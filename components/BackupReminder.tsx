@@ -16,6 +16,7 @@ import { computeBackupNagStatus } from '../services/backupReminder';
 import { QUOTA_EXCEEDED_EVENT } from '../services/quotaStorage';
 import { useHasUserData } from '../utils/useHasUserData';
 import { useFinanceStore } from '../store/useFinanceStore';
+import { useFirebaseAuth } from './auth/FirebaseAuthGate';
 import { showToast } from './ui/Toast';
 
 const DISMISS_KEY = 'backupReminderDismissedAt' as const;
@@ -49,6 +50,7 @@ interface BackupReminderProps {
 export const BackupReminder: React.FC<BackupReminderProps> = ({ onNavigateToSettings }) => {
     const { hasData } = useHasUserData();
     const isTestMode = useFinanceStore(s => s.isTestMode);
+    const { user } = useFirebaseAuth();
     const [dismissed, setDismissed] = useState<boolean>(() => isDismissed());
     const [quotaWarning, setQuotaWarning] = useState(false);
 
@@ -76,7 +78,9 @@ export const BackupReminder: React.FC<BackupReminderProps> = ({ onNavigateToSett
 
     const status = computeBackupNagStatus(hasData, isTestMode);
 
-    const showBanner = quotaWarning || (!dismissed && status.shouldShow);
+    // Si l'utilisateur est connecté à son compte Google (Cloud Firestore temps réel actif),
+    // ses données ne sont pas uniquement dans ce navigateur : on n'affiche que l'alerte de quota.
+    const showBanner = quotaWarning || (!user && !dismissed && status.shouldShow);
 
     if (!showBanner) return null;
 

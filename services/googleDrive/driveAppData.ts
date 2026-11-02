@@ -303,6 +303,63 @@ export async function updateSyncFile(
     );
 }
 
+export interface DriveRevisionRef {
+    id: string;
+    modifiedTime: string;
+    size?: string;
+}
+
+/**
+ * Liste les révisions conservées par Google Drive pour un fichier (`financeai-sync.json`).
+ * Permet de récupérer automatiquement une version antérieure lorsqu'un push accidentel a écrasé le fichier.
+ */
+export async function listSyncFileRevisions(
+    token: string,
+    fileId: string,
+    fetchFn?: FetchLike,
+): Promise<DriveRevisionRef[]> {
+    const f = resolveFetch(fetchFn);
+    const params = new URLSearchParams({
+        fields: 'revisions(id,modifiedTime,size)',
+        pageSize: '100',
+    });
+    return withDriveTimeout(
+        f,
+        `${DRIVE_FILES}/${fileId}/revisions?${params.toString()}`,
+        { headers: authHeader(token) },
+        async (res) => {
+            if (!res.ok) await failFromResponse(res);
+            const data = (await res.json()) as { revisions?: DriveRevisionRef[] };
+            return data.revisions ?? [];
+        },
+    );
+}
+
+/**
+ * Télécharge le contenu d'une révision spécifique d'un fichier dans `appDataFolder`.
+ */
+export async function readSyncFileRevision(
+    token: string,
+    fileId: string,
+    revisionId: string,
+    fetchFn?: FetchLike,
+): Promise<SyncEnvelope> {
+    const f = resolveFetch(fetchFn);
+    return withDriveTimeout(
+        f,
+        `${DRIVE_FILES}/${fileId}/revisions/${revisionId}?alt=media`,
+        { headers: authHeader(token) },
+        async (res) => {
+            if (!res.ok) await failFromResponse(res);
+            try {
+                return (await res.json()) as SyncEnvelope;
+            } catch {
+                throw new DriveError('Contenu de la révision Drive illisible (JSON invalide)');
+            }
+        },
+    );
+}
+
 /** Supprime un fichier d'appDataFolder par son id. Idempotent : un 404 (déjà absent) = succès. Base
  *  commune de `deleteSyncFile` pour tout autre petit fichier (ex. nettoyage des anciennes sauvegardes). */
 export async function deleteAppDataFile(token: string, fileId: string, fetchFn?: FetchLike): Promise<void> {

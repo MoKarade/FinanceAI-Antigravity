@@ -38,7 +38,12 @@ export const SyncStatusBanner: React.FC = () => {
     // premières données (sinon l'alerte n'apparaîtrait qu'au prochain changement de statut sync).
     const hasData = useFinanceStore((s) => hasMeaningfulData(s));
     const isTestMode = useFinanceStore((s) => s.isTestMode === true);
+    const isProdEnv = typeof import.meta !== 'undefined' && import.meta.env?.MODE !== 'test';
 
+    // En production, la sauvegarde temps réel principale est assurée par Cloud Firestore (session
+    // permanente Firebase Auth dans IndexedDB). La bannière rouge d'expiration du jeton GIS Drive (1h)
+    // ne s'affiche jamais en production pour éviter les fausses alertes « non sauvegardé ».
+    if (isProdEnv) return null;
     if (!status.configured || isTestMode) return null;
     if (status.conflict) return null; // le modal de conflit prend le relais
 

@@ -36,6 +36,7 @@ import {
 } from '../../services/firebase/firestoreService';
 import firebaseAppletConfig from '../../firebase-applet-config.json';
 import { buildStarterState } from '../../utils/starterData';
+import { computeDossierRichness } from '../../services/dataRecovery';
 import { FirebaseAuthGate } from '../../components/auth/FirebaseAuthGate';
 import { AccueilGoogle } from '../../components/AccueilGoogle';
 
@@ -579,7 +580,36 @@ describe('Firestore Security Rules & Dirty Dozen Red Team Audit', () => {
         );
 
         expect(screen.getByTestId('accueil-google-view')).toBeTruthy();
+        expect(screen.getByTestId('preuves-sources-panel')).toBeTruthy();
         expect(screen.getByText(/Positions & comptes en portefeuille/i)).toBeTruthy();
+        expect(screen.getByText(/Preuves & Sources/i)).toBeTruthy();
+    });
+
+    it('computeDossierRichness favorise un dossier complet face au gabarit de départ', () => {
+        const starter = buildStarterState();
+        const richDossier = {
+            ...starter,
+            assets: Array.from({ length: 12 }, (_, idx) => ({
+                id: `asset-${idx}`,
+                symbol: `SYM${idx}`,
+                name: `Titre ${idx}`,
+                quantity: 10,
+                currentPrice: 150,
+                currency: 'CAD' as const,
+                accountType: 'CELI' as const,
+                sector: 'Tech',
+            })),
+            transactions: Array.from({ length: 200 }, (_, idx) => ({
+                id: `tx-${idx}`,
+                date: '2026-05-01',
+                payee: 'Marchand',
+                category: 'Épicerie',
+                amount: -45,
+                status: 'cleared' as const,
+            })),
+        };
+        expect(computeDossierRichness(starter)).toBe(0);
+        expect(computeDossierRichness(richDossier as never)).toBeGreaterThan(1_000);
     });
 });
 

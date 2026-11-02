@@ -95,8 +95,8 @@ export function useAppBootEffects(): void {
         }
 
         // [CF-ACCESS] Session Cloudflare Access expirée (302 vers la page de connexion) → recharger pour se reconnecter.
-        // PROD seulement ; sans Access la sonde répond 200 et rien ne se passe.
-        const stopSessionAccess = import.meta.env.PROD ? surveillerSessionAccess() : () => {};
+        // Activé uniquement si explicitement requis par VITE_CF_ACCESS (évite tout rechargement intempestif au retour d'onglet sur Firebase Hosting).
+        const stopSessionAccess = Boolean(import.meta.env.VITE_CF_ACCESS) ? surveillerSessionAccess() : () => {};
 
         // [PERSONA-PURGE] Self-heal AVANT l'init sync : si des artefacts de persona de test ont
         // fui dans les données réelles (incident 2026-07-15 : ~600 transactions « Karim » chez

@@ -1,9 +1,10 @@
 # Changelog
 
-## 2026-11-02 — Accueil Google Finance Beta 3 colonnes, Service Worker v6 et déploiement Firebase Hosting
+## 2026-11-02 — Accueil Google Finance Beta 3 colonnes, simplification mobile, récupération Cloud et Preuves de véracité
 
-- La page d'accueil (`components/AccueilGoogle.tsx`) adopte la disposition 3 colonnes inspirée de Google Finance Beta : colonne gauche « Listes & Portefeuilles » avec mini-sparklines et pilules de variation, colonne centrale « Main » avec courbe bleue lumineuse et marqueurs ambrés « Temps forts », et panneau droit « Recherche » Gemini interactif.
-- Le Service Worker (`public/sw.js`) passe au cache `financeai-v6`, corrige la requête de navigation `fetch(req.url, { cache: 'no-store' })` qui provoquait un `TypeError` sous Chromium et servait l'ancien cache, et recharge automatiquement les fenêtres ouvertes à la purge de `financeai-v5`.
+- La page d'accueil (`components/AccueilGoogle.tsx`) adopte la disposition 3 colonnes inspirée de Google Finance Beta sur grand écran et une vue épurée à sous-onglets (`Avoirs / Insights / Transactions / Événements`) sur téléphone, avec un panneau intégré « Preuves & Sources » traçant chaque calcul vers le moteur et `docs/FISCAL_REFERENCE.md`.
+- La synchronisation unifiée Firebase Auth + Cloud Firestore (`services/firebase/workspaceSync.ts`, `services/dataRecovery.ts`) protège le dossier complet par score de richesse (`computeDossierRichness`), inspecte les révisions Google Drive en secours et élimine les popups horaires de reconnexion.
+- Le Service Worker (`public/sw.js`) passe au cache `financeai-v6`, corrige la requête de navigation `fetch(req.url, { cache: 'no-store' })` et recharge automatiquement les fenêtres ouvertes à la purge de `financeai-v5`.
 
 ## 2026-10-29 — Un onglet « Apps » pour passer d'une app à l'autre (#53)
 

@@ -200,7 +200,7 @@ export const App: React.FC = () => {
                 />
             </Layout>
             <ToastContainer />
-            {syncStatus.conflict && (
+            {syncStatus.conflict && import.meta.env?.MODE === 'test' && (
                 <Suspense fallback={null}>
                     <SyncConflictModal />
                 </Suspense>

@@ -13,6 +13,7 @@ import { modeDonneesFictives } from '../../store/modeTestActif';
 import { STORAGE_KEYS } from '../../utils/storageKeys';
 import { construireSauvegardeEtat, messageRefusSauvegarde } from '../../services/sauvegardeJson';
 import { markBackupDone } from '../../services/backupReminder';
+import { useFirebaseAuth } from '../auth/FirebaseAuthGate';
 
 interface HubConnexionsModalProps {
     isOpen: boolean;
@@ -39,6 +40,14 @@ export const HubConnexionsModal: React.FC<HubConnexionsModalProps> = ({ isOpen, 
     const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus);
     const [fxBusy, setFxBusy] = useState(false);
     const [driveBusy, setDriveBusy] = useState(false);
+    const {
+        user: firebaseUser,
+        syncStatus: cloudStatus,
+        syncWorkspaceNow,
+        restoreInitialDataNow,
+        signInWithGoogle,
+    } = useFirebaseAuth();
+    const isCloudConnected = Boolean(firebaseUser) || syncStatus.connected;
 
     useEffect(() => {
         if (!isOpen) return;
@@ -77,10 +86,23 @@ export const HubConnexionsModal: React.FC<HubConnexionsModalProps> = ({ isOpen, 
     const sauvegarderDriveMaintenant = async () => {
         setDriveBusy(true);
         try {
-            await pushNow();
-            showToast('Sauvegarde Google Drive synchronisée.', 'success');
+            if (firebaseUser) {
+                await syncWorkspaceNow();
+            } else {
+                await pushNow();
+                showToast('Sauvegarde Google Drive synchronisée.', 'success');
+            }
         } catch {
-            showToast('Échec de l’envoi vers Google Drive.', 'error');
+            showToast('Échec de la synchronisation Cloud.', 'error');
+        } finally {
+            setDriveBusy(false);
+        }
+    };
+
+    const recupererDossierCloud = async () => {
+        setDriveBusy(true);
+        try {
+            await restoreInitialDataNow();
         } finally {
             setDriveBusy(false);
         }
@@ -247,7 +269,7 @@ export const HubConnexionsModal: React.FC<HubConnexionsModalProps> = ({ isOpen, 
                     </div>
                 </div>
 
-                {/* 4. Sauvegarde Google Drive & Export JSON complet */}
+                {/* 4. Sauvegarde Cloud Google (Firestore & Drive) & Export JSON complet */}
                 <div className="p-4 rounded-xl bg-surfaceHighlight border border-bordure space-y-3">
                     <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5">
@@ -256,21 +278,32 @@ export const HubConnexionsModal: React.FC<HubConnexionsModalProps> = ({ isOpen, 
                             </span>
                             <div>
                                 <h3 className="text-sm font-semibold text-ink-50">
-                                    4. Sauvegarde Google Drive &amp; Fichier JSON
+                                    4. Cloud Google (Firestore &amp; Drive) &amp; Fichier JSON
                                 </h3>
                                 <p className="text-xs text-ink-300">
-                                    {syncStatus.connected
-                                        ? `Google Drive connecté (${syncStatus.passphraseActive ? 'chiffré AES-GCM' : 'dossier privé appData'})`
-                                        : 'Export local JSON 4.0 instantané ou synchronisation Google Drive'}
+                                    {firebaseUser
+                                        ? `Compte Google connecté (${firebaseUser.email ?? 'Session permanente'}) · Cloud Firestore ${cloudStatus.state === 'synced' ? 'synchronisé en temps réel' : 'actif'}`
+                                        : syncStatus.connected
+                                            ? `Google Drive connecté (${syncStatus.passphraseActive ? 'chiffré AES-GCM' : 'dossier privé appData'})`
+                                            : 'Connexion Google unique permanente ou export local JSON 4.0 instantané'}
                                 </p>
                             </div>
                         </div>
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${syncStatus.connected ? 'gf-delta-up' : 'gf-delta-neutral'}`}>
-                            {syncStatus.connected ? 'Drive actif' : 'JSON local prêt'}
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${isCloudConnected ? 'gf-delta-up' : 'gf-delta-neutral'}`}>
+                            {isCloudConnected ? 'Cloud Google actif' : 'JSON local prêt'}
                         </span>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                            type="button"
+                            disabled={driveBusy}
+                            onClick={() => void recupererDossierCloud()}
+                            className="gf-chip touch-target text-succes-texte disabled:opacity-50"
+                        >
+                            <Icon name="lifebuoy" size={14} />
+                            <span>{driveBusy ? 'Récupération…' : 'Récupérer mon dossier Cloud / Drive'}</span>
+                        </button>
                         <button
                             type="button"
                             onClick={exporterJsonMaintenant}
@@ -279,24 +312,24 @@ export const HubConnexionsModal: React.FC<HubConnexionsModalProps> = ({ isOpen, 
                             <Icon name="import" size={14} />
                             <span>Télécharger sauvegarde JSON</span>
                         </button>
-                        {syncStatus.connected ? (
+                        {isCloudConnected ? (
                             <button
                                 type="button"
                                 disabled={driveBusy}
-                                onClick={sauvegarderDriveMaintenant}
+                                onClick={() => void sauvegarderDriveMaintenant()}
                                 className="gf-chip touch-target text-ink-100 disabled:opacity-50"
                             >
                                 <Icon name="cloud" size={14} />
-                                <span>{driveBusy ? 'Synchronisation…' : 'Pousser vers Google Drive'}</span>
+                                <span>{driveBusy ? 'Synchronisation…' : 'Synchroniser Cloud Google'}</span>
                             </button>
                         ) : (
                             <button
                                 type="button"
-                                onClick={() => allerVers(Tab.SETTINGS)}
+                                onClick={() => void signInWithGoogle()}
                                 className="gf-chip touch-target text-ink-100"
                             >
-                                <Icon name="settings" size={14} />
-                                <span>Configurer Google Drive / Restaurer</span>
+                                <Icon name="users" size={14} />
+                                <span>Connecter mon compte Google</span>
                             </button>
                         )}
                     </div>

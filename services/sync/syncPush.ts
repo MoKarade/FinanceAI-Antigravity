@@ -17,6 +17,8 @@ import { currentMeta, resolveSub } from './syncMeta';
 import { handleError } from './syncErrors';
 import { logError } from '../errorLogger';
 import { modeDonneesFictives } from '../../store/modeTestActif';
+import { useFinanceStore } from '../../store/useFinanceStore';
+import { isStarterTemplateState } from '../dataRecovery';
 
 /** Résultat d'un push — permet à l'UI d'être honnête (toast réel vs « rien à sauvegarder »).
  *  `conflict` : Drive a été réécrit depuis la version vue, RIEN n'a été écrit et le modal de conflit
@@ -75,6 +77,10 @@ async function runPushNow(options: PushOptions): Promise<PushResult> {
     if (!isGoogleAuthConfigured()) return 'not-configured';
     const testMode = isTestModeActive();
     const local = getLocalPayload();
+    const isProdEnv = typeof import.meta !== 'undefined' && import.meta.env?.MODE !== 'test';
+    if (isProdEnv && isStarterTemplateState(useFinanceStore.getState())) {
+        return 'skipped-empty';
+    }
     if (!shouldPush(local.isEmpty, testMode)) {
         // On NE pousse jamais un état vide (anti-écrasement) ni en mode test (anti-démo). On RETOURNE
         // la raison pour que l'UI soit honnête (avant : skip silencieux + faux toast « Sauvegardé »).

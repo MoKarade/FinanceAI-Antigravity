@@ -82,7 +82,7 @@ export function useDerivedFinancials(state: AppState): DerivedFinancials {
     const assetBreakdown = useMemo(() => {
         let reer = 0;
         let celi = 0;
-        const reee = 0;
+        let reee = 0;
         let nonReg = 0;
         state.assets.forEach(a => {
             // [DETTE-PDF-FX-BYPASS] source unique : FX (prix stocké en devise NATIVE) + garde NaN/Infinity
@@ -90,7 +90,8 @@ export function useDerivedFinancials(state: AppState): DerivedFinancials {
             // à la main (le repli 1:1 muet sous-affiche le patrimoine, incident ASSET-FX-DISPLAY).
             const val = assetValueCad(a, state.fxRates);
             if (a.accountType === 'REER') reer += val;
-            else if (a.accountType === 'CELI') celi += val;
+            else if (a.accountType === 'CELI' || a.accountType === 'CELIAPP') celi += val;
+            else if (a.accountType === 'REEE') reee += val;
             else nonReg += val;
         });
         return { reer, celi, reee, nonReg };
@@ -98,9 +99,11 @@ export function useDerivedFinancials(state: AppState): DerivedFinancials {
 
     const currentLiquidity = useMemo(() => {
         let cash = 0;
-        (Object.values(state.initialBalances) as number[]).forEach(v => cash += v);
+        (Object.values(state.initialBalances) as number[]).forEach(v => {
+            if (Number.isFinite(v)) cash += v;
+        });
         state.transactions.forEach((t: Transaction) => {
-            if (!t.isDuplicate && !t.isTransfer) cash += t.amount;
+            if (!t.isDuplicate && !t.isTransfer && Number.isFinite(t.amount)) cash += t.amount;
         });
         return cash;
     }, [state.initialBalances, state.transactions]);

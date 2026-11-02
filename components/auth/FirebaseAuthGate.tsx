@@ -15,6 +15,7 @@ import {
     upsertUserProfile,
     startWorkspaceRealtimeSync,
     pushWorkspaceToFirestore,
+    pullWorkspaceFromFirestoreNow,
     recoverOrEnsureInitialWorkspace,
     subscribeFirebaseSyncStatus,
     getFirebaseSyncStatus,
@@ -161,6 +162,16 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
             });
             if (oauthCred?.accessToken) {
                 cacheExternalGoogleToken(oauthCred.accessToken);
+            }
+            const firestoreRestored = await pullWorkspaceFromFirestoreNow(credential.user);
+            if (firestoreRestored.restored) {
+                showToast(
+                    `Dossier Cloud Google restauré (${firestoreRestored.assetsCount} actifs · ${firestoreRestored.transactionsCount} transactions).`,
+                    'success',
+                );
+                return;
+            }
+            if (oauthCred?.accessToken) {
                 const driveRecovered = await chercherEtRestaurerDepuisGoogleDrive();
                 if (driveRecovered?.restored) {
                     await pushWorkspaceToFirestore(credential.user);
@@ -209,13 +220,31 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
     }, [user]);
 
     const restoreInitialDataNow = useCallback(async () => {
+        if (user) {
+            const firestoreRestored = await pullWorkspaceFromFirestoreNow(user);
+            if (firestoreRestored.restored) {
+                showToast(
+                    `Dossier Cloud Google restauré (${firestoreRestored.assetsCount} actifs · ${firestoreRestored.transactionsCount} transactions).`,
+                    'success',
+                );
+                return;
+            }
+        }
+        const driveRecovered = await chercherEtRestaurerDepuisGoogleDrive();
+        if (driveRecovered?.restored) {
+            if (user) {
+                await pushWorkspaceToFirestore(user).catch(() => {});
+            }
+            showToast(`Dossier restauré depuis ${driveRecovered.sourceLabel}.`, 'success');
+            return;
+        }
         const result = await recoverOrEnsureInitialWorkspace(true);
         if (result === 'restored-idb' || result === 'restored-snapshot') {
-            showToast('Vos données initiales ont été restaurées depuis votre archive locale.', 'success');
+            showToast('Vos données initiales ont été restaurées depuis votre archive.', 'success');
         } else {
             showToast('Votre dossier patrimonial initial a été restauré avec succès.', 'success');
         }
-    }, []);
+    }, [user]);
 
     const contextValue: FirebaseAuthContextValue = {
         user,

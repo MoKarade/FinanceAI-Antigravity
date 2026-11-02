@@ -14,7 +14,6 @@ import { BackupPanel } from '../BackupPanel';
 import { useFirebaseAuth } from '../../auth/FirebaseAuthGate';
 import { useFinanceStore } from '../../../store/useFinanceStore';
 import {
-  recoverUser230kData,
   chercherEtRestaurerDepuisGoogleDrive,
   listRecoverableSnapshots,
   restoreSpecificSnapshot,
@@ -51,6 +50,7 @@ export const BackupSection: React.FC = () => {
     signInWithGoogle,
     signOutUser,
     syncWorkspaceNow,
+    restoreInitialDataNow,
   } = useFirebaseAuth();
 
   const transactionsCount = state.transactions.length;
@@ -91,29 +91,8 @@ export const BackupSection: React.FC = () => {
   const handleRestoreProtectedDossier = async () => {
     setIsRecovering(true);
     try {
-      const driveRes = await chercherEtRestaurerDepuisGoogleDrive();
-      if (driveRes?.restored) {
-        if (user) {
-          await syncWorkspaceNow();
-        }
-        await refreshRecoverableList();
-        // MONTANT-HORS-ECRAN
-        showToast(
-          `Dossier retrouvé (${driveRes.sourceLabel} · ${formatCAD(driveRes.netWorth)}).`,
-          'success',
-        );
-        return;
-      }
-      const res = await recoverUser230kData(true);
-      if (user && res.restored) {
-        await syncWorkspaceNow();
-      }
+      await restoreInitialDataNow();
       await refreshRecoverableList();
-      // MONTANT-HORS-ECRAN
-      showToast(
-        `Dossier rétabli (${res.sourceLabel} · ${formatCAD(res.netWorth)}).`,
-        'success',
-      );
     } finally {
       setIsRecovering(false);
     }
@@ -149,10 +128,13 @@ export const BackupSection: React.FC = () => {
   };
 
   const handleConnectDriveDirect = async () => {
-    ensureDefaultGoogleAuthConfigured();
+    ensureDefaultGoogleAuthConfigured(true);
     await connectAndSync();
     const driveRecovered = await chercherEtRestaurerDepuisGoogleDrive();
     if (driveRecovered?.restored) {
+      if (user) {
+        await syncWorkspaceNow();
+      }
       // MONTANT-HORS-ECRAN
       showToast(
         `Dossier Google Drive restauré (${driveRecovered.sourceLabel} · ${formatCAD(driveRecovered.netWorth)}).`,

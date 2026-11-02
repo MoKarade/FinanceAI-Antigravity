@@ -13,8 +13,11 @@ import { hasMeaningfulData } from '../../utils/onboarding';
 import { buildStarterState } from '../../utils/starterData';
 import {
     cleanCandidateState,
+    computeCandidateNetWorth,
+    computeDossierRichness,
     isStarterTemplateState,
     recoverUser230kData,
+    saveProtectedDossierSnapshot,
 } from '../dataRecovery';
 import { listBackups, readStoredPayload } from '../backupAuto';
 import { getOrCreateDeviceKey } from '../secureKeyStore';
@@ -333,12 +336,91 @@ export function extractRemoteTimestampMs(
 }
 
 /**
- * Recherche dans le bouclier local, les sauvegardes auto IndexedDB et Google Drive un vrai dossier
- * personnalisé (hors gabarit Alex), et ne se replie sur `buildStarterState()` que sur demande explicite.
+ * Télécharge et applique immédiatement le dossier patrimonial stocké dans Cloud Firestore (`/workspaces/{uid}`)
+ * s'il contient des données réelles hors gabarit de départ.
+ */
+export async function pullWorkspaceFromFirestoreNow(user: FirebaseUser): Promise<{
+    restored: boolean;
+    netWorth: number;
+    assetsCount: number;
+    transactionsCount: number;
+}> {
+    const uid = (user.uid || '').slice(0, MAX_UID_LENGTH);
+    if (!SAFE_ID_REGEX.test(uid)) {
+        return { restored: false, netWorth: 0, assetsCount: 0, transactionsCount: 0 };
+    }
+    const authOpts = { expectedUid: uid, authenticatedUser: user };
+    try {
+        const snap = await getDocument('workspaces', uid, authOpts);
+        if (!snap.exists || !snap.data) {
+            return { restored: false, netWorth: 0, assetsCount: 0, transactionsCount: 0 };
+        }
+        activeWorkspaceDocExists = true;
+        const data = snap.data as Record<string, unknown>;
+        const remotePayload = unpackWorkspacePayloadFromFirestore(data.statePayload);
+        if (
+            !remotePayload ||
+            !hasMeaningfulData(remotePayload) ||
+            isStarterTemplateState(remotePayload)
+        ) {
+            return { restored: false, netWorth: 0, assetsCount: 0, transactionsCount: 0 };
+        }
+        const sanitizedRemote = cleanCandidateState(remotePayload);
+        const remoteUpdatedAtMs = extractRemoteTimestampMs(data, remotePayload);
+        applyingRemoteSnapshot = true;
+        try {
+            if (typeof data.revisionId === 'string') {
+                lastKnownRevisionId = data.revisionId;
+            }
+            lastSerializedPayload = JSON.stringify(sanitizedRemote);
+            useFinanceStore.getState().setAppState({
+                ...sanitizedRemote,
+                lastUpdate: remoteUpdatedAtMs ?? Date.now(),
+            });
+            useFinanceStore.setState({
+                isTestMode: false,
+                activeTestPersonaId: null,
+                realDataSnapshot: null,
+            });
+            saveProtectedDossierSnapshot(sanitizedRemote);
+        } finally {
+            applyingRemoteSnapshot = false;
+        }
+        notifySyncStatus({
+            state: 'synced',
+            lastSyncedAt: Date.now(),
+            errorMessage: null,
+        });
+        return {
+            restored: true,
+            netWorth: computeCandidateNetWorth(sanitizedRemote),
+            assetsCount: (sanitizedRemote.assets ?? []).length,
+            transactionsCount: (sanitizedRemote.transactions ?? []).length,
+        };
+    } catch {
+        return { restored: false, netWorth: 0, assetsCount: 0, transactionsCount: 0 };
+    }
+}
+
+/**
+ * Recherche dans Cloud Firestore (`/workspaces/{uid}`), le bouclier local, les sauvegardes auto IndexedDB
+ * et Google Drive un vrai dossier personnalisé (hors gabarit Alex), en privilégiant toujours le dossier le plus riche.
  */
 export async function recoverOrEnsureInitialWorkspace(
     forceEvenIfNotEmpty = false,
 ): Promise<'kept' | 'restored-snapshot' | 'restored-idb' | 'restored-starter'> {
+    // 0. Priorité absolue à Cloud Firestore si l'utilisateur est connecté et que Firestore détient un dossier plus riche
+    if (auth.currentUser) {
+        const currentBeforeFirestore = useFinanceStore.getState();
+        const localRichness = computeDossierRichness(currentBeforeFirestore);
+        if (forceEvenIfNotEmpty || localRichness === 0 || isStarterTemplateState(currentBeforeFirestore)) {
+            const firestoreRestored = await pullWorkspaceFromFirestoreNow(auth.currentUser);
+            if (firestoreRestored.restored) {
+                return 'restored-snapshot';
+            }
+        }
+    }
+
     const current = useFinanceStore.getState();
     const currentIsStarter = isStarterTemplateState(current);
 
@@ -494,6 +576,17 @@ export async function pushWorkspaceToFirestore(user: FirebaseUser): Promise<void
         try {
             const snap = await getDocument('workspaces', uid, authOpts);
             activeWorkspaceDocExists = snap.exists;
+            if (snap.exists && snap.data) {
+                const remoteData = snap.data as Record<string, unknown>;
+                const remotePayload = unpackWorkspacePayloadFromFirestore(remoteData.statePayload);
+                if (
+                    remotePayload &&
+                    computeDossierRichness(remotePayload) > computeDossierRichness(currentState)
+                ) {
+                    await pullWorkspaceFromFirestoreNow(user);
+                    return;
+                }
+            }
         } catch (error) {
             notifySyncStatus({ state: 'error', errorMessage: 'Erreur de lecture Firestore' });
             throw error;
@@ -576,6 +669,9 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                 const localHasMeaningfulData =
                     hasMeaningfulData(currentLocalState) &&
                     !isStarterTemplateState(currentLocalState);
+                const remoteRichness = computeDossierRichness(remotePayload);
+                const localRichness = computeDossierRichness(currentLocalState);
+                const isRemoteRicherThanLocal = remoteRichness > localRichness;
                 const localLastUpdate =
                     typeof currentLocalState.lastUpdate === 'number' &&
                     Number.isFinite(currentLocalState.lastUpdate)
@@ -583,7 +679,9 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                         : 0;
                 const remoteUpdatedAtMs = extractRemoteTimestampMs(data, remotePayload);
                 const isRemoteOlderThanLocal =
+                    !isRemoteRicherThanLocal &&
                     localHasMeaningfulData &&
+                    localRichness >= remoteRichness &&
                     remoteUpdatedAtMs !== null &&
                     localLastUpdate > 0 &&
                     remoteUpdatedAtMs < localLastUpdate;
@@ -592,7 +690,7 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                     remotePayload &&
                     remoteHasData &&
                     !remoteIsStarter &&
-                    remoteRevision !== lastKnownRevisionId &&
+                    (remoteRevision !== lastKnownRevisionId || isRemoteRicherThanLocal) &&
                     !isRemoteOlderThanLocal
                 ) {
                     applyingRemoteSnapshot = true;
@@ -604,6 +702,12 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                             ...sanitizedRemote,
                             lastUpdate: remoteUpdatedAtMs ?? Date.now(),
                         });
+                        useFinanceStore.setState({
+                            isTestMode: false,
+                            activeTestPersonaId: null,
+                            realDataSnapshot: null,
+                        });
+                        saveProtectedDossierSnapshot(sanitizedRemote);
                     } finally {
                         applyingRemoteSnapshot = false;
                     }

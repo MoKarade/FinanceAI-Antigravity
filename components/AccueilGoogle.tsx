@@ -19,7 +19,9 @@ import { useFinanceStore } from '../store/useFinanceStore';
 import { useNetWorthVariation } from '../hooks/useNetWorthVariation';
 import { useTodayIsoLocal } from '../hooks/useSimulationParams';
 import { presentTermesOfGoal, monthsSince } from '../services/projection/pastPurchaseInit';
-import { assetValueCad } from '../services/portfolio';
+import { assetValueCad, computeMonthlyBudgetAggregates, toCurrencyFactor } from '../services/portfolio';
+import { computePurchaseStats } from '../utils/assetPurchases';
+import { monthlyConsumptionExpenses } from '../utils/healthRatios';
 import { formatCAD, formatCompactCAD, formatPercent } from '../utils/format';
 import { maskedTick } from '../utils/chartPrivacy';
 import { MASKED_AMOUNT_LABEL } from '../utils/privacyAria';
@@ -31,6 +33,7 @@ import { ChartDataTable, type ChartDataColumn } from './ui/ChartDataTable';
 import { FinancialGoalsProgressSection } from './ui/FinancialGoalProgressRing';
 import { MonthlySpendingVsBudgetChart } from './dashboard/MonthlySpendingVsBudgetChart';
 import { HubConnexionsModal } from './future/HubConnexionsModal';
+import { useFirebaseAuth } from './auth/FirebaseAuthGate';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { prefetchTab } from '../utils/tabPrefetch';
 
@@ -93,10 +96,21 @@ interface PositionSuivie {
     compte: string;
     valeur: number;
     poidsPct: number;
-    variationPct: number;
-    gainCad: number;
+    variationPct: number | null;
+    gainCad: number | null;
     positif: boolean;
     pointsSparkline: string;
+    tab: Tab;
+}
+
+interface PreuveVeracite {
+    id: string;
+    titre: string;
+    formule: string;
+    montantNumeric: number | null;
+    badgeTexte: string;
+    sourceCode: string;
+    referenceOfficielle: string;
     tab: Tab;
 }
 
@@ -154,24 +168,35 @@ const RACCOURCIS_RECHERCHE: ReadonlyArray<{ tab: Tab; label: string; icon: IconN
     { tab: Tab.TAX, label: 'Impôts & Fiscalité', icon: 'tax' },
 ];
 
-function construireSparklineSvg(seed: number, positif: boolean): string {
-    const base = positif ? [16, 15, 13, 14, 10, 9, 5] : [6, 8, 7, 11, 12, 14, 16];
-    const decalage = (seed % 3) - 1;
-    return base
-        .map((y, idx) => {
-            const x = idx * 8;
-            const yClamp = Math.max(3, Math.min(19, y + (idx % 2 === 0 ? decalage : -decalage)));
-            return `${x},${yClamp}`;
+/**
+ * Sparkline SVG basée uniquement sur des séries de prix réelles (No-fake-data).
+ * Si moins de 2 points réels sont disponibles, trace un trait horizontal neutre.
+ */
+function construireSparklineReelle(valeurs: ReadonlyArray<number>): string {
+    const finies = valeurs.filter((v) => Number.isFinite(v));
+    if (finies.length < 2) {
+        return '0,11 48,11';
+    }
+    const echantillon = finies.slice(-7);
+    const min = Math.min(...echantillon);
+    const max = Math.max(...echantillon);
+    const amplitude = max - min;
+    const pasX = 48 / Math.max(1, echantillon.length - 1);
+    return echantillon
+        .map((val, idx) => {
+            const x = Math.round(idx * pasX);
+            const y = amplitude > 0 ? Math.round(18 - ((val - min) / amplitude) * 14) : 11;
+            return `${x},${Math.max(3, Math.min(19, y))}`;
         })
         .join(' ');
 }
 
 /**
- * Page d'accueil — Style Google Finance Beta (3 colonnes, couleurs vives & animations fluides) :
+ * Page d'accueil — Style Google Finance Beta (3 colonnes sur grand écran, flux épuré à sous-onglets sur mobile) :
  * - En-tête Google Finance 4 couleurs + Omnibox centrale en pilule + ruban de 5 indices patrimoniaux
- * - Colonne gauche (3 col) : « Listes & Portefeuilles » (Valeur totale, carte Main active, Watchlist avec sparklines et pilules vert/rouge)
- * - Colonne centrale (6 col) : Cotation « Main », courbe bleue lumineuse avec marqueurs ambrés « Temps forts », barre d'horizons et tableau détaillé des avoirs
- * - Colonne droite (3 col) : Panneau « Recherche » Gemini interactif (suggestions cliquables, puces d'actions, compositeur) + Allocation d'actifs, Activité récente et Jalons.
+ * - Colonne gauche (3 col, bureau) : « Listes & Portefeuilles » (Valeur totale, carte Main active, Watchlist)
+ * - Colonne centrale (6 col) : Cotation « Main », courbe bleue lumineuse avec marqueurs ambrés « Temps forts », barre d'horizons et sous-onglets Avoirs / Insights / Transactions / Événements
+ * - Colonne droite (3 col) : Panneau « Recherche » Gemini interactif + Allocation d'actifs, Activité récente, Jalons et Preuves & Sources.
  */
 export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     state,
@@ -188,6 +213,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     const lastProjection = useFinanceStore((s) => s.lastProjection);
     const activeTab = useFinanceStore((s) => s.activeTab);
     const todayIso = useTodayIsoLocal();
+    const { restoreInitialDataNow, syncStatus } = useFirebaseAuth();
 
     const [requete, setRequete] = useState('');
     const [questionComposer, setQuestionComposer] = useState('');
@@ -200,6 +226,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     const [segmentActif, setSegmentActif] = useState<string | null>(null);
     const [showConnexionsModal, setShowConnexionsModal] = useState(false);
     const [showGeminiModal, setShowGeminiModal] = useState(false);
+    const [restaurationEnCours, setRestaurationEnCours] = useState(false);
 
     // Calcul immobilier cohérent avec FutureKpiStrip (avoirs − dettes = patrimoine net)
     const { realEstateEquity, realEstateValeur, realEstateHypotheque } = useMemo(() => {
@@ -248,24 +275,27 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         const pctLiberte = Math.min(100, Math.max(0, Math.round((Math.max(0, patrimoineNet) / cibleRetraite) * 100)));
         const ageRetraite = state.retirementGoal?.targetAge ?? 60;
 
+        // [NO-FAKE-DATA] Revenu mensuel issu de computeMonthlyBudgetAggregates (net) ou salaire brut saisi — jamais de 20 % inventé
+        const aggsBudget = computeMonthlyBudgetAggregates(
+            state.config ?? { users: [] },
+            state.budgetItems ?? [],
+        );
         const salaireMensuelBrut = (state.config?.users ?? []).reduce(
             (acc, u) => acc + (Number(u.grossSalary) || 0),
             0,
         );
-        const tauxEpargne =
-            salaireMensuelBrut > 0
-                ? Math.round((epargneMensuelle / salaireMensuelBrut) * 100)
-                : epargneMensuelle > 0
-                  ? 20
-                  : 0;
+        const revenuReference = aggsBudget.income > 0 ? aggsBudget.income : salaireMensuelBrut;
+        const tauxEpargne: number | null =
+            revenuReference > 0
+                ? Math.round((epargneMensuelle / revenuReference) * 100)
+                : null;
 
-        const depensesMensuelles = Math.max(
-            1_500,
-            (state.budgetItems ?? [])
-                .filter((b) => b.nature !== 'Epargne')
-                .reduce((acc, b) => acc + (Number(b.target) || 0), 0),
-        );
-        const moisAutonomie = Number((liquidites / depensesMensuelles).toFixed(1));
+        // [NO-FAKE-DATA] Dépenses mensuelles de consommation via monthlyConsumptionExpenses (normalise Weekly/Quarterly/Yearly et exclut Épargne) — aucun plancher 1 500 $ inventé
+        const depensesConso = monthlyConsumptionExpenses(state.budgetItems ?? []);
+        const moisAutonomie: number | null =
+            Number.isFinite(depensesConso) && depensesConso > 0
+                ? Number((liquidites / depensesConso).toFixed(1))
+                : null;
         const ratioEndettement =
             totalAvoirs > 0 ? Math.min(100, Math.max(0, Math.round((totalDettes / totalAvoirs) * 100))) : 0;
 
@@ -275,13 +305,15 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             ageRetraite,
             tauxEpargne,
             moisAutonomie,
+            depensesConso: Number.isFinite(depensesConso) ? depensesConso : 0,
+            revenuReference,
             ratioEndettement,
         };
     }, [
         state.retirementGoal?.targetMonthlyIncome,
         state.retirementGoal?.targetAge,
         patrimoineNet,
-        state.config?.users,
+        state.config,
         epargneMensuelle,
         state.budgetItems,
         liquidites,
@@ -357,9 +389,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         const cfgHorizon = HORIZONS.find((h) => h.cle === horizon) ?? HORIZONS[2]!;
         const nbAnnees = cfgHorizon.annees;
         const ratioLentille =
-            patrimoineNet > 0
-                ? Math.max(0.15, Math.min(1.5, valeurHeroAffichee / patrimoineNet))
-                : 1;
+            lentilleHero === 'net'
+                ? 1
+                : patrimoineNet > 0
+                  ? Math.max(0, Math.min(1.5, valeurHeroAffichee / patrimoineNet))
+                  : 0;
 
         const chartData = lastProjection?.chartData ?? [];
         const pointsFuturs = chartData.filter((pt) => typeof pt.monthIndex === 'number' && pt.monthIndex >= 0);
@@ -374,22 +408,24 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 const pt = source[i]!;
                 const baseVal = Number.isFinite(pt.NetWorth) ? pt.NetWorth : patrimoineNet;
                 const val = Math.round(baseVal * ratioLentille);
+                const dettesPt = Math.max(0, Math.round(Number(pt.DettesNonImmo) || 0));
                 echantillon.push({
                     annee: String(pt.year ?? anneeCourante + Math.round(pt.monthIndex / 12)),
                     valeur: val,
-                    avoirs: Math.max(0, val + Math.round(Number(pt.DettesNonImmo) || 0)),
-                    dettes: Math.max(0, Math.round(Number(pt.DettesNonImmo) || 0)),
+                    avoirs: Math.max(0, val + dettesPt),
+                    dettes: dettesPt,
                 });
             }
             const dernier = source[source.length - 1];
             if (dernier && echantillon[echantillon.length - 1]?.annee !== String(dernier.year)) {
                 const baseFin = Number.isFinite(dernier.NetWorth) ? dernier.NetWorth : patrimoineNet;
                 const valFin = Math.round(baseFin * ratioLentille);
+                const dettesFin = Math.max(0, Math.round(Number(dernier.DettesNonImmo) || 0));
                 echantillon.push({
                     annee: String(dernier.year ?? anneeCourante + nbAnnees),
                     valeur: valFin,
-                    avoirs: Math.max(0, valFin),
-                    dettes: Math.max(0, Math.round(Number(dernier.DettesNonImmo) || 0)),
+                    avoirs: Math.max(0, valFin + dettesFin),
+                    dettes: dettesFin,
                 });
             }
             return echantillon;
@@ -405,7 +441,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 dettes: dettesReelles,
             },
         ];
-    }, [todayIso, horizon, lastProjection, patrimoineNet, valeurHeroAffichee, totalDettes]);
+    }, [todayIso, horizon, lentilleHero, lastProjection, patrimoineNet, valeurHeroAffichee, totalDettes]);
 
     // Points « Temps forts » ambrés sur la courbe (début, jalon médian, sommet projeté)
     const pointsTempsForts = useMemo<PointTrajectoire[]>(() => {
@@ -489,9 +525,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     id: 'celi',
                     code: 'PORT',
                     label: 'Placements',
-                    sousTitre: 'Portefeuille global',
-                    valeur: 1,
-                    pct: 100,
+                    sousTitre: 'Aucune position valorisée',
+                    valeur: 0,
+                    pct: 0,
                     couleur: 'var(--gf-bleu)',
                     classeBarre: 'gf-alloc-celi',
                     tab: Tab.INVESTMENTS,
@@ -511,7 +547,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         [partsRepartition, segmentActif],
     );
 
-    // Positions suivies façon Watchlist Google Finance Beta (avec sparkline et pilules vert/rouge)
+    // Positions suivies façon Watchlist Google Finance Beta — 100 % issues des achats réels (computePurchaseStats) ou performance réelle
     const positionsSuivies = useMemo<PositionSuivie[]>(() => {
         const actifs = [...(state.assets ?? [])]
             .map((a, idx) => {
@@ -524,12 +560,28 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             0,
                     ),
                 );
-                const rendementAttendu = Number(rec.expectedReturn);
-                const variationPct = Number.isFinite(rendementAttendu) && rendementAttendu !== 0
-                    ? Number((rendementAttendu * 100).toFixed(2))
-                    : Number((((idx % 5) - 1) * 1.85 + 2.4).toFixed(2));
-                const gainCad = Math.round((val * variationPct) / 100);
-                const positif = variationPct >= 0;
+                const stats = computePurchaseStats(a);
+                const fxFactor = toCurrencyFactor(state.fxRates, a.currency || 'CAD');
+                let variationPct: number | null = null;
+                let gainCad: number | null = null;
+
+                if (stats.totalCost > 0 && Number.isFinite(stats.gainPct)) {
+                    variationPct = Number(stats.gainPct.toFixed(2));
+                    gainCad = Math.round(stats.totalGain * fxFactor);
+                } else if (typeof a.performance === 'number' && Number.isFinite(a.performance) && a.performance !== 0) {
+                    variationPct = Number(a.performance.toFixed(2));
+                    gainCad = Math.round((val * variationPct) / 100);
+                }
+
+                const positif = (variationPct ?? 0) >= 0;
+                const historiquePrix = (a.priceHistory ?? []).map((p) => p.price);
+                const serieSparkline =
+                    historiquePrix.length >= 2
+                        ? historiquePrix
+                        : stats.totalCost > 0 && stats.averageCost > 0 && a.currentPrice > 0
+                          ? [stats.averageCost, a.currentPrice]
+                          : [];
+
                 const nomBrut = typeof a.name === 'string' && a.name.trim() ? a.name.trim() : a.symbol || `Titre ${idx + 1}`;
                 const symbole = (a.symbol || nomBrut.slice(0, 5) || `T${idx + 1}`).toUpperCase();
                 return {
@@ -541,7 +593,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     variationPct,
                     gainCad,
                     positif,
-                    pointsSparkline: construireSparklineSvg(idx + 1, positif),
+                    pointsSparkline: construireSparklineReelle(serieSparkline),
                     tab: Tab.INVESTMENTS,
                 };
             })
@@ -557,23 +609,19 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             }));
         }
 
-        return partsRepartition.map((p, idx) => {
-            const variationPct = Number(((idx === 3 ? 1.5 : 5.4 - idx * 0.8)).toFixed(2));
-            const gainCad = Math.round((p.valeur * variationPct) / 100);
-            return {
-                id: `pos-${p.id}`,
-                symbole: p.code,
-                nom: p.label,
-                compte: p.sousTitre,
-                valeur: p.valeur,
-                poidsPct: p.pct,
-                variationPct,
-                gainCad,
-                positif: variationPct >= 0,
-                pointsSparkline: construireSparklineSvg(idx + 2, variationPct >= 0),
-                tab: p.tab,
-            };
-        });
+        return partsRepartition.map((p) => ({
+            id: `pos-${p.id}`,
+            symbole: p.code,
+            nom: p.label,
+            compte: p.sousTitre,
+            valeur: p.valeur,
+            poidsPct: p.pct,
+            variationPct: null,
+            gainCad: null,
+            positif: true,
+            pointsSparkline: construireSparklineReelle([]),
+            tab: p.tab,
+        }));
     }, [state.assets, state.fxRates, partsRepartition]);
 
     const resultatsOmnibox = useMemo(() => {
@@ -739,6 +787,92 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         return jalons.sort((a, b) => a.annee - b.annee).slice(0, 5);
     }, [todayIso, state.realEstateGoals, state.travelGoals, state.lifeEvents, state.config?.users, state.retirementGoal]);
 
+    const preuvesVeracite = useMemo<PreuveVeracite[]>(() => {
+        const nbActifs = (state.assets ?? []).length;
+        const nbTx = (state.transactions ?? []).length;
+        const nbPostes = (state.budgetItems ?? []).length;
+        const pointsFuturs = (lastProjection?.chartData ?? []).filter(
+            (pt) => typeof pt.monthIndex === 'number' && pt.monthIndex >= 0,
+        ).length;
+
+        return [
+            {
+                id: 'preuve-bilan',
+                titre: 'Identité du bilan (Avoirs − Dettes = Net)',
+                formule: 'computePresentTermes (liquidités + titres CAD + immo) − (dettes + hypothèques)',
+                montantNumeric: patrimoineNet,
+                badgeTexte: 'Bilan net',
+                sourceCode: 'services/portfolio.ts · pastPurchaseInit.ts',
+                referenceOfficielle: 'Règle 4 GEMINI.md (Sources uniques)',
+                tab: Tab.INVESTMENTS,
+            },
+            {
+                id: 'preuve-placements',
+                // NOMBRE-NON-MONETAIRE : nombre de lignes de titres en portefeuille
+                titre: `Valorisation & coût moyen (${nbActifs} lignes)`,
+                formule: 'Σ (quantité × cours × taux FX BoC) · Gain = valeur − Σ achats DCA',
+                montantNumeric: Math.max(0, portefeuilleMobilier - liquidites),
+                badgeTexte: 'Titres CAD',
+                sourceCode: 'utils/assetPurchases.ts · services/portfolio.ts',
+                referenceOfficielle: 'Banque du Canada (Valet API) · Règle 6',
+                tab: Tab.INVESTMENTS,
+            },
+            {
+                id: 'preuve-liquidites',
+                // NOMBRE-NON-MONETAIRE : nombre de transactions rapprochées au journal
+                titre: `Grand livre de caisse (${nbTx} opérations)`,
+                formule: 'Soldes initiaux + Σ flux signés (hors virements internes & doublons)',
+                montantNumeric: liquidites,
+                badgeTexte: 'Encaisse',
+                sourceCode: 'services/startingCash.ts · utils/spendRules.ts',
+                referenceOfficielle: 'Parité stricte Budget ↔ Transactions',
+                tab: Tab.TRANSACTIONS,
+            },
+            {
+                id: 'preuve-budget',
+                // NOMBRE-NON-MONETAIRE : nombre de postes budgétaires configurés
+                titre: `Épargne & consommation (${nbPostes} postes)`,
+                formule: 'Revenu net − Σ cibles mensuelles (hors nature Épargne)',
+                montantNumeric: epargneMensuelle,
+                badgeTexte: 'Flux / mois',
+                sourceCode: 'utils/healthRatios.ts · utils/budget.ts',
+                referenceOfficielle: 'Règle 1 No-fake-data (aucun plancher fictif)',
+                tab: Tab.BUDGET,
+            },
+            {
+                id: 'preuve-futur',
+                // NOMBRE-NON-MONETAIRE : nombre d'échéances mensuelles simulées par le moteur
+                titre: `Moteur de projection (${pointsFuturs} paliers simulés)`,
+                formule: 'Boucle mensuelle : impôts ARC/RQ → épargne CELI/REER → intérêts dettes → croissance',
+                montantNumeric: gainHorizon ? gainHorizon.fin : null,
+                badgeTexte: gainHorizon ? `Cap ${gainHorizon.anneeFin}` : 'Simulation prête',
+                sourceCode: 'services/projection.ts · services/realEstate.ts',
+                referenceOfficielle: 'docs/PROJECTION.md · Loi sur les impôts (QC)',
+                tab: Tab.FUTURE,
+            },
+            {
+                id: 'preuve-fiscalite',
+                titre: 'Constantes fiscales ARC & Revenu Québec 2026',
+                formule: 'Abattement QC 16,5 % · CELI 7 000 $ · REER 18 % (max 32 490 $) · RRQ1+RRQ2 · RQAP',
+                montantNumeric: null,
+                badgeTexte: '100 % sourcé (0 écart)',
+                sourceCode: 'utils/tax.ts · services/CalculateurRevenuNet.ts',
+                referenceOfficielle: 'docs/FISCAL_REFERENCE.md (ARC T4032 / RQ TP-1015)',
+                tab: Tab.TAX,
+            },
+        ];
+    }, [
+        state.assets,
+        state.transactions,
+        state.budgetItems,
+        lastProjection?.chartData,
+        patrimoineNet,
+        portefeuilleMobilier,
+        liquidites,
+        epargneMensuelle,
+        gainHorizon,
+    ]);
+
     const colonnesTrajectoire = useMemo<ChartDataColumn[]>(
         () => [
             { key: 'annee', label: 'Année' },
@@ -775,6 +909,21 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         setShowGeminiModal(true);
     };
 
+    const gererRestaurationRapide = async () => {
+        if (restaurationEnCours) return;
+        setRestaurationEnCours(true);
+        try {
+            await restoreInitialDataNow();
+        } finally {
+            setRestaurationEnCours(false);
+        }
+    };
+
+    const sparklineIndice = useMemo(
+        () => construireSparklineReelle(donneesTrajectoire.map((pt) => pt.valeur)),
+        [donneesTrajectoire],
+    );
+
     return (
         <div
             data-testid="accueil-google-view"
@@ -808,7 +957,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
                         <span
                             className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-fond border border-bordure text-[11px] font-mono text-ink-300"
-                            title="Flux patrimonial synchronisé"
+                            title={syncStatus.state === 'synced' ? 'Cloud Google synchronisé en continu' : 'Flux patrimonial synchronisé'}
                         >
                             <span className="w-2 h-2 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
                             <span>Direct</span>
@@ -946,7 +1095,18 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     </div>
 
                     {/* Boutons d'actions rapides à droite */}
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0 overflow-x-auto no-scrollbar">
+                        <button
+                            type="button"
+                            onClick={() => void gererRestaurationRapide()}
+                            disabled={restaurationEnCours}
+                            aria-label="Récupérer mon dossier Cloud ou Google Drive"
+                            className="touch-target px-3 py-2 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap disabled:opacity-50"
+                        >
+                            <Icon name="refresh" size={14} className="text-ink-300" aria-hidden="true" />
+                            <span>{restaurationEnCours ? 'Restauration…' : 'Récupérer Cloud'}</span>
+                        </button>
+
                         <button
                             type="button"
                             onClick={() => setShowConnexionsModal(true)}
@@ -969,18 +1129,18 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     </div>
                 </div>
 
-                {/* Ruban supérieur des 5 indices de comptes (Google Finance Market Strip avec mini-sparklines) */}
+                {/* Ruban supérieur des 5 indices de comptes (défilement horizontal compact sur mobile, grille 5 col sur bureau) */}
                 <div
                     aria-label="Indices des comptes patrimoniaux"
-                    className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-y lg:divide-y-0 divide-bordure bg-fond"
+                    className="flex overflow-x-auto no-scrollbar lg:grid lg:grid-cols-5 divide-x divide-bordure bg-fond"
                 >
-                    {indicesComptes.map((idx, i) => (
+                    {indicesComptes.map((idx) => (
                         <button
                             key={idx.id}
                             type="button"
                             onClick={() => setActiveTab(idx.tab)}
                             onMouseEnter={() => prefetchTab(idx.tab)}
-                            className="touch-target px-3.5 py-2.5 text-left hover:bg-surface-douce flex items-center justify-between gap-2 transition-all duration-150 focus-ring group"
+                            className="touch-target shrink-0 min-w-[152px] lg:min-w-0 px-3.5 py-2.5 text-left hover:bg-surface-douce flex items-center justify-between gap-2 transition-all duration-150 focus-ring group"
                         >
                             <div className="min-w-0">
                                 <div className="flex items-center gap-1.5">
@@ -1010,7 +1170,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         strokeWidth="2"
                                         strokeLinecap="round"
                                         strokeLinejoin="round"
-                                        points={construireSparklineSvg(i + 1, idx.positif)}
+                                        points={sparklineIndice}
                                     />
                                 </svg>
                                 <span
@@ -1026,12 +1186,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 </div>
             </section>
 
-            {/* 2. ARCHITECTURE 3 COLONNES GOOGLE FINANCE BETA : LISTES (3) · COURBE & AVOIRS (6) · RECHERCHE GEMINI (3) */}
+            {/* 2. ARCHITECTURE 3 COLONNES GOOGLE FINANCE BETA : LISTES (3, BUREAU) · COURBE & AVOIRS (6, PREMIER SUR MOBILE) · RECHERCHE GEMINI (3) */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start gf-spring-grid">
-                {/* ── COLONNE GAUCHE (3 COL) : LISTES, PORTEFEUILLES & WATCHLIST LIVE ── */}
+                {/* ── COLONNE GAUCHE (3 COL, MASQUÉE SUR MOBILE CAR DOUBLON DES AVOIRS CENTRAUX) ── */}
                 <aside
                     aria-label="Listes et portefeuilles suivis"
-                    className="xl:col-span-3 space-y-4"
+                    className="hidden xl:block xl:order-1 xl:col-span-3 space-y-4"
                 >
                     <section className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure">
                         {/* En-tête « Listes » */}
@@ -1155,7 +1315,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     >
                                         <polyline
                                             fill="none"
-                                            stroke={pos.positif ? 'var(--gf-vert)' : 'var(--gf-rouge)'}
+                                            stroke={pos.variationPct == null ? 'var(--gf-bleu)' : pos.positif ? 'var(--gf-vert)' : 'var(--gf-rouge)'}
                                             strokeWidth="1.8"
                                             strokeLinecap="round"
                                             strokeLinejoin="round"
@@ -1169,12 +1329,20 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         </div>
                                         <span
                                             className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold mt-0.5 ${
-                                                pos.positif ? 'gf-delta-up' : 'gf-delta-down'
+                                                pos.variationPct == null
+                                                    ? 'gf-delta-neutral'
+                                                    : pos.positif
+                                                      ? 'gf-delta-up'
+                                                      : 'gf-delta-down'
                                             }`}
                                         >
-                                            <PrivateAmount>
-                                                {`${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)} ${pos.positif ? '↑' : '↓'}`}
-                                            </PrivateAmount>
+                                            {pos.variationPct != null ? (
+                                                <PrivateAmount>
+                                                    {`${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)} ${pos.positif ? '↑' : '↓'}`}
+                                                </PrivateAmount>
+                                            ) : (
+                                                <span>—</span>
+                                            )}
                                         </span>
                                     </div>
                                 </button>
@@ -1183,8 +1351,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     </section>
                 </aside>
 
-                {/* ── COLONNE CENTRALE (6 COL) : COTATION « MAIN », COURBE BLEUE « TEMPS FORTS » & AVOIRS ── */}
-                <div className="xl:col-span-6 space-y-4">
+                {/* ── COLONNE CENTRALE (6 COL, EN PREMIER SUR MOBILE) : COTATION « MAIN », COURBE BLEUE & SOUS-ONGLETS ── */}
+                <div className="order-1 xl:order-2 xl:col-span-6 space-y-4">
                     {/* Fiche principale de cotation & trajectoire Google Finance Beta */}
                     <section
                         aria-label="Trajectoire du patrimoine"
@@ -1210,6 +1378,29 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     <Icon name="edit" size={13} aria-hidden="true" />
                                     <span>Modifier</span>
                                 </button>
+                            </div>
+
+                            {/* Sélecteur de lentille compact visible sur mobile/tablette (< xl) */}
+                            <div
+                                role="group"
+                                aria-label="Assiette du patrimoine sur mobile"
+                                className="flex xl:hidden items-center gap-1.5 overflow-x-auto no-scrollbar"
+                            >
+                                {LENTILLES_HERO.map((l) => (
+                                    <button
+                                        key={`mob-${l.cle}`}
+                                        type="button"
+                                        aria-pressed={lentilleHero === l.cle}
+                                        onClick={() => setLentilleHero(l.cle)}
+                                        className={`touch-target shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors duration-100 focus-ring ${
+                                            lentilleHero === l.cle
+                                                ? 'gf-subtab-pill-active'
+                                                : 'bg-fond border border-bordure text-ink-300 hover:text-ink-50'
+                                        }`}
+                                    >
+                                        {l.label}
+                                    </button>
+                                ))}
                             </div>
 
                             {/* Montant Héro + Pilule de variation verte/rouge style Google Finance Beta */}
@@ -1345,7 +1536,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 data-chart-lens={lentilleHero}
                                 role="img"
                                 aria-label="Graphique combiné des paliers annuels et de la courbe du patrimoine selon l'horizon sélectionné — valeurs détaillées dans le tableau de données."
-                                className="h-[235px] sm:h-[265px] w-full gf-chart-enter rounded-lg bg-fond border border-bordure p-2"
+                                className="h-[220px] sm:h-[265px] w-full gf-chart-enter rounded-lg bg-fond border border-bordure p-2"
                             >
                                 <ResponsiveContainer width="100%" height="100%">
                                     <ComposedChart data={donneesTrajectoire} margin={{ top: 14, right: 10, left: 0, bottom: 0 }}>
@@ -1465,7 +1656,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     ))}
                                 </div>
 
-                                <span className="text-[11px] font-mono text-ink-400">
+                                <span className="hidden sm:inline text-[11px] font-mono text-ink-400">
                                     Points ambrés : jalons patrimoniaux clés
                                 </span>
                             </div>
@@ -1520,7 +1711,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         Épargne mensuelle
                                     </span>
                                     <span className="font-mono text-[10px] text-ink-400 tabular-nums">
-                                        <PrivateAmount>{`Taux ${indicateursPouls.tauxEpargne} %`}</PrivateAmount>
+                                        {indicateursPouls.tauxEpargne !== null ? (
+                                            <PrivateAmount>{`Taux ${indicateursPouls.tauxEpargne} %`}</PrivateAmount>
+                                        ) : (
+                                            <span>Taux —</span>
+                                        )}
                                     </span>
                                 </div>
                                 <span className="font-mono text-sm sm:text-base font-bold text-ink-50 tabular-nums">
@@ -1541,7 +1736,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         Réserve liquide
                                     </span>
                                     <span className="font-mono text-[10px] text-ink-400 tabular-nums">
-                                        <PrivateAmount>{`${indicateursPouls.moisAutonomie} mois`}</PrivateAmount>
+                                        {indicateursPouls.moisAutonomie !== null ? (
+                                            <PrivateAmount>{`${indicateursPouls.moisAutonomie} mois`}</PrivateAmount>
+                                        ) : (
+                                            <span>—</span>
+                                        )}
                                     </span>
                                 </div>
                                 <span className="font-mono text-sm sm:text-base font-bold text-ink-50 tabular-nums">
@@ -1587,7 +1786,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
                     </section>
 
-                    {/* Sous-onglets Google Finance Beta (Avoirs / Insights Nouvelle / Transactions / Événements) + Tableau des positions */}
+                    {/* Sous-onglets Google Finance Beta (Avoirs / Insights Nouvelle / Transactions / Événements) */}
                     <section
                         aria-label="Positions et comptes suivis"
                         className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
@@ -1629,13 +1828,17 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             </button>
                         </div>
 
-                        <div className="px-5 py-3 flex items-center justify-between gap-2 bg-surface-douce">
+                        <div
+                            className={`px-5 py-3 items-center justify-between gap-2 bg-surface-douce ${
+                                sousOngletCentre === 'avoirs' ? 'flex' : 'hidden xl:flex'
+                            }`}
+                        >
                             <div>
                                 <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
                                     Positions & comptes en portefeuille
                                 </h2>
                                 <p className="text-xs text-ink-300">
-                                    Principales lignes cotées, rendement annuel estimé et pondération patrimoniale
+                                    Principales lignes cotées, gain/perte réel sur coût moyen (DCA) et pondération
                                 </p>
                             </div>
                             <span className="hidden sm:inline-flex text-[11px] font-mono text-ink-400">
@@ -1644,7 +1847,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
 
                         {/* Tableau Google Finance Beta : Symboles | Enveloppe | Poids | Variation | Gain/Perte au total */}
-                        <div className="divide-y divide-bordure bg-fond">
+                        <div
+                            className={`divide-y divide-bordure bg-fond ${
+                                sousOngletCentre === 'avoirs' ? 'block' : 'hidden xl:block'
+                            }`}
+                        >
                             {positionsSuivies.map((pos) => (
                                 <button
                                     key={pos.id}
@@ -1678,53 +1885,81 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         </div>
                                     </div>
 
-                                    {/* Colonne Variation estimée (style Google Finance Beta double ligne vert/rouge) */}
+                                    {/* Colonne Variation réelle (ou — si aucun coût d'achat enregistré) */}
                                     <div className="hidden sm:block sm:col-span-2 text-right font-mono tabular-nums">
                                         <span
                                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                                                pos.positif ? 'gf-delta-up' : 'gf-delta-down'
+                                                pos.variationPct == null
+                                                    ? 'gf-delta-neutral'
+                                                    : pos.positif
+                                                      ? 'gf-delta-up'
+                                                      : 'gf-delta-down'
                                             }`}
                                         >
-                                            <PrivateAmount>
-                                                {`${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)}`}
-                                            </PrivateAmount>
+                                            {pos.variationPct != null ? (
+                                                <PrivateAmount>
+                                                    {`${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)}`}
+                                                </PrivateAmount>
+                                            ) : (
+                                                <span>—</span>
+                                            )}
                                         </span>
                                     </div>
 
                                     {/* Colonne Gain/Perte au total */}
                                     <div className="col-span-4 sm:col-span-3 text-right font-mono tabular-nums">
-                                        <div
-                                            className={`text-xs font-bold ${
-                                                pos.positif ? 'text-succes-texte' : 'text-erreur-texte'
-                                            }`}
-                                        >
-                                            <PrivateAmount>
-                                                {`${pos.positif ? '+' : ''}${formatCompactCAD(pos.gainCad)}`}
-                                            </PrivateAmount>
-                                        </div>
-                                        <div className="text-[11px] text-ink-300">
-                                            <PrivateAmount>
-                                                {`(${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)})`}
-                                            </PrivateAmount>
-                                        </div>
+                                        {pos.gainCad != null && pos.variationPct != null ? (
+                                            <>
+                                                <div
+                                                    className={`text-xs font-bold ${
+                                                        pos.positif ? 'text-succes-texte' : 'text-erreur-texte'
+                                                    }`}
+                                                >
+                                                    <PrivateAmount>
+                                                        {`${pos.positif ? '+' : ''}${formatCompactCAD(pos.gainCad)}`}
+                                                    </PrivateAmount>
+                                                </div>
+                                                <div className="text-[11px] text-ink-300">
+                                                    <PrivateAmount>
+                                                        {`(${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)})`}
+                                                    </PrivateAmount>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div className="text-xs font-mono text-ink-400">—</div>
+                                        )}
                                     </div>
                                 </button>
                             ))}
                         </div>
+
+                        {/* Indication mobile lorsque l'utilisateur bascule sur Insights / Transactions / Événements */}
+                        {sousOngletCentre !== 'avoirs' && (
+                            <div className="xl:hidden px-4 py-2.5 bg-surface-douce text-xs text-ink-200 flex items-center justify-between gap-2">
+                                <span>
+                                    {sousOngletCentre === 'insights'
+                                        ? 'Affichage : Allocation d’actifs, Budget & Objectifs ci-dessous'
+                                        : sousOngletCentre === 'transactions'
+                                          ? 'Affichage : Dernières écritures au journal ci-dessous'
+                                          : 'Affichage : Calendrier des jalons & Preuves de véracité ci-dessous'}
+                                </span>
+                                <Icon name="chevron-right" size={14} className="text-ink-400 shrink-0" aria-hidden="true" />
+                            </div>
+                        )}
                     </section>
                 </div>
 
-                {/* ── COLONNE DROITE (3 COL) : PANNEAU « RECHERCHE » GEMINI + ALLOCATION + ACTIVITÉ + JALONS ── */}
+                {/* ── COLONNE DROITE (3 COL) : PANNEAU « RECHERCHE » GEMINI + ALLOCATION + ACTIVITÉ + JALONS + PREUVES ── */}
                 <aside
                     aria-label="Recherche Gemini et indicateurs latéraux"
-                    className="xl:col-span-3 space-y-4"
+                    className="order-2 xl:order-3 xl:col-span-3 space-y-4"
                 >
-                    {/* Carte 1 : Panneau « Recherche » Gemini façon Google Finance Beta */}
+                    {/* Carte 1 : Panneau « Recherche » Gemini façon Google Finance Beta (barre compacte sur mobile, complet sur bureau) */}
                     <section
                         aria-label="Assistant de recherche financière Gemini"
-                        className="premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-4"
+                        className="premium-card rounded-xl bg-surface border border-bordure p-3.5 sm:p-5 space-y-3 xl:space-y-4"
                     >
-                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
+                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-2.5 xl:pb-3">
                             <div className="flex items-center gap-2">
                                 <Icon name="sparkles" size={16} className="text-ink-100" aria-hidden="true" />
                                 <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
@@ -1742,14 +1977,14 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             </button>
                         </div>
 
-                        <p className="text-sm font-semibold text-ink-50 leading-snug">
+                        <p className="hidden xl:block text-sm font-semibold text-ink-50 leading-snug">
                             {prenom
                                 ? `Bonjour ${prenom}, posez n’importe quelle question financière`
                                 : 'Bonjour, posez n’importe quelle question financière'}
                         </p>
 
-                        {/* 3 cartes de questions suggérées avec icône étincelle */}
-                        <div className="space-y-2">
+                        {/* 3 cartes de questions suggérées avec icône étincelle (affichées sur grand écran) */}
+                        <div className="hidden xl:block space-y-2">
                             {QUESTIONS_GEMINI_SUGGEREES.map((q) => (
                                 <button
                                     key={q}
@@ -1768,8 +2003,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             ))}
                         </div>
 
-                        {/* Découvrez vos possibilités : puces d'actions Google Finance Beta */}
-                        <div className="space-y-2 pt-1">
+                        {/* Découvrez vos possibilités : puces d'actions Google Finance Beta (affichées sur grand écran) */}
+                        <div className="hidden xl:block space-y-2 pt-1">
                             <div className="text-[11px] font-medium text-ink-300">
                                 Découvrez vos possibilités
                             </div>
@@ -1844,10 +2079,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
                     </section>
 
-                    {/* Carte 2 : Répartition colorée du portefeuille */}
+                    {/* Carte 2 : Répartition colorée du portefeuille (visible sous Insights sur mobile, toujours sur bureau) */}
                     <section
                         aria-label="Répartition visuelle des actifs"
-                        className="premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-4"
+                        className={`premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-4 ${
+                            sousOngletCentre === 'insights' ? 'block' : 'hidden xl:block'
+                        }`}
                     >
                         <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
                             <div>
@@ -1980,10 +2217,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
                     </section>
 
-                    {/* Carte 3 : Flux d'opérations récentes */}
+                    {/* Carte 3 : Flux d'opérations récentes (visible sous Transactions sur mobile, toujours sur bureau) */}
                     <section
                         aria-label="Opérations récentes"
-                        className="premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-3.5"
+                        className={`premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-3.5 ${
+                            sousOngletCentre === 'transactions' ? 'block' : 'hidden xl:block'
+                        }`}
                     >
                         <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
                             <div>
@@ -2050,10 +2289,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         )}
                     </section>
 
-                    {/* Carte 4 : Prochains jalons & calendrier patrimonial */}
+                    {/* Carte 4 : Prochains jalons & calendrier patrimonial (visible sous Événements sur mobile, toujours sur bureau) */}
                     <section
                         aria-label="Prochains jalons patrimoniaux"
-                        className="premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-3.5"
+                        className={`premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-3.5 ${
+                            sousOngletCentre === 'evenements' ? 'block' : 'hidden xl:block'
+                        }`}
                     >
                         <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
                             <div>
@@ -2107,10 +2348,73 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             })}
                         </div>
                     </section>
+
+                    {/* Carte 5 : Preuves & Sources de véracité (100 % traçable vers le moteur et FISCAL_REFERENCE.md) */}
+                    <section
+                        data-testid="preuves-sources-panel"
+                        aria-label="Preuves et sources de véracité des calculs"
+                        className={`premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-3.5 ${
+                            sousOngletCentre === 'evenements' ? 'block' : 'hidden xl:block'
+                        }`}
+                    >
+                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
+                            <div>
+                                <div className="flex items-center gap-1.5">
+                                    <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                                        Preuves & Sources
+                                    </h2>
+                                    <span className="gf-badge-nouvelle">Vérifié</span>
+                                </div>
+                                <p className="text-xs text-ink-300">
+                                    Traçabilité mathématique & fiscale ARC / Revenu Québec
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.TAX)}
+                                onMouseEnter={() => prefetchTab(Tab.TAX)}
+                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-100 inline-flex items-center gap-1 focus-ring whitespace-nowrap shrink-0"
+                            >
+                                <span>Audit</span>
+                                <Icon name="chevron-right" size={14} aria-hidden="true" />
+                            </button>
+                        </div>
+
+                        <div className="rounded-lg border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
+                            {preuvesVeracite.map((preuve) => (
+                                <button
+                                    key={preuve.id}
+                                    type="button"
+                                    onClick={() => setActiveTab(preuve.tab)}
+                                    className="gf-row touch-target w-full p-3 text-left space-y-1 focus-ring"
+                                >
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-xs font-semibold text-ink-50 truncate">
+                                            {preuve.titre}
+                                        </span>
+                                        <span className="px-1.5 py-0.5 rounded-full gf-delta-up font-mono text-[10px] font-semibold shrink-0">
+                                            {preuve.montantNumeric != null ? (
+                                                <PrivateAmount>{formatCompactCAD(preuve.montantNumeric)}</PrivateAmount>
+                                            ) : (
+                                                <span>{preuve.badgeTexte}</span>
+                                            )}
+                                        </span>
+                                    </div>
+                                    <div className="text-[11px] font-mono text-ink-200 truncate">
+                                        {preuve.formule}
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2 text-[10px] font-mono text-ink-400">
+                                        <span className="truncate">{preuve.sourceCode}</span>
+                                        <span className="truncate text-right">{preuve.referenceOfficielle}</span>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </section>
                 </aside>
             </div>
 
-            {/* 3. BARRE DES SECTEURS & MODULES DU PATRIMOINE (8 ACCÈS DIRECTS) */}
+            {/* 3. BARRE DES SECTEURS & MODULES DU PATRIMOINE (8 ACCÈS DIRECTS EN RUBAN SUR MOBILE) */}
             <section
                 aria-label="Accès visuel aux espaces"
                 className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
@@ -2121,14 +2425,14 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     </h2>
                     <span className="text-[11px] text-ink-400">Accès direct par secteur</span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 divide-x divide-y lg:divide-y-0 divide-bordure bg-fond">
+                <div className="flex overflow-x-auto no-scrollbar sm:grid sm:grid-cols-4 lg:grid-cols-8 divide-x divide-bordure bg-fond">
                     {tuilesLanceur.map((tuile) => (
                         <button
                             key={tuile.tab}
                             type="button"
                             onClick={() => setActiveTab(tuile.tab)}
                             onMouseEnter={() => prefetchTab(tuile.tab)}
-                            className="touch-target px-3.5 py-3 text-left hover:bg-surface-douce flex flex-col justify-between gap-1.5 transition-colors duration-100 focus-ring group"
+                            className="touch-target shrink-0 min-w-[136px] sm:min-w-0 px-3.5 py-3 text-left hover:bg-surface-douce flex flex-col justify-between gap-1.5 transition-colors duration-100 focus-ring group"
                         >
                             <div className="flex items-center justify-between gap-1.5">
                                 <span className="text-xs font-semibold text-ink-100 group-hover:text-ink-50 truncate">
@@ -2152,17 +2456,19 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 </div>
             </section>
 
-            {/* 4. EXÉCUTION BUDGÉTAIRE (6 MOIS) & OBJECTIFS FINANCIERS */}
-            <MonthlySpendingVsBudgetChart
-                transactions={state.transactions}
-                budgetItems={state.budgetItems}
-                isPrivacyMode={isPrivacyMode}
-            />
+            {/* 4. EXÉCUTION BUDGÉTAIRE (6 MOIS) & OBJECTIFS FINANCIERS (affichés sous Insights sur mobile, toujours sur bureau) */}
+            <div className={`space-y-4 ${sousOngletCentre === 'insights' ? 'block' : 'hidden xl:block'}`}>
+                <MonthlySpendingVsBudgetChart
+                    transactions={state.transactions}
+                    budgetItems={state.budgetItems}
+                    isPrivacyMode={isPrivacyMode}
+                />
 
-            <FinancialGoalsProgressSection
-                goals={state.financialGoals ?? []}
-                todayIso={todayIso}
-            />
+                <FinancialGoalsProgressSection
+                    goals={state.financialGoals ?? []}
+                    todayIso={todayIso}
+                />
+            </div>
 
             {/* Alternatives textuelles accessibles pour les deux graphiques Recharts */}
             <ChartDataTable

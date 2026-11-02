@@ -19,6 +19,8 @@ import {
     readSyncFile,
     listAppDataFiles,
     readAppDataFile,
+    listSyncFileRevisions,
+    readSyncFileRevision,
 } from './googleDrive/driveAppData';
 import { STORAGE_KEYS } from '../utils/storageKeys';
 import firebaseAppletConfig from '../firebase-applet-config.json';
@@ -26,8 +28,11 @@ import firebaseAppletConfig from '../firebase-applet-config.json';
 const PROTECTED_DOSSIER_STORAGE_KEY = 'financeai:protected_dossier:v1';
 const GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY = 'financeai:google_drive_client_id:v1';
 
-/** Active automatiquement l'authentification Google Drive avec le client OAuth provisionné. */
-export function ensureDefaultGoogleAuthConfigured(): void {
+/**
+ * Configure le Client ID OAuth Google Drive si présent, sans activer de sondage en arrière-plan
+ * lorsque la synchronisation principale est assurée par Cloud Firestore.
+ */
+export function ensureDefaultGoogleAuthConfigured(activateFullSync = false): void {
     const isTestEnv = typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test';
     if (isTestEnv) return;
     if (isGoogleAuthConfigured()) return;
@@ -35,10 +40,36 @@ export function ensureDefaultGoogleAuthConfigured(): void {
         typeof import.meta !== 'undefined'
             ? (import.meta.env?.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim()
             : undefined;
-    const clientId = envClientId || firebaseAppletConfig.oAuthClientId?.trim() || '';
+    const clientId = envClientId || (activateFullSync ? firebaseAppletConfig.oAuthClientId?.trim() : '') || '';
     if (clientId) {
         initSync(clientId);
     }
+}
+
+/**
+ * Calcule un score de richesse objectif d'un dossier candidat (nombre d'actifs, transactions, postes budgétaires,
+ * projets immobiliers et soldes courtiers) afin de toujours privilégier le dossier complet face à un état partiel ou écrasé.
+ */
+export function computeDossierRichness(candidate: Partial<AppState> | null | undefined): number {
+    if (!candidate) return 0;
+    if (isTestPersonaState(candidate as Record<string, unknown>)) return 0;
+    if (isStarterTemplateState(candidate)) return 0;
+    const assetsCount = (candidate.assets ?? []).length;
+    const txCount = (candidate.transactions ?? []).length;
+    const budgetCount = (candidate.budgetItems ?? []).length;
+    const immoCount = (candidate.realEstateGoals ?? []).length;
+    const goalsCount = (candidate.financialGoals ?? []).length;
+    const brokerCount =
+        (candidate.fintableBrokerBalances ?? []).length +
+        ((candidate.brokerLedger ?? []).length > 0 ? 2 : 0);
+    return (
+        assetsCount * 100 +
+        txCount +
+        budgetCount * 20 +
+        immoCount * 50 +
+        goalsCount * 25 +
+        brokerCount * 100
+    );
 }
 
 export interface RecoverableSnapshotInfo {
@@ -75,6 +106,9 @@ export function isStarterTemplateState(candidate: Partial<AppState> | null | und
     const hasStarterGoal = (candidate.financialGoals ?? []).some((g) => g.id === 'init-goal-urgence');
     const hasBrokerLedger = Array.isArray(candidate.brokerLedger) && candidate.brokerLedger.length > 0;
     if (hasBrokerLedger) return false;
+    if ((candidate.transactions ?? []).length > 60 || (candidate.assets ?? []).length > 5) {
+        return false;
+    }
     if (firstUserName === 'Alex' && (hasStarterBudget || hasStarterDebt || hasStarterGoal)) {
         return true;
     }
@@ -353,6 +387,9 @@ export async function listRecoverableSnapshots(): Promise<RecoverableSnapshotInf
         if (a.isCustomUserDossier !== b.isCustomUserDossier) {
             return a.isCustomUserDossier ? -1 : 1;
         }
+        const richA = computeDossierRichness(a.state);
+        const richB = computeDossierRichness(b.state);
+        if (richA !== richB) return richB - richA;
         return b.timestamp - a.timestamp;
     });
 
@@ -382,8 +419,8 @@ export function restoreSpecificSnapshot(snapshot: RecoverableSnapshotInfo): void
 }
 
 /**
- * Fouille Google Drive (`appDataFolder`) avec le jeton Google actif
- * pour retrouver et restaurer le vrai dossier de l'utilisateur (hors gabarit Alex).
+ * Fouille Google Drive (`appDataFolder` + historique des révisions Drive `revisions`) avec le jeton Google actif
+ * pour retrouver et restaurer la version la plus riche du dossier de l'utilisateur (même après un push accidentel).
  */
 export async function chercherEtRestaurerDepuisGoogleDrive(): Promise<{
     restored: boolean;
@@ -393,12 +430,33 @@ export async function chercherEtRestaurerDepuisGoogleDrive(): Promise<{
     const token = getCachedToken();
     if (!token) return null;
 
-    // 1. Fichier principal `financeai-sync.json` dans `appDataFolder`
+    const currentLocal = useFinanceStore.getState();
+    const localRichness = computeDossierRichness(currentLocal);
+
+    let bestCandidate: Partial<AppState> | null = null;
+    let bestRichness = localRichness;
+    let bestLabel = '';
+
+    const considerCandidate = (raw: unknown, label: string) => {
+        const candidate = extractStateFromAnyEnvelope(raw);
+        if (!candidate) return;
+        if (isTestPersonaState(candidate as Record<string, unknown>)) return;
+        if (isStarterTemplateState(candidate)) return;
+        if (!hasMeaningfulData(candidate)) return;
+        const richness = computeDossierRichness(candidate);
+        if (richness > bestRichness || (bestCandidate === null && localRichness === 0 && richness > 0)) {
+            bestCandidate = candidate;
+            bestRichness = richness;
+            bestLabel = label;
+        }
+    };
+
+    // 1. Fichier principal `financeai-sync.json` + son historique de révisions Google Drive (`revisions`)
     try {
         const syncRef = await findSyncFile(token);
         if (syncRef) {
             const envelope = await readSyncFile(token, syncRef.id);
-            if (envelope.enc) {
+            if (envelope.enc && localRichness === 0) {
                 await pullNow();
                 const afterPull = useFinanceStore.getState();
                 if (!isStarterTemplateState(afterPull) && hasMeaningfulData(afterPull)) {
@@ -409,16 +467,38 @@ export async function chercherEtRestaurerDepuisGoogleDrive(): Promise<{
                     };
                 }
             } else if (envelope.payload) {
-                const candidate = extractStateFromAnyEnvelope(envelope.payload);
-                if (candidate && hasMeaningfulData(candidate) && !isStarterTemplateState(candidate)) {
-                    await pullNow();
-                    const afterPull = useFinanceStore.getState();
-                    return {
-                        restored: true,
-                        netWorth: computeCandidateNetWorth(afterPull),
-                        sourceLabel: 'Google Drive (synchronisation principale)',
-                    };
+                considerCandidate(envelope.payload, 'Google Drive (synchronisation principale)');
+            }
+
+            // Inspection de l'historique des révisions Google Drive pour récupérer les données avant un push accidentel
+            try {
+                const revisions = await listSyncFileRevisions(token, syncRef.id);
+                // Trier par taille décroissante puis date décroissante pour inspecter en priorité les révisions les plus riches
+                const sortedRevs = [...revisions]
+                    .sort((a, b) => {
+                        const sizeDiff = Number(b.size ?? 0) - Number(a.size ?? 0);
+                        if (sizeDiff !== 0) return sizeDiff;
+                        return (b.modifiedTime || '').localeCompare(a.modifiedTime || '');
+                    })
+                    .slice(0, 8);
+                for (const rev of sortedRevs) {
+                    try {
+                        const revEnv = await readSyncFileRevision(token, syncRef.id, rev.id);
+                        if (!revEnv.enc && revEnv.payload) {
+                            const dateStr = rev.modifiedTime
+                                ? new Date(rev.modifiedTime).toLocaleString('fr-CA')
+                                : rev.id;
+                            considerCandidate(
+                                revEnv.payload,
+                                `Historique Google Drive (révision du ${dateStr})`,
+                            );
+                        }
+                    } catch {
+                        // Révision suivante
+                    }
                 }
+            } catch {
+                // API révisions non disponible ou hors-ligne
             }
         }
     } catch {
@@ -431,29 +511,25 @@ export async function chercherEtRestaurerDepuisGoogleDrive(): Promise<{
         const sortedFiles = [...appDataFiles].sort((a, b) =>
             (b.modifiedTime || '').localeCompare(a.modifiedTime || ''),
         );
-        for (const file of sortedFiles) {
+        for (const file of sortedFiles.slice(0, 10)) {
             try {
                 const rawContent = await readAppDataFile<unknown>(token, file.id);
-                const candidate = extractStateFromAnyEnvelope(rawContent);
-                if (
-                    candidate &&
-                    !isTestPersonaState(candidate as Record<string, unknown>) &&
-                    hasMeaningfulData(candidate) &&
-                    !isStarterTemplateState(candidate)
-                ) {
-                    applyRecoveredState(candidate);
-                    return {
-                        restored: true,
-                        netWorth: computeCandidateNetWorth(useFinanceStore.getState()),
-                        sourceLabel: `Google Drive (${file.name})`,
-                    };
-                }
+                considerCandidate(rawContent, `Google Drive (${file.name})`);
             } catch {
                 // Fichier suivant
             }
         }
     } catch {
         // appDataFolder inaccessible ou hors-ligne
+    }
+
+    if (bestCandidate) {
+        applyRecoveredState(bestCandidate);
+        return {
+            restored: true,
+            netWorth: computeCandidateNetWorth(useFinanceStore.getState()),
+            sourceLabel: bestLabel,
+        };
     }
 
     return null;

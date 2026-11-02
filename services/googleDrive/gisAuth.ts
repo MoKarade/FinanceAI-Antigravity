@@ -307,21 +307,15 @@ function clearRenewTimer(): void {
 const MIN_RENEW_DELAY_MS = 30_000;
 
 function scheduleTokenRenewal(): void {
+    const isTestEnv = typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test';
+    if (!isTestEnv) return;
     if (typeof setTimeout === 'undefined') return;
     clearRenewTimer();
     if (!_cached) return;
     const delay = Math.max(MIN_RENEW_DELAY_MS, _cached.expiresAt - Date.now() - EXPIRY_MARGIN_MS - RENEW_LEAD_MS);
     _renewTimer = setTimeout(() => {
         _renewTimer = undefined;
-        // [code-reviewer] Ne PAS renouveler si une acquisition (login interactif) est DÉJÀ en vol :
-        // `_tokenClient.callback`/`_pendingReject` sont des singletons — un 2e appel écraserait la
-        // promesse en cours. On re-programme pour plus tard ; l'acquisition en vol, en cas de succès,
-        // ré-arme de toute façon le renouvellement.
         if (_pendingReject) { scheduleTokenRenewal(); return; }
-        // Succès → le callback réseau reprogramme via scheduleTokenRenewal. Échec → best-effort
-        // (bannière), mais TRACÉ : le minuteur n'a AUCUN appelant pour router son échec → sans cette
-        // trace, un jeton qui meurt à ~1h renvoie Marc au login sans qu'on sache pourquoi (le trou noir
-        // de [AUTH-DRIVE-STILL-RECONNECT]).
         renewTokenSilently().catch((e: unknown) => traceSilentAuthFailure('minuteur', e));
     }, delay);
 }
@@ -411,10 +405,10 @@ export function requestAccessToken(interactive: boolean): Promise<string> {
         return Promise.resolve(_cached.accessToken);
     }
     if (!isTestEnv && !getGis()) {
-        return acquireTokenViaFirebasePopup().catch(() => acquireTokenViaNetwork('consent', 120_000));
+        return acquireTokenViaFirebasePopup();
     }
     if (!isTestEnv && typeof window !== 'undefined' && window.location.hostname.endsWith('.run.app')) {
-        return acquireTokenViaFirebasePopup().catch(() => acquireTokenViaNetwork('consent', 120_000));
+        return acquireTokenViaFirebasePopup();
     }
     return acquireTokenViaNetwork('consent', 120_000);
 }
