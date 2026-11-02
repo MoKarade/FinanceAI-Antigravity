@@ -189,15 +189,27 @@ export const Planning: React.FC<PlanningProps> = ({ transactions, apiKey }) => {
 
     return (
         <div className="space-y-6 animate-fade-in pb-20">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 bg-surface p-5 md:p-6 rounded-card border border-white/6">
-                <div>
+            <div className="gf-page-header flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-surface p-5 md:p-6 rounded-card border border-bordure">
+                <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="gf-ticker-symbol">
+                            <span className="w-1.5 h-1.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
+                            <span>ABOS:CAD · CHARGES FIXES</span>
+                        </span>
+                        <span className="gf-badge-nouvelle">Beta</span>
+                    </div>
                     <h2 className="text-[17px] lg:text-[18px] font-semibold text-ink-50">Charges fixes et abonnements</h2>
-                    <p className="text-ink-300 text-body mt-1">Abonnements & Factures Récurrentes.</p>
+                    <p className="text-ink-300 text-body">Abonnements & Factures Récurrentes.</p>
                 </div>
-                <div className="flex gap-4">
-                    <div className="text-right"><div className="text-tiny uppercase text-ink-400 font-bold">Fixe Mensuel</div><PrivateAmount as="div" className="text-2xl font-bold text-danger-400">{formatCAD(totalMonthly)}</PrivateAmount></div>
-                    <div className="w-px bg-white/10"></div>
-                    <div className="text-right"><div className="text-tiny uppercase text-ink-400 font-bold">Coût Annuel</div><PrivateAmount as="div" className="text-2xl font-bold text-white">{formatCAD(totalYearly)}</PrivateAmount></div>
+                <div className="gf-quote-strip w-full md:w-auto grid grid-cols-2 rounded-xl border border-bordure bg-fond">
+                    <div className="gf-quote-cell text-right px-4 py-2.5">
+                        <div className="text-tiny uppercase text-ink-400 font-bold">Fixe Mensuel</div>
+                        <PrivateAmount as="div" className="font-mono text-xl sm:text-2xl font-bold text-danger-400 tabular-nums">{formatCAD(totalMonthly)}</PrivateAmount>
+                    </div>
+                    <div className="gf-quote-cell text-right px-4 py-2.5">
+                        <div className="text-tiny uppercase text-ink-400 font-bold">Coût Annuel</div>
+                        <PrivateAmount as="div" className="font-mono text-xl sm:text-2xl font-bold text-ink-50 tabular-nums">{formatCAD(totalYearly)}</PrivateAmount>
+                    </div>
                 </div>
             </div>
             {/* [SUBS-TAB] Les marchands ÉCARTÉS restent VISIBLES et restaurables.
@@ -205,22 +217,23 @@ export const Planning: React.FC<PlanningProps> = ({ transactions, apiKey }) => {
                 ferait disparaître un vrai abonnement sans recours, et Marc chercherait pourquoi
                 son total a baissé. Le refus est durable, pas irréversible. */}
             {dismissedSubs.length > 0 && (
-                <details className="mb-3 text-tiny text-ink-400">
+                <details className="gf-terminal-card px-4 py-2.5 mb-3 text-tiny text-ink-400">
                     <summary className="cursor-pointer touch-target focus-ring rounded-sm inline-flex items-center">
                         {dismissedSubs.length} marchand(s) écarté(s) — « pas un abonnement »
                     </summary>
                     <ul className="mt-2 space-y-1">
                         {dismissedSubs.map((key) => (
-                            <li key={key} className="flex items-center justify-between gap-2">
+                            <li key={key} className="gf-row flex items-center justify-between gap-2 px-2 py-1 rounded-lg">
                                 {/* ⚠️ [finding vie privée #645] `key` N'EST PAS un identifiant opaque :
                                     `subscriptionKey` le construit littéralement depuis
                                     `payee.trim().toLowerCase()`. C'est donc un nom de marchand
                                     normalisé — masqué comme les autres, texte ET attribut. */}
                                 <PrivateText className="text-ink-300 truncate">{key}</PrivateText>
                                 <button
+                                    type="button"
                                     onClick={() => handleRestoreSub(key)}
                                     aria-label={`Réafficher ${maskPayee(key, isPrivacyMode)} dans les abonnements détectés`}
-                                    className="text-tiny text-ink-400 hover:text-primary px-2 py-1.5 rounded-sm focus-ring"
+                                    className="touch-target text-tiny text-ink-300 hover:text-ink-50 px-2.5 py-1.5 rounded-full border border-bordure bg-surface-douce focus-ring"
                                 >Réafficher</button>
                             </li>
                         ))}
@@ -229,15 +242,25 @@ export const Planning: React.FC<PlanningProps> = ({ transactions, apiKey }) => {
             )}
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                 <div className="xl:col-span-1 space-y-6">
-                    <Card title="Abonnements & Récurrents" action={
-                        <div className="flex gap-2">{!aiSubs ? (<button onClick={handleAiAnalysis} disabled={isAnalyzing} className="text-tiny bg-primary text-dark px-2 py-1 rounded-sm font-bold hover:bg-white disabled:opacity-50">{isAnalyzing ? '...' : 'IA'}</button>) : (<button onClick={() => setAiSubs(null)} className="text-tiny bg-white/10 px-2 py-1 rounded-sm text-ink-300">Reset</button>)}</div>
+                    <Card className="gf-terminal-card" title="Abonnements & Récurrents" action={
+                        <div className="flex gap-2">
+                            {!aiSubs ? (
+                                <button type="button" onClick={handleAiAnalysis} disabled={isAnalyzing} className="touch-target gf-chip gf-chip-active text-tiny px-3 py-1.5 rounded-full font-bold disabled:opacity-50 focus-ring">
+                                    {isAnalyzing ? '...' : 'IA'}
+                                </button>
+                            ) : (
+                                <button type="button" onClick={() => setAiSubs(null)} className="touch-target gf-chip text-tiny bg-surface-douce border border-bordure px-3 py-1.5 rounded-full text-ink-300 hover:text-ink-50 focus-ring">
+                                    Reset
+                                </button>
+                            )}
+                        </div>
                     }>
                         {subscriptionAlerts.length > 0 && (
                             <ul className="space-y-2 mb-3">
                                 {subscriptionAlerts.map((a) => (
                                     <li
                                         key={`${a.kind}-${a.merchantKey}`}
-                                        className={`rounded-lg border p-2 text-meta ${a.kind === 'price_rise' ? 'border-warning-500/30 bg-warning-500/5' : 'border-info-500/30 bg-info-500/5'}`}
+                                        className={`rounded-xl border p-2.5 text-meta ${a.kind === 'price_rise' ? 'gf-delta-amber border-warning-500/30 bg-alerte-fond/60' : 'border-info-500/30 bg-surface-douce'}`}
                                     >
                                         {/* `a.label` vient de `merchantProfile.ts` : c'est le payee. */}
                                         <PrivateText className="font-bold text-ink-100 truncate">{a.label}</PrivateText>
@@ -264,30 +287,30 @@ export const Planning: React.FC<PlanningProps> = ({ transactions, apiKey }) => {
                         )}
                         <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
                             {activeSubs.map((sub, idx) => (
-                                <div key={subscriptionKey(sub) || idx} className="flex justify-between items-center p-3 bg-[#1a1a1a] rounded-xl border border-white/5 hover:border-white/20 transition-all group">
+                                <div key={subscriptionKey(sub) || idx} className="gf-row flex justify-between items-center p-3 bg-surface-douce rounded-xl border border-bordure hover:border-bordure-champ transition-all group">
                                     <div className="flex items-center gap-3 overflow-hidden">
-                                        <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center shadow-inner shrink-0"><Icon name={subIcon(sub.payee)} size={16} className="text-ink-300" /></div>
-                                        <div className="min-w-0"><PrivateText as="div" className="font-bold text-white text-body truncate">{sub.payee}</PrivateText><div className="text-tiny text-ink-400">{subscriptionDueLabel(sub)}</div></div>
+                                        <div className="w-8 h-8 rounded-lg bg-fond border border-bordure flex items-center justify-center shadow-inner shrink-0"><Icon name={subIcon(sub.payee)} size={16} className="text-ink-300" /></div>
+                                        <div className="min-w-0"><PrivateText as="div" className="font-bold text-ink-50 text-body truncate">{sub.payee}</PrivateText><div className="text-tiny text-ink-400">{subscriptionDueLabel(sub)}</div></div>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
                                         {/* [PH4-F] épingler = persister l'abo (survit au reload sans re-détection IA) */}
                                         {isPinned(pinnedSubs, sub) ? (
-                                            <button onClick={() => handleUnpinSub(sub)} aria-label={`Désépingler ${maskPayee(sub.payee, isPrivacyMode)}`} title="Épinglé — cliquer pour retirer" className="text-tiny font-bold text-primary hover:text-danger-400 px-2 py-1.5 rounded-sm transition-colors">Épinglé</button>
+                                            <button type="button" onClick={() => handleUnpinSub(sub)} aria-label={`Désépingler ${maskPayee(sub.payee, isPrivacyMode)}`} title="Épinglé — cliquer pour retirer" className="touch-target text-tiny font-bold text-ink-50 hover:text-danger-400 px-2.5 py-1.5 rounded-full border border-bordure bg-fond transition-colors focus-ring">Épinglé</button>
                                         ) : (
-                                            <button onClick={() => handlePinSub(sub)} aria-label={`Épingler ${maskPayee(sub.payee, isPrivacyMode)}`} title="Épingler — le garder après actualisation" className="text-tiny text-ink-400 hover:text-primary px-2 py-1.5 rounded-sm transition-all md:opacity-0 md:group-hover:opacity-100 focus:opacity-100">Épingler</button>
+                                            <button type="button" onClick={() => handlePinSub(sub)} aria-label={`Épingler ${maskPayee(sub.payee, isPrivacyMode)}`} title="Épingler — le garder après actualisation" className="touch-target text-tiny text-ink-400 hover:text-ink-50 px-2.5 py-1.5 rounded-full transition-all md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 focus-ring">Épingler</button>
                                         )}
                                         {/* [SUBS-TAB] Refuser un faux positif — sinon il revient à CHAQUE actualisation.
                                             HORS du ternaire épinglé/non : refuser vaut dans les deux états (le handler
                                             désépingle en même temps, pour ne pas laisser deux vérités contradictoires). */}
-                                        <button onClick={() => handleDismissSub(sub)} aria-label={`${maskPayee(sub.payee, isPrivacyMode)} n'est pas un abonnement`} title="Ce n'est pas un abonnement — ne plus le proposer" className="text-tiny text-ink-400 hover:text-danger-400 px-2 py-1.5 rounded-sm transition-all md:opacity-0 md:group-hover:opacity-100 focus:opacity-100">Pas un abo</button>
-                                        <div className="text-right"><PrivateAmount as="div" className="font-bold text-white">{formatCAD(monthlyEquivalent(sub))}</PrivateAmount><div className="text-tiny text-ink-400">/mois</div></div>
+                                        <button type="button" onClick={() => handleDismissSub(sub)} aria-label={`${maskPayee(sub.payee, isPrivacyMode)} n'est pas un abonnement`} title="Ce n'est pas un abonnement — ne plus le proposer" className="touch-target text-tiny text-ink-400 hover:text-danger-400 px-2.5 py-1.5 rounded-full transition-all md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 focus-ring">Pas un abo</button>
+                                        <div className="text-right"><PrivateAmount as="div" className="font-mono font-bold text-ink-50 tabular-nums">{formatCAD(monthlyEquivalent(sub))}</PrivateAmount><div className="text-tiny text-ink-400">/mois</div></div>
                                     </div>
                                 </div>
                             ))}
                             {activeSubs.length === 0 && <div className="text-center text-ink-400 py-10">Aucun abonnement détecté.</div>}
                         </div>
-                        <div className="mt-4 bg-danger-500/10 border border-danger-500/20 p-3 rounded-xl">
-                            <div className="text-tiny text-red-300 uppercase font-bold mb-2">Le "Latte Factor"</div>
+                        <div className="mt-4 bg-erreur-fond border border-danger-500/20 p-3.5 rounded-xl">
+                            <div className="text-tiny text-erreur-texte uppercase font-bold mb-2">Le "Latte Factor"</div>
                             <div className="text-tiny text-ink-300 mb-2">
                                 Impact à long terme de ces {activeSubs.length} abonnements si l'argent était plutôt investi.
                             </div>
@@ -296,11 +319,11 @@ export const Planning: React.FC<PlanningProps> = ({ transactions, apiKey }) => {
                     </Card>
                 </div>
                 <div className="xl:col-span-1 space-y-6">
-                    <Card title="Calendrier des Factures">
-                        <div className="flex justify-between items-center mb-4 bg-white/5 p-2 rounded-lg">
-                            <button onClick={() => changeMonth(-1)} aria-label="Mois précédent" className="touch-target flex items-center justify-center hover:bg-white/10 rounded-sm text-ink-300 focus-ring">◀</button>
-                            <h2 className="text-body font-bold text-white capitalize">{currentDate.toLocaleString('fr-CA', { month: 'long', year: 'numeric' })}</h2>
-                            <button onClick={() => changeMonth(1)} aria-label="Mois suivant" className="touch-target flex items-center justify-center hover:bg-white/10 rounded-sm text-ink-300 focus-ring">▶</button>
+                    <Card className="gf-terminal-card" title="Calendrier des Factures">
+                        <div className="flex justify-between items-center mb-4 bg-surface-douce border border-bordure p-2 rounded-xl">
+                            <button type="button" onClick={() => changeMonth(-1)} aria-label="Mois précédent" className="touch-target flex items-center justify-center hover:bg-fond rounded-lg text-ink-300 focus-ring">◀</button>
+                            <h2 className="text-body font-bold text-ink-50 capitalize">{currentDate.toLocaleString('fr-CA', { month: 'long', year: 'numeric' })}</h2>
+                            <button type="button" onClick={() => changeMonth(1)} aria-label="Mois suivant" className="touch-target flex items-center justify-center hover:bg-fond rounded-lg text-ink-300 focus-ring">▶</button>
                         </div>
                         <div className="grid grid-cols-7 gap-1">
                             {/* [PLANNING-CALENDAR-KEY-DOUBLON] La clé est le nom COMPLET, pas la lettre
@@ -326,9 +349,9 @@ export const Planning: React.FC<PlanningProps> = ({ transactions, apiKey }) => {
                                 const hasBills = bills.length > 0;
                                 const dailyTotal = bills.reduce((s, b) => s + b.averageAmount, 0);
                                 return (
-                                    <div key={idx} className={`aspect-square rounded-lg border flex flex-col items-center justify-center relative ${isToday ? 'bg-primary/20 border-primary' : hasBills ? 'bg-danger-500/10 border-danger-500/30' : 'bg-dark/40 border-white/5'}`}>
+                                    <div key={idx} className={`aspect-square rounded-lg border flex flex-col items-center justify-center relative transition-colors ${isToday ? 'bg-primary/20 border-primary' : hasBills ? 'gf-delta-down border-danger-500/30' : 'bg-fond/60 border-bordure'}`}>
                                         <span className={`text-meta font-bold ${isToday ? 'text-primary' : 'text-ink-400'}`}>{day}</span>
-                                        {hasBills && <div className="mt-1 text-center"><div className="text-tiny font-bold text-white leading-none"><PrivateAmount>{formatCAD(dailyTotal)}</PrivateAmount></div><div className="flex gap-0.5 justify-center mt-0.5">{bills.slice(0, 3).map((b, bi) => <div key={bi} className="w-1 h-1 rounded-full bg-danger-400" title={maskPayee(b.payee, isPrivacyMode)}></div>)}</div></div>}
+                                        {hasBills && <div className="mt-1 text-center"><div className="text-tiny font-mono font-bold text-ink-50 leading-none tabular-nums"><PrivateAmount>{formatCAD(dailyTotal)}</PrivateAmount></div><div className="flex gap-0.5 justify-center mt-0.5">{bills.slice(0, 3).map((b, bi) => <div key={bi} className="w-1 h-1 rounded-full bg-danger-400" title={maskPayee(b.payee, isPrivacyMode)}></div>)}</div></div>}
                                     </div>
                                 );
                             })}

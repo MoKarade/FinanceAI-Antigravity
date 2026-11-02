@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-02 — Refonte visuelle Google Finance Beta de toutes les pages
+
+- Chaque page (Futur, Placements, Transactions, Budget, Abonnements, Immobilier, Projets immobiliers, Retraite, Impôts, Dettes, Projets de vie, Enfants, Profil, Paramètres) et la coquille (`Layout.tsx`, `GoogleFinanceTickerBar.tsx`) reprennent le langage visuel de l'accueil : en-tête `.gf-page-header` à liseré 4 couleurs Google, symbole `.gf-ticker-symbol`, bandeau `.gf-quote-strip`, pilules `.gf-subtab-pill`, cartes `.gf-terminal-card`, lignes `.gf-row`, défilement horizontal sur téléphone.
+- Aucune logique métier modifiée ; cliquets resserrés : couleurs de palette 234 → 219, blanc/noir 738 → 651, hex 202 → 196, contrôles sous 44 px 331 → 300. Cache du Service Worker : `financeai-v8`.
+
 ## 2026-11-02 — Accueil Google Finance Beta 3 colonnes, simplification mobile, récupération Cloud et Preuves de véracité
 
 - La page d'accueil (`components/AccueilGoogle.tsx`) adopte la disposition 3 colonnes inspirée de Google Finance Beta sur grand écran et une vue épurée à sous-onglets (`Avoirs / Insights / Transactions / Événements`) sur téléphone, avec un panneau intégré « Preuves & Sources » traçant chaque calcul vers le moteur et `docs/FISCAL_REFERENCE.md`.

@@ -17,9 +17,9 @@ const LIBELLE_CIBLE: Partial<Record<Tab, string>> = {
     [Tab.BUDGET]: 'Budget',
 };
 
-const TUILE_BASE = 'min-w-0 rounded-xl bg-surface border px-3.5 py-2.5 flex flex-col gap-1';
-const TUILE_CLIQUABLE = 'cursor-pointer gf-stat-cell border-primary/25 hover:border-primary/80 hover:bg-surfaceHighlight/40 transition-all duration-200 focus-ring group';
-const PIED_CLIQUABLE = 'mt-auto pt-1.5 border-t border-white/8 flex items-center justify-between text-[11px] font-semibold text-primary group-hover:text-ink-50 transition-colors';
+const TUILE_BASE = 'gf-quote-cell min-w-0 rounded-xl bg-surface border px-3.5 py-2.5 flex flex-col gap-1';
+const TUILE_CLIQUABLE = 'touch-target cursor-pointer gf-stat-cell border-bordure hover:border-repere hover:bg-surface-douce transition-all duration-200 focus-ring group';
+const PIED_CLIQUABLE = 'mt-auto pt-1.5 border-t border-bordure flex items-center justify-between text-[11px] font-semibold text-repere group-hover:text-ink-50 transition-colors';
 
 /**
  * [REFONTE-NAV Lot 1] Bandeau KPI compact AU-DESSUS de la courbe Future (choix Marc :
@@ -63,12 +63,16 @@ const KpiTile: React.FC<{
     scope?: string;
     /** Signal additionnel à côté du libellé (ex. FxEstimateBadge) — jamais de donnée financière. */
     badge?: React.ReactNode;
+    /** Symbole boursier synthétique style Google Finance Beta (sans chiffre ni signe $). */
+    symbole?: string;
+    /** Ton de la pastille symbole (.gf-delta-up / .gf-delta-down / .gf-delta-neutral / .gf-delta-amber). */
+    deltaTone?: 'gf-delta-up' | 'gf-delta-down' | 'gf-delta-neutral' | 'gf-delta-amber';
     /** Couleur de la valeur (maquette : dettes en rouge, épargne en vert). */
     ton?: string;
     /** Navigation directe au clic vers l'écran source (style Google Finance). */
     cibleOnglet?: Tab;
     onClick?: () => void;
-}> = ({ label, value, signed = false, sublabel, privateSublabel = false, scope, badge, ton = 'text-ink-50', cibleOnglet, onClick }) => {
+}> = ({ label, value, signed = false, sublabel, privateSublabel = false, scope, badge, symbole, deltaTone = 'gf-delta-neutral', ton = 'text-ink-50', cibleOnglet, onClick }) => {
     const nomCible = cibleOnglet ? LIBELLE_CIBLE[cibleOnglet] : undefined;
     return (
         <div
@@ -84,10 +88,15 @@ const KpiTile: React.FC<{
                     onClick();
                 }
             }}
-            className={`${TUILE_BASE} ${onClick ? TUILE_CLIQUABLE : 'border-white/6'}`}
+            className={`${TUILE_BASE} ${onClick ? TUILE_CLIQUABLE : 'border-bordure'}`}
         >
             <p className="text-[11px] font-semibold tracking-[0.06em] uppercase text-ink-400 flex flex-wrap items-center gap-1.5">
                 {label}{badge}
+                {symbole && (
+                    <span className={`ml-auto px-1.5 py-0.5 rounded-full text-[9px] font-mono font-bold tracking-wider ${deltaTone}`} aria-hidden="true">
+                        {symbole}
+                    </span>
+                )}
             </p>
             {Number.isFinite(value) ? (
                 <AnimatedNetWorth
@@ -223,10 +232,13 @@ export const FutureKpiStrip: React.FC<{
 
     if (variante === 'mobile-tete') {
         return (
-            <section aria-label="Indicateurs clés" className="flex flex-col gap-0.5 rounded-xl bg-surface/60 border border-bordure px-3 py-2">
+            <section aria-label="Indicateurs clés" className="gf-quote-strip flex flex-col gap-1 rounded-xl bg-surface border border-bordure px-3 py-2.5">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-baseline gap-2 min-w-0">
-                        <p className="text-[10px] font-semibold tracking-[0.08em] uppercase text-ink-400 flex items-center gap-1 shrink-0">Patrimoine net<FxEstimateBadge /></p>
+                        <p className="text-[10px] font-semibold tracking-[0.08em] uppercase text-ink-400 flex items-center gap-1 shrink-0">
+                            Patrimoine net<FxEstimateBadge />
+                            <span className="gf-badge-nouvelle" aria-hidden="true">CAD</span>
+                        </p>
                         {Number.isFinite(net)
                             ? (
                                 <button
@@ -245,7 +257,7 @@ export const FutureKpiStrip: React.FC<{
                             type="button"
                             onClick={() => setActiveTab(Tab.BUDGET)}
                             onMouseEnter={() => prefetchTab(Tab.BUDGET)}
-                            className="touch-target text-xs sm:text-meta font-semibold text-success-400 whitespace-nowrap hover:underline focus-ring rounded-sm"
+                            className={`touch-target px-2 py-0.5 rounded-full text-xs font-mono font-semibold whitespace-nowrap focus-ring ${monthlySavings >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}
                         >
                             <PrivateAmount>{`${monthlySavings > 0 ? '+' : ''}${formatCAD(monthlySavings)}`}</PrivateAmount>/mois
                         </button>
@@ -259,7 +271,7 @@ export const FutureKpiStrip: React.FC<{
         );
     }
     if (variante === 'mobile-pied') {
-        const tuileMobile = 'min-w-0 rounded-2xl bg-surface border border-white/6 p-3.5 flex flex-col gap-1';
+        const tuileMobile = 'gf-quote-cell min-w-0 rounded-2xl bg-surface border border-bordure p-3.5 flex flex-col gap-1';
         return (
             <>
                 <div
@@ -299,7 +311,7 @@ export const FutureKpiStrip: React.FC<{
     }
 
     return (
-        <section aria-label="Indicateurs clés" className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5 gf-spring-grid">
+        <section aria-label="Indicateurs clés" className="gf-quote-strip grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 gf-spring-grid p-3 rounded-2xl bg-surface/60 border border-bordure">
             <KpiTile
                 label="Patrimoine net"
                 value={net}
@@ -307,6 +319,8 @@ export const FutureKpiStrip: React.FC<{
                 // [FX-FALLBACK-SILENCIEUX] : ce chiffre convertit les avoirs étrangers en CAD via
                 // le taux du store — le signal doit vivre ICI (surface la plus vue de l'app).
                 badge={<FxEstimateBadge />}
+                symbole="BILAN:CAD"
+                deltaTone={net >= 0 ? 'gf-delta-up' : 'gf-delta-down'}
                 cibleOnglet={Tab.INVESTMENTS}
                 onClick={() => setActiveTab(Tab.INVESTMENTS)}
             />
@@ -316,6 +330,8 @@ export const FutureKpiStrip: React.FC<{
                 label="Total avoirs"
                 value={avoirs}
                 sublabel={hasRealEstate ? 'valeur brute des biens incluse' : undefined}
+                symbole="ACTIF:BRUT"
+                deltaTone="gf-delta-neutral"
                 cibleOnglet={Tab.INVESTMENTS}
                 onClick={() => setActiveTab(Tab.INVESTMENTS)}
             />
@@ -326,12 +342,16 @@ export const FutureKpiStrip: React.FC<{
                 // ⚠️ Le détail demandé par Marc est PRIVÉ (montant) : seule la VALEUR est masquée,
                 // la phrase reste — la COMPOSITION du total se lit sans qu'aucun chiffre ne sorte.
                 sublabel={detailHypotheque}
+                symbole="PASSIF:TOT"
+                deltaTone={dettes > 0 ? 'gf-delta-down' : 'gf-delta-up'}
                 cibleOnglet={Tab.DEBT}
                 onClick={() => setActiveTab(Tab.DEBT)}
             />
             <KpiTile
                 label="Liquidités"
                 value={liquidity}
+                symbole="CASH:CAD"
+                deltaTone="gf-delta-amber"
                 cibleOnglet={Tab.BUDGET}
                 onClick={() => setActiveTab(Tab.BUDGET)}
             />
@@ -340,10 +360,12 @@ export const FutureKpiStrip: React.FC<{
                 value={monthlySavings}
                 signed
                 ton="text-success-400"
+                symbole="FLUX:MENS"
+                deltaTone={monthlySavings >= 0 ? 'gf-delta-up' : 'gf-delta-down'}
                 cibleOnglet={Tab.BUDGET}
                 onClick={() => setActiveTab(Tab.BUDGET)}
             />
-            {ligneVariation && <div className="col-span-full -mt-1.5">{ligneVariation}</div>}
+            {ligneVariation && <div className="col-span-full -mt-1 pt-1 border-t border-bordure flex items-center justify-between flex-wrap gap-2">{ligneVariation}<span className="gf-badge-nouvelle">Google Finance Quote</span></div>}
         </section>
     );
 };

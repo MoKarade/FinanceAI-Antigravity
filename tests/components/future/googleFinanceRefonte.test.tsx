@@ -142,7 +142,7 @@ describe('Refonte Google Finance — GoogleFinanceHero & BoutonsPimenterFutur', 
         expect(screen.getByText(/1\. Import rapide de relevés/i)).toBeInTheDocument();
         expect(screen.getByText(/2\. Synchronisation bancaire Fintable/i)).toBeInTheDocument();
         expect(screen.getByText(/3\. Cours de marché & Devises/i)).toBeInTheDocument();
-        expect(screen.getByText(/4\. Sauvegarde Google Drive & Fichier JSON/i)).toBeInTheDocument();
+        expect(screen.getByText(/4\. Cloud Google \(Firestore & Drive\) & Fichier JSON/i)).toBeInTheDocument();
         expect(screen.queryByText(/Connecteur MCP Claude & Analyse IA/i)).not.toBeInTheDocument();
     });
 
@@ -499,9 +499,14 @@ describe('Refonte Google Finance — GoogleFinanceHero & BoutonsPimenterFutur', 
         expect(heroSection.className).toContain('premium-card');
         expect(screen.getByTestId('monthly-spending-vs-budget-chart').className).toContain('premium-card');
 
-        const btnLentillePortefeuille = screen.getByRole('button', { name: /Portefeuille liquide/i });
-        fireEvent.click(btnLentillePortefeuille);
-        expect(btnLentillePortefeuille).toHaveAttribute('aria-pressed', 'true');
+        // Deux sélecteurs d'assiette coexistent (colonne gauche ≥ xl, pilules mobiles < xl) : un seul
+        // est affiché à la fois en CSS. Cliquer l'un doit annoncer l'état actif sur LES DEUX.
+        const btnsLentillePortefeuille = screen.getAllByRole('button', { name: /Portefeuille liquide/i });
+        expect(btnsLentillePortefeuille.length).toBeGreaterThanOrEqual(1);
+        fireEvent.click(btnsLentillePortefeuille[0]!);
+        for (const btn of btnsLentillePortefeuille) {
+            expect(btn).toHaveAttribute('aria-pressed', 'true');
+        }
         expect(screen.getByTestId('recharts-trajectory-entrance')).toHaveAttribute('data-chart-lens', 'portefeuille');
         expect(screen.getByTestId('recharts-allocation-entrance')).toHaveAttribute('data-chart-lens', 'portefeuille');
 

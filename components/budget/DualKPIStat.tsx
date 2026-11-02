@@ -51,19 +51,19 @@ export const DualKPIStat: React.FC<DualKPIStatProps> = ({
             ? (ecart <= 0 ? 'succes' : ecartPct <= 50 ? 'alerte' : 'danger')
             : (ecart >= 0 ? 'succes' : 'danger');
     const texte = {
-        neutre: 'gf-delta-neutral text-ink-400',
-        succes: 'gf-delta-up text-success-400',
-        alerte: 'gf-delta-amber text-warning-400',
-        danger: 'gf-delta-down text-danger-400',
+        neutre: 'gf-delta-neutral text-ink-300',
+        succes: 'gf-delta-up text-succes-texte',
+        alerte: 'gf-delta-amber text-alerte-texte',
+        danger: 'gf-delta-down text-erreur-texte',
     }[ton];
-    const fond = barre === 'succes' ? 'bg-success-400' : barre === 'neutre' ? 'bg-ink-100'
-        : { neutre: 'bg-ink-300', succes: 'bg-success-400', alerte: 'bg-warning-400', danger: 'bg-danger-400' }[ton];
+    const fond = barre === 'succes' ? 'gf-alloc-reer' : barre === 'neutre' ? 'gf-alloc-celi'
+        : { neutre: 'gf-alloc-celi', succes: 'gf-alloc-reer', alerte: 'gf-alloc-immo', danger: 'bg-danger-400' }[ton];
     const remplissage = prevu > 0 ? Math.min(1, Math.max(0, reel / prevu)) : 0;
     // [PRIVACY-RATIOS-DUREES-UNIFORMES] L'écart % et la largeur de la barre sont des ratios réel/prévu : masqués en mode discret.
-    const pct = <span className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[11px] font-semibold font-mono tabular-nums ${texte}`}><PrivateAmount>{formatVariationPct(ecartPct)}</PrivateAmount></span>;
+    const pct = <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold font-mono tabular-nums ${texte}`}><PrivateAmount>{formatVariationPct(ecartPct)}</PrivateAmount></span>;
 
     return (
-        <div data-kpi={label} className="gf-stat-cell rounded-2xl bg-surface border border-white/6 px-3.5 py-3 lg:px-[18px] lg:py-4 flex flex-col gap-2 min-w-0">
+        <div data-kpi={label} className="gf-stat-cell gf-quote-cell rounded-2xl bg-surface border border-bordure px-3.5 py-3 lg:px-[18px] lg:py-4 flex flex-col gap-2 min-w-0">
             <div className="flex items-center justify-between gap-2">
                 <span className="font-mono text-meta lg:text-[11px] lg:font-semibold lg:tracking-[0.06em] lg:uppercase text-ink-400 truncate">{label}</span>
                 <span className="hidden lg:inline text-meta">{pct}</span>
@@ -75,7 +75,7 @@ export const DualKPIStat: React.FC<DualKPIStatProps> = ({
                 </span>
                 <span className="lg:hidden text-tiny">{pct}</span>
             </div>
-            <span className="block h-1.5 rounded-full bg-white/8 overflow-hidden gf-bar-grow" aria-hidden="true">
+            <span className="block h-1.5 rounded-full bg-surface-douce border border-bordure overflow-hidden gf-bar-grow" aria-hidden="true">
                 <span className={`block h-full rounded-full ${fond}`} style={{ width: `${isPrivacyMode ? 0 : remplissage * 100}%` }} />
             </span>
             <div className="flex flex-wrap lg:flex-nowrap items-center lg:justify-between gap-x-1 lg:gap-x-2 pt-1 border-t border-bordure text-[10px] lg:text-meta text-ink-400 font-mono">

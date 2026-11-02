@@ -510,8 +510,8 @@ export const Transactions: React.FC<TransactionsProps> = ({
             throw e;
         }
     };
-    const ligneOutil = 'w-full min-h-12 px-4 lg:px-5 flex items-center justify-between gap-3 border-t border-bordure text-body text-ink-100 text-left hover:bg-surface-douce focus-ring';
-    const pastille = 'h-10 px-3.5 rounded-full border text-[13px] whitespace-nowrap transition-colors focus-ring shrink-0';
+    const ligneOutil = 'gf-row w-full min-h-12 px-4 lg:px-5 flex items-center justify-between gap-3 border-t border-bordure text-body text-ink-100 text-left hover:bg-surface-douce focus-ring transition-colors';
+    const pastille = 'gf-chip h-10 px-3.5 rounded-full border text-[13px] whitespace-nowrap transition-colors focus-ring shrink-0';
     const signe = (n: number) => (n > 0 ? '+' : '');
     // Jours de la liste mobile (maquette : « mar. 15 sept. » + total du jour).
     const jours: Array<{ date: string; libelle: string; total: number; lignes: Transaction[] }> = [];
@@ -524,8 +524,11 @@ export const Transactions: React.FC<TransactionsProps> = ({
     }
 
     const outils = (
-        <section aria-labelledby="outils-tx-titre" className="rounded-2xl bg-surface border border-bordure overflow-hidden">
-            <h2 id="outils-tx-titre" className="px-4 lg:px-5 py-3 text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-400">Outils</h2>
+        <section aria-labelledby="outils-tx-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure overflow-hidden">
+            <div className="px-4 lg:px-5 py-3 flex items-center justify-between gap-2 bg-surface-douce/40">
+                <h2 id="outils-tx-titre" className="text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-400">Outils</h2>
+                <span className="gf-ticker-symbol">AUDIT · IA</span>
+            </div>
             {etroit && (
                 <button type="button" onClick={() => { void handleAutoCategorizeAll('gaps'); }} disabled={processing} className={`${ligneOutil} disabled:opacity-50`}>
                     {processing ? 'Catégorisation…' : 'Auto-catégoriser'}<span className="text-ink-400" aria-hidden="true">›</span>
@@ -540,7 +543,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                     className={ligneOutil}
                 >
                     {o.libelle}
-                    <span className="flex items-center gap-2 text-ink-400">{o.compte !== undefined && <span className="font-mono text-meta">{o.compte}</span>}<span aria-hidden="true">›</span></span>
+                    <span className="flex items-center gap-2 text-ink-400">{o.compte !== undefined && <span className="px-1.5 py-0.5 rounded-sm bg-fond border border-bordure font-mono text-tiny text-ink-200">{o.compte}</span>}<span aria-hidden="true">›</span></span>
                 </button>
             ))}
             {/* [TX-CATEGORIZE] Passe sur TOUT l'historique (demande Marc). Les catégories
@@ -571,29 +574,32 @@ export const Transactions: React.FC<TransactionsProps> = ({
     const pctEntreesMois = Math.round((moisCourant.entrees / totalFluxMois) * 100);
     const pctSortiesMois = Math.max(0, 100 - pctEntreesMois);
     const resumeMois = (
-        <section aria-labelledby="mois-tx-titre" className="gf-stat-cell rounded-2xl bg-surface border border-bordure p-4 flex flex-col gap-2.5">
+        <section aria-labelledby="mois-tx-titre" className="gf-terminal-card gf-stat-cell rounded-2xl bg-surface border border-bordure p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between gap-2">
-                <h2 id="mois-tx-titre" className="text-[15px] font-semibold text-ink-50">{moisCourant.libelle}</h2>
-                <span className={`px-2 py-0.5 rounded-sm text-[11px] font-mono font-semibold ${soldeMois >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}>
+                <div className="flex items-center gap-2 min-w-0">
+                    <span className="gf-ticker-symbol">BILAN</span>
+                    <h2 id="mois-tx-titre" className="text-[15px] font-semibold text-ink-50 truncate">{moisCourant.libelle}</h2>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold tabular-nums ${soldeMois >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}>
                     {soldeMois >= 0 ? '▲' : '▼'} <PrivateAmount>{formatCAD(soldeMois)}</PrivateAmount>
                 </span>
             </div>
             {!isPrivacyMode && (moisCourant.entrees > 0 || Math.abs(moisCourant.sorties) > 0) && (
-                <div className="h-2.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5 p-0.5" aria-hidden="true">
+                <div className="h-2 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5 p-0.5 gf-bar-grow" aria-hidden="true">
                     {/* MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode */}
                     <div className="h-full rounded-l-full bg-succes-texte transition-all" style={{ width: `${pctEntreesMois}%` }} />
                     <div className="h-full rounded-r-full bg-erreur-texte transition-all" style={{ width: `${pctSortiesMois}%` }} />
                 </div>
             )}
-            <dl className="grid grid-cols-3 gap-2 text-tiny">
-                <div className="flex flex-col gap-0.5 rounded-lg bg-surface-douce px-2.5 py-1.5"><dt className="text-ink-400">Entrées</dt><dd><PrivateAmount className="font-mono font-bold text-success-400">{`${signe(moisCourant.entrees)}${formatCAD(moisCourant.entrees)}`}</PrivateAmount></dd></div>
-                <div className="flex flex-col gap-0.5 rounded-lg bg-surface-douce px-2.5 py-1.5"><dt className="text-ink-400">Sorties</dt><dd><PrivateAmount className="font-mono font-bold text-danger-400">{formatCAD(moisCourant.sorties)}</PrivateAmount></dd></div>
-                <div className="flex flex-col gap-0.5 rounded-lg bg-surface-douce px-2.5 py-1.5"><dt className="text-ink-400">Restant</dt><dd><PrivateAmount className="font-mono font-bold text-ink-50">{formatCAD(soldeMois)}</PrivateAmount></dd></div>
+            <dl className="gf-quote-strip grid-cols-3 rounded-xl overflow-hidden text-tiny">
+                <div className="gf-quote-cell flex flex-col gap-0.5 px-2.5 py-2"><dt className="text-ink-400 uppercase tracking-wider text-[10px] font-semibold">Entrées</dt><dd><PrivateAmount className="font-mono font-bold text-success-400 tabular-nums">{`${signe(moisCourant.entrees)}${formatCAD(moisCourant.entrees)}`}</PrivateAmount></dd></div>
+                <div className="gf-quote-cell flex flex-col gap-0.5 px-2.5 py-2"><dt className="text-ink-400 uppercase tracking-wider text-[10px] font-semibold">Sorties</dt><dd><PrivateAmount className="font-mono font-bold text-danger-400 tabular-nums">{formatCAD(moisCourant.sorties)}</PrivateAmount></dd></div>
+                <div className="gf-quote-cell flex flex-col gap-0.5 px-2.5 py-2"><dt className="text-ink-400 uppercase tracking-wider text-[10px] font-semibold">Restant</dt><dd><PrivateAmount className="font-mono font-bold text-ink-50 tabular-nums">{formatCAD(soldeMois)}</PrivateAmount></dd></div>
             </dl>
         </section>
     );
     const aClasser = uncategorizedGroups.length > 0 && (
-        <section aria-labelledby="a-classer-titre" className="rounded-2xl border border-warning-400/35 bg-warning-500/6 p-3.5 flex items-center justify-between gap-3">
+        <section aria-labelledby="a-classer-titre" className="gf-terminal-card rounded-2xl border border-warning-400/35 bg-warning-500/6 p-3.5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
                 <span className="w-2.5 h-2.5 rounded-full bg-alerte-texte shrink-0" aria-hidden="true" />
                 <h2 id="a-classer-titre" className="text-body font-semibold text-warning-400 truncate">{uncategorizedGroups.length} groupe{uncategorizedGroups.length > 1 ? 's' : ''} à classer</h2>
@@ -603,7 +609,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                 type="button"
                 onClick={() => setShowWizard(true)}
                 aria-label={`Ouvrir l'assistant de classement (${uncategorizedGroups.length} groupes)`}
-                className={etroit ? 'shrink-0 h-10 px-3.5 rounded-lg bg-warning-400 text-dark text-meta font-bold focus-ring' : 'shrink-0 h-11 px-3.5 rounded-lg border border-warning-400/60 text-warning-400 text-meta font-semibold hover:bg-warning-500/10 focus-ring'}
+                className={etroit ? 'gf-chip shrink-0 h-10 px-3.5 rounded-full bg-warning-400 text-dark text-meta font-bold focus-ring' : 'gf-chip shrink-0 h-11 px-3.5 rounded-full border border-warning-400/60 text-warning-400 text-meta font-semibold hover:bg-warning-500/10 focus-ring'}
             >
                 {etroit ? 'Classer' : 'Classer maintenant'}
             </button>
@@ -616,15 +622,44 @@ export const Transactions: React.FC<TransactionsProps> = ({
             <PageHeader
                 // [REFONTE-NAV-L5] Titre = TAB_LABELS (cohérence des en-têtes de la destination).
                 title={TAB_LABELS[Tab.TRANSACTIONS]}
-                badge={<span className="text-meta lg:text-body text-ink-400">{transactions.length} transactions · {uncategorizedGroups.length} groupe{uncategorizedGroups.length > 1 ? 's' : ''} à classer</span>}
+                subtitle={
+                    <span className="inline-flex items-center gap-2 flex-wrap">
+                        <span className="gf-ticker-symbol">
+                            <span className="gf-pulse-live" aria-hidden="true" />
+                            FLUX:CAD · JOURNAL
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-tight text-ink-300">
+                            <span>
+                                <span className="gf-logo-b">G</span>
+                                <span className="gf-logo-r">o</span>
+                                <span className="gf-logo-y">o</span>
+                                <span className="gf-logo-b">g</span>
+                                <span className="gf-logo-g">l</span>
+                                <span className="gf-logo-r">e</span>
+                            </span>
+                            <span>Finance</span>
+                            <span className="gf-badge-nouvelle">Beta</span>
+                        </span>
+                    </span>
+                }
+                badge={
+                    <span className="inline-flex items-center gap-2 flex-wrap">
+                        <span className="px-2.5 py-0.5 rounded-full bg-surface-douce border border-bordure font-mono text-tiny text-ink-300">
+                            {transactions.length} transactions · {uncategorizedGroups.length} groupe{uncategorizedGroups.length > 1 ? 's' : ''} à classer
+                        </span>
+                        <span className={`px-2.5 py-0.5 rounded-full font-mono text-tiny font-semibold ${soldeMois >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}>
+                            {moisCourant.libelle} : <PrivateAmount>{formatSigned(soldeMois, { withCurrency: true })}</PrivateAmount>
+                        </span>
+                    </span>
+                }
                 actions={
-                    <span className="flex items-center gap-2">
+                    <span className="flex items-center gap-2 flex-wrap">
                         {onImport && (
                             <button
                                 type="button"
                                 onClick={() => setImportOuvert((o) => !o)}
                                 aria-expanded={importOuvert}
-                                className="h-10 px-3.5 lg:px-4 rounded-lg border border-bordure-champ text-body text-ink-100 hover:bg-surface-douce focus-ring"
+                                className={`gf-chip h-10 px-3.5 lg:px-4 rounded-full border text-body focus-ring ${importOuvert ? 'gf-chip-active text-primary' : 'border-bordure-champ text-ink-100 hover:bg-surface-douce'}`}
                             >
                                 {etroit ? 'Importer' : 'Importer CSV / PDF'}
                             </button>
@@ -633,7 +668,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                             <button
                                 type="button"
                                 onClick={() => { void exporterTout(); }}
-                                className="h-10 px-4 rounded-lg border border-bordure-champ text-body text-ink-100 hover:bg-surface-douce focus-ring"
+                                className="gf-chip h-10 px-4 rounded-full border border-bordure-champ text-body text-ink-100 hover:bg-surface-douce focus-ring"
                                 title="Exporter toutes les transactions en CSV"
                             >
                                 Exporter (CSV)
@@ -645,7 +680,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                 onClick={() => { void handleAutoCategorizeAll('gaps'); }}
                                 disabled={processing}
                                 aria-label={processing ? 'Scan IA en cours' : 'Demarrer le scan IA'}
-                                className="h-10 px-4 rounded-lg bg-primary text-dark text-body font-bold hover:bg-accent-fonce disabled:opacity-60 focus-ring"
+                                className="gf-chip h-10 px-4 rounded-full bg-primary text-dark text-body font-bold hover:bg-accent-fonce disabled:opacity-60 focus-ring"
                             >
                                 {processing ? 'Catégorisation…' : 'Auto-catégoriser'}
                             </button>
@@ -655,27 +690,32 @@ export const Transactions: React.FC<TransactionsProps> = ({
             />
 
             {/* Bandeau de cotation des flux (style Google Finance) — 3 KPI cliquables vers Budget */}
-            <section aria-label="Cote des flux de trésorerie" className="grid grid-cols-1 sm:grid-cols-3 gap-3 gf-spring-grid">
+            <section aria-label="Cote des flux de trésorerie" className="gf-quote-strip sm:grid-cols-3 gf-spring-grid">
                 <div
                     role="button"
                     tabIndex={0}
                     onClick={() => useFinanceStore.getState().setActiveTab(Tab.BUDGET)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); useFinanceStore.getState().setActiveTab(Tab.BUDGET); } }}
-                    className="rounded-xl bg-surface border border-primary/25 p-3.5 cursor-pointer gf-stat-cell hover:border-primary/80 transition-all focus-ring group"
+                    className="gf-quote-cell touch-target cursor-pointer transition-all focus-ring group flex flex-col justify-between gap-1.5"
                 >
                     <div className="flex items-center justify-between gap-2">
                         <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
                             Solde net · {moisCourant.libelle}
                         </span>
-                        <span className="text-[11px] font-semibold text-primary group-hover:text-ink-50">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold gf-delta-neutral group-hover:text-ink-50">
                             Budget ↗
                         </span>
                     </div>
-                    <PrivateAmount as="div" className="mt-1 font-mono text-[20px] font-bold text-ink-50 tabular-nums">
-                        {formatSigned(soldeMois, { withCurrency: true })}
-                    </PrivateAmount>
+                    <div className="flex items-baseline justify-between gap-2">
+                        <PrivateAmount as="div" className="font-mono text-[22px] font-bold text-ink-50 tabular-nums">
+                            {formatSigned(soldeMois, { withCurrency: true })}
+                        </PrivateAmount>
+                        <span className={`px-2 py-0.5 rounded-full font-mono text-[11px] font-semibold ${soldeMois >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}>
+                            {soldeMois >= 0 ? 'FLUX +' : 'FLUX −'}
+                        </span>
+                    </div>
                     {!isPrivacyMode && (
-                        <div className="mt-2 h-1.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex" aria-hidden="true">
+                        <div className="mt-1 h-1.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gf-bar-grow" aria-hidden="true">
                             {/* MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode */}
                             <div className="h-full bg-succes-texte" style={{ width: `${pctEntreesMois}%` }} />
                             <div className="h-full bg-erreur-texte" style={{ width: `${pctSortiesMois}%` }} />
@@ -687,38 +727,48 @@ export const Transactions: React.FC<TransactionsProps> = ({
                     tabIndex={0}
                     onClick={() => useFinanceStore.getState().setActiveTab(Tab.BUDGET)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); useFinanceStore.getState().setActiveTab(Tab.BUDGET); } }}
-                    className="rounded-xl bg-surface border border-primary/25 p-3.5 cursor-pointer gf-stat-cell hover:border-primary/80 transition-all focus-ring group"
+                    className="gf-quote-cell touch-target cursor-pointer transition-all focus-ring group flex flex-col justify-between gap-1.5"
                 >
                     <div className="flex items-center justify-between gap-2">
                         <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
                             Entrées du mois
                         </span>
-                        <span className="text-[11px] font-semibold text-primary group-hover:text-ink-50">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold gf-delta-up">
                             Budget ↗
                         </span>
                     </div>
-                    <PrivateAmount as="div" className="mt-1 font-mono text-[20px] font-bold text-success-400 tabular-nums">
-                        {`${signe(moisCourant.entrees)}${formatCAD(moisCourant.entrees)}`}
-                    </PrivateAmount>
+                    <div className="flex items-baseline justify-between gap-2">
+                        <PrivateAmount as="div" className="font-mono text-[22px] font-bold text-success-400 tabular-nums">
+                            {`${signe(moisCourant.entrees)}${formatCAD(moisCourant.entrees)}`}
+                        </PrivateAmount>
+                        {!isPrivacyMode && (
+                            <span className="font-mono text-[11px] text-ink-400 tabular-nums">{pctEntreesMois}%</span>
+                        )}
+                    </div>
                 </div>
                 <div
                     role="button"
                     tabIndex={0}
                     onClick={() => useFinanceStore.getState().setActiveTab(Tab.BUDGET)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); useFinanceStore.getState().setActiveTab(Tab.BUDGET); } }}
-                    className="rounded-xl bg-surface border border-primary/25 p-3.5 cursor-pointer gf-stat-cell hover:border-primary/80 transition-all focus-ring group"
+                    className="gf-quote-cell touch-target cursor-pointer transition-all focus-ring group flex flex-col justify-between gap-1.5"
                 >
                     <div className="flex items-center justify-between gap-2">
                         <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
                             Sorties du mois
                         </span>
-                        <span className="text-[11px] font-semibold text-primary group-hover:text-ink-50">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold gf-delta-down">
                             Budget ↗
                         </span>
                     </div>
-                    <PrivateAmount as="div" className="mt-1 font-mono text-[20px] font-bold text-ink-50 tabular-nums">
-                        {formatCAD(moisCourant.sorties)}
-                    </PrivateAmount>
+                    <div className="flex items-baseline justify-between gap-2">
+                        <PrivateAmount as="div" className="font-mono text-[22px] font-bold text-ink-50 tabular-nums">
+                            {formatCAD(moisCourant.sorties)}
+                        </PrivateAmount>
+                        {!isPrivacyMode && (
+                            <span className="font-mono text-[11px] text-ink-400 tabular-nums">{pctSortiesMois}%</span>
+                        )}
+                    </div>
                 </div>
             </section>
 
@@ -727,7 +777,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                 Ouvert d'emblée UNIQUEMENT à l'onboarding (aucune transaction, D2 activation — l'écran
                 vide ne doit jamais être une impasse). */}
             {onImport && importOuvert && (
-                <section aria-labelledby="import-tx-titre" className="rounded-2xl bg-surface border border-bordure p-4 lg:p-5 flex flex-col gap-3">
+                <section aria-labelledby="import-tx-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-4 lg:p-5 flex flex-col gap-3">
                     <div className="flex items-center justify-between gap-3">
                         <h2 id="import-tx-titre" className="text-body font-semibold text-ink-50">Import manuel (repli — CSV/PDF)</h2>
                         {transactions.length > 0 && <button type="button" onClick={() => setImportOuvert(false)} className="min-h-11 px-2 text-meta text-ink-300 underline underline-offset-2 focus-ring rounded-sm">Fermer</button>}
@@ -738,7 +788,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
 
             {showWizard && (
                 <div role="dialog" aria-modal="true" aria-labelledby="wizard-title" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-fond/90 backdrop-blur-md animate-fade-in">
-                    <div className="bg-surface border border-bordure w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-2xl flex flex-col">
+                    <div className="gf-terminal-card bg-surface border border-bordure w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-2xl flex flex-col">
                         <div className="p-6 border-b border-bordure flex justify-between items-center bg-surface-douce rounded-t-2xl">
                             <div>
                                 <h2 id="wizard-title" className="text-xl font-bold text-texte flex items-center gap-2">
@@ -748,7 +798,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                     L'IA a laisse {uncategorizedGroups.length} groupes incertains. Classez-les en masse ici.
                                 </p>
                             </div>
-                            <button onClick={() => setShowWizard(false)} aria-label="Fermer l'assistant" className="text-ink-300 hover:text-texte px-3 py-1 bg-bordure rounded-sm">Terminer</button>
+                            <button onClick={() => setShowWizard(false)} aria-label="Fermer l'assistant" className="gf-chip text-ink-200 hover:text-texte px-3.5 py-1.5 bg-bordure rounded-full">Terminer</button>
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-6 space-y-2 custom-scrollbar">
@@ -760,11 +810,11 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                 </div>
                             ) : (
                                 uncategorizedGroups.map((group) => (
-                                    <div key={group.payee} className="flex flex-col md:flex-row items-center gap-4 p-4 bg-surface-douce rounded-xl border border-bordure hover:border-primary/30 transition-colors">
+                                    <div key={group.payee} className="gf-row flex flex-col md:flex-row items-center gap-4 p-4 bg-surface-douce rounded-xl border border-bordure hover:border-primary/30 transition-colors">
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-1">
                                                 <PrivateText as="div" className="font-bold text-texte text-lg">{group.payee}</PrivateText>
-                                                <div className="bg-danger-500/20 text-erreur-texte text-tiny px-2 py-0.5 rounded-full font-bold">
+                                                <div className="gf-delta-down text-tiny px-2 py-0.5 rounded-full font-mono font-bold">
                                                     {group.count} trans.
                                                 </div>
                                             </div>
@@ -801,7 +851,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-5 items-start">
                 <div className="flex flex-col gap-4 min-w-0">
                     {outil && (
-                        <section aria-label={titreOutil} className="rounded-2xl bg-surface border border-bordure p-4 lg:p-5 flex flex-col gap-3">
+                        <section aria-label={titreOutil} className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-4 lg:p-5 flex flex-col gap-3">
                             <div className="flex items-center justify-between gap-3">
                                 <h2 className="text-body font-semibold text-ink-50">{titreOutil}</h2>
                                 <button type="button" onClick={() => setOutil(null)} className="min-h-11 px-2 text-meta text-ink-300 underline underline-offset-2 focus-ring rounded-sm">Fermer</button>
@@ -852,7 +902,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                     </select>
                                     <button
                                         onClick={handleAddRule}
-                                        className="px-3 py-2 bg-accent hover:bg-accent-fonce text-sur-accent text-meta font-bold rounded-lg transition-colors"
+                                        className="gf-chip px-3.5 py-2 bg-accent hover:bg-accent-fonce text-sur-accent text-meta font-bold rounded-full transition-colors"
                                     >
                                         + Ajouter
                                     </button>
@@ -863,7 +913,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                 ) : (
                                     <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
                                         {categorizationRules.map(rule => (
-                                            <div key={rule.id} className="flex items-center gap-2 bg-fond/30 px-3 py-2 rounded-lg border border-bordure text-meta group">
+                                            <div key={rule.id} className="gf-row flex items-center gap-2 bg-fond/30 px-3 py-2 rounded-lg border border-bordure text-meta group">
                                                 <span className="text-ink-200 font-bold flex-1 truncate">"{rule.pattern}"</span>
                                                 <Icon name="chevron-right" size={12} className="text-ink-500 hidden sm:inline shrink-0" />
                                                 <PrivateText quoi="categorie" className="text-ink-100 bg-bordure px-2 py-0.5 rounded-sm font-bold truncate max-w-[120px]">{rule.category}</PrivateText>
@@ -910,9 +960,9 @@ export const Transactions: React.FC<TransactionsProps> = ({
                     {/* [REFONTE-NAV-L5] Ancre du deep-link Budget → Transactions : usePendingFocus scrolle
                         vers `category:<nom>` — l'attribut suit la catégorie filtrée (posée à l'arrivée). */}
                     <div data-focus-section={`category:${selectedCategory}`} className="flex flex-col gap-4">
-                    <section aria-label="Historique des transactions" className={etroit ? 'flex flex-col gap-3' : 'rounded-2xl bg-surface border border-bordure overflow-hidden'}>
-                        <div className={etroit ? 'flex flex-col gap-3' : 'flex items-center gap-2.5 px-4 py-3.5 border-b border-bordure'}>
-                            <label className={`flex items-center gap-2 h-10 px-3 rounded-[10px] bg-dark border border-bordure text-ink-400 focus-within:border-bordure-champ ${etroit ? 'w-full' : 'flex-1 min-w-0'}`}>
+                    <section aria-label="Historique des transactions" className={etroit ? 'flex flex-col gap-3' : 'gf-terminal-card rounded-2xl bg-surface border border-bordure overflow-hidden'}>
+                        <div className={etroit ? 'flex flex-col gap-3' : 'flex items-center gap-2.5 px-4 py-3.5 border-b border-bordure bg-surface-douce/30 flex-wrap'}>
+                            <label className={`gf-omnibox-pill flex items-center gap-2.5 h-10 px-3.5 text-ink-400 ${etroit ? 'w-full' : 'flex-1 min-w-[220px]'}`}>
                                 <Icon name="search" size={16} />
                                 <input
                                     type="search"
@@ -923,11 +973,11 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                     onChange={(e) => vueFiltree(() => setFilterText(e.target.value))}
                                 />
                             </label>
-                            <div className={`flex items-center gap-2 ${etroit ? 'overflow-x-auto -mx-6 px-6 scrollbar-hide' : 'shrink-0'}`}>
+                            <div className={`flex items-center gap-2 overflow-x-auto no-scrollbar ${etroit ? '-mx-6 px-6 scrollbar-hide' : 'shrink-0'}`}>
                                 <span className="relative shrink-0">
                                     <select
                                         aria-label="Filtre par catégorie"
-                                        className={`champ-nu appearance-none h-10 pl-3.5 pr-7 rounded-full border text-[13px] max-w-[180px] truncate cursor-pointer focus-ring ${selectedCategory !== 'All' ? 'bg-primary/15 border-primary/60 text-ink-50' : 'bg-surfaceHighlight border-bordure text-ink-100'}`}
+                                        className={`champ-nu gf-chip appearance-none h-10 pl-3.5 pr-7 rounded-full border text-[13px] max-w-[180px] truncate cursor-pointer focus-ring ${selectedCategory !== 'All' ? 'gf-chip-active bg-primary/15 border-primary/60 text-ink-50' : 'bg-surfaceHighlight border-bordure text-ink-100'}`}
                                         value={selectedCategory}
                                         onChange={(e) => vueFiltree(() => setSelectedCategory(e.target.value))}
                                     >
@@ -942,7 +992,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                     type="button"
                                     onClick={() => vueFiltree(() => setQuickFilter(quickFilter === 'TO_REVIEW' ? 'NONE' : 'TO_REVIEW'))}
                                     aria-pressed={quickFilter === 'TO_REVIEW'}
-                                    className={`${pastille} ${quickFilter === 'TO_REVIEW' ? 'bg-warning-400 border-warning-400 text-dark font-semibold' : 'bg-warning-500/10 border-warning-400/35 text-warning-400 font-semibold'}`}
+                                    className={`${pastille} ${quickFilter === 'TO_REVIEW' ? 'bg-warning-400 border-warning-400 text-dark font-semibold' : 'gf-delta-amber border-warning-400/35 text-warning-400 font-semibold'}`}
                                 >
                                     À vérifier · {aVerifier}
                                 </button>
@@ -950,7 +1000,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                     type="button"
                                     onClick={() => vueFiltree(() => setMasquerVirements((m) => !m))}
                                     aria-pressed={masquerVirements}
-                                    className={`${pastille} ${masquerVirements ? 'bg-ink-50 border-ink-50 text-dark font-semibold' : 'border-bordure text-ink-200'}`}
+                                    className={`${pastille} ${masquerVirements ? 'gf-chip-active bg-ink-50 border-ink-50 text-dark font-semibold' : 'border-bordure text-ink-200'}`}
                                 >
                                     Masquer les virements
                                 </button>
@@ -962,7 +1012,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                         title={showDuplicates
                                             ? 'Masquer à nouveau les transactions exclues des calculs'
                                             : 'Ces transactions existent toujours : elles sont seulement exclues des calculs et cachées de la liste'}
-                                        className={`touch-target inline-flex items-center px-3 py-1.5 rounded-full text-meta font-bold transition-all border whitespace-nowrap ${showDuplicates ? 'bg-warning-500/20 border-warning-500 text-warning-400' : 'bg-surface-douce border-bordure text-ink-300'}`}
+                                        className={`touch-target gf-chip inline-flex items-center px-3 py-1.5 rounded-full text-meta font-bold transition-all border whitespace-nowrap ${showDuplicates ? 'bg-warning-500/20 border-warning-500 text-warning-400' : 'bg-surface-douce border-bordure text-ink-300'}`}
                                     >
                                         {markedDuplicateCount} exclue{markedDuplicateCount > 1 ? 's' : ''} — {showDuplicates ? 'masquer' : 'afficher'}
                                     </button>
@@ -975,14 +1025,14 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                         type="button"
                                         onClick={() => navigateWithFocus(Tab.BUDGET, `poste:${selectedCategory}`)}
                                         title={`Ouvrir le poste « ${selectedCategory} » dans le Budget`}
-                                        className="touch-target inline-flex items-center px-3 py-1.5 rounded-full text-meta font-medium border border-info-500/30 bg-info-500/10 text-info-400 hover:text-texte transition-colors whitespace-nowrap focus-ring"
+                                        className="touch-target gf-chip inline-flex items-center px-3 py-1.5 rounded-full text-meta font-medium border border-info-500/30 bg-info-500/10 text-info-400 hover:text-texte transition-colors whitespace-nowrap focus-ring"
                                     >
                                         Voir au budget →
                                     </button>
                                 )}
                                 {/* [A11Y-PRIVACY-TXN-TOTALS] Σ de la vue filtrée : agrégat = donnée privée. */}
                                 {!etroit && (
-                                    <PrivateAmount className="font-mono text-[13px] text-ink-400 whitespace-nowrap pl-1">{`Σ ${formatCAD(filteredSum, { decimals: 2 })}`}</PrivateAmount>
+                                    <PrivateAmount className="px-2.5 py-1 rounded-full gf-delta-neutral font-mono text-[12px] font-semibold text-ink-200 whitespace-nowrap tabular-nums">{`Σ ${formatCAD(filteredSum, { decimals: 2 })}`}</PrivateAmount>
                                 )}
                             </div>
                         </div>
@@ -1015,7 +1065,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                     <button
                                         type="button"
                                         onClick={() => setSelectedIds(new Set(filteredTransactions.map(t => t.id)))}
-                                        className="touch-target px-3 py-1.5 rounded-full text-meta font-bold bg-surface-douce border border-bordure text-ink-200 hover:text-ink-50 transition-colors focus-ring"
+                                        className="touch-target gf-chip px-3 py-1.5 rounded-full text-meta font-bold bg-surface-douce border border-bordure text-ink-200 hover:text-ink-50 transition-colors focus-ring"
                                     >
                                         Sélectionner les {filteredTransactions.length} filtrées
                                     </button>
@@ -1024,14 +1074,14 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                     type="button"
                                     onClick={() => { handleMarkDuplicates([...selectedIds]); setSelectedIds(new Set()); }}
                                     title="Les lignes restent dans l'historique mais sortent du solde, du budget et des revenus. Réversible."
-                                    className="touch-target px-3 py-1.5 rounded-full text-meta font-bold bg-warning-600 text-dark focus-ring"
+                                    className="touch-target gf-chip px-3 py-1.5 rounded-full text-meta font-bold bg-warning-600 text-dark focus-ring"
                                 >
                                     Exclure des calculs
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setSelectedIds(new Set())}
-                                    className="touch-target px-3 py-1.5 rounded-full text-meta bg-surface-douce border border-bordure text-ink-300 hover:text-ink-100 transition-colors focus-ring"
+                                    className="touch-target gf-chip px-3 py-1.5 rounded-full text-meta bg-surface-douce border border-bordure text-ink-300 hover:text-ink-100 transition-colors focus-ring"
                                 >
                                     Désélectionner
                                 </button>
@@ -1056,7 +1106,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                     <button
                                         type="button"
                                         onClick={() => { setFilterText(''); setSelectedCategory('All'); setQuickFilter('NONE'); setMasquerVirements(false); setPlus(0); }}
-                                        className="px-3 py-1.5 rounded-full text-meta font-bold bg-surface-douce border border-bordure text-ink-200 hover:text-ink-50 transition-colors focus-ring"
+                                        className="gf-chip px-3 py-1.5 rounded-full text-meta font-bold bg-surface-douce border border-bordure text-ink-200 hover:text-ink-50 transition-colors focus-ring"
                                     >
                                         Réinitialiser les filtres
                                     </button>
@@ -1066,20 +1116,20 @@ export const Transactions: React.FC<TransactionsProps> = ({
                             <div className="flex flex-col">
                                 <div className="flex items-center justify-between py-2 text-[11px] font-semibold tracking-[0.06em] uppercase text-ink-400">
                                     <span>{visiblesTx.length} sur {filteredTransactions.length}</span>
-                                    <PrivateAmount className="font-mono normal-case tracking-normal">{`Σ ${formatCAD(filteredSum, { decimals: 2 })}`}</PrivateAmount>
+                                    <PrivateAmount className="font-mono normal-case tracking-normal tabular-nums">{`Σ ${formatCAD(filteredSum, { decimals: 2 })}`}</PrivateAmount>
                                 </div>
                                 <ul role="list" aria-label={`${filteredTransactions.length} transactions`}>
                                     {jours.map((j) => (
                                         <li key={j.date}>
                                             <div className="flex items-center justify-between pt-3 pb-2 border-b border-bordure text-meta">
                                                 <span className="font-semibold text-ink-200">{j.libelle}</span>
-                                                <PrivateAmount className="font-mono text-ink-400">{formatSigned(j.total, { withCurrency: true, decimals: 2 })}</PrivateAmount>
+                                                <PrivateAmount className="font-mono text-ink-400 tabular-nums">{formatSigned(j.total, { withCurrency: true, decimals: 2 })}</PrivateAmount>
                                             </div>
                                             <ul>
                                                 {j.lignes.map((t) => {
                                                     const isUncat = t.category === 'Uncategorized' || t.category === 'Inconnu';
                                                     return (
-                                                        <li key={t.id} className={`flex items-center gap-3 py-2.5 border-b border-bordure ${selectedIds.has(t.id) ? 'bg-primary/10' : ''}`}>
+                                                        <li key={t.id} className={`gf-row flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg border-b border-bordure transition-colors ${selectedIds.has(t.id) ? 'bg-primary/10' : ''}`}>
                                                             {modeSelection && (
                                                                 <input
                                                                     type="checkbox"
@@ -1089,7 +1139,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                                                     className="rounded-sm bg-surfaceHighlight shrink-0"
                                                                 />
                                                             )}
-                                                            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: couleurCategorie(t.category) }} aria-hidden="true" />
+                                                            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: couleurCategorie(t.category) }} aria-hidden="true" />
                                                             <span className="flex-1 min-w-0 flex flex-col">
                                                                 <PrivateText className="text-body font-medium text-ink-50 truncate">{t.payee}</PrivateText>
                                                                 <span className="flex items-center gap-1 text-meta text-ink-400">
@@ -1120,7 +1170,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                                                     )}
                                                                 </span>
                                                             </span>
-                                                            <PrivateAmount className={`font-mono font-bold whitespace-nowrap ${t.isTransfer ? 'text-ink-300' : t.amount > 0 ? 'text-success-400' : 'text-ink-50'}`}>
+                                                            <PrivateAmount className={`font-mono font-bold whitespace-nowrap tabular-nums ${t.isTransfer ? 'px-2 py-0.5 rounded-full gf-delta-neutral text-ink-300 text-[12px]' : t.amount > 0 ? 'px-2 py-0.5 rounded-full gf-delta-up text-success-400 text-[12px]' : 'text-ink-50'}`}>
                                                                 {`${signe(t.amount)}${formatCAD(t.amount, { decimals: 2 })}`}
                                                             </PrivateAmount>
                                                         </li>
@@ -1135,7 +1185,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                             <table className="w-full text-left border-collapse text-body">
                                 <caption className="sr-only">Liste des {filteredTransactions.length} transactions filtrees</caption>
                                 <thead>
-                                    <tr className="text-[11px] font-semibold tracking-[0.06em] uppercase text-ink-400">
+                                    <tr className="text-[11px] font-semibold tracking-[0.06em] uppercase text-ink-400 bg-surface-douce/40">
                                         {modeSelection && (
                                             <th className="pl-4 w-8">
                                                 <input
@@ -1172,7 +1222,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                         return (
                                             <tr
                                                 key={t.id}
-                                                className={`h-12 border-t border-bordure ${selectedIds.has(t.id) ? 'bg-primary/10' : ''}`}
+                                                className={`gf-row h-12 border-t border-bordure transition-colors ${selectedIds.has(t.id) ? 'bg-primary/10' : ''}`}
                                                 // En mode sélection, un clic sur la ligne la coche (Maj-clic = plage), sauf sur ses contrôles.
                                                 onClick={modeSelection ? (e) => { if (!['BUTTON', 'SELECT', 'OPTION', 'INPUT'].includes((e.target as HTMLElement).tagName)) handleSelectOne(t.id, e.shiftKey); } : undefined}
                                             >
@@ -1190,13 +1240,13 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                                         />
                                                     </td>
                                                 )}
-                                                <td className="px-4 font-mono text-[13px] text-ink-400 whitespace-nowrap">{t.date}</td>
-                                                <td className="px-2 text-ink-100 max-w-0 w-full truncate"><PrivateText>{t.payee}</PrivateText></td>
+                                                <td className="px-4 font-mono text-[13px] text-ink-400 whitespace-nowrap tabular-nums">{t.date}</td>
+                                                <td className="px-2 text-ink-100 max-w-0 w-full truncate font-medium"><PrivateText>{t.payee}</PrivateText></td>
                                                 <td className="px-2">
                                                     {/* ⚠️ [PRIV-CATEGORIE-MASQUEE] `PrivateSelect`, pas `PrivateText` : la
                                                         catégorie s'ÉDITE — la pastille de la maquette EST la liste. */}
                                                     <span className="relative inline-flex items-center">
-                                                        <span className="pointer-events-none absolute left-2.5 w-2 h-2 rounded-full" style={{ background: couleurCategorie(t.category) }} aria-hidden="true" />
+                                                        <span className="pointer-events-none absolute left-2.5 w-2 h-2 rounded-sm" style={{ background: couleurCategorie(t.category) }} aria-hidden="true" />
                                                         <PrivateSelect
                                                             aria-label={rowControlLabel('Catégorie de', t.payee, t.date, t.id, isPrivacyMode)}
                                                             className={`champ-nu appearance-none field-sizing-content h-[30px] pl-6 pr-2.5 rounded-full border bg-surfaceHighlight text-[13px] cursor-pointer max-w-[170px] truncate ${isUncat ? 'border-warning-400/50 text-warning-400' : 'border-bordure text-ink-200'}`}
@@ -1228,7 +1278,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                                     </td>
                                                 )}
                                                 <td className="px-4 text-right whitespace-nowrap">
-                                                    <PrivateAmount className={`font-mono ${t.isTransfer ? 'text-ink-300' : t.amount > 0 ? 'text-success-400' : 'text-ink-50'}`}>
+                                                    <PrivateAmount className={`font-mono tabular-nums ${t.isTransfer ? 'px-2 py-0.5 rounded-full gf-delta-neutral text-ink-300 text-[12px] font-semibold' : t.amount > 0 ? 'px-2 py-0.5 rounded-full gf-delta-up text-success-400 text-[12px] font-semibold' : 'font-semibold text-ink-50'}`}>
                                                         {`${signe(t.amount)}${formatCAD(t.amount, { decimals: 2 })}`}
                                                     </PrivateAmount>
                                                 </td>
@@ -1240,8 +1290,8 @@ export const Transactions: React.FC<TransactionsProps> = ({
                         )}
 
                         {filteredTransactions.length > 0 && (
-                            <div className={`flex items-center justify-between gap-3 ${etroit ? 'justify-center pt-3' : 'px-4 py-3 border-t border-bordure'}`}>
-                                {!etroit && <span className="text-meta text-ink-400">{visiblesTx.length} sur {filteredTransactions.length}</span>}
+                            <div className={`flex items-center justify-between gap-3 ${etroit ? 'justify-center pt-3' : 'px-4 py-3 border-t border-bordure bg-surface-douce/20'}`}>
+                                {!etroit && <span className="font-mono text-meta text-ink-400">{visiblesTx.length} sur {filteredTransactions.length}</span>}
                                 {visiblesTx.length < filteredTransactions.length && (
                                     <button type="button" onClick={() => setPlus((n) => n + 1)} className="min-h-11 px-2 text-[13px] text-ink-100 underline underline-offset-2 focus-ring rounded-sm">
                                         Afficher plus

@@ -657,10 +657,32 @@ export const Investments: React.FC<InvestmentsProps> = ({
     if (assets.length === 0) {
         return (
             <div className="space-y-6 stagger-in pb-10 relative">
-                <PageHeader title={TAB_LABELS[TabEnum.INVESTMENTS]} />
-                <Card>
+                <PageHeader
+                    title={TAB_LABELS[TabEnum.INVESTMENTS]}
+                    subtitle={
+                        <span className="inline-flex flex-wrap items-center gap-2">
+                            <span className="gf-ticker-symbol">
+                                <span className="w-1.5 h-1.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
+                                PORTFOLIO:CAD · MARCHÉS
+                            </span>
+                            <span className="inline-flex items-center gap-1 font-semibold text-ink-200">
+                                <span aria-hidden="true" className="font-bold tracking-tight select-none">
+                                    <span className="gf-logo-b">G</span>
+                                    <span className="gf-logo-r">o</span>
+                                    <span className="gf-logo-y">o</span>
+                                    <span className="gf-logo-b">g</span>
+                                    <span className="gf-logo-g">l</span>
+                                    <span className="gf-logo-r">e</span>
+                                </span>
+                                <span>Finance</span>
+                                <span className="gf-badge-nouvelle">Beta</span>
+                            </span>
+                        </span>
+                    }
+                />
+                <div className="gf-terminal-card premium-card p-6">
                     <div className="text-center py-12 px-4 space-y-4">
-                        <Icon name="investments" size={44} className="text-ink-500 block mx-auto" />
+                        <Icon name="investments" size={44} className="text-ink-400 block mx-auto" />
                         <h2 className="text-h2 text-ink-50 font-bold">Ajoute ton premier placement</h2>
                         <p className="text-meta text-ink-300 max-w-md mx-auto leading-snug">
                             Saisis un titre à la main pour voir ton score de diversification, ton allocation
@@ -670,13 +692,13 @@ export const Investments: React.FC<InvestmentsProps> = ({
                             <button
                                 type="button"
                                 onClick={() => setShowAddStockForm(true)}
-                                className="px-4 py-2 rounded-card bg-primary/15 border border-primary/40 text-primary text-meta font-bold hover:bg-primary/25 transition-colors focus-ring"
+                                className="gf-chip gf-chip-active px-4 py-2 rounded-full text-meta font-bold transition-colors focus-ring"
                             >
                                 Ajouter un titre
                             </button>
                         </div>
                     </div>
-                </Card>
+                </div>
                 <AddStockForm
                     isOpen={showAddStockForm}
                     onClose={() => setShowAddStockForm(false)}
@@ -704,11 +726,48 @@ export const Investments: React.FC<InvestmentsProps> = ({
         .filter((l) => l.valeur > 0)
         .map((l) => ({ ...l, poids: valeurPortefeuille > 0 ? (l.valeur / valeurPortefeuille) * 100 : 0 }))
         .sort((x, y) => y.valeur - x.valeur);
-    const couleurVariation = (v: number | null) => (v === null ? 'text-ink-400' : v >= 0 ? 'text-success-400' : 'text-danger-400');
+    const enveloppesAlloc = [
+        {
+            id: 'celi',
+            code: 'CELI',
+            label: 'Compte libre d’impôt',
+            classePastille: 'gf-alloc-celi',
+            valeur: lignesTitres.filter((l) => l.compte === 'CELI' || l.compte === 'CELIAPP').reduce((s, l) => s + l.valeur, 0),
+        },
+        {
+            id: 'reer',
+            code: 'REER',
+            label: 'Retraite enregistrée',
+            classePastille: 'gf-alloc-reer',
+            valeur: lignesTitres.filter((l) => l.compte === 'REER').reduce((s, l) => s + l.valeur, 0),
+        },
+        {
+            id: 'nonreg',
+            code: 'N-REG',
+            label: 'Non-enregistré',
+            classePastille: 'gf-alloc-nonreg',
+            valeur: lignesTitres.filter((l) => l.compte === 'NON-ENREG' || l.compte === 'REEE').reduce((s, l) => s + l.valeur, 0),
+        },
+        {
+            id: 'crypto',
+            code: 'ACTIFS',
+            label: 'Crypto & alternatifs',
+            classePastille: 'gf-alloc-immo',
+            valeur: lignesTitres.filter((l) => l.compte === 'CRYPTO').reduce((s, l) => s + l.valeur, 0),
+        },
+        {
+            id: 'cash',
+            code: 'DIV/AN',
+            label: 'Rente dividendes / an',
+            classePastille: 'gf-alloc-cash',
+            valeur: totalAnnualDividends,
+        },
+    ];
+    const couleurVariation = (v: number | null) => (v === null ? 'text-ink-400' : v >= 0 ? 'text-succes-texte' : 'text-erreur-texte');
     const scoreClasses = diversificationScore >= 80
-        ? 'bg-success-500/10 border-success-400/30 text-success-400'
+        ? 'gf-delta-up'
         // Maquettes : 40/100 en ambre (à surveiller), le rouge réservé au bas de l'échelle.
-        : diversificationScore >= 40 ? 'bg-warning-500/10 border-warning-400/35 text-warning-400' : 'bg-danger-500/10 border-danger-400/30 text-danger-400';
+        : diversificationScore >= 40 ? 'gf-delta-amber' : 'gf-delta-down';
     const badgeScore = (
         <span
             className={`h-[30px] lg:h-9 px-3 lg:px-4 rounded-full border text-meta lg:text-[13px] font-semibold flex items-center whitespace-nowrap ${scoreClasses}`}
@@ -723,7 +782,6 @@ export const Investments: React.FC<InvestmentsProps> = ({
         </button>
     );
     const etiquetteTuile = 'font-mono text-meta lg:text-[11px] lg:font-semibold lg:tracking-[0.06em] lg:uppercase text-ink-400';
-    const tuile = 'gf-stat-cell rounded-2xl bg-surface border border-bordure px-[18px] py-4 flex flex-col gap-1.5 min-w-0';
     const pillVariation = (v: number | null) =>
         v === null ? 'gf-delta-neutral' : v >= 0 ? 'gf-delta-up' : 'gf-delta-down';
 
@@ -734,6 +792,26 @@ export const Investments: React.FC<InvestmentsProps> = ({
             <ProjectionStaleBanner />
             <PageHeader
                 title={TAB_LABELS[TabEnum.INVESTMENTS]}
+                subtitle={
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                        <span className="gf-ticker-symbol">
+                            <span className="w-1.5 h-1.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
+                            PORTFOLIO:CAD · MARCHÉS
+                        </span>
+                        <span className="inline-flex items-center gap-1 font-semibold text-ink-200">
+                            <span aria-hidden="true" className="font-bold tracking-tight select-none">
+                                <span className="gf-logo-b">G</span>
+                                <span className="gf-logo-r">o</span>
+                                <span className="gf-logo-y">o</span>
+                                <span className="gf-logo-b">g</span>
+                                <span className="gf-logo-g">l</span>
+                                <span className="gf-logo-r">e</span>
+                            </span>
+                            <span>Finance</span>
+                            <span className="gf-badge-nouvelle">Beta</span>
+                        </span>
+                    </span>
+                }
                 nav={
                     <SubTabs<'overview' | 'allocation' | 'detail'>
                         idPrefix="placements"
@@ -757,6 +835,55 @@ export const Investments: React.FC<InvestmentsProps> = ({
                 }
             />
 
+            {/* Ruban d'allocation par enveloppe style Google Finance Beta (défilement horizontal compact sur mobile) */}
+            <section
+                aria-label="Enveloppes fiscales et flux de dividendes"
+                className="gf-terminal-card bg-surface border border-bordure"
+            >
+                <div className="flex overflow-x-auto no-scrollbar lg:grid lg:grid-cols-5 divide-x divide-bordure">
+                    {enveloppesAlloc.map((env) => {
+                        const poidsEnv = valeurPortefeuille > 0 && env.id !== 'cash'
+                            ? Math.round((env.valeur / valeurPortefeuille) * 100)
+                            : null;
+                        return (
+                            <div
+                                key={env.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => setSubTab(env.id === 'cash' ? 'overview' : 'detail')}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        setSubTab(env.id === 'cash' ? 'overview' : 'detail');
+                                    }
+                                }}
+                                className="touch-target shrink-0 min-w-[160px] lg:min-w-0 px-3.5 py-2.5 text-left hover:bg-surface-douce flex items-center justify-between gap-2 transition-colors focus-ring cursor-pointer"
+                            >
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className={`w-2 h-2 rounded-full shrink-0 ${env.classePastille}`} aria-hidden="true" />
+                                        <span className="font-mono text-[11px] font-bold tracking-tight text-ink-50">
+                                            {env.code}
+                                        </span>
+                                        <span className="text-[11px] text-ink-400 truncate">
+                                            {env.label}
+                                        </span>
+                                    </div>
+                                    <div className="font-mono text-xs sm:text-sm font-bold text-ink-50 tabular-nums mt-0.5">
+                                        <PrivateAmount>{formatCAD(env.valeur)}</PrivateAmount>
+                                    </div>
+                                </div>
+                                {poidsEnv !== null && (
+                                    <span className={`shrink-0 px-2 py-0.5 rounded-full font-mono text-[11px] font-semibold tabular-nums ${env.valeur > 0 ? 'gf-delta-up' : 'gf-delta-neutral'}`}>
+                                        <PrivateAmount>{`${poidsEnv.toFixed(0)}%`}</PrivateAmount>
+                                    </span>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            </section>
+
             {/* [CELI-ASSET-NUDGE] virements CELI détectés mais aucun avoir CELI saisi → CELI affiché 0. */}
             <CeliAssetNudge onAddAsset={() => setShowAddStockForm(true)} />
 
@@ -770,23 +897,23 @@ export const Investments: React.FC<InvestmentsProps> = ({
             {/* [COURS-AU-TROMPEUR] Sur la Vue d'ensemble, « Sur 24 h » peut afficher « — » : dire pourquoi. */}
             {subTab === 'overview' && <CoursPerimesNotice titres={coursPerimes} />}
             {subTab === 'overview' && (
-                <section aria-label="Chiffres clés" className="grid grid-cols-1 sm:grid-cols-2 gap-3 gf-spring-grid">
+                <section aria-label="Chiffres clés" className="gf-quote-strip">
                     <div
                         role="button"
                         tabIndex={0}
                         onClick={() => setSubTab('detail')}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSubTab('detail'); } }}
-                        className={`${tuile} cursor-pointer border-primary/25 hover:border-primary/80 transition-all focus-ring group`}
+                        className="gf-quote-cell touch-target cursor-pointer focus-ring group sm:col-span-1 lg:col-span-2"
                     >
                         <div className="flex items-center justify-between gap-2">
                             <span className={etiquetteTuile}>Valeur du portefeuille</span>
-                            <span className="text-[11px] font-semibold text-primary group-hover:text-ink-50">
+                            <span className="text-[11px] font-semibold text-ink-200 group-hover:text-ink-50">
                                 Ouvrir Détail ↗
                             </span>
                         </div>
                         <div className="flex items-baseline gap-2.5 flex-wrap">
                             <PrivateAmount as="div" className="font-mono text-[22px] font-bold text-ink-50">{formatCAD(valeurPortefeuille)}</PrivateAmount>
-                            <span className={`px-1.5 py-0.5 rounded-sm text-xs font-mono font-semibold ${pillVariation(variation24h)} ${couleurVariation(variation24h)}`}>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-semibold ${pillVariation(variation24h)}`}>
                                 <PrivateAmount>{formatVariationPct(variation24h, 2)}</PrivateAmount> (24h)
                             </span>
                             {variationDepuisDebut !== null && (
@@ -798,11 +925,11 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         {/* MONTANT-PUBLIC : variation de l'indice de marché, pas celle du portefeuille. */}
                         {benchmarkTrend24 !== null && <span className="text-tiny text-ink-400">marché (MSCI World) {formatVariationPct(benchmarkTrend24, 2)}</span>}
                         {!isPrivacyMode && lignesTitres.length > 0 && (
-                            <div className="mt-1 h-2 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5 p-0.5" aria-hidden="true">
+                            <div className="mt-1 h-2 w-full rounded-full bg-fond overflow-hidden flex gap-0.5 p-0.5 gf-bar-grow" aria-hidden="true">
                                 {lignesTitres.slice(0, 5).map((l, idx) => (
                                     <div
                                         key={l.cle}
-                                        className={`h-full ${idx === 0 ? 'bg-succes-texte' : idx === 1 ? 'bg-repere' : idx === 2 ? 'bg-alerte-texte' : 'bg-primary'}`}
+                                        className={`h-full ${idx === 0 ? 'gf-alloc-celi' : idx === 1 ? 'gf-alloc-reer' : idx === 2 ? 'gf-alloc-immo' : idx === 3 ? 'gf-alloc-cash' : 'gf-alloc-nonreg'}`}
                                         // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
                                         style={{ width: `${Math.max(3, l.poids)}%` }}
                                         title={`${l.symbole} (${l.compte})`}
@@ -816,11 +943,11 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         tabIndex={0}
                         onClick={() => navigateWithFocus(TabEnum.FUTURE)}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigateWithFocus(TabEnum.FUTURE); } }}
-                        className={`${tuile} cursor-pointer border-primary/25 hover:border-primary/80 transition-all focus-ring group`}
+                        className="gf-quote-cell touch-target cursor-pointer focus-ring group sm:col-span-1 lg:col-span-2"
                     >
                         <div className="flex items-center justify-between gap-2">
                             <span className={etiquetteTuile}>Patrimoine net en {horizonSnapshot?.year ?? '—'}</span>
-                            <span className="text-[11px] font-semibold text-primary group-hover:text-ink-50">
+                            <span className="text-[11px] font-semibold text-ink-200 group-hover:text-ink-50">
                                 Ouvrir Futur ↗
                             </span>
                         </div>
@@ -828,13 +955,13 @@ export const Investments: React.FC<InvestmentsProps> = ({
                             ? <PrivateAmount as="div" className="font-mono text-[22px] font-bold text-ink-50">{formatCAD(horizonSnapshot.netWorth)}</PrivateAmount>
                             : <div className="font-mono text-[22px] font-bold text-ink-400">—</div>}
                         {!isPrivacyMode && horizonSnapshot && valeurPortefeuille > 0 && (
-                            <div className="mt-1 h-2 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5 p-0.5" aria-hidden="true">
+                            <div className="mt-1 h-2 w-full rounded-full bg-fond overflow-hidden flex gap-0.5 p-0.5 gf-bar-grow" aria-hidden="true">
                                 <div
-                                    className="h-full rounded-l-full bg-repere"
+                                    className="h-full rounded-l-full gf-alloc-celi"
                                     // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
                                     style={{ width: `${Math.min(95, Math.max(8, (valeurPortefeuille / Math.max(1, horizonSnapshot.netWorth)) * 100))}%` }}
                                 />
-                                <div className="h-full rounded-r-full bg-succes-texte" style={{ flex: 1 }} />
+                                <div className="h-full rounded-r-full gf-alloc-reer" style={{ flex: 1 }} />
                             </div>
                         )}
                         {lienFutur}
@@ -881,8 +1008,11 @@ export const Investments: React.FC<InvestmentsProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 min-h-[300px]">
 
                     {/* REGIONS — Phase E.6 : clic = filtre stocks */}
-                    <div className="bg-surface-douce rounded-xl p-4 border border-bordure flex flex-col">
-                        <h4 className="text-ink-300 text-meta font-bold uppercase mb-4 text-center">Répartition Géographique</h4>
+                    <div className="gf-terminal-card p-5 flex flex-col">
+                        <div className="flex items-center justify-between gap-2 mb-4 pb-2.5 border-b border-bordure">
+                            <h4 className="text-ink-300 text-[11px] font-bold uppercase tracking-wider">Répartition Géographique</h4>
+                            <span className="font-mono text-[11px] text-ink-400">{geoBreakdown.length} zones</span>
+                        </div>
                         <div className="flex-1 flex flex-col lg:flex-row items-center gap-4">
                             <div className="flex-1 w-full h-[200px]" role="img" aria-label="Donut de répartition géographique du portefeuille">
                                 <ResponsiveContainer width="100%" height="100%">
@@ -917,7 +1047,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                 columns={allocationColumns}
                                 rows={geoBreakdown}
                             />
-                            <div className="flex-1 w-full space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
+                            <div className="flex-1 w-full space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
                                 {geoBreakdown.map(item => {
                                     const isActive = allocationFilter?.type === 'region' && allocationFilter.value === item.name;
                                     return (
@@ -925,18 +1055,18 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                             key={item.name}
                                             type="button"
                                             onClick={() => setAllocationFilter(isActive ? null : { type: 'region', value: item.name })}
-                                            className={`w-full flex justify-between items-center text-meta p-2 rounded-sm transition-colors focus-ring ${
-                                                isActive ? 'bg-bordure border border-bordure-champ' : 'bg-surface-douce hover:bg-bordure'
+                                            className={`gf-row w-full flex justify-between items-center text-meta px-3 py-2 rounded-lg transition-colors focus-ring ${
+                                                isActive ? 'bg-bordure border border-bordure-champ' : 'bg-surface-douce hover:bg-bordure border border-transparent'
                                             }`}
                                             aria-pressed={isActive}
                                         >
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS_REGION[item.name] || '#444' }}></span>
-                                                <span className="text-ink-100 font-medium">{item.name}</span>
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: COLORS_REGION[item.name] || '#444' }}></span>
+                                                <span className="text-ink-100 font-medium truncate">{item.name}</span>
                                             </div>
-                                            <div className="text-right">
-                                                <PrivateAmount as="div" className="text-texte font-bold">{formatCAD(item.value)}</PrivateAmount>
-                                                <div className="text-tiny text-ink-400"><PrivateAmount>{item.percent.toFixed(1)}%</PrivateAmount></div>
+                                            <div className="text-right shrink-0">
+                                                <PrivateAmount as="div" className="text-texte font-mono font-bold tabular-nums">{formatCAD(item.value)}</PrivateAmount>
+                                                <div className="text-tiny font-mono text-ink-400 tabular-nums"><PrivateAmount>{item.percent.toFixed(1)}%</PrivateAmount></div>
                                             </div>
                                         </button>
                                     );
@@ -946,8 +1076,11 @@ export const Investments: React.FC<InvestmentsProps> = ({
                     </div>
 
                     {/* SECTORS — Phase E.6 : clic = filtre stocks */}
-                    <div className="bg-surface-douce rounded-xl p-4 border border-bordure flex flex-col">
-                        <h4 className="text-ink-300 text-meta font-bold uppercase mb-4 text-center">Répartition Sectorielle</h4>
+                    <div className="gf-terminal-card p-5 flex flex-col">
+                        <div className="flex items-center justify-between gap-2 mb-4 pb-2.5 border-b border-bordure">
+                            <h4 className="text-ink-300 text-[11px] font-bold uppercase tracking-wider">Répartition Sectorielle</h4>
+                            <span className="font-mono text-[11px] text-ink-400">{sectorBreakdown.length} secteurs</span>
+                        </div>
                         <div className="flex-1 flex flex-col lg:flex-row items-center gap-4">
                             <div className="flex-1 w-full h-[200px]" role="img" aria-label="Donut de répartition sectorielle du portefeuille">
                                 <ResponsiveContainer width="100%" height="100%">
@@ -982,7 +1115,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                 columns={allocationColumns}
                                 rows={sectorBreakdown}
                             />
-                            <div className="flex-1 w-full space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
+                            <div className="flex-1 w-full space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
                                 {sectorBreakdown.map(item => {
                                     const isActive = allocationFilter?.type === 'sector' && allocationFilter.value === item.name;
                                     return (
@@ -990,18 +1123,18 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                             key={item.name}
                                             type="button"
                                             onClick={() => setAllocationFilter(isActive ? null : { type: 'sector', value: item.name })}
-                                            className={`w-full flex justify-between items-center text-meta p-2 rounded-sm transition-colors focus-ring ${
-                                                isActive ? 'bg-bordure border border-bordure-champ' : 'bg-surface-douce hover:bg-bordure'
+                                            className={`gf-row w-full flex justify-between items-center text-meta px-3 py-2 rounded-lg transition-colors focus-ring ${
+                                                isActive ? 'bg-bordure border border-bordure-champ' : 'bg-surface-douce hover:bg-bordure border border-transparent'
                                             }`}
                                             aria-pressed={isActive}
                                         >
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS_SECTOR[item.name] || '#444' }}></span>
-                                                <span className="text-ink-100 font-medium">{item.name}</span>
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: COLORS_SECTOR[item.name] || '#444' }}></span>
+                                                <span className="text-ink-100 font-medium truncate">{item.name}</span>
                                             </div>
-                                            <div className="text-right">
-                                                <PrivateAmount as="div" className="text-texte font-bold">{formatCAD(item.value)}</PrivateAmount>
-                                                <div className="text-tiny text-ink-400"><PrivateAmount>{item.percent.toFixed(1)}%</PrivateAmount></div>
+                                            <div className="text-right shrink-0">
+                                                <PrivateAmount as="div" className="text-texte font-mono font-bold tabular-nums">{formatCAD(item.value)}</PrivateAmount>
+                                                <div className="text-tiny font-mono text-ink-400 tabular-nums"><PrivateAmount>{item.percent.toFixed(1)}%</PrivateAmount></div>
                                             </div>
                                         </button>
                                     );
@@ -1014,8 +1147,8 @@ export const Investments: React.FC<InvestmentsProps> = ({
 
                 {/* Phase E.6 — Liste des stocks filtrés par geo/sector cliqué */}
                 {allocationFilter && (
-                    <div className="mt-4 p-4 bg-linear-to-r/srgb from-primary/5 to-info-500/5 border border-primary/20 rounded-xl">
-                        <div className="flex items-center justify-between mb-3">
+                    <div className="mt-4 p-4 gf-terminal-card">
+                        <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-bordure">
                             <h4 className="text-body font-bold text-texte flex items-center gap-2">
                                 <Icon name={allocationFilter.type === 'region' ? 'globe' : 'building'} size={16} className="text-ink-300" />
                                 Actions en <span className="text-primary">{allocationFilter.value}</span>
@@ -1023,25 +1156,27 @@ export const Investments: React.FC<InvestmentsProps> = ({
                             <button
                                 type="button"
                                 onClick={() => setAllocationFilter(null)}
-                                className="text-tiny text-ink-400 hover:text-ink-100 px-2 py-1 rounded-sm transition-colors focus-ring"
+                                className="gf-chip text-tiny text-ink-300 hover:text-ink-100 px-3 py-1 rounded-full transition-colors focus-ring"
                             >
                                 Effacer filtre
                             </button>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
                             {currentAllocation
                                 .filter(a => allocationFilter.type === 'region' ? a.region === allocationFilter.value : a.sector === allocationFilter.value)
                                 .sort((a, b) => b.value - a.value)
                                 .map(a => (
-                                    <div key={a.id} className="bg-surface-douce p-3 rounded-lg border border-bordure">
-                                        <div className="flex justify-between items-start mb-1">
+                                    <div key={a.id} className="gf-row bg-surface-douce p-3.5 rounded-xl border border-bordure flex flex-col justify-between gap-1.5">
+                                        <div className="flex justify-between items-start gap-2">
                                             <span className="font-bold text-texte text-body truncate">{a.name}</span>
-                                            <span className="text-tiny text-ink-400 font-mono"><PrivateAmount>{a.weight.toFixed(1)}%</PrivateAmount></span>
+                                            <span className="px-1.5 py-0.5 rounded-sm bg-fond border border-bordure text-tiny text-ink-300 font-mono tabular-nums"><PrivateAmount>{a.weight.toFixed(1)}%</PrivateAmount></span>
                                         </div>
-                                        <PrivateAmount as="div" className="text-meta font-mono text-ink-200">{formatCAD(a.value)}</PrivateAmount>
-                                        <div className={`text-tiny font-mono ${a.trendPct === null ? 'text-ink-400' : a.trendPct >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
-                                            {/* MONTANT-PUBLIC : variation du PRIX DE MARCHÉ du titre (décision de Marc : laissée visible). */}
-                                            {a.trendPct === null ? '—' : `${a.trendPct >= 0 ? '+' : ''}${a.trendPct.toFixed(2)}%`} ({PERF_PERIOD_LABELS[perfPeriod]})
+                                        <div className="flex items-baseline justify-between gap-2 pt-1">
+                                            <PrivateAmount as="div" className="text-meta font-mono font-bold text-ink-100 tabular-nums">{formatCAD(a.value)}</PrivateAmount>
+                                            <div className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-tiny font-mono font-semibold tabular-nums ${a.trendPct === null ? 'gf-delta-neutral text-ink-400' : a.trendPct >= 0 ? 'gf-delta-up text-success-400' : 'gf-delta-down text-danger-400'}`}>
+                                                {/* MONTANT-PUBLIC : variation du PRIX DE MARCHÉ du titre (décision de Marc : laissée visible). */}
+                                                {a.trendPct === null ? '—' : `${a.trendPct >= 0 ? '+' : ''}${a.trendPct.toFixed(2)}%`} ({PERF_PERIOD_LABELS[perfPeriod]})
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
@@ -1095,11 +1230,14 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         badge={hasActions ? <Badge variant="warning" size="sm">Action requise</Badge> : <Badge variant="success" size="sm">OK</Badge>}
                         className="mt-2"
                     >
-                        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                            <PrivateAmount as="div" className="text-2xl font-bold font-mono text-texte">
-                                {formatCAD(totalPortfolio)}
-                            </PrivateAmount>
-                            <div className="flex items-center gap-2">
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-bordure">
+                            <div>
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-ink-400">Assiette de rééquilibrage</div>
+                                <PrivateAmount as="div" className="text-2xl font-bold font-mono text-texte tabular-nums">
+                                    {formatCAD(totalPortfolio)}
+                                </PrivateAmount>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
                                 {/* Phase E.7 — bouton justifications IA */}
                                 {hasActions && geminiKey && (
                                     <button
@@ -1141,7 +1279,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                             setIsFetchingJustifications(false);
                                         }}
                                         disabled={isFetchingJustifications}
-                                        className="px-3 py-1.5 bg-surface-douce text-texte border border-bordure-champ rounded-lg text-meta font-bold hover:bg-accent hover:text-sur-accent transition-colors disabled:opacity-50"
+                                        className="gf-chip px-3 py-1.5 bg-surface-douce text-texte border border-bordure-champ rounded-full text-meta font-bold hover:bg-accent hover:text-sur-accent transition-colors disabled:opacity-50"
                                     >
                                         {isFetchingJustifications ? 'Analyse…' : 'Pourquoi ces actions ?'}
                                     </button>
@@ -1159,7 +1297,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                 <button
                                     aria-pressed={isRebalanceEdit}
                                     onClick={() => setIsRebalanceEdit(!isRebalanceEdit)}
-                                    className="px-3 py-1.5 bg-surface-douce text-texte border border-bordure-champ rounded-lg text-meta font-bold hover:bg-accent hover:text-sur-accent transition-colors"
+                                    className={`gf-chip px-3 py-1.5 border rounded-full text-meta font-bold transition-colors ${isRebalanceEdit ? 'gf-chip-active' : 'bg-surface-douce text-texte border-bordure-champ hover:bg-accent hover:text-sur-accent'}`}
                                 >
                                     {isRebalanceEdit ? 'Terminer' : 'Modifier Cibles'}
                                 </button>
@@ -1194,16 +1332,18 @@ export const Investments: React.FC<InvestmentsProps> = ({
 
                         <div className="space-y-3 mb-6">
                             {rebalancingActions.map((item, i) => (
-                                <div key={i} className={`p-4 rounded-xl border transition-all ${!isRebalanceEdit && item.action === 'SELL' ? 'border-danger-500/30 bg-erreur-fond' :
+                                <div key={i} className={`gf-terminal-card p-4 rounded-xl border transition-all ${!isRebalanceEdit && item.action === 'SELL' ? 'border-danger-500/30 bg-erreur-fond' :
                                     !isRebalanceEdit && item.action === 'BUY' ? 'border-succes-texte/30 bg-succes-fond' :
                                         'border-bordure bg-surface-douce'
                                     }`}>
-                                    <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center justify-between gap-3 mb-2">
                                         <div className="flex items-center gap-3">
-                                            <Icon name={item.icon} size={20} className="text-ink-300 shrink-0" />
+                                            <div className="w-9 h-9 rounded-lg bg-fond border border-bordure flex items-center justify-center shrink-0">
+                                                <Icon name={item.icon} size={18} className="text-ink-200" />
+                                            </div>
                                             <div>
                                                 <div className="text-texte font-bold text-body">{item.label}</div>
-                                                <div className="text-tiny text-ink-400 flex items-center gap-2 mt-1">
+                                                <div className="text-tiny text-ink-400 flex items-center gap-2 mt-1 font-mono">
                                                     <span>Actuel: <span className="text-ink-200 font-bold"><PrivateAmount>{item.currentPct.toFixed(1)}%</PrivateAmount></span></span>
                                                     <span className="opacity-50">|</span>
                                                     {isRebalanceEdit ? (
@@ -1238,19 +1378,21 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="text-right">
+                                        <div className="text-right shrink-0">
                                             {!isRebalanceEdit && item.action === 'SELL' && (
-                                                <div className="text-danger-400 font-bold text-body">
+                                                <div className="inline-flex items-center px-2.5 py-1 rounded-full font-mono font-bold text-meta gf-delta-down text-danger-400">
                                                     → Vendre <PrivateAmount>{formatCAD(Math.round(Math.abs(item.diffAmount)))}</PrivateAmount>
                                                 </div>
                                             )}
                                             {!isRebalanceEdit && item.action === 'BUY' && (
-                                                <div className="text-succes-texte font-bold text-body">
+                                                <div className="inline-flex items-center px-2.5 py-1 rounded-full font-mono font-bold text-meta gf-delta-up text-succes-texte">
                                                     → Acheter <PrivateAmount>{formatCAD(Math.round(Math.abs(item.diffAmount)))}</PrivateAmount>
                                                 </div>
                                             )}
                                             {!isRebalanceEdit && item.action === 'OK' && (
-                                                <div className="text-ink-300 text-meta font-bold">CIBLE ATTEINTE</div>
+                                                <div className="inline-flex items-center px-2.5 py-1 rounded-full font-mono text-tiny font-bold gf-delta-neutral text-ink-300">
+                                                    CIBLE ATTEINTE
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -1300,16 +1442,16 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         />
                     }
                 >
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="card-subtle p-4 flex flex-col items-center justify-center">
-                            <div className="kpi-label mb-1">Votre portefeuille</div>
-                            <div className={`text-kpi font-mono tabular-nums ${portfolioTrend === null ? 'text-ink-400' : portfolioTrend >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
+                    <div className="gf-quote-strip sm:grid-cols-2 rounded-xl overflow-hidden">
+                        <div className="gf-quote-cell flex flex-col items-center justify-center p-4">
+                            <div className="kpi-label mb-1.5">Votre portefeuille</div>
+                            <div className={`inline-flex items-center px-3 py-1 rounded-full text-kpi font-mono tabular-nums ${portfolioTrend === null ? 'gf-delta-neutral text-ink-400' : portfolioTrend >= 0 ? 'gf-delta-up text-success-400' : 'gf-delta-down text-danger-400'}`}>
                                 <PrivateAmount>{formatVariationPct(portfolioTrend, 2)}</PrivateAmount>
                             </div>
                         </div>
-                        <div className="card-subtle p-4 flex flex-col items-center justify-center">
-                            <div className="kpi-label mb-1">Marché (MSCI World)</div>
-                            <div className={`text-kpi font-mono tabular-nums ${benchmarkTrend === null ? 'text-ink-400' : benchmarkTrend >= 0 ? 'text-info-400' : 'text-danger-400'}`}>
+                        <div className="gf-quote-cell flex flex-col items-center justify-center p-4">
+                            <div className="kpi-label mb-1.5">Marché (MSCI World)</div>
+                            <div className={`inline-flex items-center px-3 py-1 rounded-full text-kpi font-mono tabular-nums ${benchmarkTrend === null ? 'gf-delta-neutral text-ink-400' : benchmarkTrend >= 0 ? 'gf-delta-up text-info-400' : 'gf-delta-down text-danger-400'}`}>
                                 {/* MONTANT-PUBLIC : performance de l'indice de référence (marché). */}
                                 {formatVariationPct(benchmarkTrend, 2)}
                             </div>
@@ -1317,9 +1459,9 @@ export const Investments: React.FC<InvestmentsProps> = ({
                     </div>
                 </Card>
                 {/* Phase E.9 — bouton d'ajout manuel d'action · [PRICE-REFRESH-LIVE] actualisation des cours */}
-                <div className="flex justify-end items-center gap-2 flex-wrap">
+                <div className="gf-terminal-card px-4 py-2.5 flex justify-end items-center gap-2 flex-wrap overflow-x-auto no-scrollbar">
                     {lastPriceRefreshAt != null && (
-                        <span className="text-tiny text-ink-400 mr-auto">
+                        <span className="font-mono text-tiny text-ink-400 mr-auto">
                             {/* [COURS-AU-TROMPEUR] C'est l'heure du dernier rafraîchissement, pas la date des
                                 cours : l'âge de chaque cours est dit par CoursPerimesNotice. */}
                             Actualisé le {formatDate(lastPriceRefreshAt)} {new Date(lastPriceRefreshAt).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
@@ -1331,7 +1473,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         onClick={handleRefreshPrices}
                         disabled={isRefreshingPrices}
                         aria-busy={isRefreshingPrices}
-                        className="px-3 py-1.5 bg-surface-douce hover:bg-bordure border border-bordure-champ text-ink-200 text-tiny font-bold rounded-card transition-colors focus-ring disabled:opacity-50"
+                        className="gf-chip px-3 py-1.5 bg-surface-douce hover:bg-bordure border border-bordure-champ text-ink-200 text-tiny font-bold rounded-full transition-colors focus-ring disabled:opacity-50"
                     >
                         {isRefreshingPrices ? 'Actualisation…' : 'Actualiser les cours'}
                     </button>
@@ -1345,7 +1487,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                             <button
                                 type="button"
                                 onClick={() => setShowComparisonModal(true)}
-                                className="touch-target inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary text-tiny font-bold rounded-card transition-colors focus-ring"
+                                className="touch-target gf-chip gf-chip-active inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary text-tiny font-bold rounded-full transition-colors focus-ring"
                             >
                                 <Icon name="chart" size={14} />{selectedCompareSymbols.size === 1 ? 'Voir courbe' : `Comparer (${selectedCompareSymbols.size})`}
                             </button>
@@ -1357,21 +1499,21 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         type="button"
                         onClick={() => (isCompareMode ? exitCompareMode() : setIsCompareMode(true))}
                         aria-pressed={isCompareMode}
-                        className="touch-target px-3 py-1.5 bg-surface-douce hover:bg-bordure border border-bordure-champ text-ink-200 text-tiny font-bold rounded-card transition-colors focus-ring"
+                        className={`touch-target gf-chip px-3 py-1.5 border text-tiny font-bold rounded-full transition-colors focus-ring ${isCompareMode ? 'gf-chip-active text-primary' : 'bg-surface-douce hover:bg-bordure border-bordure-champ text-ink-200'}`}
                     >
                         {isCompareMode ? 'Quitter la comparaison' : 'Comparer'}
                     </button>
                     <button
                         type="button"
                         onClick={() => setShowImportBroker(true)}
-                        className="px-3 py-1.5 bg-surface-douce hover:bg-bordure border border-bordure-champ text-ink-200 text-tiny font-bold rounded-card transition-colors focus-ring"
+                        className="gf-chip px-3 py-1.5 bg-surface-douce hover:bg-bordure border border-bordure-champ text-ink-200 text-tiny font-bold rounded-full transition-colors focus-ring"
                     >
                         Importer (CSV courtier)
                     </button>
                     <button
                         type="button"
                         onClick={() => setShowAddStockForm(true)}
-                        className="px-3 py-1.5 bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary text-tiny font-bold rounded-card transition-colors focus-ring"
+                        className="gf-chip gf-chip-active px-3 py-1.5 bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary text-tiny font-bold rounded-full transition-colors focus-ring"
                     >
                         + Ajouter une action
                     </button>
@@ -1396,7 +1538,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                     const isCompareSelected = selectedCompareSymbols.has(asset.id);
 
                     return (
-                        <div key={asset.id} className={`premium-card border p-5 rounded-2xl transition-all group relative overflow-hidden flex flex-col justify-between animate-premium-in shadow-xl ${
+                        <div key={asset.id} className={`gf-terminal-card premium-card border p-5 rounded-2xl transition-all group relative overflow-hidden flex flex-col justify-between animate-premium-in shadow-xl ${
                             isCompareMode && isCompareSelected ? 'border-primary/40 bg-primary/10' : 'border-bordure hover:border-bordure-champ'
                         }`}>
                             {/* Background Gradient based on sector */}
@@ -1404,7 +1546,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
 
                             <div>
                                 <div className="flex justify-between items-start mb-4 relative z-10">
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-3 min-w-0">
                                         {/* [REFONTE-NAV-L2b] Case de sélection (mode Comparer uniquement) —
                                             même visuel que l'ex-Accueil, mais bouton DÉDIÉ : la carte porte
                                             déjà selects/suppression, un clic-carte serait ambigu. */}
@@ -1430,27 +1572,30 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                                 </span>
                                             </button>
                                         )}
-                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-meta font-bold text-texte shadow-lg border border-bordure" style={{ backgroundColor: COLORS_SECTOR[asset.sector] || '#333' }}>
+                                        <div className="w-10 h-10 rounded-lg flex items-center justify-center font-mono text-meta font-bold text-texte shadow-sm border border-bordure shrink-0" style={{ backgroundColor: COLORS_SECTOR[asset.sector] || '#333' }}>
                                             {asset.name.substring(0, 2).toUpperCase()}
                                         </div>
-                                        <div>
-                                            <div className="font-bold text-texte text-body leading-tight tracking-tight">{asset.name}</div>
-                                            <div className="text-tiny text-ink-400 font-medium uppercase tracking-wider">{asset.region}</div>
+                                        <div className="min-w-0">
+                                            <div className="font-bold text-texte text-body leading-tight tracking-tight truncate">{asset.name}</div>
+                                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                                <span className="gf-ticker-symbol">{savedAsset?.symbol || asset.id}</span>
+                                                <span className="text-tiny text-ink-400 font-medium uppercase tracking-wider">{asset.region}</span>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="text-right">
-                                        <div className="text-xl font-black text-texte tracking-tight"><PrivateAmount>{asset.weight.toFixed(1)}%</PrivateAmount></div>
+                                    <div className="text-right shrink-0">
+                                        <div className="text-lg font-mono font-black text-texte tracking-tight tabular-nums"><PrivateAmount>{asset.weight.toFixed(1)}%</PrivateAmount></div>
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3 text-tiny mb-4 relative z-10">
-                                    <div className="bg-surface-douce p-2.5 rounded-xl border border-bordure backdrop-blur-xs">
-                                        <div className="text-ink-400 mb-1 font-bold">Valeur</div>
-                                        <PrivateAmount as="div" className="text-texte font-mono font-bold text-meta">{formatCAD(asset.value)}</PrivateAmount>
+                                <div className="gf-quote-strip grid-cols-2 rounded-xl overflow-hidden text-tiny mb-4 relative z-10">
+                                    <div className="gf-quote-cell p-2.5">
+                                        <div className="text-ink-400 mb-1 font-bold uppercase tracking-wider text-[10px]">Valeur</div>
+                                        <PrivateAmount as="div" className="text-texte font-mono font-bold text-meta tabular-nums">{formatCAD(asset.value)}</PrivateAmount>
                                     </div>
-                                    <div className="bg-surface-douce p-2.5 rounded-xl border border-bordure backdrop-blur-xs">
-                                        <div className="text-ink-400 mb-1 font-bold">Variation {PERF_PERIOD_LABELS[perfPeriod]}</div>
-                                        <div className={`font-bold text-meta ${asset.trendPct === null ? 'text-ink-400' : asset.trendPct >= 0 ? 'text-succes-texte' : 'text-danger-400'}`}>
+                                    <div className="gf-quote-cell p-2.5">
+                                        <div className="text-ink-400 mb-1 font-bold uppercase tracking-wider text-[10px]">Variation {PERF_PERIOD_LABELS[perfPeriod]}</div>
+                                        <div className={`inline-flex items-center px-1.5 py-0.5 rounded-full font-mono font-bold text-meta tabular-nums ${asset.trendPct === null ? 'gf-delta-neutral text-ink-400' : asset.trendPct >= 0 ? 'gf-delta-up text-succes-texte' : 'gf-delta-down text-danger-400'}`}>
                                             {/* MONTANT-PUBLIC : variation du PRIX DE MARCHÉ du titre (décision de Marc : laissée visible). */}
                                             {asset.trendPct === null ? '—' : `${asset.trendPct > 0 ? '+' : ''}${asset.trendPct.toFixed(1)}%`}
                                         </div>
@@ -1458,12 +1603,12 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                 </div>
                             </div>
 
-                            <div className="flex items-center justify-between pt-3 border-t border-bordure relative z-10 mt-auto">
-                                <div className="text-tiny text-ink-300 flex items-center gap-2">
-                                    <span className="font-medium">Yield</span>
+                            <div className="flex items-center justify-between pt-3 border-t border-bordure relative z-10 mt-auto gap-2 flex-wrap">
+                                <div className="text-tiny text-ink-300 flex items-center gap-1.5 font-mono">
+                                    <span className="font-sans font-medium text-ink-400">Yield</span>
                                     <span className={asset.yield > 0 ? "text-success-400 font-bold" : "text-ink-400"}>{asset.yield}%</span>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                     {savedAsset && (
                                         confirmDeleteId === asset.id ? (
                                             <button
@@ -1492,7 +1637,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                         aria-label={`Région pour ${asset.id}`}
                                         value={asset.region}
                                         onChange={(e) => handleAssetMetaChange(asset.id, 'region', e.target.value)}
-                                        className="bg-surface-douce border border-bordure rounded-lg px-2 py-1 text-tiny text-ink-200 outline-hidden focus:border-primary/50 transition-colors hover:bg-bordure cursor-pointer transition-colors"
+                                        className="bg-surface-douce border border-bordure rounded-lg px-2 py-1 text-tiny text-ink-200 outline-hidden focus:border-primary/50 transition-colors hover:bg-bordure cursor-pointer"
                                     >
                                         {CANONICAL_REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
                                         {!CANONICAL_REGIONS.includes(asset.region as never) && <option value={asset.region}>{asset.region}</option>}
@@ -1501,7 +1646,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                         aria-label={`Secteur pour ${asset.id}`}
                                         value={asset.sector}
                                         onChange={(e) => handleAssetMetaChange(asset.id, 'sector', e.target.value)}
-                                        className="bg-surface-douce border border-bordure rounded-lg px-2 py-1 text-tiny text-ink-200 outline-hidden focus:border-primary/50 transition-colors hover:bg-bordure cursor-pointer transition-colors"
+                                        className="bg-surface-douce border border-bordure rounded-lg px-2 py-1 text-tiny text-ink-200 outline-hidden focus:border-primary/50 transition-colors hover:bg-bordure cursor-pointer"
                                     >
                                         {CANONICAL_SECTORS.map((s) => <option key={s} value={s}>{s}</option>)}
                                         {!CANONICAL_SECTORS.includes(asset.sector as never) && <option value={asset.sector}>{asset.sector}</option>}
@@ -1510,7 +1655,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                         aria-label={`Type de compte pour ${asset.id}`}
                                         value={accountType}
                                         onChange={(e) => handleAssetAccountChange(asset.id, e.target.value)}
-                                        className="bg-surface-douce border border-bordure rounded-lg px-2.5 py-1 text-tiny text-ink-200 font-bold outline-hidden focus:border-primary/50 transition-colors hover:bg-bordure cursor-pointer transition-colors"
+                                        className="bg-surface-douce border border-bordure rounded-lg px-2.5 py-1 text-tiny text-ink-200 font-bold outline-hidden focus:border-primary/50 transition-colors hover:bg-bordure cursor-pointer"
                                     >
                                         <option value="CELI">CELI</option>
                                         <option value="REER">REER</option>

@@ -192,10 +192,21 @@ export const Layout: React.FC<LayoutProps> = ({
       {/* Barre latérale bureau (≥ lg) : repliable, icônes + indicateurs animés + préchargement au survol */}
       <aside className={`hidden lg:flex fixed top-0 left-0 bottom-0 z-40 ${largeurSidebar} flex-col gap-2.5 bg-fond border-r border-bordure px-3 pb-3 transition-all duration-200 ${isTestMode ? 'pt-14' : 'pt-3.5'}`}>
         <div className="flex items-center justify-between px-1.5" title={`v${__APP_VERSION__} • ${__GIT_SHA__} — build ${__BUILD_DATE__}`}>
-          <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             <img src="/icon.svg" alt="" width={30} height={30} className="w-[30px] h-[30px] rounded-[9px] shrink-0" aria-hidden="true" />
             {!isSidebarCollapsed && (
-              <p className="text-base font-bold text-ink-50 tracking-tight truncate">FinanceAI</p>
+              <div className="flex items-baseline gap-1.5 min-w-0">
+                <span className="text-[15px] font-bold tracking-tight select-none shrink-0" aria-hidden="true">
+                  <span className="gf-logo-b">G</span>
+                  <span className="gf-logo-r">o</span>
+                  <span className="gf-logo-y">o</span>
+                  <span className="gf-logo-b">g</span>
+                  <span className="gf-logo-g">l</span>
+                  <span className="gf-logo-r">e</span>
+                </span>
+                <p className="text-[15px] font-bold text-ink-50 tracking-tight truncate">FinanceAI</p>
+                <span className="gf-badge-nouvelle shrink-0">Beta</span>
+              </div>
             )}
           </div>
           <button
@@ -227,7 +238,7 @@ export const Layout: React.FC<LayoutProps> = ({
                     onFocus={() => prefetchTab(item.tab)}
                     title={isSidebarCollapsed ? item.label : undefined}
                     aria-current={actif ? 'page' : undefined}
-                    className={`gf-nav-item group h-9 px-2.5 rounded-[10px] flex items-center gap-2.5 text-left focus-ring ${
+                    className={`touch-target gf-nav-item group h-9 px-2.5 rounded-[10px] flex items-center gap-2.5 text-left focus-ring ${
                       isSidebarCollapsed ? 'justify-center text-[0px]' : 'text-body'
                     } ${
                       actif ? 'gf-nav-item-active text-ink-50 font-semibold' : 'text-ink-300 hover:bg-surface-douce hover:text-ink-50'
@@ -264,7 +275,7 @@ export const Layout: React.FC<LayoutProps> = ({
             type="button"
             onClick={() => setShowConnexionsModal(true)}
             title={isSidebarCollapsed ? 'Importer / Synchroniser' : undefined}
-            className="h-10 px-2.5 rounded-xl flex items-center justify-center gap-2 text-meta font-semibold gf-delta-neutral hover:opacity-90 transition-opacity focus-ring"
+            className="touch-target h-10 px-2.5 rounded-xl flex items-center justify-center gap-2 text-meta font-semibold gf-delta-neutral hover:opacity-90 transition-opacity focus-ring"
           >
             <Icon name="cloud" size={16} className="shrink-0" aria-hidden="true" />
             <span className={isSidebarCollapsed ? 'sr-only' : 'truncate'}>+ Importer / Sync</span>
@@ -277,11 +288,11 @@ export const Layout: React.FC<LayoutProps> = ({
             onFocus={() => prefetchTab(PROFILE_TAB)}
             title={isSidebarCollapsed ? `${libelleProfil} · Profil` : undefined}
             aria-current={activeTab === PROFILE_TAB ? 'page' : undefined}
-            className={`gf-nav-item h-11 px-2 rounded-xl flex items-center gap-2.5 text-left text-body focus-ring border ${
+            className={`touch-target gf-nav-item h-11 px-2 rounded-xl flex items-center gap-2.5 text-left text-body focus-ring border ${
               activeTab === PROFILE_TAB ? 'gf-nav-item-active text-ink-50 font-semibold' : 'border-bordure text-ink-200 hover:bg-surface-douce'
             }`}
           >
-            <span className="w-7 h-7 rounded-full bg-surfaceHighlight flex items-center justify-center text-meta font-bold text-primary shrink-0" aria-hidden="true">{initiales}</span>
+            <span className="w-7 h-7 rounded-full bg-surface-douce flex items-center justify-center text-meta font-bold text-primary shrink-0" aria-hidden="true">{initiales}</span>
             <span className={isSidebarCollapsed ? 'sr-only' : 'truncate'}>{libelleProfil} · Profil</span>
           </button>
           <div className={`flex items-center ${isSidebarCollapsed ? 'flex-col gap-1.5' : 'gap-1'}`}>
@@ -291,7 +302,7 @@ export const Layout: React.FC<LayoutProps> = ({
               aria-label={isPrivacyMode ? 'Quitter le mode discret' : 'Activer le mode discret'}
               aria-pressed={isPrivacyMode}
               title="Mode discret"
-              className={`h-9 px-2.5 rounded-[10px] flex items-center gap-2 text-meta transition-colors focus-ring ${
+              className={`touch-target h-9 px-2.5 rounded-[10px] flex items-center gap-2 text-meta transition-colors focus-ring ${
                 isPrivacyMode ? 'bg-surface-douce text-ink-50' : 'text-ink-400 hover:bg-surface-douce hover:text-ink-50'
               }`}
             >
@@ -303,7 +314,7 @@ export const Layout: React.FC<LayoutProps> = ({
               onClick={toggleCoupleMode}
               aria-pressed={isCouple}
               title={isCouple ? 'Mode Couple actif — cliquer pour repasser en Individuel' : 'Mode Individuel — cliquer pour passer en Couple'}
-              className="rounded-full hover:opacity-80 transition-opacity focus-ring"
+              className="touch-target inline-flex items-center justify-center rounded-full hover:opacity-80 transition-opacity focus-ring"
             >
               <CoupleModeBadge compact />
             </button>
@@ -320,29 +331,41 @@ export const Layout: React.FC<LayoutProps> = ({
         <div className="max-w-7xl mx-auto space-y-2.5 sm:space-y-3.5 lg:space-y-4 animate-premium-in">
           {/* Barre supérieure unique : fil d'Ariane + barre de recherche directe (masquée sur Accueil qui possède déjà son Omnibox) */}
           {activeTab !== Tab.DASHBOARD && (
-          <div className="flex items-center justify-between gap-2 pb-2 border-b border-bordure">
-            <div className="flex items-center gap-1.5 min-w-0 shrink-0">
+          <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-bordure">
+            <div className="flex items-center gap-2 min-w-0 shrink-0">
               {surPagePlus && (
                 <button
                   type="button"
                   onClick={() => setShowMobileDrawer(true)}
-                  className="lg:hidden -ml-1.5 px-1.5 min-h-11 min-w-11 inline-flex items-center text-meta text-ink-400 hover:text-ink-100 focus-ring rounded-sm"
+                  className="touch-target lg:hidden -ml-1.5 px-1.5 min-h-11 min-w-11 inline-flex items-center text-meta text-ink-400 hover:text-ink-100 focus-ring rounded-sm"
                 >
                   ‹ Plus
                 </button>
               )}
-              <div className="flex items-center gap-1 text-[11px] sm:text-xs text-ink-400 truncate">
+              <div className="hidden sm:inline-flex items-baseline gap-1 select-none shrink-0 pr-1.5 border-r border-bordure" aria-hidden="true">
+                <span className="text-xs font-bold tracking-tight">
+                  <span className="gf-logo-b">G</span>
+                  <span className="gf-logo-r">o</span>
+                  <span className="gf-logo-y">o</span>
+                  <span className="gf-logo-b">g</span>
+                  <span className="gf-logo-g">l</span>
+                  <span className="gf-logo-r">e</span>
+                </span>
+                <span className="text-xs font-medium text-ink-200">Finance</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-ink-400 truncate">
                 <span className="font-semibold uppercase tracking-wider text-repere">
                   {groupeActif ? groupeActif.label : 'Dossier'}
                 </span>
                 <span aria-hidden="true">/</span>
-                <span className="font-medium text-ink-200 truncate">{TAB_LABELS[activeTab]}</span>
+                <span className="font-semibold text-ink-100 truncate">{TAB_LABELS[activeTab]}</span>
+                <span className="gf-badge-nouvelle hidden md:inline-flex">Beta</span>
               </div>
             </div>
 
-            <div ref={searchContainerRef} className="relative flex-1 min-w-0 max-w-[210px] sm:max-w-none sm:flex-none sm:w-80 lg:w-96">
-              <div className="relative flex items-center">
-                <Icon name="search" size={14} className="absolute left-3 text-ink-400 pointer-events-none" aria-hidden="true" />
+            <div ref={searchContainerRef} className="relative flex-1 min-w-0 max-w-[220px] sm:max-w-none sm:flex-none sm:w-80 lg:w-96">
+              <div className="relative flex items-center gf-omnibox-pill px-3 h-9 sm:h-10">
+                <Icon name="search" size={14} className="text-ink-400 pointer-events-none shrink-0" aria-hidden="true" />
                 <input
                   type="search"
                   value={searchQuery}
@@ -362,7 +385,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   }}
                   placeholder="Rechercher page, titre…"
                   aria-label="Rechercher une page, un titre ou une opération"
-                  className="touch-target w-full h-9 pl-8 pr-2.5 rounded-full bg-surface border border-bordure text-xs text-ink-100 focus-ring"
+                  className="touch-target champ-nu w-full h-9 pl-2 pr-1 text-xs text-ink-50 placeholder:text-ink-400"
                 />
               </div>
 
@@ -370,9 +393,9 @@ export const Layout: React.FC<LayoutProps> = ({
                 <div
                   role="listbox"
                   aria-label="Résultats de recherche rapide"
-                  className="absolute right-0 mt-1.5 w-[min(20rem,calc(100vw-1.5rem))] sm:w-full rounded-2xl bg-surface border border-bordure shadow-xl py-2 z-50 space-y-2"
+                  className="absolute right-0 mt-1.5 w-[min(20rem,calc(100vw-1.5rem))] sm:w-full rounded-2xl bg-surface border border-bordure-champ shadow-2xl py-2 z-50 divide-y divide-bordure"
                 >
-                  <div className="px-2">
+                  <div className="px-2 pb-1">
                     <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400">Pages</p>
                     {resultatsRecherche.pagesFiltrees.map((dest) => (
                       <button
@@ -388,15 +411,15 @@ export const Layout: React.FC<LayoutProps> = ({
                       >
                         <span className="flex items-center gap-2">
                           <Icon name={dest.icon} size={14} className="text-repere" aria-hidden="true" />
-                          <span className="font-medium">{dest.label}</span>
+                          <span className="font-medium text-ink-50">{dest.label}</span>
                         </span>
-                        <span className="text-[11px] text-ink-400">{dest.group}</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full gf-delta-neutral">{dest.group}</span>
                       </button>
                     ))}
                   </div>
 
                   {resultatsRecherche.titresFiltres.length > 0 && (
-                    <div className="px-2 pt-1.5 border-t border-bordure">
+                    <div className="px-2 pt-2">
                       <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400">Titres en portefeuille</p>
                       {resultatsRecherche.titresFiltres.map((asset, idx) => (
                         <button
@@ -451,7 +474,7 @@ export const Layout: React.FC<LayoutProps> = ({
               onMouseEnter={() => prefetchTab(tab)}
               onTouchStart={() => prefetchTab(tab)}
               aria-current={activeTab === tab ? 'page' : undefined}
-              className={`flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors focus-ring rounded-xl ${actif ? 'text-ink-50 font-semibold bg-surface-douce/70' : 'text-ink-400'}`}
+              className={`touch-target flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors focus-ring rounded-xl ${actif ? 'text-ink-50 font-semibold bg-repere-doux border border-bordure' : 'text-ink-400 hover:text-ink-200'}`}
             >
               <Icon name={item.icon} size={20} aria-hidden="true" className={actif ? 'text-repere' : ''} />
               {item.label}
@@ -463,25 +486,28 @@ export const Layout: React.FC<LayoutProps> = ({
           onClick={() => setShowMobileDrawer((v) => !v)}
           aria-label="Plus d'options"
           aria-expanded={showMobileDrawer}
-          className={`flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors focus-ring rounded-xl ${showMobileDrawer || surPagePlus ? 'text-ink-50 font-semibold bg-surface-douce/70' : 'text-ink-400'}`}
+          className={`touch-target flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors focus-ring rounded-xl ${showMobileDrawer || surPagePlus ? 'text-ink-50 font-semibold bg-repere-doux border border-bordure' : 'text-ink-400 hover:text-ink-200'}`}
         >
-          <Icon name="more" size={20} aria-hidden="true" />
+          <Icon name="more" size={20} aria-hidden="true" className={showMobileDrawer || surPagePlus ? 'text-repere' : ''} />
           Plus
         </button>
       </nav>
 
       {/* Menu « Plus » (mobile) : un écran à part entière, au-dessus du contenu, sous la barre du bas. */}
       {showMobileDrawer && (
-        <div ref={panneauPlusRef} className={`lg:hidden fixed inset-x-0 bottom-[64px] ${isTestMode ? 'top-10' : 'top-0'} z-90 bg-dark overflow-y-auto px-4 pt-4 pb-6 flex flex-col gap-3.5 animate-fade-in`}>
-          <h2 className="text-xl font-bold text-ink-50">Plus</h2>
+        <div ref={panneauPlusRef} className={`lg:hidden fixed inset-x-0 bottom-[64px] ${isTestMode ? 'top-10' : 'top-0'} z-90 bg-fond overflow-y-auto px-4 pt-4 pb-6 flex flex-col gap-3.5 animate-fade-in`}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold text-ink-50">Plus</h2>
+            <span className="gf-badge-nouvelle">Google Finance Beta</span>
+          </div>
           <button
             type="button"
             onClick={() => { setActiveTab(PROFILE_TAB); setShowMobileDrawer(false); }}
             onMouseEnter={() => prefetchTab(PROFILE_TAB)}
             aria-current={activeTab === PROFILE_TAB ? 'page' : undefined}
-            className="h-[54px] px-3.5 rounded-[14px] bg-surface border border-bordure flex items-center gap-3 text-left focus-ring"
+            className="touch-target h-[54px] px-3.5 rounded-[14px] bg-surface border border-bordure flex items-center gap-3 text-left focus-ring"
           >
-            <span className="w-8 h-8 rounded-full bg-surfaceHighlight flex items-center justify-center text-meta font-bold text-primary shrink-0" aria-hidden="true">{initiales}</span>
+            <span className="w-8 h-8 rounded-full bg-surface-douce flex items-center justify-center text-meta font-bold text-primary shrink-0" aria-hidden="true">{initiales}</span>
             <span className="flex-1 min-w-0 flex flex-col">
               <span className="font-semibold text-ink-50 truncate">{libelleProfil}</span>
               <span className="text-meta text-ink-400">Profil</span>
@@ -501,7 +527,7 @@ export const Layout: React.FC<LayoutProps> = ({
                       onMouseEnter={() => prefetchTab(item.tab)}
                       onTouchStart={() => prefetchTab(item.tab)}
                       aria-current={isNavActive(item.tab) ? 'page' : undefined}
-                      className={`w-full h-[48px] px-3 rounded-xl border border-bordure flex items-center justify-between text-left text-xs font-medium focus-ring ${isNavActive(item.tab) ? 'text-ink-50 font-semibold bg-surface-douce border-bordure-champ' : 'bg-surface text-ink-100 hover:bg-surface-douce'}`}
+                      className={`touch-target w-full h-[48px] px-3 rounded-xl border border-bordure flex items-center justify-between text-left text-xs font-medium focus-ring ${isNavActive(item.tab) ? 'text-ink-50 font-semibold bg-surface-douce border-bordure-champ' : 'bg-surface text-ink-100 hover:bg-surface-douce'}`}
                     >
                       <span className="flex items-center gap-2 min-w-0 truncate">
                         <Icon name={item.icon} size={16} aria-hidden="true" className={`shrink-0 ${isNavActive(item.tab) ? 'text-repere' : 'text-ink-400'}`} />
@@ -522,7 +548,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 onClick={togglePrivacyMode}
                 aria-label={isPrivacyMode ? 'Quitter le mode discret' : 'Activer le mode discret'}
                 aria-pressed={isPrivacyMode}
-                className="w-full h-[48px] px-3 rounded-xl bg-surface border border-bordure flex items-center justify-between text-xs text-ink-100 focus-ring"
+                className="touch-target w-full h-[48px] px-3 rounded-xl bg-surface border border-bordure flex items-center justify-between text-xs text-ink-100 focus-ring"
               >
                 <span className="flex items-center gap-1.5 truncate"><Icon name={isPrivacyMode ? 'eye-off' : 'eye'} size={16} aria-hidden="true" />Mode discret</span>
                 <span className="text-[11px] text-ink-400">{isPrivacyMode ? 'actif' : 'inactif'}</span>
@@ -531,7 +557,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 type="button"
                 onClick={toggleCoupleMode}
                 aria-pressed={isCouple}
-                className="w-full h-[48px] px-3 rounded-xl bg-surface border border-bordure flex items-center justify-between text-xs text-ink-100 focus-ring"
+                className="touch-target w-full h-[48px] px-3 rounded-xl bg-surface border border-bordure flex items-center justify-between text-xs text-ink-100 focus-ring"
               >
                 <span>Ménage</span>
                 <CoupleModeBadge compact />

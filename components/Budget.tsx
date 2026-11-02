@@ -843,7 +843,7 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
             {/* [PH2-c-2] — signal inter-onglets : dernier recalcul de projection échoué. */}
             <ProjectionStaleBanner />
             {!pilotage && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="gf-terminal-card px-3.5 py-2.5 flex flex-wrap items-center gap-2 bg-surface border border-bordure">
                     <ChoixPeriode p={p} />
                     <NavigateurPeriode p={p} />
                     {nomsCouple && <ChoixPersonne p={p} noms={nomsCouple} />}
@@ -920,9 +920,9 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
 
             {/* ALERTS BANNER */}
             {timeView === 'MONTH' && alerts.length > 0 && (
-                <div className="bg-erreur-fond border border-danger-500/20 rounded-lg p-3 flex items-start gap-3 animate-fade-in">
-                    <Icon name="alert" size={18} className="text-warning-400 shrink-0" />
-                    <div>
+                <div className="gf-terminal-card bg-erreur-fond border border-danger-500/20 rounded-xl p-3.5 flex items-start gap-3 animate-fade-in">
+                    <Icon name="alert" size={18} className="text-warning-400 shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
                         <h4 className="text-body font-bold text-danger-400">Attention : Dépassements détectés</h4>
                         <p className="text-meta text-ink-300 mt-1">
                             {alerts.slice(0, 3).map((a, i) => (
@@ -969,15 +969,15 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                 <div className="flex flex-col gap-5 min-w-0">
                     {/* Phase D'.3 — Détail fiscal (fed + QC + RRQ + AE + RQAP) au lieu de la simple
                         soustraction Brut − Net. [S5-REFONTE-BUDGET] Liste des maquettes + barre visuelle. */}
-                    <section aria-labelledby="sante-budget-titre" className="rounded-2xl bg-surface border border-bordure p-4 lg:p-5 flex flex-col gap-3">
+                    <section aria-labelledby="sante-budget-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-4 lg:p-5 flex flex-col gap-3">
                         <div className="flex items-center justify-between gap-2">
                             <h2 id="sante-budget-titre" className="text-[16px] font-semibold text-ink-50">{coupleAnalysis.isSolo ? 'Santé financière' : 'Santé financière du couple'}</h2>
-                            <span className="px-2 py-0.5 rounded-sm text-[11px] font-mono font-semibold gf-delta-down">
+                            <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold gf-delta-down">
                                 −<PrivateAmount>{`${formatNumber(fiscalBreakdown.averageRate, { decimals: 1 })} %`}</PrivateAmount>
                             </span>
                         </div>
                         {!isPrivacyMode && fiscalBreakdown.grossDisplay > 0 && (
-                            <div className="h-3 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5 p-0.5" aria-hidden="true">
+                            <div className="h-3 w-full rounded-full bg-surface-douce overflow-hidden flex gap-0.5 p-0.5 gf-bar-grow" aria-hidden="true">
                                 <div
                                     className="h-full rounded-l-full bg-succes-texte transition-all"
                                     // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
@@ -998,16 +998,16 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                                 />
                             </div>
                         )}
-                        <dl className="grid grid-cols-2 gap-2 text-tiny">
-                            <div className="col-span-2 flex justify-between items-center rounded-lg bg-surface-douce px-3 py-2">
+                        <dl className="gf-quote-strip grid grid-cols-2 text-tiny">
+                            <div className="gf-quote-cell col-span-2 flex-row justify-between items-center bg-surface-douce px-3 py-2">
                                 <dt className="text-ink-200 font-medium">Revenus bruts <span className="sr-only">(salaire{coupleAnalysis.isSolo ? '' : 's'} déclaré{coupleAnalysis.isSolo ? '' : 's'})</span></dt>
                                 <dd><PrivateAmount className="font-mono text-body font-bold text-ink-50">{formatCAD(fiscalBreakdown.grossDisplay)}</PrivateAmount></dd>
                             </div>
-                            <div className="flex flex-col gap-0.5 rounded-lg bg-surface-douce px-2.5 py-1.5"><dt className="text-ink-400">Impôt fédéral</dt><dd><PrivateAmount className="font-mono font-semibold text-ink-200">{`−${formatCAD(fiscalBreakdown.fedTaxDisplay)}`}</PrivateAmount></dd></div>
-                            <div className="flex flex-col gap-0.5 rounded-lg bg-surface-douce px-2.5 py-1.5"><dt className="text-ink-400">Impôt Québec</dt><dd><PrivateAmount className="font-mono font-semibold text-ink-200">{`−${formatCAD(fiscalBreakdown.qcTaxDisplay)}`}</PrivateAmount></dd></div>
-                            <div className="flex flex-col gap-0.5 rounded-lg bg-surface-douce px-2.5 py-1.5"><dt className="text-ink-400">RRQ</dt><dd><PrivateAmount className="font-mono font-semibold text-ink-200">{`−${formatCAD(fiscalBreakdown.rrqDisplay)}`}</PrivateAmount></dd></div>
-                            <div className="flex flex-col gap-0.5 rounded-lg bg-surface-douce px-2.5 py-1.5"><dt className="text-ink-400">AE + RQAP</dt><dd><PrivateAmount className="font-mono font-semibold text-ink-200">{`−${formatCAD(fiscalBreakdown.aeRqapDisplay)}`}</PrivateAmount></dd></div>
-                            <div className="col-span-2 flex justify-between items-center rounded-lg bg-surface-douce px-3 py-2 border border-bordure font-semibold">
+                            <div className="gf-quote-cell bg-surface-douce px-2.5 py-1.5"><dt className="text-ink-400">Impôt fédéral</dt><dd><PrivateAmount className="font-mono font-semibold text-ink-200">{`−${formatCAD(fiscalBreakdown.fedTaxDisplay)}`}</PrivateAmount></dd></div>
+                            <div className="gf-quote-cell bg-surface-douce px-2.5 py-1.5"><dt className="text-ink-400">Impôt Québec</dt><dd><PrivateAmount className="font-mono font-semibold text-ink-200">{`−${formatCAD(fiscalBreakdown.qcTaxDisplay)}`}</PrivateAmount></dd></div>
+                            <div className="gf-quote-cell bg-surface-douce px-2.5 py-1.5"><dt className="text-ink-400">RRQ</dt><dd><PrivateAmount className="font-mono font-semibold text-ink-200">{`−${formatCAD(fiscalBreakdown.rrqDisplay)}`}</PrivateAmount></dd></div>
+                            <div className="gf-quote-cell bg-surface-douce px-2.5 py-1.5"><dt className="text-ink-400">AE + RQAP</dt><dd><PrivateAmount className="font-mono font-semibold text-ink-200">{`−${formatCAD(fiscalBreakdown.aeRqapDisplay)}`}</PrivateAmount></dd></div>
+                            <div className="gf-quote-cell col-span-2 flex-row justify-between items-center bg-fond px-3 py-2 font-semibold">
                                 <dt className="text-ink-50">Revenu net disponible</dt>
                                 <dd><PrivateAmount className="font-mono text-body font-bold text-success-400">{formatCAD(fiscalBreakdown.netDisplay)}</PrivateAmount></dd>
                             </div>
@@ -1017,13 +1017,15 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
 
                     {/* Capacité d'épargne par personne + potentiel combiné. Le détail (effort, parts, sorties,
                         perso réel), absent des maquettes, reste là, replié. */}
-                    <section aria-labelledby="epargne-possible-titre" className="rounded-2xl bg-surface border border-bordure p-4 lg:p-5 flex flex-col gap-3">
+                    <section aria-labelledby="epargne-possible-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-4 lg:p-5 flex flex-col gap-3">
                         <div className="flex items-center justify-between gap-2">
                             <h2 id="epargne-possible-titre" className="text-[16px] font-semibold text-ink-50">Épargne possible</h2>
-                            <PrivateAmount className="font-mono text-[18px] font-bold text-success-400">{formatSigned(coupleAnalysis.totalSavings, { withCurrency: true })}</PrivateAmount>
+                            <span className={`px-2.5 py-0.5 rounded-full font-mono text-[15px] font-bold ${coupleAnalysis.totalSavings >= 0 ? 'gf-delta-up text-succes-texte' : 'gf-delta-down text-erreur-texte'}`}>
+                                <PrivateAmount>{formatSigned(coupleAnalysis.totalSavings, { withCurrency: true })}</PrivateAmount>
+                            </span>
                         </div>
                         {!isPrivacyMode && coupleAnalysis.totalSavings > 0 && !coupleAnalysis.isSolo && (
-                            <div className="h-2.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5 p-0.5" aria-hidden="true">
+                            <div className="h-2.5 w-full rounded-full bg-surface-douce overflow-hidden flex gap-0.5 p-0.5 gf-bar-grow" aria-hidden="true">
                                 <div
                                     className="h-full rounded-l-full bg-succes-texte"
                                     // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
@@ -1036,9 +1038,9 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                             </div>
                         )}
                         <ul className="grid grid-cols-2 gap-2 text-tiny">
-                            <li className="flex flex-col gap-0.5 rounded-lg bg-surface-douce px-2.5 py-2"><span className="text-ink-300 truncate">{coupleAnalysis.user1.name}</span><PrivateAmount className="font-mono text-body font-bold text-success-400">{formatCAD(coupleAnalysis.user1Savings)}</PrivateAmount></li>
+                            <li className="gf-quote-cell rounded-xl border border-bordure bg-surface-douce px-2.5 py-2"><span className="text-ink-300 truncate">{coupleAnalysis.user1.name}</span><PrivateAmount className="font-mono text-body font-bold text-success-400">{formatCAD(coupleAnalysis.user1Savings)}</PrivateAmount></li>
                             {!coupleAnalysis.isSolo && coupleAnalysis.user2 && (
-                                <li className="flex flex-col gap-0.5 rounded-lg bg-surface-douce px-2.5 py-2"><span className="text-ink-300 truncate">{coupleAnalysis.user2.name}</span><PrivateAmount className="font-mono text-body font-bold text-success-400">{formatCAD(coupleAnalysis.user2Savings)}</PrivateAmount></li>
+                                <li className="gf-quote-cell rounded-xl border border-bordure bg-surface-douce px-2.5 py-2"><span className="text-ink-300 truncate">{coupleAnalysis.user2.name}</span><PrivateAmount className="font-mono text-body font-bold text-success-400">{formatCAD(coupleAnalysis.user2Savings)}</PrivateAmount></li>
                             )}
                         </ul>
                         <div className="sr-only">
@@ -1050,23 +1052,23 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                                     {/* User 1 Breakdown */}
                                     <div className="space-y-2">
                                         <div className="flex justify-between items-center">
-                                            <span className="text-body font-bold text-indigo-400">{coupleAnalysis.user1.name}</span>
+                                            <span className="text-body font-bold text-ink-50">{coupleAnalysis.user1.name}</span>
                                             <div className="flex items-center gap-2">
                                                 {coupleAnalysis.splitMode === 'prorata' && (
                                                     <span className="text-tiny text-ink-400"><PrivateAmount>{(coupleAnalysis.splitRatio1 * 100).toFixed(0)}%</PrivateAmount> (Net)</span>
                                                 )}
-                                                <span className="text-meta text-ink-400 bg-surface-douce px-2 py-0.5 rounded-sm" title={EFFORT_BASE_TITLE}>
+                                                <span className="text-meta text-ink-300 bg-surface-douce border border-bordure px-2 py-0.5 rounded-full" title={EFFORT_BASE_TITLE}>
                                                     Effort: <PrivateAmount>{coupleAnalysis.user1Income > 0 ? ((coupleAnalysis.user1Contribution / coupleAnalysis.user1Income) * 100).toFixed(0) : 0}%</PrivateAmount> {EFFORT_BASE_LABEL}
                                                 </span>
                                             </div>
                                         </div>
 
-                                        <div className="relative h-4 w-full bg-fond rounded-full overflow-hidden flex">
+                                        <div className="relative h-4 w-full bg-fond border border-bordure rounded-full overflow-hidden flex gf-bar-grow">
                                             {/* [PRIVACY-RATIOS-DUREES-UNIFORMES] Les largeurs trahissent les ratios commun/perso/épargne : barre neutre en mode discret. */}
                                             {isPrivacyMode ? <div className="h-full w-full bg-surface-douce" /> : (<>
-                                            <div className="h-full bg-indigo-600" style={{ width: `${(coupleAnalysis.user1ShareCommon / coupleAnalysis.user1Income) * 100}%` }} title={`Commun: ${maskedAttr(coupleAnalysis.user1ShareCommon)}`}></div>
-                                            <div className="h-full bg-indigo-400" style={{ width: `${(coupleAnalysis.user1Personal / coupleAnalysis.user1Income) * 100}%` }} title={`Perso: ${maskedAttr(coupleAnalysis.user1Personal)}`}></div>
-                                            <div className="h-full bg-green-500/50" style={{ flex: 1 }} title={`Épargne: ${maskedAttr(coupleAnalysis.user1Savings)}`}></div>
+                                            <div className="h-full gf-alloc-celi" style={{ width: `${(coupleAnalysis.user1ShareCommon / coupleAnalysis.user1Income) * 100}%` }} title={`Commun: ${maskedAttr(coupleAnalysis.user1ShareCommon)}`}></div>
+                                            <div className="h-full gf-alloc-cash" style={{ width: `${(coupleAnalysis.user1Personal / coupleAnalysis.user1Income) * 100}%` }} title={`Perso: ${maskedAttr(coupleAnalysis.user1Personal)}`}></div>
+                                            <div className="h-full gf-alloc-reer" style={{ flex: 1 }} title={`Épargne: ${maskedAttr(coupleAnalysis.user1Savings)}`}></div>
                                             </>)}
                                         </div>
 
@@ -1088,23 +1090,23 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                                     {!coupleAnalysis.isSolo && coupleAnalysis.user2 && (
                                         <div className="space-y-2 pt-2 border-t border-bordure">
                                             <div className="flex justify-between items-center">
-                                                <span className="text-body font-bold text-pink-400">{coupleAnalysis.user2.name}</span>
+                                                <span className="text-body font-bold text-repere">{coupleAnalysis.user2.name}</span>
                                                 <div className="flex items-center gap-2">
                                                     {coupleAnalysis.splitMode === 'prorata' && (
                                                         <span className="text-tiny text-ink-400"><PrivateAmount>{((1 - coupleAnalysis.splitRatio1) * 100).toFixed(0)}%</PrivateAmount> (Net)</span>
                                                     )}
-                                                    <span className="text-meta text-ink-400 bg-surface-douce px-2 py-0.5 rounded-sm" title={EFFORT_BASE_TITLE}>
+                                                    <span className="text-meta text-ink-300 bg-surface-douce border border-bordure px-2 py-0.5 rounded-full" title={EFFORT_BASE_TITLE}>
                                                         Effort: <PrivateAmount>{coupleAnalysis.user2Income > 0 ? ((coupleAnalysis.user2Contribution / coupleAnalysis.user2Income) * 100).toFixed(0) : 0}%</PrivateAmount> {EFFORT_BASE_LABEL}
                                                     </span>
                                                 </div>
                                             </div>
 
-                                            <div className="relative h-4 w-full bg-fond rounded-full overflow-hidden flex">
+                                            <div className="relative h-4 w-full bg-fond border border-bordure rounded-full overflow-hidden flex gf-bar-grow">
                                                 {/* [PRIVACY-RATIOS-DUREES-UNIFORMES] Les largeurs trahissent les ratios commun/perso/épargne : barre neutre en mode discret. */}
                                                 {isPrivacyMode ? <div className="h-full w-full bg-surface-douce" /> : (<>
-                                                <div className="h-full bg-pink-600" style={{ width: `${(coupleAnalysis.user2ShareCommon / coupleAnalysis.user2Income) * 100}%` }} title={`Commun: ${maskedAttr(coupleAnalysis.user2ShareCommon)}`}></div>
-                                                <div className="h-full bg-pink-400" style={{ width: `${(coupleAnalysis.user2Personal / coupleAnalysis.user2Income) * 100}%` }} title={`Perso: ${maskedAttr(coupleAnalysis.user2Personal)}`}></div>
-                                                <div className="h-full bg-green-500/50" style={{ flex: 1 }} title={`Épargne: ${maskedAttr(coupleAnalysis.user2Savings)}`}></div>
+                                                <div className="h-full gf-alloc-nonreg" style={{ width: `${(coupleAnalysis.user2ShareCommon / coupleAnalysis.user2Income) * 100}%` }} title={`Commun: ${maskedAttr(coupleAnalysis.user2ShareCommon)}`}></div>
+                                                <div className="h-full gf-alloc-immo" style={{ width: `${(coupleAnalysis.user2Personal / coupleAnalysis.user2Income) * 100}%` }} title={`Perso: ${maskedAttr(coupleAnalysis.user2Personal)}`}></div>
+                                                <div className="h-full gf-alloc-reer" style={{ flex: 1 }} title={`Épargne: ${maskedAttr(coupleAnalysis.user2Savings)}`}></div>
                                                 </>)}
                                             </div>
 
@@ -1128,7 +1130,7 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                     {/* [PH4-A] Parité Budget ↔ Transactions : trous de rapprochement (règle unique
                         `matchTransactionToCategory`). Empty-state honnête si tout est rapproché. */}
                     {(orphanCategories.length > 0 || itemsWithoutTransactions.length > 0) ? (
-                        <section aria-labelledby="parite-titre" className="rounded-2xl border border-warning-400/35 bg-warning-500/6 p-4 lg:p-5 flex flex-col gap-2.5">
+                        <section aria-labelledby="parite-titre" className="gf-terminal-card rounded-2xl border border-warning-400/35 bg-alerte-fond/40 p-4 lg:p-5 flex flex-col gap-2.5">
                             <h2 id="parite-titre" className="sr-only">Parité Budget ↔ Transactions</h2>
                             {orphanCategories.length > 0 && (
                                 <div className="flex flex-col gap-2">
@@ -1137,7 +1139,7 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                                     </h3>
                                     <ul className="flex flex-col gap-1">
                                         {orphanCategories.map((o: OrphanCategory) => (
-                                            <li key={o.category} className="flex items-center justify-between gap-2 text-body">
+                                            <li key={o.category} className="gf-row flex items-center justify-between gap-2 text-body px-2 py-1 rounded-lg">
                                                 <PrivateText quoi="categorie" className="text-ink-100 truncate">{o.category}</PrivateText>
                                                 <PrivateAmount className="font-mono text-ink-100 shrink-0">{formatCAD(o.total)}</PrivateAmount>
                                             </li>
@@ -1153,7 +1155,7 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                                     </h3>
                                     <ul className="flex flex-wrap gap-1.5">
                                         {itemsWithoutTransactions.map(i => (
-                                            <li key={i.id ?? i.name} className="text-meta px-2 py-0.5 rounded-full bg-surface-douce border border-bordure text-ink-200">{i.name}</li>
+                                            <li key={i.id ?? i.name} className="text-meta px-2.5 py-0.5 rounded-full bg-surface-douce border border-bordure text-ink-200">{i.name}</li>
                                         ))}
                                     </ul>
                                     <p className="text-meta text-ink-400">Aucune transaction (tout l'historique) ne correspond à ce poste — nom différent des catégories de transactions, ou poste inutilisé&nbsp;? (l'épargne par virement n'est pas comptée ici)</p>
@@ -1204,7 +1206,7 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                                     <th scope="row" colSpan={ledger.months.length + 2} className="text-left text-tiny uppercase tracking-widest text-success-400 font-bold pt-3 pb-1 sticky left-0 bg-surface">Revenus</th>
                                 </tr>
                                 {ledger.incomeRows.map(row => (
-                                    <tr key={`in-${row.category}`} className="border-t border-bordure">
+                                    <tr key={`in-${row.category}`} className="gf-row border-t border-bordure">
                                         <th scope="row" className="text-left font-medium text-ink-100 py-1.5 pr-2 sticky left-0 bg-surface whitespace-nowrap"><PrivateText quoi="categorie">{row.category}</PrivateText></th>
                                         {row.byMonth.map((v, i) => (
                                             <td key={ledger.months[i]} className="text-right py-1.5 px-1.5 font-mono">
@@ -1230,7 +1232,7 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                                             <th scope="row" colSpan={ledger.months.length + 2} className="text-left text-tiny uppercase tracking-widest text-ink-300 font-bold pt-3 pb-1 sticky left-0 bg-surface">Entrées hors revenu (exclues du total et du solde)</th>
                                         </tr>
                                         {ledger.entreesHorsRevenuRows.map(row => (
-                                            <tr key={`hr-${row.category}`} className="border-t border-bordure">
+                                            <tr key={`hr-${row.category}`} className="gf-row border-t border-bordure">
                                                 <th scope="row" className="text-left font-medium text-ink-200 py-1.5 pr-2 sticky left-0 bg-surface whitespace-nowrap"><PrivateText quoi="categorie">{row.category}</PrivateText></th>
                                                 {row.byMonth.map((v, i) => (
                                                     <td key={ledger.months[i]} className="text-right py-1.5 px-1.5 font-mono">
@@ -1260,7 +1262,7 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                                     <th scope="row" colSpan={ledger.months.length + 2} className="text-left text-tiny uppercase tracking-widest text-warning-400 font-bold pt-3 pb-1 sticky left-0 bg-surface">Dépenses</th>
                                 </tr>
                                 {ledger.expenseRows.map(row => (
-                                    <tr key={`out-${row.category}`} className="border-t border-bordure">
+                                    <tr key={`out-${row.category}`} className="gf-row border-t border-bordure">
                                         <th scope="row" className="text-left font-medium text-ink-100 py-1.5 pr-2 sticky left-0 bg-surface whitespace-nowrap"><PrivateText quoi="categorie">{row.category}</PrivateText></th>
                                         {row.byMonth.map((v, i) => (
                                             <td key={ledger.months[i]} className="text-right py-1.5 px-1.5 font-mono">
@@ -1314,18 +1316,18 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
             <CollapsibleSection title="Outils du budget" subtitle="Diagnostic IA, simulateur d'inflation, impact à long terme" headingLevel={2}>
                 <div className="flex flex-col gap-4">
                     <div className="flex flex-wrap items-center gap-3">
-                        <button type="button" onClick={handleAiDiagnosis} className="h-10 px-4 rounded-lg bg-primary text-dark text-body font-bold focus-ring">
+                        <button type="button" onClick={handleAiDiagnosis} className="touch-target h-11 px-4 rounded-full gf-chip gf-chip-active text-body font-bold focus-ring">
                             Diagnostic
                         </button>
-                        <span className={`h-8 px-3 rounded-full border text-meta font-semibold flex items-center ${excedent >= 0 ? 'border-success-400/30 bg-success-500/10 text-success-400' : 'border-danger-400/30 bg-danger-500/10 text-danger-400'}`}>
+                        <span className={`h-8 px-3 rounded-full border text-meta font-semibold flex items-center ${excedent >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}>
                             {excedent >= 0 ? 'Excédentaire' : 'Déficitaire'}
                             <PrivateAmount className="ml-1 tabular-nums">{formatCAD(excedent)}</PrivateAmount>
                         </span>
                         <span className="text-meta text-ink-400">revenu moyen face au budget prévu, {timeView === 'MONTH' ? 'Vision tactique (Mois en cours)' : timeView === 'QUARTER' ? 'Vision trimestrielle (Objectifs ×3)' : timeView === 'YEAR' ? 'Vision stratégique (Objectifs ×12)' : 'Période personnalisée'}</span>
                     </div>
                     {/* Simulateur d'inflation — toggle inline (avant: caché en hover sur Card 1) */}
-                    <details className="bg-surface/40 rounded-card border border-bordure group">
-                        <summary className="cursor-pointer px-4 py-2 text-meta text-ink-300 hover:text-ink-50 transition-colors flex items-center justify-between focus-ring">
+                    <details className="gf-terminal-card bg-surface/40 rounded-card border border-bordure group">
+                        <summary className="touch-target cursor-pointer px-4 py-2 text-meta text-ink-300 hover:text-ink-50 transition-colors flex items-center justify-between focus-ring">
                             <span>Simulateur d'inflation {inflationSim > 0 && <Badge variant="warning" size="sm" className="ml-2">+{inflationSim}%</Badge>}</span>
                             <span className="text-ink-400 group-open:rotate-180 transition-transform" aria-hidden="true">▾</span>
                         </summary>
@@ -1352,7 +1354,7 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                         <button
                             type="button"
                             onClick={() => navigateWithFocus(TabEnum.FUTURE)}
-                            className="bg-surface-douce border border-bordure-champ rounded-card p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between w-full text-left hover:bg-surface-douce transition-colors focus-ring"
+                            className="touch-target gf-terminal-card bg-surface-douce border border-bordure-champ rounded-card p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between w-full text-left hover:bg-surface-douce transition-colors focus-ring"
                             title="Ouvrir FutureProjection"
                         >
                             <div>

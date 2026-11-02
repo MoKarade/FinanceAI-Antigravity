@@ -64,6 +64,11 @@ const Sparkline = ({ data, color, poste }: { data: number[]; color: string; post
 
 /** [S5-REFONTE-BUDGET] Titres des groupes (maquettes E/M-budget). */
 const TITRES: Record<'Besoin' | 'Envie' | 'Epargne', string> = { Besoin: 'Besoins', Envie: 'Envies', Epargne: 'Épargne' };
+const COULEUR_GROUPE: Record<'Besoin' | 'Envie' | 'Epargne', string> = {
+    Besoin: 'gf-alloc-celi',
+    Envie: 'gf-alloc-immo',
+    Epargne: 'gf-alloc-reer',
+};
 
 const LIBELLES_PERIODE: Record<TimeView, { cible: string; reel: string }> = {
     MONTH: { cible: 'Cible / mois', reel: 'Réel ce mois' },
@@ -145,7 +150,7 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
             type="button"
             onClick={() => onAddItem(nature)}
             aria-label={`Ajouter un poste dans ${titre}`}
-            className="self-start min-h-11 px-5 lg:px-5 text-[13px] text-ink-200 hover:text-ink-50 focus-ring rounded-sm"
+            className="touch-target self-start min-h-11 px-5 lg:px-5 text-[13px] font-medium text-ink-200 hover:text-ink-50 hover:bg-surface-douce transition-colors focus-ring rounded-sm"
         >
             + Ajouter un poste
         </button>
@@ -155,7 +160,7 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
     // créer le premier (au lieu d'un tableau vide).
     if (isEmpty && nature === 'Epargne') {
         return (
-            <section aria-labelledby={idTitre} className="rounded-2xl border border-dashed border-white/15 px-4 py-4 lg:px-5 flex items-center justify-between gap-4">
+            <section aria-labelledby={idTitre} className="gf-terminal-card rounded-2xl border border-dashed border-bordure-champ bg-surface px-4 py-4 lg:px-5 flex items-center justify-between gap-4">
                 <div className="flex flex-col gap-1 min-w-0">
                     <h2 id={idTitre} className="text-body font-semibold text-ink-50">{titre} · aucun poste</h2>
                     <p className="text-meta lg:text-[13px] text-ink-400">Crée un poste d'épargne pour suivre ce que tu mets de côté chaque mois.</p>
@@ -164,7 +169,7 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
                     type="button"
                     onClick={() => onAddItem(nature)}
                     aria-label="Créer un poste d'épargne"
-                    className="shrink-0 h-10 px-4 rounded-lg border border-white/40 text-body text-ink-100 hover:bg-white/5 focus-ring"
+                    className="touch-target shrink-0 h-11 px-4 rounded-full border border-bordure-champ bg-surface-douce text-body text-ink-100 hover:bg-fond focus-ring"
                 >
                     Créer<span className="hidden lg:inline"> un poste</span>
                 </button>
@@ -180,13 +185,21 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
         const remaining = displayTarget - spent;
         const isOver = spent > displayTarget;
         const percentSpent = displayTarget > 0 ? (spent / displayTarget) * 100 : 0;
-        // Barre du poste : rouge si dépassé, ambre si en avance sur le mois (vue Mois), clair sinon.
-        const couleurBarre = isOver ? 'bg-danger-400' : (timeView === 'MONTH' && percentSpent > monthProgress ? 'bg-warning-400' : 'bg-ink-100');
+        // Barre du poste : rouge si dépassé, ambre si en avance sur le mois (vue Mois), couleur Google Finance du groupe sinon.
+        const couleurBarre = isOver
+            ? 'bg-danger-400'
+            : (timeView === 'MONTH' && percentSpent > monthProgress
+                ? 'gf-alloc-immo'
+                : nature === 'Epargne'
+                    ? 'gf-alloc-reer'
+                    : nature === 'Besoin'
+                        ? 'gf-alloc-celi'
+                        : 'gf-alloc-cash');
         return { item, idx, displayTarget, displayAvg, spent, remaining, isOver, percentSpent, couleurBarre, isExpanded: expandedId === item.id };
     });
     const basculer = (id: string | undefined, ouvert: boolean) => onExpandToggle(ouvert ? null : (id ?? null));
     const barre = (l: typeof lignes[number], classe: string) => (
-        <span className={`block h-1 rounded-full bg-white/8 overflow-hidden ${classe}`} aria-hidden="true">
+        <span className={`block h-1.5 rounded-full bg-surface-douce overflow-hidden gf-bar-grow ${classe}`} aria-hidden="true">
             <span className={`block h-full rounded-full ${l.couleurBarre}`} style={{ width: `${isPrivacyMode ? 0 : Math.min(100, l.percentSpent)}%` }} />
         </span>
     );
@@ -204,10 +217,11 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
     );
 
     return (
-        <section aria-labelledby={idTitre} className="rounded-2xl bg-surface border border-white/6 overflow-hidden flex flex-col">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-0.5 lg:gap-3 px-4 pt-4 pb-2 lg:px-5 lg:py-3.5">
-                <h2 id={idTitre} className="text-[17px] lg:text-[16px] font-semibold text-ink-50">
-                    {titre}<span className="text-meta lg:text-[13px] font-normal text-ink-400"> · {items.length} poste{items.length > 1 ? 's' : ''}</span>
+        <section aria-labelledby={idTitre} className="gf-terminal-card rounded-2xl bg-surface border border-bordure overflow-hidden flex flex-col">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-0.5 lg:gap-3 px-4 pt-4 pb-2 lg:px-5 lg:py-3.5 bg-fond/40">
+                <h2 id={idTitre} className="text-[17px] lg:text-[16px] font-semibold text-ink-50 inline-flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${COULEUR_GROUPE[nature]}`} aria-hidden="true" />
+                    <span>{titre}<span className="text-meta lg:text-[13px] font-normal text-ink-400"> · {items.length} poste{items.length > 1 ? 's' : ''}</span></span>
                 </h2>
                 <div className="text-meta lg:font-mono text-ink-400 lg:text-ink-200" title="Réel · moyenne 12 mois · cible">
                     <PrivateAmount className={groupTotalSpent > groupTotalTarget ? 'text-danger-400' : ''}>
@@ -223,7 +237,7 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
             </div>
 
             {isEmpty && (
-                <p className="px-4 lg:px-5 py-5 border-t border-white/5 text-meta text-ink-400">
+                <p className="px-4 lg:px-5 py-5 border-t border-bordure text-meta text-ink-400">
                     Aucune catégorie dans « {titre} » pour l'instant. Ajoute un premier poste ci-dessous.
                 </p>
             )}
@@ -231,12 +245,12 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
             {!isEmpty && etroit && (
                 <ul className="px-4">
                     {lignes.map((l) => (
-                        <li key={l.item.id} data-focus-section={`poste:${l.item.name}`} className="border-t border-white/5">
+                        <li key={l.item.id} data-focus-section={`poste:${l.item.name}`} className="gf-row border-t border-bordure">
                             <button
                                 type="button"
                                 aria-expanded={l.isExpanded}
                                 onClick={() => basculer(l.item.id, l.isExpanded)}
-                                className="w-full py-3 flex flex-col gap-2 text-left focus-ring rounded-sm"
+                                className="touch-target w-full py-3 flex flex-col gap-2 text-left focus-ring rounded-sm"
                             >
                                 <span className="w-full flex items-center justify-between gap-3">
                                     <span className="text-body font-semibold text-ink-50 truncate">{l.item.name}</span>
@@ -257,7 +271,7 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
                                     <span className="font-mono"><span className={l.remaining < 0 ? 'text-danger-400' : 'text-success-400'}>Reste </span>{reste(l)}</span>
                                 </span>
                             </button>
-                            {l.isExpanded && <div className="pb-4">{editeur(l)}</div>}
+                            {l.isExpanded && <div className="pb-4 gf-accordion-panel">{editeur(l)}</div>}
                         </li>
                     ))}
                 </ul>
@@ -266,7 +280,7 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
             {!isEmpty && !etroit && (
                 <table className="w-full text-left border-collapse text-body">
                     <thead>
-                        <tr className="text-[11px] font-semibold tracking-[0.06em] uppercase text-ink-400 border-t border-white/5">
+                        <tr className="text-[11px] font-semibold tracking-[0.06em] uppercase text-ink-400 border-t border-bordure bg-surface-douce/60">
                             <th scope="col" className="px-5 h-10 font-semibold">Poste</th>
                             <th scope="col" className="px-3 font-semibold text-right">{libelles.cible}</th>
                             <th scope="col" className="px-3 font-semibold text-right" title="Moyenne mensuelle des 12 derniers mois (mois courant, partiel, exclu), ramenée à la période affichée">Moy. 12 mois</th>
@@ -281,7 +295,7 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
                                     // [REFONTE-NAV-L5] Ancre du deep-link Transactions → Budget (« Voir au budget »
                                     // sur une catégorie) : usePendingFocus scrolle vers `poste:<nom>`.
                                     data-focus-section={`poste:${l.item.name}`}
-                                    className={`border-t border-white/5 ${l.isExpanded ? 'bg-white/3' : ''}`}
+                                    className={`gf-row border-t border-bordure ${l.isExpanded ? 'bg-surface-douce' : ''}`}
                                 >
                                     <th scope="row" className="px-5 py-3 font-normal w-[42%]">
                                         {/* Le nom est le bouton qui déplie l'édition du poste (cible, fréquence,
@@ -290,7 +304,7 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
                                             type="button"
                                             aria-expanded={l.isExpanded}
                                             onClick={() => basculer(l.item.id, l.isExpanded)}
-                                            className="text-ink-50 font-medium hover:underline underline-offset-2 focus-ring rounded-sm text-left"
+                                            className="touch-target inline-flex items-center text-ink-50 font-medium hover:underline underline-offset-2 focus-ring rounded-sm text-left"
                                         >
                                             {l.item.name || 'Sans nom'}
                                         </button>
@@ -306,7 +320,7 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
                                     <td className="px-5 text-right">{reste(l)}</td>
                                 </tr>
                                 {l.isExpanded && (
-                                    <tr className="bg-white/3">
+                                    <tr className="bg-surface-douce/60 gf-accordion-panel">
                                         <td colSpan={5} className="px-5 pb-5 pt-1">{editeur(l)}</td>
                                     </tr>
                                 )}
@@ -315,7 +329,7 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
                     </tbody>
                 </table>
             )}
-            <div className="border-t border-white/5 flex">{boutonAjouter}</div>
+            <div className="border-t border-bordure bg-fond/40 flex">{boutonAjouter}</div>
         </section>
     );
 };
@@ -356,11 +370,11 @@ const EditeurPoste: React.FC<EditeurPosteProps> = ({
             : item.type === 'Perso 1'
                 ? [{ nom: userNames[0], montant: displayTarget }]
                 : [{ nom: userNames[1], montant: displayTarget }];
-    const champ = 'h-10 px-3 text-body text-ink-50';
+    const champ = 'touch-target h-11 px-3 text-body text-ink-50';
     const etiquette = 'text-meta text-ink-400';
 
     return (
-        <div className="flex flex-col gap-4 rounded-xl border border-white/8 bg-dark/40 p-4">
+        <div className="flex flex-col gap-4 rounded-xl border border-bordure bg-fond/80 p-4">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <label className="flex flex-col gap-1 col-span-2 lg:col-span-1">
                     <span className={etiquette}>Nom du poste</span>
@@ -472,7 +486,7 @@ const EditeurPoste: React.FC<EditeurPosteProps> = ({
                 <button
                     type="button"
                     onClick={() => onDeleteItem(item.id)}
-                    className="min-h-11 px-2 text-meta text-danger-400 underline underline-offset-2 focus-ring rounded-sm"
+                    className="touch-target min-h-11 px-2 text-meta text-danger-400 underline underline-offset-2 focus-ring rounded-sm"
                 >
                     Supprimer le poste
                 </button>

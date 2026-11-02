@@ -397,11 +397,11 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
         return { ...r, gauche: Math.max(0, debut), largeur: pct(r.montant) };
     });
     const boutonImporter = (classe: string) => (
-        <button type="button" onClick={importer} disabled={isAnalyzing} className={`h-10 px-4 rounded-lg bg-primary text-dark text-body font-bold focus-ring disabled:opacity-50 ${classe}`}>
+        <button type="button" onClick={importer} disabled={isAnalyzing} className={`touch-target h-10 px-4 rounded-lg bg-primary text-dark text-body font-bold focus-ring disabled:opacity-50 ${classe}`}>
             {isAnalyzing ? 'Analyse…' : 'Importer une fiche de paie'}
         </button>
     );
-    const tuile = 'rounded-2xl bg-surface border border-white/6 p-4 lg:px-[18px] flex flex-col gap-1';
+    const tuile = 'gf-quote-cell gf-terminal-card gf-stat-cell rounded-2xl bg-surface border border-bordure p-4 lg:px-[18px] flex flex-col gap-1';
     const etiquetteTuile = 'text-meta lg:text-[11px] lg:font-semibold lg:tracking-[0.06em] lg:uppercase text-ink-400';
 
     // [S5-REFONTE-IMPOTS] Maquettes E-impots / M-impots : en-tête (Couple / conjoints, « Estimation
@@ -411,15 +411,26 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
         <div className="space-y-5 stagger-in pb-20">
             <PageHeader
                 title={TAB_LABELS[Tab.TAX]}
+                badge={
+                    <span className="inline-flex items-center gap-2">
+                        <span className="gf-ticker-symbol">
+                            <span className="gf-pulse-live" aria-hidden="true" />
+                            FISC:ARC·RQ · {annee}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-sm text-[10px] font-mono font-semibold ${paieAppliquee ? 'gf-delta-up' : 'gf-delta-amber'}`}>
+                            {paieAppliquee ? 'PAIE VÉRIFIÉE' : 'SAISIE MANUELLE'}
+                        </span>
+                    </span>
+                }
                 nav={config.users.length > 1 ? (
-                    <div role="group" aria-label="Vue fiscale" className="flex gap-1 p-1 rounded-xl bg-surface border border-white/6 w-full lg:w-auto">
+                    <div role="group" aria-label="Vue fiscale" className="gf-subtab-bar overflow-x-auto no-scrollbar w-full lg:w-auto">
                         {[{ id: 'all', libelle: 'Couple' }, ...config.users.map((u) => ({ id: u.name, libelle: u.name }))].map((o) => (
                             <button
                                 key={o.id}
                                 type="button"
                                 onClick={() => setViewUser(o.id)}
                                 aria-pressed={viewUser === o.id}
-                                className={`flex-1 lg:flex-none min-h-10 lg:min-h-8 px-3.5 rounded-lg text-[13px] transition-colors focus-ring ${viewUser === o.id ? 'bg-ink-50 text-dark font-semibold' : 'text-ink-300 hover:bg-white/5'}`}
+                                className={`gf-subtab-pill touch-target flex-1 lg:flex-none justify-center focus-ring ${viewUser === o.id ? 'gf-subtab-pill-active bg-ink-50 text-dark font-semibold' : 'text-ink-300 hover:bg-surface-douce'}`}
                             >
                                 {o.libelle}
                             </button>
@@ -438,19 +449,19 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
             {/* [INCOME-PROVENANCE] Source UNIQUE du revenu (demande Marc : « l'onglet impôt dépend
                 seulement des fichiers de paie que je lui mets »). */}
             {paieAppliquee ? (
-                <div className="rounded-xl border border-success-500/30 bg-success-500/8 px-4 py-3 text-[13px] text-ink-100 flex items-center gap-2">
+                <div className="rounded-xl border border-succes-texte/30 bg-succes-fond px-4 py-3 text-[13px] text-ink-100 flex items-center gap-2">
                     <Icon name="lock" size={14} className="shrink-0" />
                     <span>
-                        <strong className="text-success-400 font-semibold">Revenu de la fiche de paie</strong>{salarySource?.label ? ` « ${salarySource.label} »` : ''}
+                        <strong className="text-succes-texte font-semibold">Revenu de la fiche de paie</strong>{salarySource?.label ? ` « ${salarySource.label} »` : ''}
                         {salarySource?.kind === 'mcp' ? ' (via le connecteur Claude)' : ''}
                         {salarySource?.appliedAt ? `, appliquée le ${formatIsoDay(salarySource.appliedAt)}` : ''}.
                         {' '}La Santé financière et le Budget utilisent ce même revenu.
                     </span>
                 </div>
             ) : (
-                <div className="rounded-xl border border-warning-500/30 bg-warning-500/6 px-4 py-3 flex flex-col lg:flex-row lg:items-center gap-3">
+                <div className="rounded-xl border border-alerte-texte/30 bg-alerte-fond px-4 py-3 flex flex-col lg:flex-row lg:items-center gap-3">
                     <p className="text-[13px] text-ink-100 leading-5">
-                        <strong className="text-warning-400 font-semibold">Revenu saisi à la main.</strong>{' '}
+                        <strong className="text-alerte-texte font-semibold">Revenu saisi à la main.</strong>{' '}
                         Aucune fiche de paie appliquée : importe une paie pour un calcul précis, elle devient la source du revenu partout.
                     </p>
                     {boutonImporter('lg:hidden w-full h-11')}
@@ -460,48 +471,48 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
                 employeur, salaire exact) à Anthropic — le dire explicitement près de l'action. */}
             <p className="text-tiny text-ink-400 -mt-2">
                 L'import envoie ta fiche de paie (image/PDF, avec nom/employeur/salaire) à Anthropic (Claude) pour en extraire les montants.{' '}
-                <button type="button" onClick={openDrive} className="underline underline-offset-2 hover:text-ink-100 focus-ring rounded-sm">Ouvrir Google Drive ↗</button>
+                <button type="button" onClick={openDrive} className="touch-target inline-flex items-center underline underline-offset-2 hover:text-ink-100 focus-ring rounded-sm">Ouvrir Google Drive ↗</button>
             </p>
 
             {isAnalyzing && (
-                <div className="w-full bg-surfaceHighlight rounded-full h-2.5 overflow-hidden">
+                <div className="w-full bg-surface-douce rounded-full h-2.5 overflow-hidden">
                     {/* NOMBRE-NON-MONETAIRE : progression d'une tâche (démarrage, import, visite guidée), pas une donnée du dossier */}
-                    <div className="bg-info-500 h-2.5 rounded-full transition-all duration-300" style={{ width: `${(progress.current / progress.total) * 100}%` }}></div>
+                    <div className="bg-repere h-2.5 rounded-full transition-all duration-300" style={{ width: `${(progress.current / progress.total) * 100}%` }}></div>
                     <div className="text-center text-tiny text-ink-300 mt-1">Traitement {progress.current} / {progress.total} fichiers</div>
                 </div>
             )}
 
             {scannedPay && (
-                <section aria-labelledby="paie-detectee" className="rounded-2xl bg-surface border border-white/10 p-4 sm:p-5 animate-fade-in">
+                <section aria-labelledby="paie-detectee" className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-4 sm:p-5 animate-fade-in">
                     <h2 id="paie-detectee" className="text-[17px] font-semibold text-ink-50 mb-3">Fiche de paie détectée ({scannedPay.freq})</h2>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-4">
                         {[
                             { l: 'Brut annuel est.', v: <PrivateAmount as="div" className="font-mono text-[18px] font-bold text-ink-50">{formatCAD(scannedPay.gross)}</PrivateAmount> },
-                            { l: 'Net annuel est.', v: <PrivateAmount as="div" className="font-mono text-[18px] font-bold text-success-400">{formatCAD(scannedPay.net)}</PrivateAmount> },
-                            { l: 'Impôts retenus est.', v: <PrivateAmount as="div" className="font-mono text-[18px] font-bold text-danger-400">{formatSigned(-scannedPay.tax, { withCurrency: true })}</PrivateAmount> },
+                            { l: 'Net annuel est.', v: <PrivateAmount as="div" className="font-mono text-[18px] font-bold text-succes-texte">{formatCAD(scannedPay.net)}</PrivateAmount> },
+                            { l: 'Impôts retenus est.', v: <PrivateAmount as="div" className="font-mono text-[18px] font-bold text-erreur-texte">{formatSigned(-scannedPay.tax, { withCurrency: true })}</PrivateAmount> },
                             { l: 'REER/RPP retenus', v: <PrivateAmount as="div" className="font-mono text-[18px] font-bold text-ink-50">{formatCAD(scannedPay.rrsp)}</PrivateAmount> },
                         ].map((t) => (
-                            <div key={t.l} className="rounded-xl bg-dark/40 border border-white/6 px-3.5 py-3">
+                            <div key={t.l} className="rounded-xl bg-fond border border-bordure px-3.5 py-3">
                                 <div className="text-meta text-ink-400">{t.l}</div>
                                 {t.v}
                             </div>
                         ))}
                     </div>
                     <div className="flex justify-end gap-2">
-                        <button type="button" onClick={() => setScannedPay(null)} className="h-10 px-4 rounded-lg text-body text-ink-300 hover:bg-white/5 focus-ring">Ignorer</button>
-                        <button type="button" onClick={applyToProfile} className="h-10 px-4 rounded-lg bg-primary text-dark text-body font-bold focus-ring">Appliquer au profil principal</button>
+                        <button type="button" onClick={() => setScannedPay(null)} className="touch-target h-10 px-4 rounded-lg text-body text-ink-300 hover:bg-surface-douce focus-ring">Ignorer</button>
+                        <button type="button" onClick={applyToProfile} className="touch-target h-10 px-4 rounded-lg bg-primary text-dark text-body font-bold focus-ring">Appliquer au profil principal</button>
                     </div>
                 </section>
             )}
 
             {analysisStatus && !scannedPay && (
-                <div className="bg-info-500/10 border border-info-500/30 text-blue-300 px-4 py-2 rounded-lg text-body animate-fade-in" role="status">
+                <div className="bg-surface-douce border border-bordure text-ink-100 px-4 py-2 rounded-lg text-body animate-fade-in" role="status">
                     {analysisStatus}
                 </div>
             )}
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 lg:gap-4 gf-spring-grid">
-                <div className={`gf-stat-cell ${tuile}`}>
+            <div className="gf-quote-strip grid grid-cols-2 lg:grid-cols-4 gap-2.5 lg:gap-4 gf-spring-grid">
+                <div className={tuile}>
                     <div className="flex items-center justify-between gap-2">
                         <span className={`font-mono ${etiquetteTuile}`}>Impôt total</span>
                         <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-down">QC + Féd</span>
@@ -509,15 +520,15 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
                     <PrivateAmount as="div" className="font-mono text-[18px] lg:text-[24px] font-bold text-ink-50">{formatCAD(report.totalTax)}</PrivateAmount>
                     <span className="text-tiny text-ink-400">fédéral + Québec</span>
                 </div>
-                <div className={`gf-stat-cell ${tuile}`}>
+                <div className={tuile}>
                     <div className="flex items-center justify-between gap-2">
                         <span className={`font-mono ${etiquetteTuile}`}>Revenu net</span>
                         <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-up">Net disp.</span>
                     </div>
-                    <PrivateAmount as="div" className="font-mono text-[18px] lg:text-[24px] font-bold text-ink-50 lg:text-success-400">{formatCAD(report.netIncome)}</PrivateAmount>
+                    <PrivateAmount as="div" className="font-mono text-[18px] lg:text-[24px] font-bold text-ink-50 lg:text-succes-texte">{formatCAD(report.netIncome)}</PrivateAmount>
                     <span className="text-tiny text-ink-400"><PrivateAmount>{formatCAD(report.netIncome / 12)}</PrivateAmount> par mois</span>
                 </div>
-                <div className={`gf-stat-cell ${tuile}`}>
+                <div className={tuile}>
                     <div className="flex items-center justify-between gap-2">
                         <span className={`font-mono ${etiquetteTuile}`}>Taux marginal</span>
                         <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-amber">Palier</span>
@@ -526,14 +537,14 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
                     <div className="font-mono lg:font-sans text-[18px] lg:text-[24px] font-bold text-ink-50"><PrivateAmount>{formatPercent(report.marginalRate * 100, 1)}</PrivateAmount></div>
                     <span className="text-tiny text-ink-400">sur le prochain dollar</span>
                 </div>
-                <div className={`gf-stat-cell ${tuile}`}>
+                <div className={tuile}>
                     <div className="flex items-center justify-between gap-2">
                         <span className={`font-mono ${etiquetteTuile}`}>Remboursement estimé</span>
                         <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold ${report.refundOrOwe > 0 ? 'gf-delta-up' : report.refundOrOwe < 0 ? 'gf-delta-down' : 'gf-delta-neutral'}`}>
                             {report.refundOrOwe > 0 ? '▲ Crédit' : report.refundOrOwe < 0 ? '▼ Solde' : 'Équilibré'}
                         </span>
                     </div>
-                    <PrivateAmount as="div" className={`font-mono text-[18px] lg:text-[24px] font-bold ${report.refundOrOwe > 0 ? 'text-success-400' : report.refundOrOwe < 0 ? 'text-danger-400' : 'text-ink-50'}`}>
+                    <PrivateAmount as="div" className={`font-mono text-[18px] lg:text-[24px] font-bold ${report.refundOrOwe > 0 ? 'text-succes-texte' : report.refundOrOwe < 0 ? 'text-erreur-texte' : 'text-ink-50'}`}>
                         {formatSigned(report.refundOrOwe, { withCurrency: true })}
                     </PrivateAmount>
                     <span className="text-tiny text-ink-400">selon les documents reçus</span>
@@ -544,24 +555,24 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
                 <div className="min-w-0 flex flex-col gap-5">
                     {/* [TAX-DETAIL] Brut → chaque retenue → net (demande Marc : « que je vois exactement ce
                         que je gagne ») — la cascade doit BOUCLER au dollar près (placement inclus). */}
-                    <section aria-labelledby="brut-net-titre" className="rounded-2xl bg-surface border border-white/6 p-4 sm:px-6 sm:py-5">
+                    <section aria-labelledby="brut-net-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-4 sm:px-6 sm:py-5">
                         <h2 id="brut-net-titre" className="text-[17px] lg:text-[18px] font-semibold text-ink-50 mb-3">Du brut au net (annuel{!isGlobal ? `, ${viewUser}` : ''})</h2>
                         <dl className="flex flex-col">
-                            <LigneCascade libelle="Salaire brut" montant={<PrivateAmount>{formatCAD(grossIncome)}</PrivateAmount>} barre={{ gauche: 0, largeur: pct(grossIncome), couleur: 'bg-ink-50' }} />
+                            <LigneCascade libelle="Salaire brut" pastille="gf-alloc-reer" montant={<PrivateAmount>{formatCAD(grossIncome)}</PrivateAmount>} barre={{ gauche: 0, largeur: pct(grossIncome), couleur: 'bg-ink-50' }} />
                             {taxableAddOn > 0 && (
-                                <LigneCascade libelle="Revenu de placement estimé" montant={<PrivateAmount>{formatSigned(taxableAddOn, { withCurrency: true })}</PrivateAmount>} barre={{ gauche: pct(grossIncome), largeur: pct(taxableAddOn), couleur: 'bg-success-400' }} />
+                                <LigneCascade libelle="Revenu de placement estimé" pastille="gf-alloc-nonreg" montant={<PrivateAmount>{formatSigned(taxableAddOn, { withCurrency: true })}</PrivateAmount>} barre={{ gauche: pct(grossIncome), largeur: pct(taxableAddOn), couleur: 'bg-succes-texte' }} />
                             )}
-                            <LigneCascade fort separe libelle="Revenu imposable" montant={<PrivateAmount>{formatCAD(imposable)}</PrivateAmount>} barre={{ gauche: 0, largeur: 100, couleur: 'bg-ink-500' }} />
+                            <LigneCascade fort separe libelle="Revenu imposable" pastille="gf-alloc-immo" montant={<PrivateAmount>{formatCAD(imposable)}</PrivateAmount>} barre={{ gauche: 0, largeur: 100, couleur: 'bg-ink-500' }} />
                             {barresRetenues.map((r) => (
-                                <LigneCascade key={r.cle} libelle={r.libelle} montant={<PrivateAmount>{formatSigned(-r.montant, { withCurrency: true })}</PrivateAmount>} couleurMontant="text-danger-400" barre={{ gauche: r.gauche, largeur: r.largeur, couleur: 'bg-danger-400' }} />
+                                <LigneCascade key={r.cle} libelle={r.libelle} montant={<PrivateAmount>{formatSigned(-r.montant, { withCurrency: true })}</PrivateAmount>} couleurMontant="text-erreur-texte" barre={{ gauche: r.gauche, largeur: r.largeur, couleur: 'bg-erreur-texte' }} />
                             ))}
-                            <LigneCascade fort separe libelle="Revenu net fiscal" montant={<PrivateAmount>{formatCAD(report.netIncome)}</PrivateAmount>} barre={{ gauche: 0, largeur: pct(report.netIncome), couleur: 'bg-success-400' }} />
+                            <LigneCascade fort separe libelle="Revenu net fiscal" pastille="gf-alloc-celi" montant={<PrivateAmount>{formatCAD(report.netIncome)}</PrivateAmount>} barre={{ gauche: 0, largeur: pct(report.netIncome), couleur: 'bg-succes-texte' }} />
                             {/* [ENG-NET-MODEL-RESIDUAL] Affiché seulement quand il y a un FAIT à montrer (brut SAISI
                                 et écart ≥ 1 % du net déclaré). */}
                             {residuelNet?.significatif && (
-                                <div className="flex justify-between gap-3 py-2 border-t border-white/6 text-[13px]">
-                                    <dt className="text-warning-400">Écart net déclaré ↔ net du modèle (salaire)</dt>
-                                    <dd className="font-mono text-warning-400"><PrivateAmount>{formatSigned(residuelNet.residuel, { withCurrency: true })}</PrivateAmount></dd>
+                                <div className="gf-row flex justify-between gap-3 py-2 border-t border-bordure text-[13px] rounded-lg px-1.5 -mx-1.5">
+                                    <dt className="text-alerte-texte">Écart net déclaré ↔ net du modèle (salaire)</dt>
+                                    <dd className="font-mono text-alerte-texte"><PrivateAmount>{formatSigned(residuelNet.residuel, { withCurrency: true })}</PrivateAmount></dd>
                                 </div>
                             )}
                         </dl>
@@ -574,25 +585,26 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
                     {/* Paliers : individuels (vue d'un conjoint, ou solo). */}
                     {!isGlobal && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <Paliers titre="Paliers fédéraux" paliers={fedBreakdown ?? []} couleur="bg-danger-600/80" />
-                            <Paliers titre="Paliers provinciaux" paliers={qcBreakdown ?? []} couleur="bg-info-600/80" />
+                            <Paliers titre="Paliers fédéraux" paliers={fedBreakdown ?? []} couleur="bg-erreur-texte/80" />
+                            <Paliers titre="Paliers provinciaux" paliers={qcBreakdown ?? []} couleur="bg-repere/80" />
                         </div>
                     )}
                 </div>
 
                 <div className="min-w-0 flex flex-col gap-4">
-                    <section aria-labelledby="reducteurs-titre" className="rounded-2xl bg-surface border border-white/6 p-4 sm:px-5 sm:py-[18px] flex flex-col gap-2.5">
+                    <section aria-labelledby="reducteurs-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-4 sm:px-5 sm:py-[18px] flex flex-col gap-2.5">
                         <h2 id="reducteurs-titre" className="text-[17px] lg:text-[16px] font-semibold text-ink-50">Réducteurs d'impôt</h2>
-                        <LigneSimple libelle="Cotisation REER" valeur={<PrivateSliderValue revealed={rrspSliderFocus}>{formatCAD(rrspContribution)}</PrivateSliderValue>} />
-                        <LigneSimple libelle="CELIAPP" valeur={<PrivateSliderValue revealed={fhsaSliderFocus}>{formatCAD(fhsaContribution)}</PrivateSliderValue>} />
+                        <LigneSimple pastille="gf-alloc-reer" libelle="Cotisation REER" valeur={<PrivateSliderValue revealed={rrspSliderFocus}>{formatCAD(rrspContribution)}</PrivateSliderValue>} />
+                        <LigneSimple pastille="gf-alloc-celi" libelle="CELIAPP" valeur={<PrivateSliderValue revealed={fhsaSliderFocus}>{formatCAD(fhsaContribution)}</PrivateSliderValue>} />
                         {investmentTaxData.totalNonReg > 0 && (
                             <LigneSimple
+                                pastille="gf-alloc-nonreg"
                                 libelle={<span className="flex items-center gap-2">Placements non enregistrés <FxEstimateBadge /></span>}
-                                valeur={<span className="text-warning-400"><PrivateAmount>{formatSigned(taxableAddOn, { withCurrency: true })}</PrivateAmount> imposable</span>}
+                                valeur={<span className="text-alerte-texte"><PrivateAmount>{formatSigned(taxableAddOn, { withCurrency: true })}</PrivateAmount> imposable</span>}
                             />
                         )}
                         {alreadyPaidTax > 0 && (
-                            <LigneSimple libelle="Impôt déjà prélevé (documents)" valeur={<PrivateAmount>{formatCAD(alreadyPaidTax)}</PrivateAmount>} />
+                            <LigneSimple pastille="gf-alloc-immo" libelle="Impôt déjà prélevé (documents)" valeur={<PrivateAmount>{formatCAD(alreadyPaidTax)}</PrivateAmount>} />
                         )}
                         {/* Les curseurs (absents des maquettes, gardés) : simuler une cotisation. */}
                         <CollapsibleSection title="Simuler une cotisation" variant="quiet" headingLevel={3}>
@@ -602,14 +614,14 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
                                         <span>Cotisation REER</span>
                                         <PrivateSliderValue revealed={rrspSliderFocus}>{formatCAD(rrspContribution)}</PrivateSliderValue>
                                     </label>
-                                    <input type="range" aria-label="Cotisation REER" min="0" max={RRSP_SLIDER_MAX} step="100" value={rrspContribution} {...maskedSliderAria(isPrivacyMode && !rrspSliderFocus)} onChange={e => setRrspContribution(parseFloat(e.target.value))} onFocus={() => setRrspSliderFocus(true)} onBlur={() => setRrspSliderFocus(false)} className="w-full accent-primary cursor-pointer" />
+                                    <input type="range" aria-label="Cotisation REER" min="0" max={RRSP_SLIDER_MAX} step="100" value={rrspContribution} {...maskedSliderAria(isPrivacyMode && !rrspSliderFocus)} onChange={e => setRrspContribution(parseFloat(e.target.value))} onFocus={() => setRrspSliderFocus(true)} onBlur={() => setRrspSliderFocus(false)} className="w-full accent-primary cursor-pointer touch-target" />
                                 </div>
                                 <div>
                                     <label className="flex justify-between text-meta text-ink-200 mb-1">
                                         <span>CELIAPP</span>
                                         <PrivateSliderValue revealed={fhsaSliderFocus}>{formatCAD(fhsaContribution)}</PrivateSliderValue>
                                     </label>
-                                    <input type="range" aria-label="CELIAPP" min="0" max={FHSA_ANNUAL_LIMIT_PER_USER} step="100" value={fhsaContribution} {...maskedSliderAria(isPrivacyMode && !fhsaSliderFocus)} onChange={e => setFhsaContribution(parseFloat(e.target.value))} onFocus={() => setFhsaSliderFocus(true)} onBlur={() => setFhsaSliderFocus(false)} className="w-full accent-primary cursor-pointer" />
+                                    <input type="range" aria-label="CELIAPP" min="0" max={FHSA_ANNUAL_LIMIT_PER_USER} step="100" value={fhsaContribution} {...maskedSliderAria(isPrivacyMode && !fhsaSliderFocus)} onChange={e => setFhsaContribution(parseFloat(e.target.value))} onFocus={() => setFhsaSliderFocus(true)} onBlur={() => setFhsaSliderFocus(false)} className="w-full accent-primary cursor-pointer touch-target" />
                                 </div>
                             </div>
                         </CollapsibleSection>
@@ -617,14 +629,14 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
 
                     {/* [TAX-REAL-SPENDING] Le réel des transactions est un agrégat MÉNAGE : en vue d'un seul
                         conjoint, le comparer à SON net serait dominé par le salaire de l'autre. */}
-                    <section aria-labelledby="vraie-vie-titre" className="rounded-2xl bg-surface border border-white/6 p-4 sm:px-5 sm:py-[18px] flex flex-col gap-2.5">
+                    <section aria-labelledby="vraie-vie-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-4 sm:px-5 sm:py-[18px] flex flex-col gap-2.5">
                         <h2 id="vraie-vie-titre" className="text-[17px] lg:text-[16px] font-semibold text-ink-50">Dans la vraie vie ({realAverages.fullMonths > 0 ? `${realAverages.fullMonths} derniers mois` : 'transactions'})</h2>
                         {!isGlobal ? (
                             <p className="text-meta text-ink-400">Le réel des transactions est un agrégat du ménage — choisis « Couple » pour le voir.</p>
                         ) : realAverages.fullMonths > 0 ? (
                             <>
                                 {!isPrivacyMode && (realAverages.incomeAvg > 0 || realAverages.expenseAvg > 0) && (
-                                    <div className="h-2.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5 p-0.5" aria-hidden="true">
+                                    <div className="h-2.5 w-full rounded-full bg-surface-douce overflow-hidden flex gap-0.5 p-0.5 gf-bar-grow" aria-hidden="true">
                                         <div
                                             className="h-full rounded-l-full bg-succes-texte"
                                             // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
@@ -636,11 +648,11 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
                                         />
                                     </div>
                                 )}
-                                <LigneSimple libelle="Revenus réels / mois" valeur={<PrivateAmount>{formatCAD(realAverages.incomeAvg)}</PrivateAmount>} />
-                                <LigneSimple libelle="Dépenses réelles / mois" valeur={<PrivateAmount>{formatSigned(-realAverages.expenseAvg, { withCurrency: true })}</PrivateAmount>} />
-                                <div className="flex justify-between items-center gap-3 pt-2 border-t border-white/6">
+                                <LigneSimple pastille="gf-alloc-celi" libelle="Revenus réels / mois" valeur={<PrivateAmount>{formatCAD(realAverages.incomeAvg)}</PrivateAmount>} />
+                                <LigneSimple pastille="gf-alloc-nonreg" libelle="Dépenses réelles / mois" valeur={<PrivateAmount>{formatSigned(-realAverages.expenseAvg, { withCurrency: true })}</PrivateAmount>} />
+                                <div className="gf-row flex justify-between items-center gap-3 pt-2 border-t border-bordure rounded-lg px-1.5 -mx-1.5">
                                     <span className="text-body font-semibold text-ink-50">Solde mensuel</span>
-                                    <span className={`font-mono font-bold ${realAverages.incomeAvg - realAverages.expenseAvg >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
+                                    <span className={`font-mono font-bold ${realAverages.incomeAvg - realAverages.expenseAvg >= 0 ? 'text-succes-texte' : 'text-erreur-texte'}`}>
                                         <PrivateAmount>{formatSigned(realAverages.incomeAvg - realAverages.expenseAvg, { withCurrency: true })}</PrivateAmount>
                                     </span>
                                 </div>
@@ -670,12 +682,15 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
 /** Ligne de la cascade « Du brut au net » : libellé, barre (position en % de l'imposable), montant. */
 const LigneCascade: React.FC<{
     libelle: string; montant: React.ReactNode; barre: { gauche: number; largeur: number; couleur: string };
-    fort?: boolean; separe?: boolean; couleurMontant?: string;
-}> = ({ libelle, montant, barre, fort, separe, couleurMontant = 'text-ink-50' }) => {
+    fort?: boolean; separe?: boolean; couleurMontant?: string; pastille?: string;
+}> = ({ libelle, montant, barre, fort, separe, couleurMontant = 'text-ink-50', pastille }) => {
     const isPrivacyMode = useFinanceStore((s) => s.isPrivacyMode);
     return (
-    <div className={`gf-row rounded-lg px-1.5 -mx-1.5 grid grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_120px] items-center gap-x-4 gap-y-1.5 py-2.5 lg:py-0 lg:h-[42px] ${separe ? 'border-t border-white/6' : ''}`}>
-        <dt className={`text-[13px] lg:text-body ${fort ? 'font-semibold text-ink-50' : 'text-ink-200'}`}>{libelle}</dt>
+    <div className={`gf-row rounded-lg px-1.5 -mx-1.5 grid grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_120px] items-center gap-x-4 gap-y-1.5 py-2.5 lg:py-0 lg:h-[42px] ${separe ? 'border-t border-bordure' : ''}`}>
+        <dt className={`text-[13px] lg:text-body flex items-center gap-2 ${fort ? 'font-semibold text-ink-50' : 'text-ink-200'}`}>
+            {pastille && <span className={`w-2 h-2 rounded-full shrink-0 ${pastille}`} aria-hidden="true" />}
+            <span>{libelle}</span>
+        </dt>
         <div className="relative h-2.5 col-span-2 lg:col-span-1 row-start-2 lg:row-start-auto gf-bar-grow" aria-hidden="true">
             <span className={`absolute inset-y-0 rounded-sm ${barre.couleur}`} style={isPrivacyMode ? { left: 0, width: 0 } : { left: `${barre.gauche}%`, width: `max(${barre.largeur}%, 2px)` }} />
         </div>
@@ -684,29 +699,37 @@ const LigneCascade: React.FC<{
     );
 };
 
-const LigneSimple: React.FC<{ libelle: React.ReactNode; valeur: React.ReactNode }> = ({ libelle, valeur }) => (
-    <div className="flex justify-between items-center gap-3 text-body">
-        <span className="text-ink-300">{libelle}</span>
+const LigneSimple: React.FC<{ libelle: React.ReactNode; valeur: React.ReactNode; pastille?: string }> = ({ libelle, valeur, pastille }) => (
+    <div className="gf-row rounded-lg px-1.5 -mx-1.5 py-1 flex justify-between items-center gap-3 text-body">
+        <span className="text-ink-300 flex items-center gap-2">
+            {pastille && <span className={`w-2 h-2 rounded-full shrink-0 ${pastille}`} aria-hidden="true" />}
+            <span>{libelle}</span>
+        </span>
         <span className="font-mono text-ink-50 text-right">{valeur}</span>
     </div>
 );
+
+const PASTILLES_PALIERS = ['gf-alloc-celi', 'gf-alloc-reer', 'gf-alloc-immo', 'gf-alloc-nonreg'] as const;
 
 type Palier = { rate: string; amount: number; filled: number; max: number | string; percentFull: number };
 const Paliers: React.FC<{ titre: string; paliers: Palier[]; couleur: string }> = ({ titre, paliers, couleur }) => {
     const isPrivacyMode = useFinanceStore((s) => s.isPrivacyMode);
     return (
-    <section className="rounded-2xl bg-surface border border-white/6 p-4 sm:p-5">
+    <section className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-4 sm:p-5">
         <h2 className="text-[17px] font-semibold text-ink-50 mb-3">{titre}</h2>
-        <div className="space-y-4">
+        <div className="space-y-3">
             {paliers.map((b, i) => (
-                <div key={i} className="relative">
-                    <div className="flex justify-between text-tiny mb-1">
-                        <span className="text-ink-200 font-bold">{b.rate}</span>
+                <div key={i} className="gf-row rounded-lg px-2 py-1.5 -mx-2 relative">
+                    <div className="flex justify-between items-center text-tiny mb-1">
+                        <span className="text-ink-200 font-bold flex items-center gap-1.5">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${PASTILLES_PALIERS[i % PASTILLES_PALIERS.length]}`} aria-hidden="true" />
+                            {b.rate}
+                        </span>
                         <PrivateAmount className="text-ink-400">{b.amount > 0 ? `${formatCAD(b.amount)} taxés` : formatCAD(0)}</PrivateAmount>
                     </div>
-                    <div className="h-4 w-full bg-surfaceHighlight rounded-sm overflow-hidden relative border border-white/5 gf-bar-grow">
+                    <div className="h-4 w-full bg-surface-douce rounded-sm overflow-hidden relative border border-bordure gf-bar-grow">
                         <div className={`h-full transition-all duration-500 ${couleur}`} style={{ width: `${isPrivacyMode ? 0 : b.percentFull}%` }}></div>
-                        <PrivateAmount as="div" className="absolute inset-0 flex items-center justify-center text-tiny font-mono text-white/80">
+                        <PrivateAmount as="div" className="absolute inset-0 flex items-center justify-center text-tiny font-mono text-ink-50">
                             {formatCAD(b.filled)} / {typeof b.max === 'number' ? formatCAD(b.max) : `${b.max} $`}
                         </PrivateAmount>
                     </div>

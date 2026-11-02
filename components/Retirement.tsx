@@ -225,12 +225,25 @@ export const Retirement: React.FC<RetirementProps> = ({
 
     // [REFONTE-NAV-L4] sous-onglet actif (idiome BudgetWorkspace, aucun état persisté).
     const [subTab, setSubTab] = useState<RetirementSubTab>('projection');
+    const [horizonFocus, setHorizonFocus] = useState<'accumulation' | 'decaissement'>('accumulation');
+
+    const tickerBadge = (
+        <span className="inline-flex items-center gap-2">
+            <span className="gf-ticker-symbol">
+                <span className="gf-pulse-live" aria-hidden="true" />
+                RETRAITE:QC · RRQ &amp; PSV
+            </span>
+            <span className="px-2 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-amber">
+                CIBLE {goal.targetAge} ANS
+            </span>
+        </span>
+    );
 
     // Mode strict : pas de projection = pas de données. Aucune invention.
     if (!hasProjection) {
         return (
             <div className="space-y-5 stagger-in pb-10">
-                <PageHeader title={TAB_LABELS[Tab.RETIREMENT]} actions={<VieCurveLink />} />
+                <PageHeader title={TAB_LABELS[Tab.RETIREMENT]} badge={tickerBadge} actions={<VieCurveLink />} />
                 <ProjectionRequired feature="La simulation de retraite" />
             </div>
         );
@@ -240,21 +253,21 @@ export const Retirement: React.FC<RetirementProps> = ({
     // pastille « Tient jusqu'à N ans » (ou « Épuisé à N ans ») ; sur mobile, la pastille seule à droite
     // du titre, le scénario en petite ligne sous les onglets, le lien courbe en bas de page.
     const pastilleStatut = bankruptcyAge
-        ? 'bg-danger-500/10 border-danger-400/30 text-danger-400'
-        : 'bg-success-500/10 border-success-400/30 text-success-400';
+        ? 'gf-delta-down border border-erreur-texte/30'
+        : 'gf-delta-up border border-succes-texte/30';
     const statut = (
-        <span className={`h-[30px] lg:h-9 px-2.5 lg:px-3.5 rounded-full border text-meta lg:text-[13px] font-semibold flex items-center whitespace-nowrap ${pastilleStatut}`}>
+        <span className={`h-[30px] lg:h-9 px-2.5 lg:px-3.5 rounded-full text-meta lg:text-[13px] font-semibold flex items-center whitespace-nowrap ${pastilleStatut}`}>
             {/* [PRIVACY-RATIOS-DUREES-UNIFORMES] L'âge d'épuisement vient de la projection : masqué. « Tient jusqu'à » = réglage. */}
             {bankruptcyAge ? <>Épuisé à <PrivateAmount>{bankruptcyAge}</PrivateAmount> ans</> : `Tient jusqu'à ${lifeExpectancy} ans`}
         </span>
     );
     const etiquette = 'font-mono text-meta xl:text-[11px] xl:font-semibold xl:tracking-[0.06em] xl:uppercase text-ink-400';
-    const tuile = 'gf-stat-cell rounded-2xl bg-surface border border-white/6 p-3.5 xl:px-[18px] xl:py-4 flex flex-col gap-1.5 min-w-0';
+    const tuile = 'gf-quote-cell gf-terminal-card gf-stat-cell rounded-2xl bg-surface border border-bordure p-3.5 xl:px-[18px] xl:py-4 flex flex-col gap-1.5 min-w-0';
     const valeur = 'font-mono xl:font-sans text-[18px] xl:text-[26px] font-bold xl:font-extrabold';
     const capitaux = [
-        { libelle: 'REER', montant: liveCSVBalances.REER, couleur: 'text-[#7c93f2]' },
-        { libelle: 'CELI', montant: liveCSVBalances.CELI, couleur: 'text-[#34b39a]' },
-        { libelle: 'Non-enr.', montant: liveCSVBalances.NON_ENREG, couleur: 'text-[#d4a24c]' },
+        { libelle: 'REER', montant: liveCSVBalances.REER, couleur: 'text-ink-100', dot: 'gf-alloc-reer' },
+        { libelle: 'CELI', montant: liveCSVBalances.CELI, couleur: 'text-succes-texte', dot: 'gf-alloc-celi' },
+        { libelle: 'Non-enr.', montant: liveCSVBalances.NON_ENREG, couleur: 'text-alerte-texte', dot: 'gf-alloc-nonreg' },
     ];
 
     return (
@@ -263,6 +276,7 @@ export const Retirement: React.FC<RetirementProps> = ({
             <ProjectionStaleBanner />
             <PageHeader
                 title={TAB_LABELS[Tab.RETIREMENT]}
+                badge={tickerBadge}
                 nav={
                     <SubTabs<RetirementSubTab>
                         idPrefix="retraite"
@@ -275,7 +289,7 @@ export const Retirement: React.FC<RetirementProps> = ({
                 actions={etroit ? statut : (
                     <span className="flex items-center gap-3">
                         {activeScenarioName && (
-                            <span className="h-9 px-3.5 rounded-full bg-surface border border-white/8 text-ink-200 text-[13px] flex items-center whitespace-nowrap">Scénario : {activeScenarioName}</span>
+                            <span className="h-9 px-3.5 rounded-full bg-surface border border-bordure text-ink-200 text-[13px] flex items-center whitespace-nowrap">Scénario : {activeScenarioName}</span>
                         )}
                         {statut}
                         <VieCurveLink />
@@ -283,6 +297,50 @@ export const Retirement: React.FC<RetirementProps> = ({
                 )}
             />
             {etroit && activeScenarioName && <p className="-mt-2 text-meta text-ink-400">Scénario : {activeScenarioName}</p>}
+
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+                <div
+                    role="group"
+                    aria-label="Horizons et scénarios de retraite"
+                    className="gf-subtab-bar overflow-x-auto no-scrollbar max-w-full"
+                >
+                    <button
+                        type="button"
+                        onClick={() => { setSubTab('projection'); setHorizonFocus('accumulation'); }}
+                        aria-pressed={subTab === 'projection' && horizonFocus === 'accumulation'}
+                        className={`gf-subtab-pill touch-target ${subTab === 'projection' && horizonFocus === 'accumulation' ? 'gf-subtab-pill-active' : ''}`}
+                    >
+                        {/* NOMBRE-NON-MONETAIRE : âge cible et espérance de vie saisis en hypothèse */}
+                        <span>Trajectoire ({goal.targetAge} → {lifeExpectancy} ans)</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => { setSubTab('projection'); setHorizonFocus('decaissement'); }}
+                        aria-pressed={subTab === 'projection' && horizonFocus === 'decaissement'}
+                        className={`gf-subtab-pill touch-target ${subTab === 'projection' && horizonFocus === 'decaissement' ? 'gf-subtab-pill-active' : ''}`}
+                    >
+                        <span>Décaissement &amp; Rentes ({goal.targetAge}+ ans)</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setSubTab('outils')}
+                        aria-pressed={subTab === 'outils'}
+                        className={`gf-subtab-pill touch-target ${subTab === 'outils' ? 'gf-subtab-pill-active' : ''}`}
+                    >
+                        <span>Simulateurs &amp; Paliers</span>
+                    </button>
+                </div>
+                <div className="hidden sm:flex items-center gap-2 font-mono text-[11px] text-ink-300">
+                    <span className="px-2 py-0.5 rounded-sm gf-delta-neutral">
+                        HORIZON {lifeExpectancy} ANS
+                    </span>
+                    {isProjectionLocked && (
+                        <span className="px-2 py-0.5 rounded-sm gf-delta-amber">
+                            RÉFÉRENCE VERROUILLÉE
+                        </span>
+                    )}
+                </div>
+            </div>
 
             <TabPanel idPrefix="retraite" tab="outils" when={subTab === 'outils'} className="space-y-5 focus-ring rounded-card">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start gf-spring-grid">
@@ -315,14 +373,14 @@ export const Retirement: React.FC<RetirementProps> = ({
             </TabPanel>
 
             <TabPanel idPrefix="retraite" tab="projection" when={subTab === 'projection'} className="space-y-5 focus-ring rounded-card">
-                <section aria-label="Résumé" className="grid grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_1.4fr] gap-2.5 xl:gap-3.5 gf-spring-grid">
+                <section aria-label="Résumé" className="gf-quote-strip grid grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_1.4fr] gap-2.5 xl:gap-3.5 gf-spring-grid">
                     <div className={`${tuile} col-span-2 xl:col-span-1`}>
                         <div className="flex items-center justify-between gap-2">
                             {/* NOMBRE-NON-MONETAIRE : âge cible de retraite saisi en réglage */}
                             <span className={etiquette}>Capital à la retraite ({goal.targetAge} ans)</span>
                             <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-up">Cible</span>
                         </div>
-                        <PrivateAmount as="div" className={`${valeur} text-success-400 xl:text-ink-50`}>{formatCompactCAD(retirementNetWorth)}</PrivateAmount>
+                        <PrivateAmount as="div" className={`${valeur} text-succes-texte xl:text-ink-50`}>{formatCompactCAD(retirementNetWorth)}</PrivateAmount>
                     </div>
                     <div className={tuile}>
                         <div className="flex items-center justify-between gap-2">
@@ -341,28 +399,31 @@ export const Retirement: React.FC<RetirementProps> = ({
                         </div>
                         {finalNetWorth > 0
                             ? <PrivateAmount as="div" className={`${valeur} text-ink-50`}>{formatCompactCAD(finalNetWorth)}</PrivateAmount>
-                            : <div className={`${valeur} text-danger-400`}>Épuisé</div>}
+                            : <div className={`${valeur} text-erreur-texte`}>Épuisé</div>}
                     </div>
                     <div
                         role="button"
                         tabIndex={0}
                         onClick={() => useFinanceStore.getState().setActiveTab(Tab.INVESTMENTS)}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); useFinanceStore.getState().setActiveTab(Tab.INVESTMENTS); } }}
-                        className="gf-stat-cell col-span-2 xl:col-span-1 rounded-2xl bg-surface border border-white/6 p-4 xl:px-[18px] flex flex-col gap-3 xl:gap-2 min-w-0 cursor-pointer hover:border-bordure-champ focus-ring"
+                        className="gf-quote-cell gf-terminal-card gf-card-interactive gf-stat-cell touch-target col-span-2 xl:col-span-1 rounded-2xl bg-surface border border-bordure p-4 xl:px-[18px] flex flex-col gap-3 xl:gap-2 min-w-0 cursor-pointer hover:border-bordure-champ focus-ring"
                     >
                         <span className="font-mono text-[11px] font-semibold tracking-[0.08em] xl:tracking-[0.06em] uppercase text-ink-400">Capitaux actuels · Placements ↗</span>
                         {!isPrivacyMode && liveCSVBalances.TOTAL > 0 && (
-                            <div className="h-1.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5" aria-hidden="true">
+                            <div className="h-1.5 w-full rounded-full bg-surface-douce overflow-hidden flex gap-0.5 gf-bar-grow" aria-hidden="true">
                                 {/* MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode */}
-                                <div className="h-full bg-repere" style={{ width: `${Math.round((liveCSVBalances.REER / Math.max(1, liveCSVBalances.TOTAL)) * 100)}%` }} />
-                                <div className="h-full bg-succes-texte" style={{ width: `${Math.round((liveCSVBalances.CELI / Math.max(1, liveCSVBalances.TOTAL)) * 100)}%` }} />
-                                <div className="h-full bg-alerte-texte" style={{ flex: 1 }} />
+                                <div className="h-full gf-alloc-reer" style={{ width: `${Math.round((liveCSVBalances.REER / Math.max(1, liveCSVBalances.TOTAL)) * 100)}%` }} />
+                                <div className="h-full gf-alloc-celi" style={{ width: `${Math.round((liveCSVBalances.CELI / Math.max(1, liveCSVBalances.TOTAL)) * 100)}%` }} />
+                                <div className="h-full gf-alloc-nonreg" style={{ flex: 1 }} />
                             </div>
                         )}
                         <dl className="grid grid-cols-3 gap-2">
                             {capitaux.map((c) => (
                                 <div key={c.libelle} className="flex flex-col gap-0.5 min-w-0">
-                                    <dt className="text-meta text-ink-400">{c.libelle}</dt>
+                                    <dt className="text-meta text-ink-400 flex items-center gap-1.5">
+                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${c.dot}`} aria-hidden="true" />
+                                        {c.libelle}
+                                    </dt>
                                     <dd><PrivateAmount className={`font-mono text-[14px] font-semibold xl:font-bold ${c.couleur} xl:text-ink-50`}>{formatCAD(c.montant)}</PrivateAmount></dd>
                                 </div>
                             ))}
@@ -408,11 +469,11 @@ export const RetirementTooltip = React.memo(({ active, payload }: RetirementTool
     const isRetired = (data.age ?? 0) >= (data.RetirementAge ?? 65);
 
     return (
-        <div className="gf-tooltip-card bg-surface border border-white/10 p-4 rounded-xl shadow-2xl max-w-[280px] z-50">
-            <div className="flex justify-between items-center mb-4 pb-3 border-b border-white/10">
+        <div className="gf-tooltip-card bg-surface border border-bordure p-4 rounded-xl shadow-2xl max-w-[280px] z-50">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-bordure">
                 {/* NOMBRE-NON-MONETAIRE : axe d'âge ou d'année de la projection, pas une valeur dérivée du dossier */}
                 <span className="text-body font-bold text-ink-50">{data.age} ans</span>
-                <span className={`text-meta font-bold px-2 py-1 rounded-md ${isRetired ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-info-500/10 text-info-400 border border-info-500/20'}`}>
+                <span className={`text-meta font-bold px-2 py-1 rounded-md ${isRetired ? 'gf-delta-amber' : 'gf-delta-neutral'}`}>
                     {isRetired ? 'En retraite' : 'Accumulation'}
                 </span>
             </div>
@@ -420,33 +481,33 @@ export const RetirementTooltip = React.memo(({ active, payload }: RetirementTool
             <div className="mb-4 space-y-2">
                 <div className="flex justify-between items-center">
                     <span className="text-tiny font-bold text-ink-300 uppercase tracking-widest">Patrimoine Net</span>
-                    <PrivateAmount className="text-body font-black text-success-400">{formatCAD(data.NetWorth)}</PrivateAmount>
+                    <PrivateAmount className="text-body font-black text-succes-texte">{formatCAD(data.NetWorth)}</PrivateAmount>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-black/30 p-2 rounded-lg border border-white/5">
-                        <div className="text-tiny text-primary font-bold mb-1">CELI</div>
+                    <div className="bg-fond p-2 rounded-lg border border-bordure">
+                        <div className="text-tiny text-succes-texte font-bold mb-1">CELI</div>
                         <PrivateAmount as="div" className="text-meta font-black text-ink-50">{formatCAD(data.CELI)}</PrivateAmount>
                     </div>
-                    <div className="bg-black/30 p-2 rounded-lg border border-white/5">
-                        <div className="text-tiny text-info-500 font-bold mb-1">REER</div>
+                    <div className="bg-fond p-2 rounded-lg border border-bordure">
+                        <div className="text-tiny text-ink-100 font-bold mb-1">REER</div>
                         <PrivateAmount as="div" className="text-meta font-black text-ink-50">{formatCAD(data.REER)}</PrivateAmount>
                     </div>
                     {/* Revue #245 (a11y S1) — CELIAPP visible au stack doit avoir sa valeur TEXTE ici. */}
                     {(data.CELIAPP || 0) > 0 && (
-                        <div className="bg-black/30 p-2 rounded-lg border border-white/5">
-                            <div className="text-tiny text-[#2dd4bf] font-bold mb-1">CELIAPP</div>
+                        <div className="bg-fond p-2 rounded-lg border border-bordure">
+                            <div className="text-tiny text-succes-texte font-bold mb-1">CELIAPP</div>
                             <PrivateAmount as="div" className="text-meta font-black text-ink-50">{formatCAD(data.CELIAPP)}</PrivateAmount>
                         </div>
                     )}
                     {(data.NonReg || 0) > 0 && (
-                        <div className="bg-black/30 p-2 rounded-lg border border-white/5">
-                            <div className="text-tiny text-warning-500 font-bold mb-1">Non-Enreg.</div>
+                        <div className="bg-fond p-2 rounded-lg border border-bordure">
+                            <div className="text-tiny text-alerte-texte font-bold mb-1">Non-Enreg.</div>
                             <PrivateAmount as="div" className="text-meta font-black text-ink-50">{formatCAD(data.NonReg)}</PrivateAmount>
                         </div>
                     )}
-                    <div className="bg-black/30 p-2 rounded-lg border border-white/5">
-                        <div className="text-tiny text-[#9b8fcf] font-bold mb-1">Liquidités</div>
+                    <div className="bg-fond p-2 rounded-lg border border-bordure">
+                        <div className="text-tiny text-ink-200 font-bold mb-1">Liquidités</div>
                         <PrivateAmount as="div" className="text-meta font-black text-ink-50">{formatCAD(data.Liquidites)}</PrivateAmount>
                     </div>
                 </div>
@@ -455,17 +516,17 @@ export const RetirementTooltip = React.memo(({ active, payload }: RetirementTool
             {isRetired ? (
                 <div className="space-y-2">
                     <div className="text-tiny font-bold text-ink-300 uppercase tracking-widest mb-1">Flux Mensuel</div>
-                    <div className="bg-black/30 rounded-lg p-3 border border-danger-500/20 space-y-2">
-                        <div className="flex justify-between text-meta"><span className="text-ink-300">Revenu total</span><PrivateAmount className="text-success-400 font-bold">{formatSigned(data.Income || 0, { withCurrency: true })}</PrivateAmount></div>
-                        <div className="flex justify-between text-meta"><span className="text-ink-300">Dépenses (avec inflation)</span><PrivateAmount className="text-danger-400 font-bold">{formatSigned(-(data.Expenses || 0), { withCurrency: true })}</PrivateAmount></div>
-                        <div className="flex justify-between text-meta pt-1 border-t border-white/5"><span className="text-ink-300">Flux net</span><PrivateAmount className={`font-bold ${((data.Income ?? 0) - (data.Expenses ?? 0)) >= 0 ? 'text-success-400' : 'text-danger-400'}`}>{formatCAD((data.Income ?? 0) - (data.Expenses ?? 0))}</PrivateAmount></div>
+                    <div className="bg-fond rounded-lg p-3 border border-erreur-texte/20 space-y-2">
+                        <div className="flex justify-between text-meta"><span className="text-ink-300">Revenu total</span><PrivateAmount className="text-succes-texte font-bold">{formatSigned(data.Income || 0, { withCurrency: true })}</PrivateAmount></div>
+                        <div className="flex justify-between text-meta"><span className="text-ink-300">Dépenses (avec inflation)</span><PrivateAmount className="text-erreur-texte font-bold">{formatSigned(-(data.Expenses || 0), { withCurrency: true })}</PrivateAmount></div>
+                        <div className="flex justify-between text-meta pt-1 border-t border-bordure"><span className="text-ink-300">Flux net</span><PrivateAmount className={`font-bold ${((data.Income ?? 0) - (data.Expenses ?? 0)) >= 0 ? 'text-succes-texte' : 'text-erreur-texte'}`}>{formatCAD((data.Income ?? 0) - (data.Expenses ?? 0))}</PrivateAmount></div>
                     </div>
                 </div>
             ) : (
                 <div className="space-y-2">
                     <div className="text-tiny font-bold text-ink-300 uppercase tracking-widest mb-1">Épargne mensuelle</div>
-                    <div className="bg-black/30 rounded-lg p-3 border border-success-500/20">
-                        <div className="flex justify-between text-meta"><span className="text-ink-300">Flux net</span><PrivateAmount className="text-success-400 font-bold">{formatSigned(data.Savings || 0, { withCurrency: true })}</PrivateAmount></div>
+                    <div className="bg-fond rounded-lg p-3 border border-succes-texte/20">
+                        <div className="flex justify-between text-meta"><span className="text-ink-300">Flux net</span><PrivateAmount className="text-succes-texte font-bold">{formatSigned(data.Savings || 0, { withCurrency: true })}</PrivateAmount></div>
                     </div>
                 </div>
             )}

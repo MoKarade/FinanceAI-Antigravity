@@ -25,12 +25,13 @@ interface TickerQuote {
   valueNode: React.ReactNode;
   badgeText: React.ReactNode;
   badgeClass: string;
+  dotClass: string;
 }
 
 /**
- * Bandeau supérieur d'indices personnels inspiré de Google Finance (« Aperçu des marchés »).
- * Présent en haut de chaque page pour offrir la lecture instantanée des cotes clés du dossier
- * et basculer d'un clic vers l'écran correspondant.
+ * Bandeau supérieur d'indices personnels inspiré de Google Finance Beta (« Aperçu des marchés »).
+ * Présent en haut de chaque page (hors Accueil) avec défilement horizontal fluide sur mobile
+ * et grille 6 colonnes sur grand écran pour basculer d'un clic vers l'écran correspondant.
  */
 export const GoogleFinanceTickerBar: React.FC<GoogleFinanceTickerBarProps> = ({
   activeTab,
@@ -87,6 +88,7 @@ export const GoogleFinanceTickerBar: React.FC<GoogleFinanceTickerBarProps> = ({
       valueNode: <AnimatedNetWorth value={netWorth} format="compact" as="span" testId="animated-ticker-net-worth" />,
       badgeText: netWorth >= 0 ? '▲ Actif net' : '▼ Passif net',
       badgeClass: netWorth >= 0 ? 'gf-delta-up' : 'gf-delta-down',
+      dotClass: 'gf-alloc-celi',
     },
     {
       id: 'epargne',
@@ -100,6 +102,7 @@ export const GoogleFinanceTickerBar: React.FC<GoogleFinanceTickerBarProps> = ({
       ),
       badgeText: monthlySavings >= 0 ? '▲ Excédent' : '▼ Déficit',
       badgeClass: monthlySavings >= 0 ? 'gf-delta-up' : 'gf-delta-down',
+      dotClass: 'gf-alloc-reer',
     },
     {
       id: 'placements',
@@ -109,6 +112,7 @@ export const GoogleFinanceTickerBar: React.FC<GoogleFinanceTickerBarProps> = ({
       valueNode: <PrivateAmount>{formatCompactCAD(stats.portefeuille)}</PrivateAmount>,
       badgeText: privacyActif ? '••' : `${stats.nbTitres} titre${stats.nbTitres > 1 ? 's' : ''}`,
       badgeClass: 'gf-delta-neutral',
+      dotClass: 'gf-alloc-nonreg',
     },
     {
       id: 'liquidites',
@@ -118,6 +122,7 @@ export const GoogleFinanceTickerBar: React.FC<GoogleFinanceTickerBarProps> = ({
       valueNode: <PrivateAmount>{formatCompactCAD(currentValues.liquidity || 0)}</PrivateAmount>,
       badgeText: privacyActif ? '••' : `${stats.nbTx} opér.`,
       badgeClass: (currentValues.liquidity || 0) >= 0 ? 'gf-delta-up' : 'gf-delta-amber',
+      dotClass: 'gf-alloc-cash',
     },
     {
       id: 'dettes',
@@ -131,6 +136,7 @@ export const GoogleFinanceTickerBar: React.FC<GoogleFinanceTickerBarProps> = ({
           ? `${stats.nbDettes} active${stats.nbDettes > 1 ? 's' : ''}`
           : '0 dette',
       badgeClass: stats.totalDettesBrut > 0 ? 'gf-delta-down' : 'gf-delta-up',
+      dotClass: 'gf-alloc-immo',
     },
     {
       id: 'immobilier',
@@ -148,47 +154,60 @@ export const GoogleFinanceTickerBar: React.FC<GoogleFinanceTickerBarProps> = ({
       ),
       badgeText: activeTab === Tab.TAX ? 'Fisc QC' : 'Foncier',
       badgeClass: 'gf-delta-amber',
+      dotClass: 'gf-alloc-immo',
     },
   ];
 
   return (
     <section
       aria-label="Aperçu des indices du dossier (style Google Finance)"
-      className="gf-market-banner"
+      className="premium-card rounded-xl bg-surface border border-bordure overflow-hidden"
     >
-      {tickers.map((item) => {
-        const isCurrent = activeTab === item.tab;
-        return (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setActiveTab(item.tab)}
-            onMouseEnter={() => prefetchTab(item.tab)}
-            onFocus={() => prefetchTab(item.tab)}
-            aria-current={isCurrent ? 'page' : undefined}
-            className={`touch-target gf-market-ticker focus-ring ${
-              isCurrent ? 'gf-market-ticker-active' : ''
-            }`}
-          >
-            <div className="flex items-center justify-between gap-1.5 w-full">
-              <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400 truncate">
-                {item.symbol}
-              </span>
-              <span
-                className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold leading-none shrink-0 ${item.badgeClass}`}
-              >
-                {item.badgeText}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between gap-1.5 w-full mt-0.5">
-              <span className="text-[11px] font-medium text-ink-300 truncate">{item.label}</span>
-              <span className="font-mono text-[13px] font-bold text-ink-50 tabular-nums shrink-0">
-                {item.valueNode}
-              </span>
-            </div>
-          </button>
-        );
-      })}
+      <div className="flex overflow-x-auto no-scrollbar xl:grid xl:grid-cols-6 divide-x divide-bordure bg-fond">
+        {tickers.map((item) => {
+          const isCurrent = activeTab === item.tab;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setActiveTab(item.tab)}
+              onMouseEnter={() => prefetchTab(item.tab)}
+              onFocus={() => prefetchTab(item.tab)}
+              aria-current={isCurrent ? 'page' : undefined}
+              className={`touch-target shrink-0 min-w-[162px] sm:min-w-[176px] xl:min-w-0 px-3 py-2 text-left flex flex-col justify-between gap-1 transition-all duration-150 focus-ring group ${
+                isCurrent
+                  ? 'gf-market-ticker-active bg-surface-douce'
+                  : 'hover:bg-surface-douce'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-1.5 w-full">
+                <span className="inline-flex items-center gap-1.5 min-w-0">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.dotClass} ${isCurrent ? 'gf-pulse-live' : ''}`}
+                    aria-hidden="true"
+                  />
+                  <span className="font-mono text-[10px] font-bold tracking-wider uppercase text-ink-200 group-hover:text-ink-50 truncate">
+                    {item.symbol}
+                  </span>
+                </span>
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold leading-none shrink-0 ${item.badgeClass}`}
+                >
+                  {item.badgeText}
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between gap-1.5 w-full">
+                <span className="text-[11px] font-medium text-ink-400 group-hover:text-ink-200 truncate">
+                  {item.label}
+                </span>
+                <span className="font-mono text-[13px] font-bold text-ink-50 tabular-nums shrink-0">
+                  {item.valueNode}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </section>
   );
 };

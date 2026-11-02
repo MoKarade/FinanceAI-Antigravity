@@ -105,7 +105,7 @@ export const Settings: React.FC<SettingsProps> = ({
   const aFaire = (id: SubTab) => id === 'integrations' && !(apiKeys.gemini || apiKeys.anthropic);
   const onglets = SUB_TABS.map((t) => ({
     ...t,
-    badge: t.id === 'completude' ? `${pct} %` : aFaire(t.id) ? <span className="text-warning-400">à faire</span> : undefined,
+    badge: t.id === 'completude' ? `${pct} %` : aFaire(t.id) ? <span className="text-alerte-texte">à faire</span> : undefined,
   }));
 
   // Contenu d'une section — partagé par les deux mises en page.
@@ -144,8 +144,28 @@ export const Settings: React.FC<SettingsProps> = ({
   const enTete = (
     <PageHeader
       title="Réglages"
+      badge={
+        <span className="inline-flex items-center gap-2">
+          <span className="gf-ticker-symbol">
+            <span className="w-1.5 h-1.5 rounded-full bg-current gf-pulse-live" aria-hidden="true" />
+            CONFIG:GOOGLE · CLOUD &amp; IA
+          </span>
+          <span aria-hidden="true" className="font-bold tracking-tight select-none text-xs">
+            <span className="gf-logo-b">G</span>
+            <span className="gf-logo-r">o</span>
+            <span className="gf-logo-y">o</span>
+            <span className="gf-logo-b">g</span>
+            <span className="gf-logo-g">l</span>
+            <span className="gf-logo-r">e</span>
+          </span>
+        </span>
+      }
       actions={
-        <button type="button" onClick={startGuidedTour} className="h-11 px-4 rounded-lg border border-white/40 text-body text-ink-100 hover:bg-white/5 transition-colors focus-ring">
+        <button
+          type="button"
+          onClick={startGuidedTour}
+          className="touch-target min-h-11 px-4 rounded-lg border border-bordure-champ bg-fond text-body text-ink-50 hover:bg-surface-douce transition-colors focus-ring"
+        >
           Revoir le tutoriel
         </button>
       }
@@ -160,7 +180,7 @@ export const Settings: React.FC<SettingsProps> = ({
       <div className="space-y-6 stagger-in">
         {enTete}
         <div className="grid grid-cols-[240px_minmax(0,1fr)_380px] gap-5 items-start">
-          <div className="min-w-0 flex flex-col gap-1">
+          <div className="gf-terminal-card p-3 min-w-0 flex flex-col gap-1 bg-surface border border-bordure">
             <SubTabs<SubTab>
               idPrefix="config"
               label="Sections des réglages"
@@ -170,17 +190,21 @@ export const Settings: React.FC<SettingsProps> = ({
               orientation="vertical"
             />
             {/* Hors tablist : le Profil est une autre page, pas un onglet de celle-ci. */}
-            <button type="button" onClick={() => setActiveTab(Tab.PROFILE)} className="h-10 px-3 rounded-[10px] flex items-center justify-between gap-2 text-body text-ink-300 hover:bg-white/5 hover:text-ink-50 focus-ring">
+            <button
+              type="button"
+              onClick={() => setActiveTab(Tab.PROFILE)}
+              className="touch-target min-h-11 px-3 rounded-[10px] flex items-center justify-between gap-2 text-body text-ink-300 hover:bg-surface-douce hover:text-ink-50 transition-colors focus-ring"
+            >
               Profil <span aria-hidden="true">↗</span>
             </button>
           </div>
-          <div className="min-w-0">
+          <div className="gf-terminal-card p-4 sm:p-5 min-w-0 bg-surface border border-bordure">
             {SUB_TABS.map(({ id }) => (
               <TabPanel key={id} idPrefix="config" tab={id} when={actif === id}>{contenu(id)}</TabPanel>
             ))}
           </div>
           {/* Mode test (dev) — charger un persona réaliste ; vraies données sauvegardées/restaurées. */}
-          <div className="min-w-0">
+          <div className="gf-terminal-card p-3 min-w-0 bg-surface border border-bordure">
             <TestModePanel />
           </div>
         </div>
@@ -195,12 +219,33 @@ export const Settings: React.FC<SettingsProps> = ({
     return (
       <div className="space-y-6 stagger-in">
         {enTete}
-        <section aria-labelledby="reglages-section-titre" className="space-y-4">
+        <div
+          role="group"
+          aria-label="Accès rapide aux sections"
+          className="gf-subtab-bar flex items-center gap-1.5 overflow-x-auto no-scrollbar"
+        >
+          {SUB_TABS.filter((t) => t.id !== 'completude').map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              aria-pressed={ouverte.id === t.id}
+              onClick={() => setSub(t.id)}
+              className={`touch-target gf-subtab-pill px-3.5 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 transition-colors focus-ring ${
+                ouverte.id === t.id
+                  ? 'gf-subtab-pill-active text-ink-50 font-semibold'
+                  : 'text-ink-300 hover:bg-surface-douce hover:text-ink-50'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <section aria-labelledby="reglages-section-titre" className="gf-terminal-card p-4 rounded-2xl bg-surface border border-bordure space-y-4">
           <div className="flex flex-col gap-1">
             <button
               type="button"
               onClick={() => { setSub(null); requestAnimationFrame(() => document.getElementById(`reglages-ligne-${ouverte.id}`)?.focus()); }}
-              className="self-start min-h-11 text-meta text-ink-400 hover:text-ink-100 focus-ring rounded-sm"
+              className="touch-target self-start min-h-11 px-2 text-meta text-ink-400 hover:text-ink-100 focus-ring rounded-sm"
             >
               ‹ Toutes les sections
             </button>
@@ -216,26 +261,28 @@ export const Settings: React.FC<SettingsProps> = ({
     setSub(id);
     requestAnimationFrame(() => document.getElementById('reglages-section-titre')?.focus());
   };
-  const ligne = 'w-full h-[52px] px-4 flex items-center justify-between gap-3 text-left text-body text-ink-100 focus-ring';
+  const ligne = 'touch-target gf-row w-full min-h-[52px] px-4 flex items-center justify-between gap-3 text-left text-body text-ink-50 hover:bg-surface-douce transition-colors focus-ring';
   return (
     <div className="space-y-4 stagger-in">
       {enTete}
       <TestModePanel compact />
-      <nav aria-label="Sections des réglages" className="rounded-2xl bg-surface border border-white/6 overflow-hidden">
+      <nav aria-label="Sections des réglages" className="gf-terminal-card rounded-2xl bg-surface border border-bordure overflow-hidden">
         <button type="button" onClick={() => setActiveTab(Tab.PROFILE)} className={ligne}>
           Profil <span className="text-ink-400" aria-hidden="true">›</span>
         </button>
         {SUB_TABS.filter((t) => t.id !== 'completude').map((t) => (
-          <button key={t.id} id={`reglages-ligne-${t.id}`} type="button" onClick={() => ouvrir(t.id)} className={`${ligne} border-t border-white/5`}>
+          <button key={t.id} id={`reglages-ligne-${t.id}`} type="button" onClick={() => ouvrir(t.id)} className={`${ligne} border-t border-bordure`}>
             {t.label}
             <span className="flex items-center gap-3">
-              {aFaire(t.id) && <span className="text-meta text-warning-400">à faire</span>}
+              {aFaire(t.id) && <span className="text-meta text-alerte-texte">à faire</span>}
               <span className="text-ink-400" aria-hidden="true">›</span>
             </span>
           </button>
         ))}
       </nav>
-      {contenu('completude')}
+      <div className="gf-terminal-card p-3 sm:p-4 rounded-2xl bg-surface border border-bordure">
+        {contenu('completude')}
+      </div>
     </div>
   );
 };

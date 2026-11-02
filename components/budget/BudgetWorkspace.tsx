@@ -84,14 +84,26 @@ export const BudgetWorkspace: React.FC<BudgetWorkspaceProps> = ({
                 Transactions), stable quel que soit le sous-onglet actif. */}
             <PageHeader
                 title={TAB_LABELS[Tab.BUDGET]}
+                className="gf-page-header"
+                badge={
+                    <span className="inline-flex items-center gap-2">
+                        <span className="gf-ticker-symbol">
+                            <span className="w-1.5 h-1.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
+                            <span>BUDGET:CAD · TRÉSORERIE</span>
+                        </span>
+                        <span className="gf-badge-nouvelle">Beta</span>
+                    </span>
+                }
                 nav={
-                    <SubTabs<SubTab>
-                        idPrefix="budget"
-                        label="Sections Budget"
-                        tabs={SUB_TABS}
-                        active={sub}
-                        onSelect={setSub}
-                    />
+                    <div className="overflow-x-auto no-scrollbar max-w-full">
+                        <SubTabs<SubTab>
+                            idPrefix="budget"
+                            label="Sections Budget"
+                            tabs={SUB_TABS}
+                            active={sub}
+                            onSelect={setSub}
+                        />
+                    </div>
                 }
                 actions={surBudget ? (
                     etroit ? <NavigateurPeriode p={pilotage} /> : (
@@ -104,7 +116,7 @@ export const BudgetWorkspace: React.FC<BudgetWorkspaceProps> = ({
                 ) : undefined}
             />
             {surBudget && etroit && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="gf-terminal-card px-3 py-2 flex flex-wrap items-center gap-2 overflow-x-auto no-scrollbar bg-surface border border-bordure">
                     <ChoixPeriode p={pilotage} />
                     {noms && <ChoixPersonne p={pilotage} noms={noms} />}
                 </div>

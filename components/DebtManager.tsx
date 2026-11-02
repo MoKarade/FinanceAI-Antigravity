@@ -138,6 +138,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ debts, setDebts }) => 
     // le clic n'avait rien fait, et un `NaN` enregistré ne se voyait plus nulle part.
     const [refusSaisie, setRefusSaisie] = useState<string | null>(null);
     const [extraPayment, setExtraPayment] = useState(200);
+    const [strategie, setStrategie] = useState<'avalanche' | 'neige'>('avalanche');
     // [D6-PRIV-MONTANTS] focus du slider → étiquette révélée pendant l'ajustement seulement.
     const [extraSliderFocus, setExtraSliderFocus] = useState(false);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -227,7 +228,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ debts, setDebts }) => 
         while (activeDebts.some(d => d.balance > 0) && month < maxMonths) {
             let monthlyBalanceTotal = 0;
             let remainingExtra = extraPayment;
-            activeDebts.sort((a, b) => b.interestRate - a.interestRate);
+            activeDebts.sort((a, b) => strategie === 'neige' ? a.balance - b.balance : b.interestRate - a.interestRate);
             activeDebts.forEach(d => {
                 if (d.balance <= 0) return;
                 const interest = (d.balance * (d.interestRate / 100)) / 12;
@@ -249,7 +250,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ debts, setDebts }) => 
         // Et SANS dette, il n'y a rien à simuler : « 0,0 ans » était une durée inventée (`[].every` est vrai par vacuité).
         const valide = dettesAuJour.length > 0 && dettesAuJour.every(d => Number.isFinite(d.balance) && Number.isFinite(d.interestRate) && Number.isFinite(d.minimumPayment));
         return { chart: data, totalInterest: totalInterestPaid, months: month, valide };
-    }, [dettesAuJour, extraPayment]);
+    }, [dettesAuJour, extraPayment, strategie]);
 
     // [DEBT-SUM-DUP, audit 2026-07-16] Source unique (garde isFinite incluse) au lieu du reduce local.
     const totalDebt = useMemo(() => computeTotalDebt(debts, todayIso, transactions), [debts, todayIso, transactions]);
@@ -314,25 +315,85 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ debts, setDebts }) => 
                 (mobile) ; action principale à droite (« Ajouter » en contour au téléphone). */}
             <PageHeader
                 title="Dettes"
-                badge={<span className="text-meta lg:text-body text-texte-doux">Total dû <PrivateAmount className={`font-mono font-semibold lg:font-normal ${totalDebt > 0 ? 'text-erreur-texte' : 'text-succes-texte'}`}>{formatCAD(totalDebt)}</PrivateAmount></span>}
+                badge={
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                        <span className="gf-ticker-symbol">
+                            <span className="gf-pulse-live" aria-hidden="true" />
+                            PASSIF:CAD · AMORTISSEMENT
+                        </span>
+                        <span className="text-meta lg:text-body text-texte-doux">
+                            Total dû <PrivateAmount className={`font-mono font-semibold lg:font-normal ${totalDebt > 0 ? 'text-erreur-texte' : 'text-succes-texte'}`}>{formatCAD(totalDebt)}</PrivateAmount>
+                        </span>
+                    </span>
+                }
                 actions={
                     <button
                         type="button"
                         onClick={() => { setIsAdding(!isAdding); setRefusSaisie(null); }}
                         aria-expanded={isAdding}
                         aria-label={isAdding ? 'Fermer' : 'Ajouter une dette'}
-                        className="h-11 px-3.5 lg:px-4 rounded-lg border border-bordure-champ lg:border-transparent text-texte lg:bg-accent lg:text-sur-accent text-body lg:font-bold focus-ring"
+                        className="touch-target h-11 px-3.5 lg:px-4 rounded-lg border border-bordure-champ lg:border-transparent text-texte lg:bg-accent lg:text-sur-accent text-body lg:font-bold focus-ring"
                     >
                         {isAdding ? 'Fermer' : <><span className="lg:hidden">Ajouter</span><span className="hidden lg:inline">Ajouter une dette</span></>}
                     </button>
                 }
             />
 
+            {/* Bandeau de cotations Google Finance Beta */}
+            <div className="gf-terminal-card gf-card-interactive p-3.5 sm:p-4">
+                <div className="gf-quote-strip grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+                    <div className="gf-quote-cell flex flex-col gap-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-400">Passif total</span>
+                            <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold ${totalDebt > 0 ? 'gf-delta-down' : 'gf-delta-up'}`}>
+                                {totalDebt > 0 ? 'ENGAGÉ' : 'SOLDÉ'}
+                            </span>
+                        </div>
+                        <PrivateAmount as="div" className={`font-mono text-[16px] lg:text-[20px] font-bold ${totalDebt > 0 ? 'text-erreur-texte' : 'text-succes-texte'}`}>
+                            {formatCAD(totalDebt)}
+                        </PrivateAmount>
+                        <span className="text-tiny text-ink-400">solde consolidé du jour</span>
+                    </div>
+                    <div className="gf-quote-cell flex flex-col gap-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-400">Flux mensuel</span>
+                            <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-neutral">MIN + EXTRA</span>
+                        </div>
+                        <PrivateAmount as="div" className="font-mono text-[16px] lg:text-[20px] font-bold text-ink-50">
+                            {formatCAD(totalMinPayment + extraPayment)}
+                        </PrivateAmount>
+                        <span className="text-tiny text-ink-400">remboursement mensuel cible</span>
+                    </div>
+                    <div className="gf-quote-cell flex flex-col gap-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-400">Coût des intérêts</span>
+                            <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-amber">CUMULÉ</span>
+                        </div>
+                        {simulation.valide
+                            ? <PrivateAmount as="div" className="font-mono text-[16px] lg:text-[20px] font-bold text-alerte-texte">{formatCAD(Math.round(simulation.totalInterest))}</PrivateAmount>
+                            : <div className="font-mono text-[16px] lg:text-[20px] font-bold text-ink-400">n.d.</div>}
+                        <span className="text-tiny text-ink-400">d'ici l'extinction complète</span>
+                    </div>
+                    <div className="gf-quote-cell flex flex-col gap-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-400">Horizon estimé</span>
+                            <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-up">
+                                {strategie === 'avalanche' ? 'AVALANCHE' : 'NEIGE'}
+                            </span>
+                        </div>
+                        {simulation.valide
+                            ? <div className="font-mono text-[16px] lg:text-[20px] font-bold text-succes-texte"><PrivateAmount>{formatNumber(simulation.months / 12, { decimals: 1 })}</PrivateAmount> ans</div>
+                            : <div className="font-mono text-[16px] lg:text-[20px] font-bold text-ink-400">n.d.</div>}
+                        <span className="text-tiny text-ink-400">selon la stratégie choisie</span>
+                    </div>
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 xl:grid-cols-[380px_minmax(0,1fr)] gap-5 items-start">
                 <div className="space-y-4">
                     {/* [S5-REFONTE-DETTES] Maquettes : bureau = une carte, dettes en lignes ; mobile = une carte
                         par dette, liseré orange à gauche. Pas de titre visible (la page EST la liste). */}
-                    <section aria-label="Tes dettes" className="flex flex-col gap-2.5 lg:gap-0 lg:rounded-2xl lg:bg-surface lg:border lg:border-bordure lg:overflow-hidden">
+                    <section aria-label="Tes dettes" className="gf-terminal-card flex flex-col gap-2.5 lg:gap-0 lg:rounded-2xl lg:bg-surface lg:border lg:border-bordure lg:overflow-hidden">
                         {isAdding && (
                             <div className="p-4 lg:px-5 rounded-2xl lg:rounded-none bg-surface border border-bordure lg:border-x-0 lg:border-t-0 lg:border-bordure space-y-2">
                                 <input aria-label="Nom de la dette" type="text" placeholder="Nom (ex: Visa)" className="w-full bg-fond border border-bordure-champ rounded-sm px-2 py-1 text-meta text-texte touch-target" value={newDebt.name} onChange={e => setNewDebt({...newDebt, name: e.target.value})} />
@@ -367,7 +428,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ debts, setDebts }) => 
                             </div>
                         )}
                             {debts.map(d => (
-                                <div key={d.id} className="p-4 lg:px-5 rounded-2xl lg:rounded-none bg-surface lg:bg-transparent border border-bordure border-l-[3px] border-l-repere lg:border-x-0 lg:border-t-0 lg:border-bordure lg:last:border-b-0">
+                                <div key={d.id} className="gf-row p-4 lg:px-5 rounded-2xl lg:rounded-none bg-surface lg:bg-transparent border border-bordure border-l-[3px] border-l-repere lg:border-x-0 lg:border-t-0 lg:border-bordure lg:last:border-b-0">
                                     {editingId === d.id ? (
                                         <div ref={panneauEditionRef} tabIndex={-1} role="group" aria-label={`Modifier la dette ${d.name}`} className="space-y-2 focus:outline-none">
                                             <input aria-label="Nom de la dette" type="text" className="w-full bg-fond border border-bordure-champ rounded-sm px-2 py-1 text-meta text-texte touch-target" value={draft.name ?? ''} onChange={e => setDraft({ ...draft, name: e.target.value })} />
@@ -444,9 +505,31 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ debts, setDebts }) => 
                     </section>
                     <Card title="Remboursement">
                         <div className="space-y-3.5">
+                            <div
+                                role="group"
+                                aria-label="Stratégie de remboursement"
+                                className="gf-subtab-bar overflow-x-auto no-scrollbar w-full"
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => setStrategie('avalanche')}
+                                    aria-pressed={strategie === 'avalanche'}
+                                    className={`gf-subtab-pill touch-target flex-1 justify-center ${strategie === 'avalanche' ? 'gf-subtab-pill-active' : ''}`}
+                                >
+                                    <span>Avalanche (taux max)</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setStrategie('neige')}
+                                    aria-pressed={strategie === 'neige'}
+                                    className={`gf-subtab-pill touch-target flex-1 justify-center ${strategie === 'neige' ? 'gf-subtab-pill-active' : ''}`}
+                                >
+                                    <span>Boule de neige (solde min)</span>
+                                </button>
+                            </div>
                             <div>
                                 <label className="flex justify-between text-body text-texte mb-2"><span>Paiement supplémentaire</span><span className="font-mono text-texte"><PrivateSliderValue revealed={extraSliderFocus}>{formatCAD(extraPayment)}</PrivateSliderValue>/mois</span></label>
-                                <input type="range" aria-label="Paiement supplémentaire" min="0" max="2000" step="50" value={extraPayment} {...maskedSliderAria(isPrivacyMode && !extraSliderFocus)} onChange={e => setExtraPayment(Number(e.target.value))} onFocus={() => setExtraSliderFocus(true)} onBlur={() => setExtraSliderFocus(false)} className="w-full accent-accent cursor-pointer" />
+                                <input type="range" aria-label="Paiement supplémentaire" min="0" max="2000" step="50" value={extraPayment} {...maskedSliderAria(isPrivacyMode && !extraSliderFocus)} onChange={e => setExtraPayment(Number(e.target.value))} onFocus={() => setExtraSliderFocus(true)} onBlur={() => setExtraSliderFocus(false)} className="w-full accent-accent cursor-pointer touch-target" />
                                 <div className="flex items-center justify-between text-tiny text-texte-doux mt-1.5">
                                     <span>Minimum : <PrivateAmount>{formatCAD(totalMinPayment)}</PrivateAmount></span>
                                     <span className="font-mono font-semibold text-texte">Total : <PrivateAmount>{formatCAD(totalMinPayment + extraPayment)}</PrivateAmount>/mois</span>
@@ -469,7 +552,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ debts, setDebts }) => 
                             </div>
                             {!isPrivacyMode && simulation.valide && totalDebt > 0 && (
                                 <div className="space-y-1">
-                                    <div className="h-2.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5 p-0.5" aria-hidden="true">
+                                    <div className="h-2.5 w-full rounded-full bg-surface-douce overflow-hidden flex gap-0.5 p-0.5 gf-bar-grow" aria-hidden="true">
                                         <div
                                             className="h-full rounded-l-full bg-repere transition-all"
                                             // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode

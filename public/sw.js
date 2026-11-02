@@ -10,7 +10,7 @@
 //
 // Note : ce SW est uniquement chargé en PROD (vite import.meta.env.PROD).
 
-const CACHE_NAME = 'financeai-v7'; // v7 : simplification mobile + restauration Cloud + Preuves & Sources ; v6 : migration Firebase Hosting + fix fetch navigation RequestInit ; v5 : logo série A — purge de v4 qui gardait l'ancien /icon.svg (cache d'abord) ; v4 : Cloudflare Access — plus aucune réponse redirigée/opaque en cache (purge des caches v3)
+const CACHE_NAME = 'financeai-v8'; // v8 : refonte visuelle Google Finance Beta de toutes les pages ; v7 : simplification mobile + restauration Cloud + Preuves & Sources ; v6 : migration Firebase Hosting + fix fetch navigation RequestInit ; v5 : logo série A — purge de v4 qui gardait l'ancien /icon.svg (cache d'abord) ; v4 : Cloudflare Access — plus aucune réponse redirigée/opaque en cache (purge des caches v3)
 const PRECACHE_URLS = ['/manifest.json', '/icon.svg'];
 
 // [CF-ACCESS] Une réponse mettable en cache doit être une réponse DIRECTE de notre origine : ni redirigée (session

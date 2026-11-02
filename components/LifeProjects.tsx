@@ -79,15 +79,15 @@ export const LifeProjects: React.FC<LifeProjectsProps> = ({
     };
 
     const filtres = (classe: string) => (
-        <div role="group" aria-label="Filtrer les projets" className={classe}>
+        <div role="group" aria-label="Filtrer les projets" className={`gf-subtab-bar overflow-x-auto no-scrollbar ${classe}`}>
             {FILTRES.map((f) => (
                 <button
                     key={f.id}
                     type="button"
                     onClick={() => setFiltre(f.id)}
                     aria-pressed={filtre === f.id}
-                    className={`min-h-11 lg:min-h-8 px-3 rounded-lg text-[13px] transition-colors focus-ring ${compacte ? 'flex-1' : ''} ${
-                        filtre === f.id ? (compacte ? 'bg-ink-50 text-dark font-semibold' : 'bg-surfaceHighlight text-ink-50 font-semibold') : 'text-ink-300 hover:bg-white/5'
+                    className={`touch-target gf-subtab-pill min-h-11 lg:min-h-9 px-3.5 rounded-lg text-[13px] whitespace-nowrap transition-colors focus-ring ${compacte ? 'flex-1' : ''} ${
+                        filtre === f.id ? (compacte ? 'gf-subtab-pill-active bg-ink-50 text-dark font-semibold' : 'gf-subtab-pill-active bg-surface-douce text-ink-50 font-semibold') : 'text-ink-300 hover:bg-surface-douce hover:text-ink-50'
                     }`}
                 >
                     {f.libelle}
@@ -108,7 +108,17 @@ export const LifeProjects: React.FC<LifeProjectsProps> = ({
             />
             <PageHeader
                 title={TAB_LABELS[Tab.LIFE_PROJECTS]}
-                badge={<span className="text-meta lg:text-body text-ink-400">{pluriel(tous.length, 'projet', 'projets')} · {pluriel(nbVoyages, 'voyage', 'voyages')} · {pluriel(nbEvenements, 'événement', 'événements')}</span>}
+                badge={
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                        <span className="gf-ticker-symbol">
+                            <span className="w-1.5 h-1.5 rounded-full bg-current gf-pulse-live" aria-hidden="true" />
+                            PROJETS:VIE · HORIZON
+                        </span>
+                        <span className="text-meta lg:text-body text-ink-400">
+                            {pluriel(tous.length, 'projet', 'projets')} · {pluriel(nbVoyages, 'voyage', 'voyages')} · {pluriel(nbEvenements, 'événement', 'événements')}
+                        </span>
+                    </span>
+                }
                 actions={
                     <span className="flex items-center gap-3">
                         <span className="hidden lg:inline-flex"><VieCurveLink /></span>
@@ -117,7 +127,7 @@ export const LifeProjects: React.FC<LifeProjectsProps> = ({
                             onClick={() => setAjout((v) => !v)}
                             aria-expanded={ajout}
                             aria-label={ajout ? 'Fermer' : 'Nouveau projet'}
-                            className="h-10 px-3.5 lg:px-4 rounded-lg border border-white/40 lg:border-transparent text-ink-100 lg:bg-primary lg:text-dark text-body lg:font-bold focus-ring"
+                            className="touch-target min-h-11 px-3.5 lg:px-4 rounded-lg border border-bordure-champ lg:border-transparent text-ink-50 lg:bg-primary lg:text-dark text-body lg:font-bold hover:bg-surface-douce lg:hover:opacity-90 transition-colors focus-ring"
                         >
                             {ajout ? 'Fermer' : <><span className="lg:hidden">Nouveau</span><span className="hidden lg:inline">Nouveau projet</span></>}
                         </button>
@@ -139,7 +149,7 @@ export const LifeProjects: React.FC<LifeProjectsProps> = ({
                         <PrivateAmount as="div" className="font-mono text-[20px] font-bold text-ink-50 tabular-nums">
                             {formatCAD(tous.reduce((s, p) => s + p.cout, 0))}
                         </PrivateAmount>
-                        <div className="mt-1.5 h-1.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex" aria-hidden="true">
+                        <div className="mt-1.5 h-1.5 w-full rounded-full bg-surface-douce overflow-hidden flex" aria-hidden="true">
                             <div
                                 className="h-full bg-repere"
                                 // NOMBRE-NON-MONETAIRE : BARRE-DECORATIVE accompagnant le budget sous PrivateAmount
@@ -210,12 +220,12 @@ export const LifeProjects: React.FC<LifeProjectsProps> = ({
                         icon={<Icon name="life-projects" size={30} />}
                         title="Aucun projet"
                         description="Planifie un voyage ou un événement (rénovation, mariage, sabbatique…) pour voir son effet sur ta courbe Future."
-                        cta={<button type="button" onClick={() => setAjout(true)} className="h-10 px-4 rounded-lg bg-primary text-dark text-body font-bold focus-ring">Nouveau projet</button>}
+                        cta={<button type="button" onClick={() => setAjout(true)} className="touch-target min-h-11 px-4 rounded-lg bg-primary text-dark text-body font-bold focus-ring">Nouveau projet</button>}
                     />
                 )
             ) : (
                 <>
-                    {compacte && filtres('flex gap-1 p-1 rounded-xl bg-surface border border-white/6')}
+                    {compacte && filtres('flex gap-1 p-1 rounded-xl bg-surface border border-bordure')}
                     <FriseProjets
                         items={compacte ? visibles : tous}
                         selection={choisi?.cle ?? null}
@@ -226,21 +236,26 @@ export const LifeProjects: React.FC<LifeProjectsProps> = ({
                     />
                     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_440px] gap-5 items-start">
                         {!compacte && (
-                            <section aria-label="Projets" className="rounded-2xl bg-surface border border-white/6 overflow-hidden">
-                                {filtres('flex gap-1 px-4 py-3')}
+                            <section aria-label="Projets" className="gf-terminal-card rounded-2xl bg-surface border border-bordure overflow-hidden">
+                                <div className="px-4 py-3 bg-fond border-b border-bordure flex items-center justify-between gap-2">
+                                    {filtres('flex gap-1')}
+                                    <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-ink-400">
+                                        {visibles.length} ligne{visibles.length > 1 ? 's' : ''}
+                                    </span>
+                                </div>
                                 <ul className="gf-spring-grid">
                                     {visibles.map((p) => {
                                         const couleur = couleurProjet(p);
                                         const j = joursRestants(p.date, aujourdhui);
                                         return (
-                                            <li key={p.cle} className="border-t border-white/5">
+                                            <li key={p.cle} className="border-t border-bordure first:border-t-0">
                                                 <button
                                                     type="button"
                                                     aria-pressed={choisi?.cle === p.cle}
                                                     onClick={() => setSelection(p.cle)}
-                                                    className={`gf-row w-full min-h-[72px] px-5 grid grid-cols-[44px_minmax(0,1fr)_90px_120px] gap-3.5 items-center text-left transition-colors focus-ring ${choisi?.cle === p.cle ? 'bg-white/4' : 'hover:bg-white/3'}`}
+                                                    className={`touch-target gf-row gf-card-interactive w-full min-h-[72px] px-5 grid grid-cols-[44px_minmax(0,1fr)_90px_120px] gap-3.5 items-center text-left transition-colors focus-ring ${choisi?.cle === p.cle ? 'bg-surface-douce' : 'hover:bg-surface-douce'}`}
                                                 >
-                                                    <span className="w-10 h-10 rounded-xl bg-surfaceHighlight flex items-center justify-center" style={{ color: couleur }} aria-hidden="true"><Icon name={p.icone} size={18} /></span>
+                                                    <span className="w-10 h-10 rounded-xl bg-surface-douce border border-bordure flex items-center justify-center" style={{ color: couleur }} aria-hidden="true"><Icon name={p.icone} size={18} /></span>
                                                     <span className="flex flex-col gap-0.5 min-w-0">
                                                         <span className="font-semibold text-ink-50 truncate">{p.nom}</span>
                                                         <span className="font-mono text-meta text-ink-400">{dateLongue(p.date)}</span>
@@ -252,7 +267,7 @@ export const LifeProjects: React.FC<LifeProjectsProps> = ({
                                         );
                                     })}
                                     {visibles.length === 0 && (
-                                        <li className="border-t border-white/5 px-5 py-6 text-meta text-ink-400">Aucun projet dans cette catégorie.</li>
+                                        <li className="border-t border-bordure px-5 py-6 text-meta text-ink-400">Aucun projet dans cette catégorie.</li>
                                     )}
                                 </ul>
                             </section>

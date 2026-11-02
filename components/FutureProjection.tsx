@@ -1500,9 +1500,9 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     const anneesHorizon = dernierPoint ? Math.max(0, Math.round((dernierPoint.monthIndex - todayMonthIndex) / 12)) : null;
     const naviguerVers = (tab: Tab) => useFinanceStore.getState().setActiveTab(tab);
 
-    const cellCourbe = 'touch-target inline-flex items-center gap-2 rounded-lg border border-primary/25 bg-surfaceHighlight/30 px-2.5 py-1 text-tiny cursor-pointer focus-ring';
+    const cellCourbe = 'touch-target gf-quote-cell inline-flex items-center gap-2 rounded-xl border border-bordure hover:border-repere bg-surface-douce px-3 py-1.5 text-tiny cursor-pointer transition-colors focus-ring shrink-0';
     const statsCourbe = (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
             <button
                 type="button"
                 title="Objectif FIRE — Ouvrir Placements"
@@ -1510,10 +1510,10 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                 onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
                 className={cellCourbe}
             >
-                <span className="text-ink-400">Objectif FIRE</span>
+                <span className="text-ink-400 font-medium">Objectif FIRE</span>
                 <PrivateAmount className="font-mono font-bold text-ink-50">{formatCompactCAD(fireNumber)}</PrivateAmount>
-                {jalonFire?.year != null && <span className="font-semibold text-warning-400">· <PrivateAmount>{jalonFire.year}</PrivateAmount></span>}
-                <span className="text-primary font-semibold" aria-hidden="true">↗</span>
+                {jalonFire?.year != null && <span className="px-1.5 py-0.5 rounded-full font-mono font-semibold gf-delta-amber">· <PrivateAmount>{jalonFire.year}</PrivateAmount></span>}
+                <span className="text-repere font-semibold" aria-hidden="true">↗</span>
             </button>
             <button
                 type="button"
@@ -1524,14 +1524,14 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             >
                 {/* [HORIZON-ESPERANCE-DE-VIE] L'horizon court jusqu'à l'espérance de vie de la personne 1. */}
                 {/* NOMBRE-NON-MONETAIRE : réglage saisi (âge ou horizon choisi), pas une valeur dérivée du dossier (horizon = espérance de vie) */}
-                <span className="text-ink-400" title={`Jusqu'à ${esperanceDeVieEffective(retirementGoal)} ans`}>
+                <span className="text-ink-400 font-medium" title={`Jusqu'à ${esperanceDeVieEffective(retirementGoal)} ans`}>
                     À l&apos;horizon{anneesHorizon != null ? ` (${anneesHorizon} ans)` : ''}
                 </span>
                 {/* [FUTUR-KPI-PATRIMOINE-FIN-COURBE] Valeur nette de fin de courbe ; l'héritage net vit dans l'info-bulle. */}
-                <span className="font-mono font-bold text-ink-50">
+                <span className="px-1.5 py-0.5 rounded-full font-mono font-bold gf-delta-up">
                     <PrivateAmount>{patrimoineKpi.value}</PrivateAmount>
                 </span>
-                <span className="text-primary font-semibold" aria-hidden="true">↗</span>
+                <span className="text-repere font-semibold" aria-hidden="true">↗</span>
             </button>
         </div>
     );
@@ -1612,13 +1612,13 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
 
     // Verrouiller / Plein écran : secondaires, à droite des périodes dans l'en-tête de la carte.
     const actionsCourbe = (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
             {/* PH2-d — verrou de courbe : fige la courbe courante comme référence (persistée IDB). */}
                 {isProjectionLocked ? (
                     <button
                         type="button"
                         onClick={unlockProjection}
-                        className="h-11 min-w-11 lg:h-9 lg:min-w-0 px-3 rounded-lg text-[13px] font-semibold text-alerte-texte hover:text-texte bg-alerte-fond hover:bg-surface-douce border border-alerte-texte/30 transition-colors focus-ring"
+                        className="touch-target h-11 min-w-11 lg:h-9 lg:min-w-0 px-3 rounded-lg text-[13px] font-semibold text-alerte-texte hover:text-texte bg-alerte-fond hover:bg-surface-douce border border-alerte-texte/30 transition-colors focus-ring"
                         title="Déverrouiller : revenir à la courbe live seule"
                     >
                         <span aria-hidden="true">🔓</span> <span className="max-lg:sr-only">Déverrouiller</span>
@@ -1628,7 +1628,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                         type="button"
                         onClick={() => { if (results) lockProjection(results); }}
                         disabled={!results || isComputing}
-                        className="h-11 min-w-11 lg:h-9 lg:min-w-0 px-3 rounded-lg text-[13px] text-ink-300 hover:text-ink-50 hover:bg-surface-douce border border-bordure transition-colors focus-ring disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="touch-target h-11 min-w-11 lg:h-9 lg:min-w-0 px-3 rounded-lg text-[13px] text-ink-300 hover:text-ink-50 hover:bg-surface-douce border border-bordure transition-colors focus-ring disabled:opacity-40 disabled:cursor-not-allowed"
                         title="Verrouiller cette courbe comme référence (persistée jusqu'au déverrouillage)"
                     >
                         <span aria-hidden="true">🔒</span> <span className="max-lg:sr-only">Verrouiller</span>
@@ -1639,7 +1639,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                 <button
                     type="button"
                     onClick={() => zoom.containerEl.current?.requestFullscreen?.()}
-                    className="sr-only h-9"
+                    className="touch-target sr-only h-9"
                     title="Plein écran (Échap pour quitter)"
                 >
                     ⛶ Plein écran
@@ -1652,11 +1652,45 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
 
     return (
         <div className="space-y-4 lg:space-y-6 animate-fade-in pb-24">
-            <PageHeader
-                title="Projection"
-                badge={insolvencyBadge}
-                actions={<FutureHealthSummary />}
-            />
+            <div className="gf-page-header space-y-2.5">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                        <span className="gf-ticker-symbol">FUTUR:CAD · MONTE CARLO</span>
+                        <span className="gf-badge-nouvelle">Google Finance Beta</span>
+                    </div>
+                    <div className="gf-subtab-bar overflow-x-auto no-scrollbar max-w-full">
+                        <button
+                            type="button"
+                            onClick={() => setModeCourbe('nette')}
+                            aria-pressed={modeCourbe === 'nette'}
+                            className={`touch-target gf-subtab-pill shrink-0 ${modeCourbe === 'nette' ? 'gf-subtab-pill-active' : ''}`}
+                        >
+                            Vue trajectoire
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setModeCourbe('empilee')}
+                            aria-pressed={modeCourbe === 'empilee'}
+                            className={`touch-target gf-subtab-pill shrink-0 ${modeCourbe === 'empilee' ? 'gf-subtab-pill-active' : ''}`}
+                        >
+                            Comptes empilés
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setRunMC(!runMC)}
+                            aria-pressed={runMC}
+                            className={`touch-target gf-subtab-pill shrink-0 ${runMC ? 'gf-subtab-pill-active' : ''}`}
+                        >
+                            Bande P10–P90
+                        </button>
+                    </div>
+                </div>
+                <PageHeader
+                    title="Projection"
+                    badge={insolvencyBadge}
+                    actions={<FutureHealthSummary />}
+                />
+            </div>
 
             {/* [REFONTE-NAV Lot 1] Chiffres de tête (ex-Accueil), fournis par l'hôte (TabRouter) :
                 le bandeau reste un module chargé à part — il tire l'historique du portefeuille. */}
@@ -1667,7 +1701,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                 PH4-FUT « leviers-d'abord » : le composeur de leviers est EN AMONT de tout calcul.
                 [PROJECTION-PERSIST] Fenêtre de restauration → chargement honnête, pas l'amorçage. */}
             {curveRestoring && (
-                <section className="rounded-2xl bg-surface border border-bordure text-center">
+                <section className="gf-terminal-card rounded-2xl bg-surface border border-bordure text-center">
                     <div className="py-10 flex flex-col items-center gap-3 text-ink-300" role="status" aria-live="polite">
                         <svg className="animate-spin h-8 w-8 text-alerte-texte" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                             <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="40" strokeDashoffset="20" opacity="0.5" />
@@ -1678,7 +1712,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             )}
             {!curveVisible && !curveRestoring && (
                 <div className="space-y-4">
-                    <section className="rounded-2xl bg-surface border border-bordure text-center">
+                    <section className="gf-terminal-card rounded-2xl bg-surface border border-bordure text-center">
                         <div className="py-6 px-4 space-y-3 max-w-xl mx-auto">
                             <div className="text-4xl" aria-hidden="true">{isStale ? '🔄' : '🎯'}</div>
                             <h2 className="text-h2 text-ink-50">{isStale ? 'Paramètres modifiés' : 'Compose tes leviers, calcule ta meilleure projection'}</h2>
@@ -1692,7 +1726,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                 onClick={revealCurve}
                                 disabled={isComputing}
                                 aria-busy={isComputing}
-                                className={`text-tiny text-ink-400 hover:text-ink-200 underline focus-ring rounded disabled:opacity-50 ${
+                                className={`touch-target text-tiny text-ink-400 hover:text-ink-200 underline focus-ring rounded disabled:opacity-50 ${
                                     isNarrowViewport ? 'min-h-[44px] inline-flex items-center' : ''
                                 }`}
                             >
@@ -1743,14 +1777,14 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                             type="button"
                             onClick={revealCurve}
                             disabled={isComputing}
-                            className="px-3 py-1 rounded-card bg-primary text-dark text-tiny font-bold focus-ring disabled:opacity-50"
+                            className="touch-target px-3 py-1 rounded-card bg-primary text-dark text-tiny font-bold focus-ring disabled:opacity-50"
                         >
                             {isComputing ? 'Calcul…' : 'Recharger avec mes données'}
                         </button>
                         <button
                             type="button"
                             onClick={regateToLevers}
-                            className="px-3 py-1 rounded-card border border-bordure-champ text-ink-200 hover:text-ink-50 text-tiny font-bold focus-ring"
+                            className="touch-target px-3 py-1 rounded-card border border-bordure-champ text-ink-200 hover:text-ink-50 text-tiny font-bold focus-ring"
                         >
                             Rechoisir mes leviers
                         </button>
@@ -1773,9 +1807,8 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                 </div>
             )}
 
-            {/* [S5-REFONTE-FUTUR] Carte « La courbe de vie » (maquette F-bureau) ; au téléphone, pas de
-                cadre : la courbe prend toute la largeur (maquette F-mobile). */}
-            <section aria-labelledby="courbe-vie-titre" className="lg:rounded-2xl lg:bg-surface lg:border lg:border-bordure lg:px-6 lg:pt-5 lg:pb-6 space-y-4">
+            {/* [S5-REFONTE-FUTUR] Carte « La courbe de vie » (maquette F-bureau) ; habillage Google Finance Beta. */}
+            <section aria-labelledby="courbe-vie-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure px-3 py-3.5 sm:px-5 sm:py-4 lg:px-6 lg:pt-5 lg:pb-6 space-y-4">
                 <GoogleFinanceHero
                     jourAffiche={jourAffiche?.point ?? null}
                     pointAncre={pointAncre}
@@ -1793,8 +1826,8 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                     onOpenConnections={() => setShowConnexionsModal(true)}
                 />
                 <h2 id="courbe-vie-titre" className="sr-only">La courbe de vie</h2>
-                <div className="flex items-center justify-between gap-1.5 sm:gap-2 flex-wrap">
-                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
+                <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pb-2 border-b border-bordure">
+                    <div className="flex items-center gap-2 min-w-max">
                         <FutureCurveToolbar
                             modeCourbe={modeCourbe}
                             onChangeModeCourbe={setModeCourbe}
@@ -1807,7 +1840,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                         />
                         {statsCourbe}
                     </div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
+                    <div className="flex items-center gap-1.5 shrink-0">
                         {isComputing && (
                             <span className="flex items-center gap-1.5 text-tiny text-alerte-texte" role="status" aria-live="polite">
                                 <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -1838,9 +1871,9 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                     </div>
                 )}
                 {lockedByMonth && (
-                    <div className="text-tiny text-fuchsia-300/90 flex items-center gap-1.5 flex-wrap">
-                        <span aria-hidden="true" className="inline-block w-5 border-t-2 border-dashed border-fuchsia-400" />
-                        <span>Courbe verrouillée</span>
+                    <div className="text-tiny text-ink-200 flex items-center gap-1.5 flex-wrap">
+                        <span aria-hidden="true" className="inline-block w-5 border-t-2 border-dashed border-repere" />
+                        <span className="px-1.5 py-0.5 rounded-full font-mono font-semibold gf-delta-neutral">Courbe verrouillée</span>
                     </div>
                 )}
                 <ForecastAccuracyBadge accuracy={forecastAccuracy} />
@@ -2349,7 +2382,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                         onClick={() => { revealCurve(); setTiroirOuvert(null); }}
                         disabled={isComputing}
                         aria-busy={isComputing}
-                        className="w-full min-h-[48px] rounded-card bg-primary text-dark font-bold text-body focus-ring disabled:opacity-50"
+                        className="touch-target w-full min-h-[48px] rounded-card bg-primary text-dark font-bold text-body focus-ring disabled:opacity-50"
                     >
                         {isComputing
                             ? 'Calcul en cours…'
@@ -2546,7 +2579,7 @@ const FutureCurveTooltip = React.memo(({ active, payload }: FutureCurveTooltipPr
                                         </PrivateAmount>
                                     </div>
                                     {partPct > 0 && (
-                                        <div className="h-1 w-full rounded-full bg-surfaceHighlight overflow-hidden" aria-hidden="true">
+                                        <div className="h-1 w-full rounded-full bg-surface-douce overflow-hidden" aria-hidden="true">
                                             {/* NOMBRE-NON-MONETAIRE : BARRE-DECORATIVE accompagnant le montant sous PrivateAmount */}
                                             <div className="h-full rounded-full" style={{ width: `${partPct}%`, backgroundColor: couleurSerie(c.cle) }} />
                                         </div>

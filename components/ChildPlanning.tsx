@@ -279,7 +279,17 @@ export const ChildPlanning: React.FC<ChildPlanningProps> = ({ goals = [], setGoa
     if (!goal) {
         return (
             <div className="space-y-6 stagger-in pb-10">
-                <PageHeader title={TITRE} subtitle={CHILD_SUBTITLE} actions={<VieCurveLink />} />
+                <PageHeader
+                    title={TITRE}
+                    subtitle={CHILD_SUBTITLE}
+                    badge={
+                        <span className="gf-ticker-symbol">
+                            <span className="w-1.5 h-1.5 rounded-full bg-current gf-pulse-live" aria-hidden="true" />
+                            FAMILLE:QC · REEE &amp; ALLOC
+                        </span>
+                    }
+                    actions={<VieCurveLink />}
+                />
                 <EmptyState
                     icon={<Icon name="child" size={30} />}
                     title="Aucun enfant planifié"
@@ -319,17 +329,25 @@ export const ChildPlanning: React.FC<ChildPlanningProps> = ({ goals = [], setGoa
             />
             <PageHeader
                 title={TITRE}
-                badge={<span className="lg:hidden">{coutTotal}</span>}
+                badge={
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                        <span className="gf-ticker-symbol">
+                            <span className="w-1.5 h-1.5 rounded-full bg-current gf-pulse-live" aria-hidden="true" />
+                            FAMILLE:QC · REEE &amp; ALLOC
+                        </span>
+                        <span className="lg:hidden">{coutTotal}</span>
+                    </span>
+                }
                 nav={
-                    <div role="group" aria-label="Enfants" className="gf-subtab-bar flex flex-wrap items-center gap-1">
+                    <div role="group" aria-label="Enfants" className="gf-subtab-bar overflow-x-auto no-scrollbar flex items-center gap-1">
                         {goals.map((g, idx) => (
                             <button
                                 type="button"
                                 key={g.id || idx}
                                 onClick={() => setActiveTabIndex(idx)}
                                 aria-pressed={activeTabIndex === idx}
-                                className={`gf-subtab-pill min-h-11 lg:min-h-9 px-3.5 rounded-lg text-body transition-colors focus-ring ${
-                                    activeTabIndex === idx ? 'gf-subtab-pill-active bg-ink-50 lg:bg-surfaceHighlight text-dark lg:text-ink-50 font-semibold' : 'text-ink-300 hover:bg-white/5'
+                                className={`touch-target gf-subtab-pill min-h-11 lg:min-h-9 px-3.5 rounded-lg text-body whitespace-nowrap transition-colors focus-ring ${
+                                    activeTabIndex === idx ? 'gf-subtab-pill-active bg-ink-50 lg:bg-surface-douce text-dark lg:text-ink-50 font-semibold' : 'text-ink-300 hover:bg-surface-douce hover:text-ink-50'
                                 }`}
                             >
                                 {g.name || `Enfant ${idx + 1}`}
@@ -339,7 +357,7 @@ export const ChildPlanning: React.FC<ChildPlanningProps> = ({ goals = [], setGoa
                             type="button"
                             onClick={handleAddChild}
                             aria-label="Ajouter un enfant"
-                            className="gf-subtab-pill min-h-11 lg:min-h-9 px-3.5 rounded-lg border border-dashed border-white/20 text-body text-ink-200 hover:bg-white/5 transition-colors focus-ring"
+                            className="touch-target gf-subtab-pill min-h-11 lg:min-h-9 px-3.5 rounded-lg border border-dashed border-bordure-champ text-body text-ink-200 hover:bg-surface-douce whitespace-nowrap transition-colors focus-ring"
                         >
                             + Ajouter
                         </button>
@@ -368,7 +386,7 @@ export const ChildPlanning: React.FC<ChildPlanningProps> = ({ goals = [], setGoa
                     tabIndex={0}
                     onClick={() => useFinanceStore.getState().setActiveTab(TabEnum.INVESTMENTS)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); useFinanceStore.getState().setActiveTab(TabEnum.INVESTMENTS); } }}
-                    className="gf-quote-cell cursor-pointer hover:bg-surface-douce transition-colors focus-ring"
+                    className="touch-target gf-quote-cell cursor-pointer hover:bg-surface-douce transition-colors focus-ring"
                 >
                     <div className="flex items-center justify-between gap-2">
                         <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
@@ -378,7 +396,7 @@ export const ChildPlanning: React.FC<ChildPlanningProps> = ({ goals = [], setGoa
                             REEE ↗
                         </span>
                     </div>
-                    <PrivateAmount as="div" className="font-mono text-[20px] font-bold text-success-400 tabular-nums">
+                    <PrivateAmount as="div" className="font-mono text-[20px] font-bold text-succes-texte tabular-nums">
                         {fmt(currentRESP)}
                     </PrivateAmount>
                 </div>
@@ -424,11 +442,11 @@ export const ChildPlanning: React.FC<ChildPlanningProps> = ({ goals = [], setGoa
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <label htmlFor="child-name-input" className="text-meta text-ink-300 block mb-1">Prénom ou identifiant</label>
-                                    <input id="child-name-input" type="text" value={goal.name || ''} onChange={e => update('name', e.target.value)} placeholder="Ex: Léo" className="w-full h-11 px-3 text-white" />
+                                    <input id="child-name-input" type="text" value={goal.name || ''} onChange={e => update('name', e.target.value)} placeholder="Ex: Léo" className="touch-target w-full h-11 px-3 text-ink-50" />
                                 </div>
                                 <div>
                                     <label htmlFor="child-birthDate" className="text-meta text-ink-300 block mb-1">Date de naissance (ou prévue)</label>
-                                    <input id="child-birthDate" type="date" value={goal.birthDate} onChange={e => update('birthDate', e.target.value)} className="w-full h-11 px-3 text-white" />
+                                    <input id="child-birthDate" type="date" value={goal.birthDate} onChange={e => update('birthDate', e.target.value)} className="touch-target w-full h-11 px-3 text-ink-50" />
                                 </div>
                             </div>
                             <div>
@@ -436,19 +454,19 @@ export const ChildPlanning: React.FC<ChildPlanningProps> = ({ goals = [], setGoa
                                     <span>Cotisation annuelle REEE</span>
                                     <PrivateSliderValue revealed={respSliderFocus} className="font-mono text-ink-50">{fmt(respContribution)}</PrivateSliderValue>
                                 </label>
-                                <input type="range" aria-label="Cotisation annuelle REEE" min="0" max="5000" step="100" value={respContribution} {...maskedSliderAria(isPrivacyMode && !respSliderFocus)} onChange={e => setRespContribution(Number(e.target.value))} onFocus={() => setRespSliderFocus(true)} onBlur={() => setRespSliderFocus(false)} className="w-full accent-primary cursor-pointer" />
+                                <input type="range" aria-label="Cotisation annuelle REEE" min="0" max="5000" step="100" value={respContribution} {...maskedSliderAria(isPrivacyMode && !respSliderFocus)} onChange={e => setRespContribution(Number(e.target.value))} onFocus={() => setRespSliderFocus(true)} onBlur={() => setRespSliderFocus(false)} className="touch-target w-full accent-primary cursor-pointer" />
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {CHAMPS_MONTANTS.map((c) => (
                                     <div key={c.id}>
                                         <label htmlFor={`child-${c.id}`} className="text-meta text-ink-300 block mb-1">{c.libelle}</label>
-                                        <input id={`child-${c.id}`} type="number" value={goal[c.id]} onChange={e => update(c.id, Number(e.target.value))} className="w-full h-11 px-3 text-right font-mono text-white" />
+                                        <input id={`child-${c.id}`} type="number" value={goal[c.id]} onChange={e => update(c.id, Number(e.target.value))} className="touch-target w-full h-11 px-3 text-right font-mono text-ink-50" />
                                     </div>
                                 ))}
                             </div>
                             {goals.length > 1 && (
                                 <div className="flex justify-end">
-                                    <button type="button" onClick={handleRemoveChild} className="min-h-11 px-3 text-meta text-danger-400 underline underline-offset-2 focus-ring rounded-sm">
+                                    <button type="button" onClick={handleRemoveChild} className="touch-target min-h-11 px-3 text-meta text-erreur-texte underline underline-offset-2 focus-ring rounded-sm">
                                         Supprimer {nomEnfant}
                                     </button>
                                 </div>
@@ -458,7 +476,7 @@ export const ChildPlanning: React.FC<ChildPlanningProps> = ({ goals = [], setGoa
                 </div>
 
                 <div className="min-w-0 flex flex-col gap-4 order-1 xl:order-none">
-                    <Card title="Coût net par âge" action={<span className="hidden sm:flex">{legende}</span>}>
+                    <Card title="Coût net par âge" className="gf-terminal-card" action={<span className="hidden sm:flex">{legende}</span>}>
                         <div className="sm:hidden -mt-2 mb-3">{legende}</div>
                         <div role="img" aria-label={`Coût net de ${nomEnfant} par âge, de 0 à 25 ans : essentiel, garde/école/activités, ponctuel, et allocations reçues en négatif.`}>
                         <ZoomContainer zoom={zoomCost} hint={false} style={{ width: '100%', height: etroit ? '220px' : '300px' }}>
@@ -489,8 +507,8 @@ export const ChildPlanning: React.FC<ChildPlanningProps> = ({ goals = [], setGoa
                     </Card>
 
                     {/* REEE : phrase de repère + trois chiffres (maquettes). La cotisation se règle dans « Détails ». */}
-                    <section aria-labelledby="reee-titre" className="rounded-2xl bg-surface border border-white/6 p-4 sm:px-[22px] sm:py-[18px] grid grid-cols-3 lg:grid-cols-[1.2fr_repeat(3,minmax(0,1fr))] gap-x-4 gap-y-3 items-center">
-                        <div className="col-span-3 lg:col-span-1 flex flex-col gap-1">
+                    <section aria-labelledby="reee-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-4 sm:px-[22px] sm:py-[18px] grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-[1.2fr_repeat(3,minmax(0,1fr))] gap-x-4 gap-y-3 items-center">
+                        <div className="sm:col-span-3 lg:col-span-1 flex flex-col gap-1">
                             <h2 id="reee-titre" className="text-[17px] lg:text-[16px] font-semibold text-ink-50">REEE</h2>
                             <p className="sr-only text-[12px] leading-[17px] text-ink-400">Plafond subventions (30 %) : <PrivateAmount>{fmt(2500)}</PrivateAmount>/an</p>
                         </div>
@@ -506,11 +524,11 @@ export const ChildPlanning: React.FC<ChildPlanningProps> = ({ goals = [], setGoa
                         </div>
                         <div>
                             <div className="text-meta text-ink-400">Couverture</div>
-                            <div className={`text-[18px] lg:text-[20px] font-bold ${respCovers != null && respCovers >= 100 ? 'text-success-400' : 'text-warning-400'}`}>
+                            <div className={`text-[18px] lg:text-[20px] font-bold ${respCovers != null && respCovers >= 100 ? 'text-succes-texte' : 'text-alerte-texte'}`}>
                                 {respCovers != null ? <PrivateAmount>{formatPercent(respCovers, 0)}</PrivateAmount> : '—'}
                             </div>
                             {respCovers != null && !isPrivacyMode && (
-                                <div className="mt-1.5 h-1.5 w-full rounded-full bg-surfaceHighlight overflow-hidden" aria-hidden="true">
+                                <div className="mt-1.5 h-1.5 w-full rounded-full bg-surface-douce overflow-hidden" aria-hidden="true">
                                     <div
                                         className={`h-full rounded-full transition-all duration-300 ${respCovers >= 100 ? 'bg-succes-texte' : 'bg-alerte-texte'}`}
                                         // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
