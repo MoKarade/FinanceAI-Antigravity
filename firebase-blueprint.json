@@ -1,0 +1,102 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Profil d'identité privé de l'utilisateur authentifié via Google Sign-In.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Identifiant unique Firebase Authentication du propriétaire.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Nom d'affichage du profil Google.",
+          "minLength": 0,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Adresse courriel vérifiée de l'utilisateur (isolée et accessible uniquement au propriétaire).",
+          "minLength": 3,
+          "maxLength": 254
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "URL de l'avatar Google de l'utilisateur.",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Horodatage serveur de création initiale du profil."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Horodatage serveur de dernière mise à jour du profil."
+        }
+      },
+      "required": ["uid", "email", "createdAt", "updatedAt"]
+    },
+    "FinancialWorkspace": {
+      "title": "FinancialWorkspace",
+      "description": "Dossier patrimonial complet de l'utilisateur synchronisé en temps réel (hors clés API locales).",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Identifiant Firebase Auth du propriétaire exclusif du dossier.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "schemaVersion": {
+          "type": "integer",
+          "description": "Version du schéma de persistance du dossier patrimonial."
+        },
+        "revisionId": {
+          "type": "string",
+          "description": "Identifiant d'écriture cliente pour la déduplication des échos temps réel.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "statePayload": {
+          "type": "object",
+          "description": "Carte native Firestore contenant l'état patrimonial assaini (comptes, budget, actifs, dettes, immobilier, retraite, objectifs)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Horodatage serveur immuable de création du dossier."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Horodatage serveur de dernière synchronisation."
+        }
+      },
+      "required": ["ownerId", "schemaVersion", "revisionId", "statePayload", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Profil privé de chaque utilisateur identifié par son UID Firebase Auth."
+    },
+    "/workspaces/{userId}": {
+      "schema": {
+        "$ref": "#/entities/FinancialWorkspace"
+      },
+      "description": "Dossier patrimonial complet synchronisé en temps réel appartenant exclusivement à userId."
+    }
+  }
+}

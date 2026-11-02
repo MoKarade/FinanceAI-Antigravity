@@ -1,0 +1,1577 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+/* [S5-TAILWIND4] Les jetons (couleurs, typo, rayons, animations) restent dans tailwind.config.js,
+   lu par @config : une seule source, que les scripts de contraste et les tests lisent aussi. */
+@config './tailwind.config.js';
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+/* [S5-TAILWIND4] Parité avec la v3, mesurée écran par écran (styles calculés, avant/après) :
+   - le préflight v4 remet à zéro la marge intérieure de TOUS les éléments ; la v3 laissait aux
+     cellules de tableau celle du navigateur (1 px) → tableaux 2 px plus bas par ligne, pages plus courtes ;
+   - les boutons v4 prennent le curseur par défaut ; la v3 (et toute l'app) supposait la main. */
+@layer base {
+  td,
+  th {
+    padding: 1px;
+  }
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+@utility premium-card {
+  @apply relative overflow-hidden border border-white/6;
+  background: var(--surface);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+  transition:
+    transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 10%;
+    right: 10%;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(138, 180, 248, 0.55),
+      rgba(129, 201, 149, 0.45),
+      transparent
+    );
+    opacity: 0;
+    transition: opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1), left 0.38s cubic-bezier(0.16, 1, 0.3, 1), right 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  &:hover {
+    @apply border-white/10;
+    border-color: rgba(138, 180, 248, 0.34);
+    transform: translateY(-2px) scale(1.01);
+    box-shadow:
+      0 14px 34px -8px rgba(0, 0, 0, 0.56),
+      0 0 0 1px rgba(138, 180, 248, 0.15);
+  }
+
+  &:active {
+    transform: translateY(0) scale(0.996);
+  }
+
+  &:has(.fixed, [role='dialog'], [aria-modal='true']):hover,
+  &:has(.fixed, [role='dialog'], [aria-modal='true']):active {
+    transform: none;
+  }
+
+  &:hover::before {
+    opacity: 1;
+    left: 2%;
+    right: 2%;
+  }
+}
+
+@utility text-gradient-primary {
+  /* Text Gradients */
+  @apply bg-clip-text text-transparent bg-linear-to-r from-primary to-emerald-400 font-bold;
+}
+
+@utility text-gradient-secondary {
+  @apply bg-clip-text text-transparent bg-linear-to-r from-secondary to-purple-400 font-bold;
+}
+
+@utility glow-primary {
+  /* Custom Glows */
+  box-shadow: 0 0 20px var(--primary-glow);
+}
+
+@utility glow-secondary {
+  box-shadow: 0 0 20px var(--secondary-glow);
+}
+
+@utility glass-panel {
+  /* Glass panel (migre depuis index.html) */
+  background: rgba(14, 16, 20, 0.72);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+
+  &:hover {
+    background: rgba(30, 35, 48, 0.75);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+  }
+}
+
+@utility privacy-blur {
+  /* Privacy blur */
+  transition: filter 0.3s ease;
+}
+
+@utility focus-ring {
+  /* Focus ring unifié pour tous les contrôles interactifs */
+  @apply outline-hidden focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-dark;
+}
+
+@utility card-subtle {
+  /* Card "subtle" — variante pour sous-cards imbriquées */
+  @apply bg-white/3 border border-white/5 rounded-card;
+  transition:
+    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+
+  &:hover {
+    border-color: rgba(138, 180, 248, 0.22);
+    transform: translateY(-1.5px) scale(1.006);
+    box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.38);
+  }
+}
+
+@utility section-header {
+  /* Section header — pattern uniforme dans toutes les Cards */
+  @apply flex items-center justify-between mb-4 pb-3 border-b border-white/5;
+}
+
+@utility kpi-label {
+  /* KPI Label — petit caps avec tracking, pattern uniforme */
+  @apply text-tiny uppercase text-ink-400;
+}
+
+@utility lift-on-hover {
+  /* Phase D2 — microinteraction: lift léger au hover, utilisé sur les Cards
+   *  cliquables (deep-link cross-tab, navigation, etc.) */
+  @apply transition-all duration-200;
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.4);
+  }
+}
+
+@utility pb-safe {
+  /* Phase D1 — safe-area inset pour iOS bottom nav (notch + home indicator) */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@utility touch-target {
+  /* Phase D1 — surface tactile minimum 44x44 (WCAG / Apple HIG) */
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Phase D1 — Polish 360px : text-display et text-kpi sont trop grands sur mobile ; rabaissés sur
+ * viewports étroits, taille pleine au-delà. [S5-TAILWIND4] Règle CSS simple (hors @utility) : un
+ * @utility du même nom que l'utilitaire de taille du thème se fondrait avec lui. */
+@media (max-width: 639px) {
+  .text-display {
+    font-size: 1.5rem !important;
+    line-height: 2rem !important;
+  }
+  .text-kpi {
+    font-size: 1.375rem !important;
+    line-height: 1.75rem !important;
+  }
+}
+
+/* [SOCLE-VISUEL-1] Variables du socle visuel commun des apps du hub (MoKarade/app-template,
+   app/globals.css, tâche #39), aux valeurs SOMBRES de FinanceAI : poser ces variables ne change
+   aucun pixel, rien ne les lit encore. Les écrans y passent par groupes (tâche FinanceAI#1176), le
+   thème clair vient en dernier. Verrou : tests/guards/socleVisuel.test.ts (variables définies, couples
+   texte/fond au WCAG, nombre de couleurs hors variables qui ne monte pas).
+   `--surface` existe déjà plus bas (#0e1014) ; `--fond` = `dark` et `--surface-douce` =
+   `surfaceHighlight` du tailwind.config.js, le test le vérifie. */
+:root {
+  /* Fonds et surfaces. */
+  --fond: #07090d;
+  --surface-douce: #15181e;
+  --bordure: #262a33;
+  /* Contour de champ, de case et de bouton secondaire : au moins 3:1 sur le fond (WCAG 1.4.11). */
+  --bordure-champ: #6f7b8e;
+
+  /* Textes : `--texte` est le slate-200 du corps de page actuel. */
+  --texte: #e2e8f0;
+  --texte-doux: #94a3b8;
+
+  /* L'accent ne sert QU'À l'action principale ; `--repere` : surtitre, navigation active,
+     catégorie, jamais un état. */
+  --accent: #e6eaf2;
+  --accent-fonce: #c3cad8;
+  --sur-accent: #07090d;
+  --repere: #fb923c;
+  --repere-doux: #2a1b14;
+
+  /* Sémantique : « ça va », « attention », « erreur », déclarées une fois. */
+  --succes-fond: #0f2a24;
+  --succes-texte: #6ee7b7;
+  --alerte-fond: #2c2410;
+  --alerte-texte: #fbbf24;
+  --erreur-fond: #331618;
+  --erreur-texte: #f87171;
+
+  --rayon: 16px;
+}
+
+@layer utilities {
+  :root {
+    --primary: #e6eaf2;
+    --primary-glow: rgba(230, 234, 242, 0.14);
+    --secondary: #8b5cf6;
+    --secondary-glow: rgba(139, 92, 246, 0.4);
+    --dark: #07090d;
+    --surface: #0e1014;
+    --surface-highlight: #15181e;
+
+    /* Glassmorphism Tokens */
+    --glass-bg: rgba(14, 16, 20, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.07);
+    --glass-blur: 24px;
+
+    /* Animation Timings */
+    --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@layer base {
+  body {
+    /* [S5-REFONTE] Fond UNI des maquettes (#07090D) : plus d'aurore ni de dégradé — les halos
+       flous animés (blur 90 px en boucle) coûtaient aussi du rendu sur mobile. */
+    @apply bg-dark text-slate-200 font-sans antialiased;
+    min-height: 100vh;
+  }
+
+  /* Styles globaux inputs (migres depuis index.html).
+     [S5-REFONTE] `.champ-nu` : champ posé DANS une barre qui porte déjà fond, bordure et focus (chat),
+     ou `<select>` habillé en pastille (catégorie d'une transaction) qui porte les siens.
+     Opt-out ici, pas par des utilitaires `!important` : en couches, un !important de la couche base
+     l'emporte sur celui de la couche utilities (ordre inversé pour les déclarations importantes). */
+  input:not(.champ-nu), select:not(.champ-nu), textarea {
+    transition: all 0.2s ease;
+    background-color: rgba(11, 14, 20, 0.6) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+  /* [S5-REFONTE] `.champ-alerte` : valeur « à préciser » (maquette E-immobilier : bordure et fond ambrés). */
+  select.champ-alerte:not(:focus) {
+    background-color: rgba(212, 162, 76, 0.08) !important;
+    border-color: rgba(212, 162, 76, 0.55) !important;
+  }
+  /* LUXE — focus aligné sur la marque (emerald/primary, au lieu du violet) + anneau
+     plus doux. Les composants demandaient déjà focus:border-primary ; le !important
+     global forçait le violet → incohérent. Corrigé ici, app-wide. */
+  input:not(.champ-nu):focus, select:not(.champ-nu):focus, textarea:focus {
+    background-color: rgba(11, 14, 20, 0.9) !important;
+    border-color: rgba(230, 234, 242, 0.45) !important;
+    box-shadow: 0 0 0 3px rgba(230, 234, 242, 0.12);
+  }
+
+  /* LUXE — champs texte/select/textarea plus arrondis (moderne, cohérent).
+     Exclut checkbox/radio/range/color (forme propre). */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(.champ-nu),
+  select:not(.champ-nu),
+  textarea {
+    border-radius: 0.5rem !important;
+  }
+}
+
+@layer utilities {
+  /* Animations */
+  @keyframes slideUpFade {
+    /* transform absent du keyframe 100% (cf cardRise) : `forwards` ne fige que
+     l'opacité → pas de translateY(0) résiduel qui supprimerait le lift au survol
+     des cartes ni ne créerait un bloc conteneur cassant position:fixed. */
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .animate-premium-in {
+    animation: slideUpFade 0.7s var(--ease-premium) forwards;
+  }
+
+  /* ANIM — fondu d'entrée OPACITÉ PURE (aucun transform → ne crée pas de bloc
+   conteneur, ne casse pas position:fixed). Sert aux transitions d'onglet. */
+  @keyframes fadeInOpacity {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .animate-tab-in {
+    animation: fadeInOpacity 0.28s ease forwards;
+  }
+
+  /* LUXE — entrée chorégraphiée : les enfants DIRECTS d'un conteneur `.stagger-in`
+   ou `.gf-spring-grid` montent en fondu avec ressort, en cascade (style Apple/Google).
+   Le transform est TRANSIENT (≤0.75s incl. décalage) puis libéré (cf keyframe) → AUCUN bloc
+   conteneur résiduel (ne casse pas position:fixed) et le `:hover { transform }` des cartes
+   reste fonctionnel. */
+  @keyframes cardRise {
+    /* Le transform n'est PAS dans le keyframe 100% : avec `forwards`, seul l'état
+     du dernier keyframe (opacity:1) est figé. Le transform redevient donc libre
+     après l'entrée → le `:hover { transform }` des cartes n'est plus supprimé,
+     et aucun bloc conteneur transform résiduel ne casse position:fixed. */
+    0% {
+      opacity: 0;
+      transform: translateY(12px) scale(0.985);
+    }
+    70% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+  .stagger-in > *,
+  .gf-spring-grid > * {
+    opacity: 0;
+    animation: cardRise 0.48s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .stagger-in > *:nth-child(1),
+  .gf-spring-grid > *:nth-child(1) {
+    animation-delay: 0.03s;
+  }
+  .stagger-in > *:nth-child(2),
+  .gf-spring-grid > *:nth-child(2) {
+    animation-delay: 0.075s;
+  }
+  .stagger-in > *:nth-child(3),
+  .gf-spring-grid > *:nth-child(3) {
+    animation-delay: 0.12s;
+  }
+  .stagger-in > *:nth-child(4),
+  .gf-spring-grid > *:nth-child(4) {
+    animation-delay: 0.165s;
+  }
+  .stagger-in > *:nth-child(5),
+  .gf-spring-grid > *:nth-child(5) {
+    animation-delay: 0.21s;
+  }
+  .stagger-in > *:nth-child(6),
+  .gf-spring-grid > *:nth-child(6) {
+    animation-delay: 0.255s;
+  }
+  .stagger-in > *:nth-child(7),
+  .gf-spring-grid > *:nth-child(7) {
+    animation-delay: 0.3s;
+  }
+  .stagger-in > *:nth-child(n + 8),
+  .gf-spring-grid > *:nth-child(n + 8) {
+    animation-delay: 0.34s;
+  }
+  /* Garde-fou : un enfant direct en position:fixed (overlay/modale) ne doit PAS
+   hériter du transform transitoire — sinon son positionnement viewport casse.
+   Rend `.stagger-in` sûr à poser sur n'importe quelle racine de page. */
+  .stagger-in > .fixed,
+  .stagger-in > [role='dialog'],
+  .stagger-in > [aria-modal='true'],
+  .gf-spring-grid > .fixed,
+  .gf-spring-grid > [role='dialog'],
+  .gf-spring-grid > [aria-modal='true'] {
+    opacity: 1;
+    animation: none;
+    transform: none;
+  }
+
+  /* Skeletons */
+  .skeleton-box {
+    @apply relative overflow-hidden bg-white/5 rounded-sm;
+  }
+
+  .skeleton-box::after {
+    content: '';
+    @apply absolute inset-0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.05),
+      transparent
+    );
+    animation: shimmer 2s infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  /* Sprint 2 H5 — Toast slide-in animation (remplace framer-motion, économie -80KB gzip). */
+  @keyframes toast-slide-in {
+    from {
+      opacity: 0;
+      transform: translateX(50px) scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+    }
+  }
+  @keyframes toast-slide-out {
+    from {
+      opacity: 1;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+  }
+  .animate-toast-in {
+    animation: toast-slide-in 0.3s
+      var(--ease-out-back, cubic-bezier(0.34, 1.56, 0.64, 1)) forwards;
+  }
+  .animate-toast-out {
+    animation: toast-slide-out 0.2s ease-out forwards;
+  }
+
+  /* Mode test — bordure orange permanente sur le viewport pour éviter d'oublier
+   qu'on est en train de manipuler des fixtures et pas les vraies données. */
+  .test-mode-active {
+    outline: 3px solid #f59e0b;
+    outline-offset: -3px;
+    padding-top: 36px; /* compense la hauteur du banner top fixed */
+  }
+  @media (max-width: 767px) {
+    .test-mode-active {
+      padding-top: 48px;
+    }
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* LUXE — scrollbars fines aussi sur Firefox. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  }
+
+  /* LUXE — surbrillance de sélection à la marque (emerald discret). */
+  ::selection {
+    background: rgba(230, 234, 242, 0.9);
+    color: #07090d;
+  }
+
+  /* LUXE — select : chevron custom (appearance-none) au lieu de la flèche native datée.
+   background-image distinct du background-color (!important du base) → pas de conflit ;
+   padding-right !important réserve la place du chevron quelle que soit la classe px inline.
+   [S5-REFONTE] Sauf `.champ-nu` (pastille qui porte son propre habillage, ou aucun chevron). */
+  select:not(.champ-nu) {
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238896a8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+    background-size: 0.9rem;
+    padding-right: 1.75rem !important;
+  }
+
+  /* G3b — plein écran du graphique via la Fullscreen API. L'élément passe dans le
+   « top layer » du navigateur, ce qui échappe aux ancêtres transformés
+   (animate-fade-in) qui piégeaient l'approche position:fixed. */
+  .chart-fullscreen:fullscreen {
+    width: 100vw;
+    height: 100vh;
+    /* [FUTUR-AXE-Y-MINIMAL] `margin: 0` : le conteneur porte désormais `-mx-6` (pour déborder du
+     padding de la <Card> et utiliser toute la largeur, hors plein écran) — sans ce reset, la même
+     marge négative pousserait l'élément hors du viewport une fois en plein écran (width: 100vw). */
+    margin: 0;
+    background: #0b0e14;
+    padding: 1.5rem;
+  }
+
+  /* ============================================================
+ * Phase A1 (2026-05) — Tokens UI & helpers de refonte
+ * Classes utilitaires consommées par les nouvelles primitives.
+ * Ne pas utiliser directement dans les pages existantes — passer
+ * par <Button>, <Badge>, <KPIStat>, etc. (à coder en A2/A3).
+ * ============================================================ */
+}
+
+/* ============================================================
+ * P2.6 — Respect prefers-reduced-motion (WCAG 2.3.3 AAA)
+ * Désactive animations/transitions longues pour les utilisateurs
+ * sensibles aux mouvements (vestibulaires, anxiété, etc.).
+ * Garde les transitions courtes (≤10ms) pour préserver l'UX.
+ * ============================================================ */
+/* [S5-REFONTE-PERF] Premier affichage SANS animation d'entrée. `html.demarrage` (posée dans
+   index.html) est retirée au premier geste ou après 5 s (index.tsx). Tant qu'elle est là, les fondus
+   d'entrée durent 0 s : le contenu est visible dès la première image — un fondu de 0,5 s retardait
+   d'autant le plus grand affichage mesuré (Chrome ne le compte qu'une fois opaque).
+   ⚠️ Durée 0 et PAS `animation: none` : retirer ensuite la classe ne rejoue pas l'animation (même
+   nom, déjà terminée) ; un `none` la relancerait, et le contenu déjà affiché referait un fondu.
+   Ciblé sur les animations d'ENTRÉE seulement — un indicateur de chargement doit continuer de tourner. */
+.demarrage .animate-fade-in,
+.demarrage .animate-slide-up,
+.demarrage .animate-premium-in,
+.demarrage .animate-tab-in,
+.demarrage .stagger-in > *,
+.demarrage .gf-spring-grid > *,
+.demarrage .gf-quote-strip > *,
+.demarrage .gf-market-banner > *,
+.demarrage .gf-stat-cell,
+.demarrage .gf-bar-grow > *,
+.demarrage .gf-chart-enter,
+.demarrage .recharts-responsive-container,
+.demarrage .recharts-line .recharts-curve,
+.demarrage .recharts-area .recharts-curve,
+.demarrage .recharts-area-area,
+.demarrage .recharts-bar-rectangles,
+.demarrage .recharts-pie {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .skeleton-box::after {
+    animation: none !important;
+  }
+
+  .lift-on-hover:hover,
+  .premium-card:hover,
+  .card-subtle:hover {
+    transform: none !important;
+  }
+
+  /* La cascade d'entrée part de opacity:0 — sans animation, il faut forcer la
+     visibilité, sinon le contenu resterait invisible. */
+  .stagger-in > *,
+  .gf-spring-grid > *,
+  .gf-quote-strip > *,
+  .gf-market-banner > * {
+    opacity: 1 !important;
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+/* [A11Y-FUTUR-MILESTONES-KEYBOARD] Anneau de focus des pastilles d'événement du graphe Futur.
+   Dessiné en SVG (cercle .event-focus-ring) : l'outline CSS sur un <g> SVG est invisible dans
+   certains moteurs — l'anneau, lui, se rend partout où la pastille se rend. */
+.chart-event-icon {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.22s ease;
+}
+.chart-event-icon:hover {
+  transform: scale(1.16);
+  filter: drop-shadow(0 0 8px rgba(138, 180, 248, 0.5));
+}
+.chart-event-icon:focus {
+  outline: none; /* remplacé par l'anneau SVG, jamais supprimé sans remplacement */
+}
+.chart-event-icon:focus-visible .event-focus-ring {
+  opacity: 1;
+}
+
+/* ── Masquage complet de Lia, Hub et Apps du parc (Cockpit personnel exclusif pour Marc) ── */
+.lia-ui,
+[data-lia-ui],
+#lia-root,
+.lia-ui__hit,
+.lia-ui__corps {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.nav-apps {
+  display: none !important;
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 20;
+}
+.nav-apps-onglet {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 2.75rem; min-height: 2.75rem; padding: 0.625rem 1rem;
+  border-radius: 9999px; border: 1px solid var(--bordure-champ);
+  background-color: var(--surface); color: var(--texte);
+  font-size: 1rem; font-weight: 600; line-height: 1.2; cursor: pointer; list-style: none;
+}
+.nav-apps-onglet::-webkit-details-marker { display: none; }
+.nav-apps-onglet:hover { background-color: var(--surface-douce); }
+.nav-apps-panneau {
+  position: absolute; top: calc(100% + 8px); right: 0; display: grid; gap: 4px;
+  min-width: 11rem; max-width: calc(100vw - 24px); padding: 8px;
+  background-color: var(--surface); border: 1px solid var(--bordure); border-radius: 12px;
+}
+.nav-apps-lien {
+  display: flex; align-items: center; min-height: 2.75rem; padding: 0.625rem 0.875rem;
+  border-radius: 12px; font-size: 1rem; font-weight: 600; color: var(--texte); text-decoration: none;
+}
+.nav-apps-lien:hover { background-color: var(--surface-douce); }
+
+/* ── Style Google Finance (Refonte visuelle épurée & Animations Pro) ── */
+:root {
+  --gf-bleu: #8ab4f8;
+  --gf-bleu-fond: #082756;
+  --gf-bleu-bordure: rgba(138, 180, 248, 0.35);
+  --gf-vert: #81c995;
+  --gf-vert-fond: #0f291e;
+  --gf-vert-bordure: rgba(129, 201, 149, 0.32);
+  --gf-rouge: #f28b82;
+  --gf-rouge-fond: #3c1917;
+  --gf-rouge-bordure: rgba(242, 139, 130, 0.32);
+  --gf-ambre: #fdd663;
+  --gf-ambre-fond: #332b00;
+  --gf-ambre-bordure: rgba(253, 214, 99, 0.35);
+}
+
+@keyframes gfBadgePop {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.gf-delta-up {
+  background-color: var(--gf-vert-fond);
+  color: var(--gf-vert);
+  border: 1px solid var(--gf-vert-bordure);
+  animation: gfBadgePop 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+
+.gf-delta-down {
+  background-color: var(--gf-rouge-fond);
+  color: var(--gf-rouge);
+  border: 1px solid var(--gf-rouge-bordure);
+  animation: gfBadgePop 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+
+.gf-delta-neutral {
+  background-color: var(--gf-bleu-fond);
+  color: var(--gf-bleu);
+  border: 1px solid var(--gf-bleu-bordure);
+  animation: gfBadgePop 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+
+.gf-delta-amber {
+  background-color: var(--gf-ambre-fond);
+  color: var(--gf-ambre);
+  border: 1px solid var(--gf-ambre-bordure);
+  animation: gfBadgePop 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+
+.gf-delta-up:hover,
+.gf-delta-down:hover,
+.gf-delta-neutral:hover,
+.gf-delta-amber:hover {
+  transform: translateY(-1px) scale(1.03);
+}
+
+.gf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+  background-color: var(--surface-douce);
+  color: var(--texte);
+  border: 1px solid var(--bordure);
+  transition:
+    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+
+.gf-chip:hover {
+  border-color: var(--gf-bleu-bordure);
+  background-color: rgba(138, 180, 248, 0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.32);
+}
+
+.gf-chip:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.gf-chip-active {
+  background-color: var(--gf-bleu-fond);
+  color: var(--gf-bleu);
+  border-color: var(--gf-bleu);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px rgba(138, 180, 248, 0.25), 0 6px 18px rgba(8, 39, 86, 0.55);
+}
+
+/* ── Navigation fluide & Micro-interactions Google Finance ── */
+.gf-nav-item {
+  position: relative;
+  transition:
+    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.gf-nav-item:hover {
+  transform: translateX(3px);
+}
+
+.gf-nav-item:active {
+  transform: scale(0.97);
+}
+
+.gf-nav-item-active {
+  background: linear-gradient(90deg, rgba(138, 180, 248, 0.16) 0%, rgba(138, 180, 248, 0.04) 100%);
+  border: 1px solid rgba(138, 180, 248, 0.28);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.24);
+}
+
+@keyframes gfPulseDot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(138, 180, 248, 0.45);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.3);
+    box-shadow: 0 0 8px 2px rgba(138, 180, 248, 0.25);
+  }
+}
+
+.gf-pulse-live {
+  animation: gfPulseDot 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes gfChartReveal {
+  /* Transform absent du keyframe 100% : avec forwards, seule l'opacité finale est figée,
+     ce qui préserve le plein écran et les éléments position:fixed. */
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.992);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.gf-chart-enter,
+.recharts-responsive-container {
+  animation: gfChartReveal 0.44s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ── Barres de répartition et jauges animées (toutes pages) ── */
+@keyframes gfBarGrow {
+  0% {
+    transform: scaleX(0);
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.gf-bar-grow > *,
+[aria-hidden='true'].rounded-full.overflow-hidden > *,
+[aria-label*='Répartition'] .rounded-full.overflow-hidden > * {
+  transform-origin: left center;
+  animation: gfBarGrow 0.68s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition:
+    width 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+    left 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.3s ease,
+    filter 0.2s ease;
+}
+
+.gf-bar-grow > *:hover,
+[aria-hidden='true'].rounded-full.overflow-hidden > *:hover,
+[aria-label*='Répartition'] .rounded-full.overflow-hidden > *:hover {
+  filter: brightness(1.18);
+}
+
+.gf-card-interactive {
+  transition:
+    border-color 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gf-card-interactive:hover {
+  border-color: var(--gf-bleu-bordure);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 26px -6px rgba(0, 0, 0, 0.45);
+}
+
+.gf-card-interactive:active {
+  transform: translateY(0) scale(0.99);
+}
+
+/* ── Bandeau Marchés / Indices (Google Finance Market Summary Strip) ── */
+.gf-market-banner {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 0.625rem;
+  border-radius: 0.875rem;
+  background-color: var(--surface);
+  border: 1px solid var(--bordure);
+}
+
+.gf-market-banner > * {
+  opacity: 0;
+  animation: cardRise 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.gf-market-banner > *:nth-child(1) { animation-delay: 0.02s; }
+.gf-market-banner > *:nth-child(2) { animation-delay: 0.05s; }
+.gf-market-banner > *:nth-child(3) { animation-delay: 0.08s; }
+.gf-market-banner > *:nth-child(4) { animation-delay: 0.11s; }
+.gf-market-banner > *:nth-child(5) { animation-delay: 0.14s; }
+.gf-market-banner > *:nth-child(n + 6) { animation-delay: 0.17s; }
+
+@media (min-width: 640px) {
+  .gf-market-banner {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .gf-market-banner {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.gf-market-ticker {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.25rem;
+  min-height: 3.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.625rem;
+  background-color: var(--fond);
+  border: 1px solid var(--bordure);
+  text-align: left;
+  transition:
+    border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gf-market-ticker:hover {
+  background-color: var(--surface-douce);
+  border-color: var(--gf-bleu-bordure);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.4);
+}
+
+.gf-market-ticker:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.gf-market-ticker-active {
+  background: linear-gradient(180deg, rgba(8, 39, 86, 0.55) 0%, rgba(14, 16, 20, 0.95) 100%);
+  border-color: var(--gf-bleu);
+  box-shadow: inset 0 0 0 1px rgba(138, 180, 248, 0.18), 0 4px 14px rgba(8, 39, 86, 0.35);
+}
+
+/* ── En-tête de Cote par Page (Google Finance Quote Header) ── */
+.gf-page-header {
+  position: relative;
+  overflow: hidden;
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, rgba(21, 24, 30, 0.78) 0%, rgba(14, 16, 20, 0.96) 100%);
+  border: 1px solid var(--bordure);
+  transition: border-color 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gf-page-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(138, 180, 248, 0.65) 35%,
+    rgba(129, 201, 149, 0.55) 65%,
+    transparent 100%
+  );
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.gf-page-header:hover {
+  border-color: rgba(138, 180, 248, 0.28);
+  box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.45);
+}
+
+.gf-ticker-symbol {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.375rem;
+  background-color: var(--surface-douce);
+  border: 1px solid var(--bordure);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gf-bleu);
+}
+
+.gf-quote-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  background-color: var(--fond);
+  border: 1px solid var(--bordure);
+  transition: border-color 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.gf-quote-badge:hover {
+  border-color: var(--gf-bleu-bordure);
+  transform: scale(1.02);
+}
+
+/* ── Bandeau Statistiques Clés / Cote (Google Finance Key Stats Strip) ── */
+.gf-quote-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-radius: 1rem;
+  background-color: var(--surface);
+  border: 1px solid var(--bordure);
+  overflow: hidden;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.gf-quote-strip:hover {
+  border-color: rgba(138, 180, 248, 0.26);
+  box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.42);
+}
+
+.gf-quote-strip > * {
+  opacity: 0;
+  animation: cardRise 0.44s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.gf-quote-strip > *:nth-child(1) { animation-delay: 0.03s; }
+.gf-quote-strip > *:nth-child(2) { animation-delay: 0.07s; }
+.gf-quote-strip > *:nth-child(3) { animation-delay: 0.11s; }
+.gf-quote-strip > *:nth-child(n + 4) { animation-delay: 0.15s; }
+
+@media (min-width: 1024px) {
+  .gf-quote-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.gf-quote-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.25rem;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--bordure);
+  border-right: 1px solid var(--bordure);
+  transition:
+    background-color 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gf-quote-cell:hover {
+  background-color: rgba(138, 180, 248, 0.06);
+  transform: translateY(-2px) scale(1.008);
+  box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.4);
+  z-index: 1;
+}
+
+.gf-quote-cell:active {
+  transform: translateY(0) scale(0.99);
+}
+
+.gf-stat-cell {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--surface);
+  border: 1px solid var(--bordure) !important;
+  border-top: 2px solid rgba(138, 180, 248, 0.24) !important;
+  animation: cardRise 0.46s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition:
+    border-color 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gf-stat-cell:nth-child(1) { animation-delay: 0.02s; }
+.gf-stat-cell:nth-child(2) { animation-delay: 0.06s; }
+.gf-stat-cell:nth-child(3) { animation-delay: 0.1s; }
+.gf-stat-cell:nth-child(4) { animation-delay: 0.14s; }
+.gf-stat-cell:nth-child(n + 5) { animation-delay: 0.18s; }
+
+.gf-stat-cell:hover {
+  border-color: var(--bordure-champ) !important;
+  border-top-color: var(--gf-bleu) !important;
+  transform: translateY(-3px);
+  box-shadow:
+    0 10px 24px -6px rgba(0, 0, 0, 0.48),
+    0 0 0 1px rgba(138, 180, 248, 0.14);
+}
+
+.gf-stat-cell:active {
+  transform: translateY(-1px) scale(0.985);
+}
+
+/* ── Sous-onglets en pilules Google Finance (SubTabs) ── */
+.gf-subtab-bar {
+  padding: 0.25rem;
+  border-radius: 9999px;
+  background-color: var(--fond);
+  border: 1px solid var(--bordure);
+}
+
+.gf-subtab-pill {
+  border-radius: 9999px !important;
+  font-size: 0.8125rem;
+  border: 1px solid transparent;
+  transition:
+    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gf-subtab-pill:hover {
+  transform: translateY(-1px);
+}
+
+.gf-subtab-pill:active {
+  transform: scale(0.96);
+}
+
+.gf-subtab-pill-active {
+  background-color: var(--gf-bleu-fond) !important;
+  color: var(--gf-bleu) !important;
+  border-color: var(--gf-bleu-bordure) !important;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(8, 39, 86, 0.45);
+}
+
+/* ── Tiroirs (Drawers) & Accordéons fluides ── */
+@keyframes gfDrawerLateralIn {
+  0% {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes gfDrawerSheetIn {
+  0% {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes gfAccordionIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.gf-drawer-lateral {
+  animation: gfDrawerLateralIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.gf-drawer-sheet {
+  animation: gfDrawerSheetIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.gf-accordion-panel {
+  animation: gfAccordionIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ── Lignes de tableau et listes style Google Finance ── */
+.gf-row {
+  transition:
+    background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gf-row:hover {
+  background-color: rgba(138, 180, 248, 0.06);
+  transform: translateX(2px) scale(1.004);
+}
+
+/* ── Courbes haute précision, Animations & Infobulles Google Finance ── */
+@keyframes gfChartSeriesIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes gfChartBarRise {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.84);
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes gfChartPieIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.recharts-curve {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.recharts-line .recharts-curve,
+.recharts-area .recharts-curve {
+  filter: drop-shadow(0 2px 6px rgba(138, 180, 248, 0.22));
+  transition: stroke-width 0.2s ease, filter 0.2s ease;
+  animation: gfChartSeriesIn 0.48s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.recharts-area-area {
+  animation: gfChartSeriesIn 0.54s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.recharts-bar-rectangles {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: gfChartBarRise 0.46s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.recharts-pie {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: gfChartPieIn 0.46s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.recharts-bar-rectangle path,
+.recharts-bar-rectangle rect {
+  transition: filter 0.18s ease, opacity 0.18s ease;
+}
+
+.recharts-bar-rectangle:hover path,
+.recharts-bar-rectangle:hover rect {
+  filter: brightness(1.18) drop-shadow(0 0 8px rgba(138, 180, 248, 0.28));
+}
+
+@keyframes gfActiveDotPop {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.recharts-active-dot circle {
+  filter: drop-shadow(0 0 8px rgba(138, 180, 248, 0.65));
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: gfActiveDotPop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.recharts-tooltip-wrapper {
+  transition: transform 0.08s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  z-index: 40 !important;
+  pointer-events: none !important;
+}
+
+@keyframes gfTooltipIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.gf-tooltip-card {
+  background: linear-gradient(180deg, rgba(21, 24, 30, 0.97) 0%, rgba(11, 14, 20, 0.99) 100%);
+  border: 1px solid rgba(138, 180, 248, 0.24);
+  border-top: 2px solid var(--gf-bleu);
+  border-radius: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  box-shadow:
+    0 14px 32px -4px rgba(0, 0, 0, 0.72),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--texte);
+  min-width: 14rem;
+  max-width: 19.5rem;
+  font-variant-numeric: tabular-nums;
+  animation: gfTooltipIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.gf-tooltip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.375rem;
+  margin-bottom: 0.375rem;
+  border-bottom: 1px solid var(--bordure);
+}
+
+.gf-tooltip-hero {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+}
+
+.gf-tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.15rem;
+}
+
+.gf-tooltip-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.gf-tooltip-divider {
+  border-top: 1px solid var(--bordure);
+  margin: 0.375rem 0;
+  padding-top: 0.375rem;
+}
+
+.gf-tooltip-bar-track {
+  height: 0.25rem;
+  width: 100%;
+  border-radius: 9999px;
+  background-color: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-top: 0.25rem;
+}
+
+.gf-tooltip-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.recharts-cartesian-axis-tick-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.gf-chart-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.125rem;
+  border-radius: 9999px;
+  background-color: rgba(7, 9, 13, 0.86);
+  border: 1px solid var(--bordure);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.gf-chart-ctrl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  height: 1.5rem;
+  padding: 0 0.4rem;
+  border-radius: 9999px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--texte-doux);
+  background-color: transparent;
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease;
+}
+
+.gf-chart-ctrl-btn:hover:not(:disabled) {
+  background-color: var(--surface-douce);
+  color: var(--texte);
+}
+
+.gf-chart-ctrl-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.gf-chart-ctrl-btn-active {
+  background-color: var(--gf-bleu-fond);
+  color: var(--gf-bleu);
+}
+
+.gf-chart-minimap {
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  bottom: 0.125rem;
+  height: 3px;
+  border-radius: 9999px;
+  background-color: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.gf-chart-minimap-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 9999px;
+  background-color: var(--gf-bleu);
+  opacity: 0.75;
+  transition: left 0.06s linear, width 0.06s linear;
+}
+
+/* ── Optimisation Ergonomique Mobile (< 640px) ── */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 639px) {
+  html,
+  body {
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role='button'],
+  [role='tab'] {
+    touch-action: manipulation;
+  }
+
+  .gf-page-header {
+    padding: 0.625rem 0.875rem;
+    border-radius: 0.875rem;
+  }
+
+  .gf-quote-strip {
+    border-radius: 0.875rem;
+  }
+
+  .gf-quote-cell {
+    padding: 0.625rem 0.75rem;
+    gap: 0.25rem;
+  }
+
+  .gf-market-banner {
+    padding: 0.5rem;
+    gap: 0.375rem;
+  }
+
+  .gf-market-ticker {
+    min-height: 3rem;
+    padding: 0.375rem 0.625rem;
+  }
+
+  .gf-chip {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    gap: 0.375rem;
+    flex-shrink: 0;
+  }
+
+  .gf-subtab-bar {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    border-radius: 0.875rem;
+  }
+
+  .gf-subtab-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .gf-subtab-pill {
+    font-size: 0.75rem;
+    padding-left: 0.625rem !important;
+    padding-right: 0.625rem !important;
+  }
+
+  .gf-tooltip-card {
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0.375rem 0.625rem !important;
+    border-radius: 0.625rem !important;
+    background: linear-gradient(180deg, rgba(18, 21, 28, 0.96) 0%, rgba(11, 14, 20, 0.98) 100%) !important;
+    box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.72) !important;
+  }
+
+  .gf-tooltip-header {
+    padding-bottom: 0.2rem;
+    margin-bottom: 0.2rem;
+  }
+
+  .gf-tooltip-hero {
+    margin-bottom: 0.2rem;
+  }
+
+  .gf-tooltip-row {
+    font-size: 0.6875rem;
+    line-height: 0.95rem;
+    gap: 0.375rem;
+  }
+
+  .gf-tooltip-divider {
+    margin: 0.2rem 0;
+    padding-top: 0.2rem;
+  }
+
+  .recharts-tooltip-wrapper {
+    top: 4px !important;
+    left: 6px !important;
+    right: 6px !important;
+    width: auto !important;
+    max-width: calc(100% - 12px) !important;
+    transform: none !important;
+  }
+
+  [data-testid='zoomable-chart-entrance'] .recharts-tooltip-wrapper {
+    top: 34px !important;
+  }
+
+  [data-panneau-jour] .gf-subtab-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem;
+    border-radius: 0.75rem;
+    overflow: visible;
+  }
+
+  [data-panneau-jour] .gf-subtab-pill {
+    width: 100%;
+    min-height: 38px;
+    padding: 0.375rem 0.5rem !important;
+    font-size: 0.75rem;
+  }
+
+  nav[aria-label='Navigation mobile'] button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
