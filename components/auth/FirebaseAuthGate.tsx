@@ -25,7 +25,8 @@ import {
     ensureDefaultGoogleAuthConfigured,
     chercherEtRestaurerDepuisGoogleDrive,
 } from '../../services/dataRecovery';
-import { connectAndSync } from '../../services/sync/syncOrchestrator';
+import { setStatus as setDriveSyncStatus } from '../../services/sync/syncStatusStore';
+import { setGateAuthedThisSession } from '../../services/sync/authGate';
 import { Icon } from '../ui/Icon';
 import { showToast } from '../ui/Toast';
 
@@ -93,7 +94,6 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
 
     useEffect(() => {
         if (isTestEnv) return;
-        ensureDefaultGoogleAuthConfigured();
         void recoverOrEnsureInitialWorkspace(false);
         void chercherEtRestaurerDepuisGoogleDrive();
         void testFirestoreConnection();
@@ -104,6 +104,13 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                 setUser(nextUser);
                 if (nextUser) {
                     setRequireGateScreen(false);
+                    setGateAuthedThisSession();
+                    setDriveSyncStatus({
+                        connected: true,
+                        email: nextUser.email ?? null,
+                        resumeSettled: true,
+                        error: null,
+                    });
                 }
                 setAuthReady(true);
                 setAuthError(null);
@@ -145,9 +152,15 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
             const oauthCred = GoogleAuthProvider.credentialFromResult(credential);
             setUser(credential.user);
             setRequireGateScreen(false);
+            setGateAuthedThisSession();
+            setDriveSyncStatus({
+                connected: true,
+                email: credential.user.email ?? null,
+                resumeSettled: true,
+                error: null,
+            });
             if (oauthCred?.accessToken) {
                 cacheExternalGoogleToken(oauthCred.accessToken);
-                await connectAndSync();
                 const driveRecovered = await chercherEtRestaurerDepuisGoogleDrive();
                 if (driveRecovered?.restored) {
                     await pushWorkspaceToFirestore(credential.user);
@@ -159,7 +172,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                 }
             }
             showToast(
-                'Compte Google connecté · Cloud Firestore et Google Drive synchronisés.',
+                'Compte Google connecté de façon permanente · Cloud Firestore synchronisé.',
                 'success',
             );
         } catch (err: unknown) {

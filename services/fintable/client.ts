@@ -233,10 +233,49 @@ export class FintableClient {
         return url.toString();
     }
 
+    private useDirectFallback = false;
+
     /** Lit statut + corps DANS le budget de temps (le corps est la partie qui stalle). */
     private async fetchWithinBudget(
         url: string,
     ): Promise<{ body: unknown; status: number; retryAfterSec: number | undefined }> {
+        const effectiveUrl = this.useDirectFallback ? this.toDirectFintableUrl(url) : url;
+        const result = await this.fetchSingleUrl(effectiveUrl);
+
+        // Sur un hébergement statique (ex. Firebase Hosting), la réécriture SPA renvoie `index.html`
+        // (200 OK, HTML commençant par `<`) sur `/api/fintable/*`. On bascule alors automatiquement
+        // vers l'API officielle `https://fintable.io/api/v2` (qui autorise CORS `Access-Control-Allow-Origin: *`).
+        if (
+            !this.useDirectFallback &&
+            result.isHtmlFallback &&
+            !/^[a-z][a-z0-9+.-]*:\/\//i.test(this.baseUrl)
+        ) {
+            this.useDirectFallback = true;
+            const directUrl = this.toDirectFintableUrl(url);
+            if (directUrl !== effectiveUrl) {
+                return this.fetchSingleUrl(directUrl);
+            }
+        }
+
+        return result;
+    }
+
+    private toDirectFintableUrl(url: string): string {
+        try {
+            const parsed = new URL(url);
+            const prefix = this.baseUrl.startsWith('/') ? this.baseUrl : `/${this.baseUrl}`;
+            const subPath = parsed.pathname.startsWith(prefix)
+                ? parsed.pathname.slice(prefix.length)
+                : parsed.pathname;
+            return `${FINTABLE_API_BASE}${subPath.startsWith('/') ? subPath : `/${subPath}`}${parsed.search}`;
+        } catch {
+            return url;
+        }
+    }
+
+    private async fetchSingleUrl(
+        url: string,
+    ): Promise<{ body: unknown; status: number; retryAfterSec: number | undefined; isHtmlFallback: boolean }> {
         const controller = new AbortController();
         const timer = setTimeout(() => { controller.abort(); }, this.timeoutMs);
         try {
@@ -249,9 +288,11 @@ export class FintableClient {
                 signal: controller.signal,
             });
             const retryAfterSec = parseRetryAfter(res.headers?.get?.('Retry-After') ?? null);
+            const contentType = res.headers?.get?.('Content-Type') ?? res.headers?.get?.('content-type') ?? '';
             // ⚠️ DANS le budget : en abortant, le signal partagé fait REJETER un json() en cours.
             const text = await res.text();
             let body: unknown = null;
+            let isHtmlFallback = false;
             if (text) {
                 try {
                     body = JSON.parse(text);
@@ -260,9 +301,12 @@ export class FintableClient {
                     // une page d'erreur d'infra. Dans les deux cas on garde `body = null` et le
                     // statut décide — jamais de crash brut de parsing remonté à l'appelant.
                     body = null;
+                    if (res.status >= 200 && res.status < 300 && (contentType.includes('text/html') || text.trimStart().startsWith('<'))) {
+                        isHtmlFallback = true;
+                    }
                 }
             }
-            return { body, status: res.status, retryAfterSec };
+            return { body, status: res.status, retryAfterSec, isHtmlFallback };
         } finally {
             clearTimeout(timer);
         }

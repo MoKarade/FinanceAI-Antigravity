@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import {
     initializeFirestore,
     getFirestore,
@@ -25,6 +25,11 @@ function createFirestoreInstance(): Firestore {
 
 export const db = createFirestoreInstance();
 export const auth = getAuth(app);
+if (typeof setPersistence === 'function' && browserLocalPersistence) {
+    void setPersistence(auth, browserLocalPersistence).catch(() => {
+        // Ignoré en environnement de test ou hors navigateur
+    });
+}
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('https://www.googleapis.com/auth/drive.appdata');
 googleProvider.addScope('https://www.googleapis.com/auth/userinfo.email');

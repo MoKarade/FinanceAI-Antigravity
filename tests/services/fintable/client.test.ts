@@ -273,4 +273,40 @@ describe('récepteur de fetch (règle WebIDL du navigateur, simulée)', () => {
         expect(injected).toHaveBeenCalledTimes(1);
         vi.unstubAllGlobals();
     });
+
+    it('bascule automatiquement vers https://fintable.io/api/v2 si le proxy relatif (/api/fintable) renvoie le fallback HTML SPA', async () => {
+        const prevLocation = (globalThis as { location?: unknown }).location;
+        (globalThis as { location?: unknown }).location = { origin: 'https://financeai-497112.web.app' };
+        try {
+            const calls: string[] = [];
+            const fetchImpl = vi.fn(async (url: string) => {
+                calls.push(url);
+                if (url.startsWith('https://financeai-497112.web.app/api/fintable/')) {
+                    return res(200, '<!DOCTYPE html><html><body>SPA</body></html>', {
+                        'content-type': 'text/html; charset=utf-8',
+                    });
+                }
+                return res(200, { data: [{ id: 'acc_direct_1' }] });
+            });
+
+            const client = new FintableClient({
+                token: TOKEN,
+                baseUrl: '/api/fintable',
+                fetchImpl: fetchImpl as unknown as typeof fetch,
+            });
+
+            const first = await client.get<Array<{ id: string }>>('/accounts');
+            expect(first.data).toEqual([{ id: 'acc_direct_1' }]);
+            expect(calls).toEqual([
+                'https://financeai-497112.web.app/api/fintable/accounts',
+                'https://fintable.io/api/v2/accounts',
+            ]);
+
+            // Les requêtes suivantes passent directement par l'API officielle sans refaire un aller-retour HTML.
+            await client.get('/transactions', { limit: 10 });
+            expect(calls[2]).toBe('https://fintable.io/api/v2/transactions?limit=10');
+        } finally {
+            (globalThis as { location?: unknown }).location = prevLocation;
+        }
+    });
 });

@@ -337,19 +337,16 @@ export function renewTokenSilently(): Promise<string> {
         if (_cached && !isTokenExpired(_cached.expiresAt, Date.now())) {
             return Promise.resolve(_cached.accessToken);
         }
-        const isRunAppHost =
-            typeof window !== 'undefined' && window.location.hostname.endsWith('.run.app');
-        const hasUserActivation =
-            typeof navigator !== 'undefined' &&
-            'userActivation' in navigator &&
-            Boolean((navigator as Navigator & { userActivation?: { isActive?: boolean } }).userActivation?.isActive);
-        if (isRunAppHost || !hasUserActivation) {
-            return Promise.reject(
-                new AuthInteractionRequiredError(
-                    "Échec de l'autorisation Google (popup_failed_to_open)",
-                ),
-            );
-        }
+        // En navigateur réel, `client.requestAccessToken({ prompt: '' })` de Google Identity Services
+        // ouvre TOUJOURS une fenêtre popup dès qu'un clic utilisateur est récent (`userActivation`).
+        // Comme la session principale et la synchronisation Cloud Firestore sont maintenues en
+        // permanence par Firebase Auth (IndexedDB + refresh token permanent sans popup), on ne
+        // déclenche jamais de popup GIS en arrière-plan.
+        return Promise.reject(
+            new AuthInteractionRequiredError(
+                "Échec de l'autorisation Google (popup_failed_to_open)",
+            ),
+        );
     }
     return acquireTokenViaNetwork('', 15_000);
 }
