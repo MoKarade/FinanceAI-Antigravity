@@ -1,9 +1,9 @@
-# Déploiement continu du front-end (Vite / React) sur Firebase Hosting (projet financeai-497112).
+# Déploiement continu du front-end (Vite / React) sur Firebase Hosting.
 # Se déclenche à chaque push sur `main` (hors documentation seule) ou manuellement (`workflow_dispatch`).
 # Authentification sans clé via Workload Identity Federation (OIDC) et variables de dépôt non secrètes :
-#   - vars.GCP_PROJECT_ID   (ex. financeai-497112)
-#   - vars.GCP_WIF_PROVIDER (projects/550313627083/locations/global/workloadIdentityPools/github/providers/github)
-#   - vars.GCP_DEPLOY_SA    (github-deployer@financeai-497112.iam.gserviceaccount.com)
+#   - vars.GCP_PROJECT_ID   (identifiant du projet Google Cloud / Firebase)
+#   - vars.GCP_WIF_PROVIDER (fournisseur Workload Identity Federation)
+#   - vars.GCP_DEPLOY_SA    (compte de service de déploiement)
 
 name: Deploy Hosting (Firebase)
 
@@ -44,6 +44,8 @@ jobs:
         run: npm ci --no-audit --no-fund --ignore-scripts
 
       - name: Build production bundle
+        env:
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: npx --no-install vite build --mode production
 
       - name: Authenticate to Google Cloud (WIF)

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-02 — Accueil Google Finance Beta 3 colonnes, Service Worker v6 et déploiement Firebase Hosting
+
+- La page d'accueil (`components/AccueilGoogle.tsx`) adopte la disposition 3 colonnes inspirée de Google Finance Beta : colonne gauche « Listes & Portefeuilles » avec mini-sparklines et pilules de variation, colonne centrale « Main » avec courbe bleue lumineuse et marqueurs ambrés « Temps forts », et panneau droit « Recherche » Gemini interactif.
+- Le Service Worker (`public/sw.js`) passe au cache `financeai-v6`, corrige la requête de navigation `fetch(req.url, { cache: 'no-store' })` qui provoquait un `TypeError` sous Chromium et servait l'ancien cache, et recharge automatiquement les fenêtres ouvertes à la purge de `financeai-v5`.
+
 ## 2026-10-29 — Un onglet « Apps » pour passer d'une app à l'autre (#53)
 
 - Un petit onglet « Apps » (replié, en haut à droite) se déplie en six liens : Hub, DriveAI, BatchChef, CarAI, JobAI, MemoryAI. Un clic ouvre l'app dans le même onglet.

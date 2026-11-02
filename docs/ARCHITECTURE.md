@@ -24,7 +24,7 @@
 | Stock/ETF pricing | Finnhub REST | Clé gratuite optionnelle |
 | Tests | Vitest + React Testing Library | compte à jour dans `GEMINI.md` (source unique) |
 | Auth & Sync Cloud | **Firebase Auth** + **Cloud Firestore** + **Google Drive** | Google Sign-In, `users/{uid}/workspaces/main`, `appDataFolder` chiffré |
-| Hébergement | Vercel (auto) + GitHub Pages (workflow) | Preview par PR |
+| Hébergement | **Firebase Hosting** (`firebase.json`, `.github/workflows/deploy-hosting.yml`) | Déploiement continu OIDC sur chaque push vers `main` |
 
 L'application fonctionne à 100 % côté navigateur dans l'écosystème Google, persiste localement via `persist`
 (chiffré en AES-256-GCM dans IndexedDB pour les clés API `apiKeys.gemini` et `apiKeys.finnhub`), synchronise

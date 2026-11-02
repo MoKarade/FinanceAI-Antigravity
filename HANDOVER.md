@@ -4,6 +4,10 @@
 > la lecture séquentielle de tous les autres. Pointeurs vers les détails
 > à la fin (`GEMINI.md`, `docs/ARCHITECTURE.md`).
 >
+> ## 🟦 Session 2026-11-02 — **`[ACCUEIL-GF-BETA-SW-V6]`** : refonte Accueil Google Finance Beta 3 colonnes, correctif Service Worker `financeai-v6` et déploiement Firebase Hosting
+> - **Service Worker (`public/sw.js` & `hooks/useAppBootEffects.ts`)** : passage à `CACHE_NAME = 'financeai-v6'`, correction de `fetch(req.url, { cache: 'no-store' })` sur les navigations (`req.mode === 'navigate'` lançait un `TypeError` avec un objet `Request` + `RequestInit` non vide sous Chromium, ce qui renvoyait l'ancien `'/'` du cache `financeai-v5`), rafraîchissement automatique des onglets ouverts à l'activation et en-tête `Cache-Control: no-cache, no-store, must-revalidate` sur `/sw.js` dans `firebase.json`.
+> - **Accueil Google Finance Beta (`components/AccueilGoogle.tsx` & `index.css`)** : architecture 3 colonnes (`Listes & Portefeuilles` à gauche avec mini-sparklines et pilules vert/rouge, cotation `Main` + courbe bleue lumineuse avec marqueurs ambrés `Temps forts` + tableau détaillé des avoirs au centre, panneau `Recherche` Gemini interactif à droite avec suggestions cliquables, puces d'actions et compositeur).
+>
 > ## 🟦 Session 2026-11-02 — **`[FULL-GOOGLE-MIGRATION]`** : bascule architecturale 100 % Google (Google Gemini, Firebase Auth, Cloud Firestore, Google Drive, Google Finance UI)
 > Migration complète de FinanceAI vers l'écosystème **100 % Google** :
 > - **IA Google Gemini** : remplacement intégral d'Anthropic/Claude et de LIA/Hubperso par le SDK officiel `@google/genai` (`services/gemini.ts`, `services/geminiAssistant.ts`, modèles `gemini-2.5-flash` et `gemini-2.5-pro`, tarification Gemini dans `services/aiChat/pricing.ts` et `models.ts`, clé unique `apiKeys.gemini` chiffrée `AES-256-GCM` en IndexedDB).

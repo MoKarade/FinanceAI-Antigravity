@@ -14,6 +14,7 @@
 > bug. Quand une tâche touche un domaine sensible, LIRE la section correspondante ici AVANT de coder —
 > c'est le mode d'emploi prévu, pas une archive morte. Là où un détail historique ci-dessous diverge de
 > `GEMINI.md` (ex. migration d'Anthropic/Claude vers Google Gemini `@google/genai`), **c'est `GEMINI.md` qui fait foi**.
+> - **Leçon 2026-11-02 (`[SW-NAVIGATE-NO-STORE]`)** : dans `public/sw.js`, ne jamais appeler `fetch(req, { cache: 'no-store' })` lorsque `req` est un objet `Request` de navigation (`req.mode === 'navigate'`). Sous Chromium, construire une requête à partir d'un `Request` en mode `navigate` avec un `RequestInit` non vide lève `TypeError`, ce qui déclenchait le `.catch()` et servait l'ancien `index.html` du cache `financeai-v5`. Toujours passer l'URL (`fetch(req.url, { cache: 'no-store' })`), incrémenter `CACHE_NAME` et recharger les fenêtres clientes (`client.navigate`) lors de la purge d'un ancien cache dans `activate`.
 
 ---
 

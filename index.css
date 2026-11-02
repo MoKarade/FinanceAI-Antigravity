@@ -671,6 +671,118 @@
   --gf-ambre: #fdd663;
   --gf-ambre-fond: #332b00;
   --gf-ambre-bordure: rgba(253, 214, 99, 0.35);
+  --gf-violet: #c58af9;
+  --gf-violet-fond: #2b1842;
+  --gf-cyan: #78d9ec;
+  --gf-cyan-fond: #0d2b33;
+}
+
+.gf-logo-b { color: #4285f4; }
+.gf-logo-r { color: #ea4335; }
+.gf-logo-y { color: #fbbc04; }
+.gf-logo-g { color: #34a853; }
+
+.gf-alloc-celi { background-color: var(--gf-bleu); }
+.gf-alloc-reer { background-color: var(--gf-vert); }
+.gf-alloc-immo { background-color: var(--gf-ambre); }
+.gf-alloc-cash { background-color: var(--gf-cyan); }
+.gf-alloc-nonreg { background-color: var(--gf-violet); }
+
+@keyframes gfAmberHalo {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(253, 214, 99, 0.55), 0 0 8px rgba(253, 214, 99, 0.65);
+  }
+  50% {
+    transform: scale(1.18);
+    box-shadow: 0 0 0 5px rgba(253, 214, 99, 0), 0 0 12px rgba(253, 214, 99, 0.9);
+  }
+}
+
+.gf-amber-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background-color: var(--gf-ambre);
+  animation: gfAmberHalo 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.gf-badge-nouvelle {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.45rem;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  background-color: var(--gf-bleu-fond);
+  color: var(--gf-bleu);
+  border: 1px solid var(--gf-bleu-bordure);
+}
+
+.gf-omnibox-pill {
+  border-radius: 9999px;
+  background-color: var(--fond);
+  border: 1px solid var(--bordure-champ);
+  transition:
+    border-color 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gf-omnibox-pill:focus-within {
+  border-color: var(--gf-bleu);
+  box-shadow:
+    0 0 0 3px rgba(138, 180, 248, 0.16),
+    0 8px 24px -4px rgba(0, 0, 0, 0.5);
+}
+
+.gf-portfolio-active {
+  background: linear-gradient(135deg, rgba(15, 41, 30, 0.52) 0%, rgba(8, 39, 86, 0.38) 100%);
+  border: 1px solid var(--gf-vert-bordure);
+  box-shadow: inset 0 0 0 1px rgba(129, 201, 149, 0.12), 0 6px 18px -6px rgba(0, 0, 0, 0.45);
+}
+
+.gf-prompt-card {
+  background-color: var(--fond);
+  border: 1px solid var(--bordure);
+  border-radius: 0.75rem;
+  transition:
+    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gf-prompt-card:hover {
+  border-color: var(--gf-bleu-bordure);
+  background-color: rgba(8, 39, 86, 0.28);
+  transform: translateX(3px) translateY(-1px);
+  box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.45);
+}
+
+.gf-chat-composer {
+  background: linear-gradient(180deg, rgba(21, 24, 30, 0.96) 0%, rgba(7, 9, 13, 0.98) 100%);
+  border: 1px solid var(--bordure-champ);
+  border-radius: 1.125rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.gf-chat-composer:focus-within {
+  border-color: var(--gf-bleu);
+  box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.18), 0 10px 26px -6px rgba(0, 0, 0, 0.55);
+}
+
+.gf-send-circle {
+  background-color: var(--gf-bleu-fond);
+  color: var(--gf-bleu);
+  border: 1px solid var(--gf-bleu-bordure);
+  border-radius: 9999px;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease;
+}
+
+.gf-send-circle:hover {
+  transform: scale(1.06);
+  background-color: rgba(138, 180, 248, 0.24);
 }
 
 @keyframes gfBadgePop {

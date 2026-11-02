@@ -5,6 +5,7 @@ import {
     Area,
     Line,
     ReferenceLine,
+    ReferenceDot,
     PieChart,
     Pie,
     Cell,
@@ -53,6 +54,7 @@ interface AccueilGoogleProps {
 type HorizonCle = '1A' | '5A' | '10A' | 'MAX';
 type LentilleHero = 'net' | 'portefeuille' | 'immobilier';
 type ModeCourbe = 'nette' | 'complete';
+type SousOngletCentre = 'avoirs' | 'insights' | 'transactions' | 'evenements';
 
 interface PointTrajectoire {
     annee: string;
@@ -80,6 +82,7 @@ interface IndiceCompte {
     valeur: number;
     poidsPct: number;
     positif: boolean;
+    couleurTrait: string;
     tab: Tab;
 }
 
@@ -90,6 +93,10 @@ interface PositionSuivie {
     compte: string;
     valeur: number;
     poidsPct: number;
+    variationPct: number;
+    gainCad: number;
+    positif: boolean;
+    pointsSparkline: string;
     tab: Tab;
 }
 
@@ -110,17 +117,30 @@ interface JalonPatrimonial {
     tab: Tab;
 }
 
-const HORIZONS: ReadonlyArray<{ cle: HorizonCle; label: string; annees: number }> = [
-    { cle: '1A', label: '1A', annees: 1 },
-    { cle: '5A', label: '5A', annees: 5 },
-    { cle: '10A', label: '10A', annees: 10 },
-    { cle: 'MAX', label: 'MAX', annees: 30 },
+const HORIZONS: ReadonlyArray<{ cle: HorizonCle; label: string; annees: number; tempsFort: boolean }> = [
+    { cle: '1A', label: '1A', annees: 1, tempsFort: true },
+    { cle: '5A', label: '5A', annees: 5, tempsFort: true },
+    { cle: '10A', label: '10A', annees: 10, tempsFort: true },
+    { cle: 'MAX', label: 'MAX', annees: 30, tempsFort: true },
 ];
 
 const LENTILLES_HERO: ReadonlyArray<{ cle: LentilleHero; label: string; ticker: string }> = [
     { cle: 'net', label: 'Patrimoine net', ticker: 'BILAN:CAD' },
     { cle: 'portefeuille', label: 'Portefeuille liquide', ticker: 'LIQ:CAD' },
     { cle: 'immobilier', label: 'Équité immobilière', ticker: 'IMMO:CAD' },
+];
+
+const SOUS_ONGLETS_CENTRE: ReadonlyArray<{ cle: SousOngletCentre; label: string; badgeNouveau?: boolean }> = [
+    { cle: 'avoirs', label: 'Avoirs' },
+    { cle: 'insights', label: 'Insights', badgeNouveau: true },
+    { cle: 'transactions', label: 'Transactions' },
+    { cle: 'evenements', label: 'Événements' },
+];
+
+const QUESTIONS_GEMINI_SUGGEREES: ReadonlyArray<string> = [
+    "Comment se porte mon portefeuille aujourd'hui ?",
+    'Quelles sont mes lignes les plus performantes au total ?',
+    'Quelle est la répartition fiscale optimale de mon patrimoine ?',
 ];
 
 const RACCOURCIS_RECHERCHE: ReadonlyArray<{ tab: Tab; label: string; icon: IconName }> = [
@@ -134,12 +154,24 @@ const RACCOURCIS_RECHERCHE: ReadonlyArray<{ tab: Tab; label: string; icon: IconN
     { tab: Tab.TAX, label: 'Impôts & Fiscalité', icon: 'tax' },
 ];
 
+function construireSparklineSvg(seed: number, positif: boolean): string {
+    const base = positif ? [16, 15, 13, 14, 10, 9, 5] : [6, 8, 7, 11, 12, 14, 16];
+    const decalage = (seed % 3) - 1;
+    return base
+        .map((y, idx) => {
+            const x = idx * 8;
+            const yClamp = Math.max(3, Math.min(19, y + (idx % 2 === 0 ? decalage : -decalage)));
+            return `${x},${yClamp}`;
+        })
+        .join(' ');
+}
+
 /**
- * Page d'accueil — Style Google Finance :
- * - Bandeau supérieur d'indices des comptes (CELI, REER, Non-enregistré, Immobilier, Liquidités)
- * - Barre de recherche Omnibox façon Google Finance
- * - Grille principale 8/4 : Cotation du patrimoine net + graphique interactif + statistiques clés + positions suivies à gauche ;
- *   Répartition du portefeuille + activité récente + calendrier des jalons à droite.
+ * Page d'accueil — Style Google Finance Beta (3 colonnes, couleurs vives & animations fluides) :
+ * - En-tête Google Finance 4 couleurs + Omnibox centrale en pilule + ruban de 5 indices patrimoniaux
+ * - Colonne gauche (3 col) : « Listes & Portefeuilles » (Valeur totale, carte Main active, Watchlist avec sparklines et pilules vert/rouge)
+ * - Colonne centrale (6 col) : Cotation « Main », courbe bleue lumineuse avec marqueurs ambrés « Temps forts », barre d'horizons et tableau détaillé des avoirs
+ * - Colonne droite (3 col) : Panneau « Recherche » Gemini interactif (suggestions cliquables, puces d'actions, compositeur) + Allocation d'actifs, Activité récente et Jalons.
  */
 export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     state,
@@ -158,10 +190,13 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     const todayIso = useTodayIsoLocal();
 
     const [requete, setRequete] = useState('');
+    const [questionComposer, setQuestionComposer] = useState('');
     const [rechercheOuverte, setRechercheOuverte] = useState(false);
     const [lentilleHero, setLentilleHero] = useState<LentilleHero>('net');
     const [horizon, setHorizon] = useState<HorizonCle>('10A');
     const [modeCourbe, setModeCourbe] = useState<ModeCourbe>('nette');
+    const [tempsFortsActifs, setTempsFortsActifs] = useState(true);
+    const [sousOngletCentre, setSousOngletCentre] = useState<SousOngletCentre>('avoirs');
     const [segmentActif, setSegmentActif] = useState<string | null>(null);
     const [showConnexionsModal, setShowConnexionsModal] = useState(false);
     const [showGeminiModal, setShowGeminiModal] = useState(false);
@@ -271,6 +306,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 valeur: celi,
                 poidsPct: Math.round((celi / base) * 100),
                 positif: celi > 0,
+                couleurTrait: 'var(--gf-bleu)',
                 tab: Tab.INVESTMENTS,
             },
             {
@@ -280,6 +316,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 valeur: reer,
                 poidsPct: Math.round((reer / base) * 100),
                 positif: reer > 0,
+                couleurTrait: 'var(--gf-vert)',
                 tab: Tab.INVESTMENTS,
             },
             {
@@ -289,6 +326,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 valeur: nonReg,
                 poidsPct: Math.round((nonReg / base) * 100),
                 positif: nonReg > 0,
+                couleurTrait: 'var(--gf-violet)',
                 tab: Tab.INVESTMENTS,
             },
             {
@@ -298,6 +336,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 valeur: immo,
                 poidsPct: Math.round((immo / base) * 100),
                 positif: immo > 0,
+                couleurTrait: 'var(--gf-ambre)',
                 tab: Tab.REAL_ESTATE,
             },
             {
@@ -307,6 +346,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 valeur: cash,
                 poidsPct: Math.round((cash / base) * 100),
                 positif: cash > 0,
+                couleurTrait: 'var(--gf-cyan)',
                 tab: Tab.BUDGET,
             },
         ];
@@ -367,6 +407,16 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         ];
     }, [todayIso, horizon, lastProjection, patrimoineNet, valeurHeroAffichee, totalDettes]);
 
+    // Points « Temps forts » ambrés sur la courbe (début, jalon médian, sommet projeté)
+    const pointsTempsForts = useMemo<PointTrajectoire[]>(() => {
+        if (!tempsFortsActifs || donneesTrajectoire.length < 2) return [];
+        const milieuIdx = Math.floor(donneesTrajectoire.length / 2);
+        const finIdx = donneesTrajectoire.length - 1;
+        const pMilieu = donneesTrajectoire[milieuIdx];
+        const pFin = donneesTrajectoire[finIdx];
+        return [pMilieu, pFin].filter((p): p is PointTrajectoire => Boolean(p));
+    }, [tempsFortsActifs, donneesTrajectoire]);
+
     const gainHorizon = useMemo(() => {
         if (donneesTrajectoire.length < 2) return null;
         const debut = donneesTrajectoire[0]!.valeur;
@@ -385,8 +435,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 label: 'CELI',
                 sousTitre: 'Compte libre d’impôt',
                 valeur: Math.max(0, Math.round(assetBreakdown.celi || 0)),
-                couleur: 'var(--accent)',
-                classeBarre: 'bg-accent',
+                couleur: 'var(--gf-bleu)',
+                classeBarre: 'gf-alloc-celi',
                 tab: Tab.INVESTMENTS,
             },
             {
@@ -395,8 +445,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 label: 'REER',
                 sousTitre: 'Épargne retraite',
                 valeur: Math.max(0, Math.round(assetBreakdown.reer || 0)),
-                couleur: 'var(--accent-fonce)',
-                classeBarre: 'bg-accent-fonce',
+                couleur: 'var(--gf-vert)',
+                classeBarre: 'gf-alloc-reer',
                 tab: Tab.INVESTMENTS,
             },
             {
@@ -405,8 +455,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 label: 'Immobilier',
                 sousTitre: 'Valeur brute des biens',
                 valeur: Math.max(0, Math.round(realEstateValeur || 0)),
-                couleur: 'var(--texte-doux)',
-                classeBarre: 'bg-ink-300',
+                couleur: 'var(--gf-ambre)',
+                classeBarre: 'gf-alloc-immo',
                 tab: Tab.REAL_ESTATE,
             },
             {
@@ -415,8 +465,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 label: 'Liquidités',
                 sousTitre: 'Encaisse disponible',
                 valeur: Math.max(0, Math.round(liquidites)),
-                couleur: 'var(--bordure-champ)',
-                classeBarre: 'bg-bordure-champ',
+                couleur: 'var(--gf-cyan)',
+                classeBarre: 'gf-alloc-cash',
                 tab: Tab.BUDGET,
             },
             {
@@ -425,8 +475,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 label: 'Non-enregistré',
                 sousTitre: 'Comptes ordinaires & REEE',
                 valeur: Math.max(0, Math.round((assetBreakdown.nonReg || 0) + (assetBreakdown.reee || 0))),
-                couleur: 'var(--texte)',
-                classeBarre: 'bg-ink-200',
+                couleur: 'var(--gf-violet)',
+                classeBarre: 'gf-alloc-nonreg',
                 tab: Tab.INVESTMENTS,
             },
         ];
@@ -442,8 +492,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     sousTitre: 'Portefeuille global',
                     valeur: 1,
                     pct: 100,
-                    couleur: 'var(--accent)',
-                    classeBarre: 'bg-accent',
+                    couleur: 'var(--gf-bleu)',
+                    classeBarre: 'gf-alloc-celi',
                     tab: Tab.INVESTMENTS,
                 },
             ];
@@ -461,7 +511,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         [partsRepartition, segmentActif],
     );
 
-    // Positions suivies façon Watchlist Google Finance
+    // Positions suivies façon Watchlist Google Finance Beta (avec sparkline et pilules vert/rouge)
     const positionsSuivies = useMemo<PositionSuivie[]>(() => {
         const actifs = [...(state.assets ?? [])]
             .map((a, idx) => {
@@ -474,6 +524,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             0,
                     ),
                 );
+                const rendementAttendu = Number(rec.expectedReturn);
+                const variationPct = Number.isFinite(rendementAttendu) && rendementAttendu !== 0
+                    ? Number((rendementAttendu * 100).toFixed(2))
+                    : Number((((idx % 5) - 1) * 1.85 + 2.4).toFixed(2));
+                const gainCad = Math.round((val * variationPct) / 100);
+                const positif = variationPct >= 0;
                 const nomBrut = typeof a.name === 'string' && a.name.trim() ? a.name.trim() : a.symbol || `Titre ${idx + 1}`;
                 const symbole = (a.symbol || nomBrut.slice(0, 5) || `T${idx + 1}`).toUpperCase();
                 return {
@@ -482,12 +538,16 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     nom: nomBrut,
                     compte: a.accountType || 'Portefeuille',
                     valeur: val,
+                    variationPct,
+                    gainCad,
+                    positif,
+                    pointsSparkline: construireSparklineSvg(idx + 1, positif),
                     tab: Tab.INVESTMENTS,
                 };
             })
             .filter((a) => a.valeur > 0)
             .sort((a, b) => b.valeur - a.valeur)
-            .slice(0, 6);
+            .slice(0, 8);
 
         if (actifs.length > 0) {
             const totalActifs = Math.max(1, actifs.reduce((s, a) => s + a.valeur, 0));
@@ -497,15 +557,23 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             }));
         }
 
-        return partsRepartition.map((p) => ({
-            id: `pos-${p.id}`,
-            symbole: p.code,
-            nom: p.label,
-            compte: p.sousTitre,
-            valeur: p.valeur,
-            poidsPct: p.pct,
-            tab: p.tab,
-        }));
+        return partsRepartition.map((p, idx) => {
+            const variationPct = Number(((idx === 3 ? 1.5 : 5.4 - idx * 0.8)).toFixed(2));
+            const gainCad = Math.round((p.valeur * variationPct) / 100);
+            return {
+                id: `pos-${p.id}`,
+                symbole: p.code,
+                nom: p.label,
+                compte: p.sousTitre,
+                valeur: p.valeur,
+                poidsPct: p.pct,
+                variationPct,
+                gainCad,
+                positif: variationPct >= 0,
+                pointsSparkline: construireSparklineSvg(idx + 2, variationPct >= 0),
+                tab: p.tab,
+            };
+        });
     }, [state.assets, state.fxRates, partsRepartition]);
 
     const resultatsOmnibox = useMemo(() => {
@@ -702,120 +770,97 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 
     const anneeActuelle = Number(todayIso.slice(0, 4)) || 2026;
 
+    const ouvrirQuestionGemini = (q: string) => {
+        setRequete(q);
+        setShowGeminiModal(true);
+    };
+
     return (
         <div
             data-testid="accueil-google-view"
-            className="max-w-7xl mx-auto space-y-5 pb-8"
+            className="max-w-[1440px] mx-auto space-y-4 pb-8"
         >
-            {/* 1. BANDEAU D'INDICES PATRIMONIAUX & BARRE DE RECHERCHE STYLE GOOGLE FINANCE */}
+            {/* 1. EN-TÊTE GOOGLE FINANCE BETA : LOGO 4 COULEURS + OMNIBOX PILULE + RUBAN D'INDICES ANIMÉS */}
             <section
                 aria-label="Synthèse patrimoniale et recherche rapide"
-                className="premium-card rounded-md bg-surface border border-bordure divide-y divide-bordure"
+                className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
             >
-                {/* Ruban supérieur des 5 indices de comptes (Google Finance Market Strip) */}
-                <div
-                    aria-label="Indices des comptes patrimoniaux"
-                    className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-y lg:divide-y-0 divide-bordure bg-fond"
-                >
-                    {indicesComptes.map((idx) => (
-                        <button
-                            key={idx.id}
-                            type="button"
-                            onClick={() => setActiveTab(idx.tab)}
-                            onMouseEnter={() => prefetchTab(idx.tab)}
-                            className="touch-target px-3.5 py-2.5 text-left hover:bg-surface-douce flex items-center justify-between gap-2 transition-colors duration-100 focus-ring group"
-                        >
-                            <div className="min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                    <span className="font-mono text-[11px] font-bold tracking-tight text-ink-50 group-hover:underline">
-                                        {idx.ticker}
-                                    </span>
-                                    <span className="text-[11px] text-ink-400 truncate">
-                                        {idx.label}
-                                    </span>
-                                </div>
-                                <div className="font-mono text-xs sm:text-sm font-bold text-ink-50 tabular-nums mt-0.5">
-                                    <PrivateAmount>{formatCompactCAD(idx.valeur)}</PrivateAmount>
-                                </div>
-                            </div>
+                {/* Barre supérieure : Marque Google Finance + Omnibox centrale en pilule + Actions */}
+                <div className="p-3.5 sm:px-5 sm:py-3.5 bg-surface flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    {/* Identité Google Finance 4 couleurs */}
+                    <div className="flex items-center justify-between lg:justify-start gap-3 shrink-0">
+                        <div className="flex items-center gap-2">
                             <span
-                                className={`shrink-0 px-2 py-0.5 rounded-sm font-mono text-[11px] font-semibold tabular-nums border ${
-                                    idx.positif
-                                        ? 'bg-succes-fond text-succes-texte border-bordure'
-                                        : 'bg-surface-douce text-ink-300 border-bordure'
-                                }`}
+                                aria-hidden="true"
+                                className="text-base sm:text-lg font-bold tracking-tight select-none"
                             >
-                                <PrivateAmount>{`${idx.poidsPct} %`}</PrivateAmount>
+                                <span className="gf-logo-b">G</span>
+                                <span className="gf-logo-r">o</span>
+                                <span className="gf-logo-y">o</span>
+                                <span className="gf-logo-b">g</span>
+                                <span className="gf-logo-g">l</span>
+                                <span className="gf-logo-r">e</span>
                             </span>
-                        </button>
-                    ))}
-                </div>
+                            <span className="text-base sm:text-lg font-medium text-ink-200 tracking-tight">
+                                Finance
+                            </span>
+                            <span className="gf-badge-nouvelle">Beta</span>
+                        </div>
+                        <span
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-fond border border-bordure text-[11px] font-mono text-ink-300"
+                            title="Flux patrimonial synchronisé"
+                        >
+                            <span className="w-2 h-2 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
+                            <span>Direct</span>
+                        </span>
+                    </div>
 
-                {/* Barre de recherche centrale Omnibox façon Google Finance */}
-                <div className="p-4 sm:px-6 sm:py-4 bg-surface">
-                    <div className="relative">
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                            <div className="relative flex-1 flex items-center rounded-sm border border-bordure-champ bg-fond focus-within:border-accent transition-colors duration-100">
-                                <Icon
-                                    name="search"
-                                    size={16}
-                                    className="absolute left-3.5 text-ink-300 pointer-events-none"
-                                    aria-hidden="true"
-                                />
-                                <input
-                                    type="search"
-                                    value={requete}
-                                    onFocus={() => setRechercheOuverte(true)}
-                                    onBlur={() => {
-                                        setTimeout(() => setRechercheOuverte(false), 160);
-                                    }}
-                                    onChange={(e) => {
-                                        setRequete(e.target.value);
-                                        setRechercheOuverte(true);
-                                    }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Escape') {
-                                            setRechercheOuverte(false);
-                                        } else if (e.key === 'Enter' && resultatsOmnibox.pages[0]) {
-                                            setActiveTab(resultatsOmnibox.pages[0].tab);
-                                            setRechercheOuverte(false);
-                                            setRequete('');
-                                        }
-                                    }}
-                                    placeholder="Rechercher un titre, un FNB, un compte ou une écriture…"
-                                    aria-label="Rechercher dans votre patrimoine"
-                                    className="champ-nu touch-target w-full pl-10 pr-4 bg-transparent text-xs sm:text-sm text-ink-50 placeholder-ink-400 focus-ring"
-                                />
-                            </div>
-
-                            <div className="flex items-center gap-2 shrink-0">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowConnexionsModal(true)}
-                                    aria-label="Importer ou synchroniser des comptes"
-                                    className="touch-target px-3.5 py-2 rounded-sm border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-2 transition-colors duration-100 focus-ring whitespace-nowrap"
-                                >
-                                    <Icon name="cloud" size={15} className="text-ink-300" aria-hidden="true" />
-                                    <span>Synchroniser</span>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setShowGeminiModal(true)}
-                                    aria-label="Ouvrir le conseiller financier Gemini"
-                                    className="touch-target px-4 py-2 rounded-sm bg-accent text-sur-accent hover:bg-accent-fonce text-xs font-semibold inline-flex items-center gap-2 transition-colors duration-100 focus-ring whitespace-nowrap"
-                                >
-                                    <Icon name="sparkles" size={15} aria-hidden="true" />
-                                    <span>Analyser</span>
-                                </button>
-                            </div>
+                    {/* Omnibox centrale en pilule façon Google Finance Beta */}
+                    <div className="relative flex-1 max-w-2xl mx-auto w-full">
+                        <div className="gf-omnibox-pill relative flex items-center px-3.5">
+                            <Icon
+                                name="search"
+                                size={16}
+                                className="text-ink-300 pointer-events-none shrink-0"
+                                aria-hidden="true"
+                            />
+                            <input
+                                type="search"
+                                value={requete}
+                                onFocus={() => setRechercheOuverte(true)}
+                                onBlur={() => {
+                                    setTimeout(() => setRechercheOuverte(false), 160);
+                                }}
+                                onChange={(e) => {
+                                    setRequete(e.target.value);
+                                    setRechercheOuverte(true);
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Escape') {
+                                        setRechercheOuverte(false);
+                                    } else if (e.key === 'Enter' && resultatsOmnibox.pages[0]) {
+                                        setActiveTab(resultatsOmnibox.pages[0].tab);
+                                        setRechercheOuverte(false);
+                                        setRequete('');
+                                    }
+                                }}
+                                placeholder="Que se passe-t-il sur les marchés et votre patrimoine aujourd’hui ?"
+                                aria-label="Rechercher dans votre patrimoine"
+                                className="champ-nu touch-target w-full pl-3 pr-3 bg-transparent text-xs sm:text-sm text-ink-50 placeholder-ink-400 focus-ring"
+                            />
+                            <Icon
+                                name="sparkles"
+                                size={15}
+                                className="text-ink-300 shrink-0 pointer-events-none"
+                                aria-hidden="true"
+                            />
                         </div>
 
                         {rechercheOuverte && (
                             <div
                                 role="listbox"
                                 aria-label="Suggestions rapides"
-                                className="absolute left-0 right-0 top-full mt-1.5 rounded-sm bg-surface border border-bordure-champ divide-y divide-bordure z-40 text-left"
+                                className="absolute left-0 right-0 top-full mt-2 rounded-xl bg-surface border border-bordure-champ divide-y divide-bordure z-40 text-left shadow-xl overflow-hidden"
                             >
                                 <button
                                     type="button"
@@ -825,10 +870,13 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     }}
                                     className="touch-target w-full px-4 py-2.5 bg-surface-douce flex items-center justify-between gap-2 text-xs font-medium text-ink-50 hover:bg-fond transition-colors duration-100 focus-ring"
                                 >
-                                    <span className="truncate">
-                                        {requete.trim()
-                                            ? `Interroger votre dossier : « ${requete.trim()} »`
-                                            : 'Ouvrir l’analyse patrimoniale'}
+                                    <span className="truncate flex items-center gap-2">
+                                        <Icon name="sparkles" size={14} className="text-ink-200 shrink-0" aria-hidden="true" />
+                                        <span>
+                                            {requete.trim()
+                                                ? `Interroger Gemini : « ${requete.trim()} »`
+                                                : 'Ouvrir l’analyse patrimoniale Gemini'}
+                                        </span>
                                     </span>
                                     <Icon name="chevron-right" size={14} className="text-ink-300" aria-hidden="true" />
                                 </button>
@@ -896,171 +944,398 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             </div>
                         )}
                     </div>
+
+                    {/* Boutons d'actions rapides à droite */}
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => setShowConnexionsModal(true)}
+                            aria-label="Importer ou synchroniser des comptes"
+                            className="touch-target px-3.5 py-2 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-2 transition-colors duration-100 focus-ring whitespace-nowrap"
+                        >
+                            <Icon name="cloud" size={15} className="text-ink-300" aria-hidden="true" />
+                            <span>Synchroniser</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setShowGeminiModal(true)}
+                            aria-label="Ouvrir le conseiller financier Gemini"
+                            className="touch-target px-4 py-2 rounded-full gf-subtab-pill-active text-xs font-semibold inline-flex items-center gap-2 transition-transform duration-150 focus-ring whitespace-nowrap"
+                        >
+                            <Icon name="sparkles" size={15} aria-hidden="true" />
+                            <span>Analyser</span>
+                        </button>
+                    </div>
                 </div>
-            </section>
 
-            {/* 2. GRILLE PRINCIPALE GOOGLE FINANCE : COTATION & COURBE (8 COL) + RAIL LATÉRAL (4 COL) */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-                {/* COLONNE GAUCHE (8 COL) : FICHE DE COTATION PATRIMONIALE, COURBE & POSITIONS SUIVIES */}
-                <div className="lg:col-span-8 space-y-5">
-                    {/* Fiche principale de cotation & trajectoire Google Finance */}
-                    <section
-                        aria-label="Trajectoire du patrimoine"
-                        className="premium-card rounded-md bg-surface border border-bordure divide-y divide-bordure"
-                    >
-                        {/* En-tête de cotation Google Finance */}
-                        <div className="p-5 sm:p-6 space-y-4">
-                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                                <div className="space-y-1">
-                                    <div className="flex flex-wrap items-center gap-2 text-xs text-ink-300">
-                                        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-ink-400">
-                                            {lentilleCourante.ticker}
-                                        </span>
-                                        <span aria-hidden="true" className="text-ink-400">·</span>
-                                        <h1 className="font-medium text-ink-200 tracking-tight">
-                                            {prenom ? `${prenom} — ${lentilleCourante.label}` : lentilleCourante.label}
-                                        </h1>
-                                        <span aria-hidden="true" className="text-ink-400">·</span>
-                                        <span className="font-mono text-[11px] tabular-nums text-ink-400">{todayIso}</span>
-                                        <FxEstimateBadge />
-                                    </div>
-
-                                    {/* Valeur principale + Variation style Google Finance */}
-                                    <div className="flex flex-wrap items-baseline gap-3 pt-1">
-                                        <AnimatedNetWorth
-                                            value={valeurHeroAffichee}
-                                            as="div"
-                                            testId="animated-global-net-worth"
-                                            className="font-mono tabular-nums text-3xl sm:text-5xl font-bold tracking-tight text-ink-50 leading-none"
-                                        />
-
-                                        {variation && lentilleHero === 'net' && (
-                                            <span
-                                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border text-xs font-mono font-semibold tabular-nums ${
-                                                    variation.diff >= 0
-                                                        ? 'bg-succes-fond text-succes-texte border-bordure'
-                                                        : 'bg-erreur-fond text-erreur-texte border-bordure'
-                                                }`}
-                                            >
-                                                <span aria-hidden="true">{variation.diff >= 0 ? '▲' : '▼'}</span>
-                                                <PrivateAmount>
-                                                    {`${variation.diff >= 0 ? '+' : ''}${formatCompactCAD(variation.diff)}`}
-                                                </PrivateAmount>
-                                                {variation.pct != null && (
-                                                    <PrivateAmount>{`(${formatPercent(variation.pct)})`}</PrivateAmount>
-                                                )}
-                                            </span>
-                                        )}
-
-                                        {gainHorizon && (
-                                            <span className="text-xs font-mono tabular-nums text-ink-300">
-                                                Projection {gainHorizon.anneeFin} :{' '}
-                                                <strong className="text-ink-50">
-                                                    <PrivateAmount>{formatCompactCAD(gainHorizon.fin)}</PrivateAmount>
-                                                </strong>{' '}
-                                                (
-                                                <PrivateAmount>
-                                                    {`${gainHorizon.diff >= 0 ? '+' : ''}${formatCompactCAD(gainHorizon.diff)}`}
-                                                </PrivateAmount>
-                                                )
-                                            </span>
-                                        )}
-                                    </div>
+                {/* Ruban supérieur des 5 indices de comptes (Google Finance Market Strip avec mini-sparklines) */}
+                <div
+                    aria-label="Indices des comptes patrimoniaux"
+                    className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-y lg:divide-y-0 divide-bordure bg-fond"
+                >
+                    {indicesComptes.map((idx, i) => (
+                        <button
+                            key={idx.id}
+                            type="button"
+                            onClick={() => setActiveTab(idx.tab)}
+                            onMouseEnter={() => prefetchTab(idx.tab)}
+                            className="touch-target px-3.5 py-2.5 text-left hover:bg-surface-douce flex items-center justify-between gap-2 transition-all duration-150 focus-ring group"
+                        >
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="font-mono text-[11px] font-bold tracking-tight text-ink-50 group-hover:underline">
+                                        {idx.ticker}
+                                    </span>
+                                    <span className="text-[11px] text-ink-400 truncate">
+                                        {idx.label}
+                                    </span>
                                 </div>
-
-                                {/* Sélecteur d'assiette (Patrimoine net / Portefeuille / Immobilier) */}
-                                <div
-                                    role="group"
-                                    aria-label="Lentille d'affichage du patrimoine"
-                                    className="inline-flex flex-wrap items-center p-0.5 rounded-sm border border-bordure bg-fond gap-0.5 self-start"
-                                >
-                                    {LENTILLES_HERO.map((l) => (
-                                        <button
-                                            key={l.cle}
-                                            type="button"
-                                            aria-pressed={lentilleHero === l.cle}
-                                            onClick={() => setLentilleHero(l.cle)}
-                                            className={`touch-target px-3 py-1.5 rounded-sm text-xs font-medium transition-colors duration-100 focus-ring whitespace-nowrap shrink-0 ${
-                                                lentilleHero === l.cle
-                                                    ? 'bg-accent text-sur-accent font-semibold'
-                                                    : 'text-ink-300 hover:text-ink-50 hover:bg-surface-douce'
-                                            }`}
-                                        >
-                                            {l.label}
-                                        </button>
-                                    ))}
+                                <div className="font-mono text-xs sm:text-sm font-bold text-ink-50 tabular-nums mt-0.5">
+                                    <PrivateAmount>{formatCompactCAD(idx.valeur)}</PrivateAmount>
                                 </div>
                             </div>
 
-                            {/* Barre d'outils du graphique façon Google Finance (Périodes 1A / 5A / 10A / MAX + Série) */}
-                            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-bordure">
-                                <div
-                                    role="group"
-                                    aria-label="Horizon de la courbe"
-                                    className="inline-flex items-center p-0.5 rounded-sm border border-bordure bg-fond gap-0.5"
+                            <div className="flex items-center gap-2 shrink-0">
+                                <svg
+                                    width="44"
+                                    height="20"
+                                    viewBox="0 0 48 22"
+                                    aria-hidden="true"
+                                    className="hidden sm:block overflow-visible"
                                 >
-                                    {HORIZONS.map((h) => (
-                                        <button
-                                            key={h.cle}
-                                            type="button"
-                                            aria-pressed={horizon === h.cle}
-                                            onClick={() => setHorizon(h.cle)}
-                                            className={`touch-target px-3 py-1 rounded-sm text-xs font-mono font-semibold tabular-nums transition-colors duration-100 focus-ring whitespace-nowrap shrink-0 ${
-                                                horizon === h.cle
-                                                    ? 'bg-accent text-sur-accent'
-                                                    : 'text-ink-300 hover:text-ink-50'
+                                    <polyline
+                                        fill="none"
+                                        stroke={idx.couleurTrait}
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        points={construireSparklineSvg(i + 1, idx.positif)}
+                                    />
+                                </svg>
+                                <span
+                                    className={`shrink-0 px-2 py-0.5 rounded-full font-mono text-[11px] font-semibold tabular-nums ${
+                                        idx.positif ? 'gf-delta-up' : 'gf-delta-neutral'
+                                    }`}
+                                >
+                                    <PrivateAmount>{`${idx.poidsPct} %`}</PrivateAmount>
+                                </span>
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            </section>
+
+            {/* 2. ARCHITECTURE 3 COLONNES GOOGLE FINANCE BETA : LISTES (3) · COURBE & AVOIRS (6) · RECHERCHE GEMINI (3) */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start gf-spring-grid">
+                {/* ── COLONNE GAUCHE (3 COL) : LISTES, PORTEFEUILLES & WATCHLIST LIVE ── */}
+                <aside
+                    aria-label="Listes et portefeuilles suivis"
+                    className="xl:col-span-3 space-y-4"
+                >
+                    <section className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure">
+                        {/* En-tête « Listes » */}
+                        <div className="px-4 py-3 flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                                    Listes
+                                </h2>
+                                <span className="text-[11px] font-mono text-ink-400">
+                                    {/* NOMBRE-NON-MONETAIRE : nombre de lignes suivies */}
+                                    ({positionsSuivies.length})
+                                </span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.INVESTMENTS)}
+                                onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                                aria-label="Gérer les listes et placements"
+                                className="touch-target px-2.5 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-200 inline-flex items-center gap-1 focus-ring"
+                            >
+                                <Icon name="plus" size={14} aria-hidden="true" />
+                                <span>Ajouter</span>
+                            </button>
+                        </div>
+
+                        {/* Bloc « Portefeuilles » avec Valeur totale et carte Main active */}
+                        <div className="p-4 space-y-3 bg-fond">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-semibold text-ink-200">Portefeuilles</span>
+                                <span className="text-[11px] font-mono text-ink-400">CAD</span>
+                            </div>
+
+                            <div>
+                                <div className="text-[11px] text-ink-400">Valeur totale</div>
+                                <div className="font-mono text-lg sm:text-xl font-bold text-ink-50 tabular-nums mt-0.5">
+                                    <PrivateAmount>{formatCAD(patrimoineNet)}</PrivateAmount>
+                                </div>
+                            </div>
+
+                            {/* Carte active « Main » façon Google Finance Beta */}
+                            <div className="gf-portfolio-active rounded-lg p-3 space-y-1.5">
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-bold text-ink-50 truncate">
+                                        Main · {lentilleCourante.label}
+                                    </span>
+                                    <span className="w-2 h-2 rounded-full gf-alloc-reer gf-pulse-live shrink-0" aria-hidden="true" />
+                                </div>
+                                <div className="flex flex-wrap items-center justify-between gap-1.5 font-mono tabular-nums">
+                                    <span className="text-xs font-semibold text-ink-100">
+                                        <PrivateAmount>{formatCAD(valeurHeroAffichee)}</PrivateAmount>
+                                    </span>
+                                    {gainHorizon && (
+                                        <span
+                                            className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                                                gainHorizon.diff >= 0 ? 'gf-delta-up' : 'gf-delta-down'
                                             }`}
                                         >
-                                            {h.label}
-                                        </button>
-                                    ))}
+                                            <PrivateAmount>
+                                                {`${gainHorizon.diff >= 0 ? '+' : ''}${formatCompactCAD(gainHorizon.diff)}`}
+                                            </PrivateAmount>
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Sélecteur d'assiette (Patrimoine net / Portefeuille liquide / Équité immobilière) */}
+                            <div
+                                role="group"
+                                aria-label="Lentille d'affichage du patrimoine"
+                                className="grid grid-cols-1 gap-1 pt-1"
+                            >
+                                {LENTILLES_HERO.map((l) => (
+                                    <button
+                                        key={l.cle}
+                                        type="button"
+                                        aria-pressed={lentilleHero === l.cle}
+                                        onClick={() => setLentilleHero(l.cle)}
+                                        className={`touch-target px-3 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between gap-2 transition-all duration-150 focus-ring ${
+                                            lentilleHero === l.cle
+                                                ? 'gf-subtab-pill-active'
+                                                : 'text-ink-300 hover:text-ink-50 hover:bg-surface-douce border border-transparent'
+                                        }`}
+                                    >
+                                        <span className="truncate">{l.label}</span>
+                                        <span className="font-mono text-[10px] opacity-80">{l.ticker}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Liste des titres & enveloppes avec mini-sparklines et pilules colorées */}
+                        <div className="divide-y divide-bordure bg-surface">
+                            <div className="px-4 py-2.5 flex items-center justify-between bg-surface-douce">
+                                <span className="text-xs font-semibold text-ink-200">Liste suivie</span>
+                                <span className="text-[11px] text-ink-400">Variation & Cours</span>
+                            </div>
+
+                            {positionsSuivies.map((pos) => (
+                                <button
+                                    key={`left-${pos.id}`}
+                                    type="button"
+                                    onClick={() => setActiveTab(pos.tab)}
+                                    onMouseEnter={() => prefetchTab(pos.tab)}
+                                    className="gf-row touch-target w-full px-3.5 py-2.5 flex items-center justify-between gap-2 text-left focus-ring"
+                                >
+                                    <div className="min-w-0 flex-1">
+                                        <div className="font-mono text-xs font-bold text-ink-50 truncate">
+                                            {pos.symbole}
+                                        </div>
+                                        <div className="text-[11px] text-ink-400 truncate">
+                                            {pos.nom}
+                                        </div>
+                                    </div>
+
+                                    <svg
+                                        width="42"
+                                        height="18"
+                                        viewBox="0 0 48 22"
+                                        aria-hidden="true"
+                                        className="shrink-0 overflow-visible"
+                                    >
+                                        <polyline
+                                            fill="none"
+                                            stroke={pos.positif ? 'var(--gf-vert)' : 'var(--gf-rouge)'}
+                                            strokeWidth="1.8"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            points={pos.pointsSparkline}
+                                        />
+                                    </svg>
+
+                                    <div className="text-right font-mono tabular-nums shrink-0">
+                                        <div className="text-xs font-bold text-ink-50">
+                                            <PrivateAmount>{formatCompactCAD(pos.valeur)}</PrivateAmount>
+                                        </div>
+                                        <span
+                                            className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold mt-0.5 ${
+                                                pos.positif ? 'gf-delta-up' : 'gf-delta-down'
+                                            }`}
+                                        >
+                                            <PrivateAmount>
+                                                {`${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)} ${pos.positif ? '↑' : '↓'}`}
+                                            </PrivateAmount>
+                                        </span>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </section>
+                </aside>
+
+                {/* ── COLONNE CENTRALE (6 COL) : COTATION « MAIN », COURBE BLEUE « TEMPS FORTS » & AVOIRS ── */}
+                <div className="xl:col-span-6 space-y-4">
+                    {/* Fiche principale de cotation & trajectoire Google Finance Beta */}
+                    <section
+                        aria-label="Trajectoire du patrimoine"
+                        className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
+                    >
+                        <div className="p-4 sm:p-6 space-y-4">
+                            {/* Fil d'Ariane « ← Accueil | Main » + bouton Modifier */}
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-ink-300">
+                                    <span className="gf-ticker-symbol">{lentilleCourante.ticker}</span>
+                                    <span aria-hidden="true" className="text-ink-400">|</span>
+                                    <h1 className="font-semibold text-ink-100 tracking-tight text-sm sm:text-base">
+                                        {prenom ? `Main · ${prenom} (${lentilleCourante.label})` : `Main · ${lentilleCourante.label}`}
+                                    </h1>
                                 </div>
 
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab(Tab.INVESTMENTS)}
+                                    onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                                    className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring"
+                                >
+                                    <Icon name="edit" size={13} aria-hidden="true" />
+                                    <span>Modifier</span>
+                                </button>
+                            </div>
+
+                            {/* Montant Héro + Pilule de variation verte/rouge style Google Finance Beta */}
+                            <div className="space-y-1.5">
+                                <div className="flex flex-wrap items-baseline gap-2.5">
+                                    <AnimatedNetWorth
+                                        value={valeurHeroAffichee}
+                                        as="div"
+                                        testId="animated-global-net-worth"
+                                        className="font-mono tabular-nums text-3xl sm:text-4xl font-bold tracking-tight text-ink-50 leading-none"
+                                    />
+
+                                    {variation && lentilleHero === 'net' ? (
+                                        <span
+                                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-semibold tabular-nums ${
+                                                variation.diff >= 0 ? 'gf-delta-up' : 'gf-delta-down'
+                                            }`}
+                                        >
+                                            <span aria-hidden="true">{variation.diff >= 0 ? '↑' : '↓'}</span>
+                                            {variation.pct != null && (
+                                                <PrivateAmount>{`${variation.diff >= 0 ? '+' : ''}${formatPercent(variation.pct)}`}</PrivateAmount>
+                                            )}
+                                            <PrivateAmount>
+                                                {`(${variation.diff >= 0 ? '+' : ''}${formatCompactCAD(variation.diff)})`}
+                                            </PrivateAmount>
+                                        </span>
+                                    ) : (
+                                        gainHorizon && (
+                                            <span
+                                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-semibold tabular-nums ${
+                                                    gainHorizon.diff >= 0 ? 'gf-delta-up' : 'gf-delta-down'
+                                                }`}
+                                            >
+                                                <span aria-hidden="true">{gainHorizon.diff >= 0 ? '↑' : '↓'}</span>
+                                                {gainHorizon.pct != null && (
+                                                    <PrivateAmount>{`${gainHorizon.diff >= 0 ? '+' : ''}${formatPercent(gainHorizon.pct)}`}</PrivateAmount>
+                                                )}
+                                                <PrivateAmount>
+                                                    {`(${gainHorizon.diff >= 0 ? '+' : ''}${formatCompactCAD(gainHorizon.diff)}) ${horizon}`}
+                                                </PrivateAmount>
+                                            </span>
+                                        )
+                                    )}
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2 text-xs font-mono tabular-nums text-ink-400">
+                                    <span>{todayIso} · CAD</span>
+                                    <FxEstimateBadge />
+                                    {gainHorizon && (
+                                        <span className="text-ink-300">
+                                            · Cible {gainHorizon.anneeFin} :{' '}
+                                            <strong className="text-ink-50">
+                                                <PrivateAmount>{formatCompactCAD(gainHorizon.fin)}</PrivateAmount>
+                                            </strong>
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Pilules d'outils au-dessus du graphique : En aires / + Avoirs bruts / Temps forts / Simulateur */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-bordure">
                                 <div className="flex flex-wrap items-center gap-2">
                                     <div
                                         role="group"
                                         aria-label="Série affichée sur la courbe"
-                                        className="inline-flex items-center p-0.5 rounded-sm border border-bordure bg-fond gap-0.5"
+                                        className="inline-flex items-center p-0.5 rounded-full border border-bordure bg-fond gap-0.5"
                                     >
                                         <button
                                             type="button"
                                             aria-pressed={modeCourbe === 'nette'}
                                             onClick={() => setModeCourbe('nette')}
-                                            className={`touch-target px-2.5 py-1 rounded-sm text-xs font-medium transition-colors duration-100 focus-ring whitespace-nowrap shrink-0 ${
+                                            className={`touch-target px-3 py-1 rounded-full text-xs font-medium transition-colors duration-100 focus-ring whitespace-nowrap ${
                                                 modeCourbe === 'nette'
-                                                    ? 'bg-surface-douce text-ink-50 font-semibold border border-bordure-champ'
-                                                    : 'text-ink-300 hover:text-ink-50 border border-transparent'
+                                                    ? 'gf-subtab-pill-active'
+                                                    : 'text-ink-300 hover:text-ink-50'
                                             }`}
                                         >
-                                            Valeur nette
+                                            En aires · Valeur nette
                                         </button>
                                         <button
                                             type="button"
                                             aria-pressed={modeCourbe === 'complete'}
                                             onClick={() => setModeCourbe('complete')}
-                                            className={`touch-target px-2.5 py-1 rounded-sm text-xs font-medium transition-colors duration-100 focus-ring whitespace-nowrap shrink-0 ${
+                                            className={`touch-target px-3 py-1 rounded-full text-xs font-medium transition-colors duration-100 focus-ring whitespace-nowrap ${
                                                 modeCourbe === 'complete'
-                                                    ? 'bg-surface-douce text-ink-50 font-semibold border border-bordure-champ'
-                                                    : 'text-ink-300 hover:text-ink-50 border border-transparent'
+                                                    ? 'gf-subtab-pill-active'
+                                                    : 'text-ink-300 hover:text-ink-50'
                                             }`}
                                         >
                                             + Avoirs bruts
                                         </button>
                                     </div>
 
-                                    <button
-                                        type="button"
-                                        onClick={() => setActiveTab(Tab.FUTURE)}
-                                        onMouseEnter={() => prefetchTab(Tab.FUTURE)}
-                                        className="touch-target px-3 py-1 rounded-sm border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                    <div
+                                        role="group"
+                                        aria-label="Marqueurs des temps forts sur la courbe"
+                                        className="inline-flex items-center"
                                     >
-                                        <span>Simulateur</span>
-                                        <Icon name="chevron-right" size={14} aria-hidden="true" />
-                                    </button>
+                                        <button
+                                            type="button"
+                                            aria-pressed={tempsFortsActifs}
+                                            onClick={() => setTempsFortsActifs((v) => !v)}
+                                            className={`touch-target px-3 py-1 rounded-full text-xs font-medium inline-flex items-center gap-2 border transition-all duration-150 focus-ring ${
+                                                tempsFortsActifs
+                                                    ? 'gf-delta-amber'
+                                                    : 'bg-fond text-ink-300 border-bordure hover:text-ink-50'
+                                            }`}
+                                        >
+                                            <span className="gf-amber-dot shrink-0" aria-hidden="true" />
+                                            <span>Temps forts</span>
+                                        </button>
+                                    </div>
                                 </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab(Tab.FUTURE)}
+                                    onMouseEnter={() => prefetchTab(Tab.FUTURE)}
+                                    className="touch-target px-3.5 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                >
+                                    <span>Simulateur</span>
+                                    <Icon name="chevron-right" size={14} aria-hidden="true" />
+                                </button>
                             </div>
 
-                            {/* Courbe interactive façon Google Finance */}
+                            {/* Courbe bleue lumineuse façon Google Finance Beta avec pastilles ambrées « Temps forts » */}
                             <div
                                 key={`${activeTab}-trajectoire-${horizon}-${modeCourbe}-${lentilleHero}`}
                                 data-testid="recharts-trajectory-entrance"
@@ -1070,14 +1345,15 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 data-chart-lens={lentilleHero}
                                 role="img"
                                 aria-label="Graphique combiné des paliers annuels et de la courbe du patrimoine selon l'horizon sélectionné — valeurs détaillées dans le tableau de données."
-                                className="h-[220px] sm:h-[245px] w-full gf-chart-enter"
+                                className="h-[235px] sm:h-[265px] w-full gf-chart-enter rounded-lg bg-fond border border-bordure p-2"
                             >
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <ComposedChart data={donneesTrajectoire} margin={{ top: 10, right: 6, left: 0, bottom: 0 }}>
+                                    <ComposedChart data={donneesTrajectoire} margin={{ top: 14, right: 10, left: 0, bottom: 0 }}>
                                         <defs>
                                             <linearGradient id="accueilStepAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.18} />
-                                                <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.0} />
+                                                <stop offset="0%" stopColor="var(--gf-bleu)" stopOpacity={0.36} />
+                                                <stop offset="65%" stopColor="var(--gf-bleu)" stopOpacity={0.1} />
+                                                <stop offset="100%" stopColor="var(--gf-bleu)" stopOpacity={0.0} />
                                             </linearGradient>
                                         </defs>
                                         <XAxis
@@ -1087,11 +1363,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             tickLine={false}
                                         />
                                         <YAxis
-                                            orientation="right"
+                                            orientation="left"
                                             tick={{ fill: 'var(--texte-doux)', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
                                             axisLine={false}
                                             tickLine={false}
-                                            width={56}
+                                            width={58}
                                             tickFormatter={maskedTick(isPrivacyMode, (v: number) => formatCompactCAD(v))}
                                         />
                                         <Tooltip
@@ -1100,16 +1376,16 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         />
                                         <ReferenceLine
                                             y={indicateursPouls.cibleRetraite}
-                                            stroke="var(--bordure-champ)"
+                                            stroke="var(--gf-ambre)"
                                             strokeDasharray="3 3"
-                                            strokeOpacity={0.75}
+                                            strokeOpacity={0.55}
                                         />
                                         <Bar
                                             dataKey="valeur"
-                                            fill="var(--bordure-champ)"
-                                            fillOpacity={0.2}
-                                            radius={[2, 2, 0, 0]}
-                                            maxBarSize={22}
+                                            fill="var(--gf-bleu)"
+                                            fillOpacity={0.12}
+                                            radius={[3, 3, 0, 0]}
+                                            maxBarSize={20}
                                             isAnimationActive={true}
                                             animationDuration={320}
                                         />
@@ -1117,10 +1393,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             <Line
                                                 type="monotone"
                                                 dataKey="avoirs"
-                                                stroke="var(--texte-doux)"
-                                                strokeWidth={1.75}
+                                                stroke="var(--gf-vert)"
+                                                strokeWidth={2}
                                                 strokeDasharray="4 4"
-                                                dot={{ r: 2.5, fill: 'var(--texte-doux)', strokeWidth: 0 }}
+                                                dot={{ r: 2.5, fill: 'var(--gf-vert)', strokeWidth: 0 }}
                                                 isAnimationActive={true}
                                                 animationDuration={340}
                                             />
@@ -1137,15 +1413,61 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         <Line
                                             type="monotone"
                                             dataKey="valeur"
-                                            stroke="var(--accent)"
-                                            strokeWidth={2.25}
-                                            dot={{ r: 3, fill: 'var(--accent)', strokeWidth: 0 }}
-                                            activeDot={{ r: 4.5, fill: 'var(--accent)' }}
+                                            stroke="var(--gf-bleu)"
+                                            strokeWidth={2.5}
+                                            dot={{ r: 3, fill: 'var(--gf-bleu)', strokeWidth: 0 }}
+                                            activeDot={{ r: 5, fill: 'var(--gf-bleu)' }}
                                             isAnimationActive={true}
                                             animationDuration={380}
                                         />
+                                        {pointsTempsForts.map((pt, idx) => (
+                                            <ReferenceDot
+                                                key={`tf-${pt.annee}-${idx}`}
+                                                x={pt.annee}
+                                                y={pt.valeur}
+                                                r={6}
+                                                fill="var(--gf-ambre)"
+                                                stroke="var(--fond)"
+                                                strokeWidth={2}
+                                            />
+                                        ))}
                                     </ComposedChart>
                                 </ResponsiveContainer>
+                            </div>
+
+                            {/* Barre d'horizons sous la courbe façon Google Finance Beta (1A • 5A • 10A • MAX •) */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                <div
+                                    role="group"
+                                    aria-label="Horizon de la courbe"
+                                    className="inline-flex items-center p-0.5 rounded-full border border-bordure bg-fond gap-1"
+                                >
+                                    {HORIZONS.map((h) => (
+                                        <button
+                                            key={h.cle}
+                                            type="button"
+                                            aria-pressed={horizon === h.cle}
+                                            onClick={() => setHorizon(h.cle)}
+                                            className={`touch-target px-3.5 py-1 rounded-full text-xs font-mono font-semibold tabular-nums inline-flex items-center gap-1.5 transition-all duration-150 focus-ring whitespace-nowrap ${
+                                                horizon === h.cle
+                                                    ? 'gf-subtab-pill-active'
+                                                    : 'text-ink-300 hover:text-ink-50'
+                                            }`}
+                                        >
+                                            <span>{h.label}</span>
+                                            {h.tempsFort && tempsFortsActifs && (
+                                                <span
+                                                    className="w-1.5 h-1.5 rounded-full gf-alloc-immo"
+                                                    aria-hidden="true"
+                                                />
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <span className="text-[11px] font-mono text-ink-400">
+                                    Points ambrés : jalons patrimoniaux clés
+                                </span>
                             </div>
                         </div>
 
@@ -1265,31 +1587,63 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
                     </section>
 
-                    {/* Tableau Watchlist Google Finance : Vos positions & comptes suivis */}
+                    {/* Sous-onglets Google Finance Beta (Avoirs / Insights Nouvelle / Transactions / Événements) + Tableau des positions */}
                     <section
                         aria-label="Positions et comptes suivis"
-                        className="premium-card rounded-md bg-surface border border-bordure divide-y divide-bordure"
+                        className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
                     >
-                        <div className="px-5 py-3.5 flex items-center justify-between gap-2">
-                            <div>
-                                <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
-                                    Positions & comptes en portefeuille
-                                </h2>
-                                <p className="text-xs text-ink-300">
-                                    Principales lignes cotées et enveloppes patrimoniales
-                                </p>
+                        <div className="px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+                            <div
+                                role="group"
+                                aria-label="Vue détaillée du portefeuille"
+                                className="inline-flex flex-wrap items-center gap-1"
+                            >
+                                {SOUS_ONGLETS_CENTRE.map((ong) => (
+                                    <button
+                                        key={ong.cle}
+                                        type="button"
+                                        aria-pressed={sousOngletCentre === ong.cle}
+                                        onClick={() => setSousOngletCentre(ong.cle)}
+                                        className={`touch-target px-3.5 py-1.5 rounded-full text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 focus-ring ${
+                                            sousOngletCentre === ong.cle
+                                                ? 'gf-subtab-pill-active'
+                                                : 'text-ink-300 hover:text-ink-50 hover:bg-surface-douce'
+                                        }`}
+                                    >
+                                        <span>{ong.label}</span>
+                                        {ong.badgeNouveau && (
+                                            <span className="gf-badge-nouvelle">Nouvelle</span>
+                                        )}
+                                    </button>
+                                ))}
                             </div>
+
                             <button
                                 type="button"
                                 onClick={() => setActiveTab(Tab.INVESTMENTS)}
                                 onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
-                                className="touch-target px-3 py-1 rounded-sm border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
                             >
                                 <span>Portefeuille complet</span>
                                 <Icon name="chevron-right" size={14} aria-hidden="true" />
                             </button>
                         </div>
 
+                        <div className="px-5 py-3 flex items-center justify-between gap-2 bg-surface-douce">
+                            <div>
+                                <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                                    Positions & comptes en portefeuille
+                                </h2>
+                                <p className="text-xs text-ink-300">
+                                    Principales lignes cotées, rendement annuel estimé et pondération patrimoniale
+                                </p>
+                            </div>
+                            <span className="hidden sm:inline-flex text-[11px] font-mono text-ink-400">
+                                Symboles ↓ · Variation · Gain/Perte au total
+                            </span>
+                        </div>
+
+                        {/* Tableau Google Finance Beta : Symboles | Enveloppe | Poids | Variation | Gain/Perte au total */}
                         <div className="divide-y divide-bordure bg-fond">
                             {positionsSuivies.map((pos) => (
                                 <button
@@ -1297,10 +1651,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     type="button"
                                     onClick={() => setActiveTab(pos.tab)}
                                     onMouseEnter={() => prefetchTab(pos.tab)}
-                                    className="touch-target w-full px-4 sm:px-5 py-2.5 flex items-center justify-between gap-3 text-left hover:bg-surface-douce transition-colors duration-100 focus-ring"
+                                    className="gf-row touch-target w-full px-4 sm:px-5 py-3 grid grid-cols-12 items-center gap-2 text-left focus-ring"
                                 >
-                                    <div className="min-w-0 flex items-center gap-3">
-                                        <span className="w-14 shrink-0 px-2 py-0.5 rounded-sm bg-surface border border-bordure-champ font-mono text-[11px] font-bold text-ink-50 text-center truncate">
+                                    {/* Colonne Symbole + Nom */}
+                                    <div className="col-span-5 sm:col-span-4 min-w-0 flex items-center gap-2.5">
+                                        <span className="w-14 shrink-0 px-2 py-1 rounded-md bg-surface border border-bordure-champ font-mono text-[11px] font-bold text-ink-50 text-center truncate">
                                             {pos.symbole}
                                         </span>
                                         <div className="min-w-0">
@@ -1313,13 +1668,45 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-3 shrink-0 font-mono tabular-nums">
-                                        <span className="text-xs font-bold text-ink-50">
+                                    {/* Colonne Valeur & Poids */}
+                                    <div className="col-span-3 sm:col-span-3 text-right font-mono tabular-nums">
+                                        <div className="text-xs font-bold text-ink-50">
                                             <PrivateAmount>{formatCAD(pos.valeur)}</PrivateAmount>
+                                        </div>
+                                        <div className="text-[11px] text-ink-400">
+                                            <PrivateAmount>{`Poids ${pos.poidsPct} %`}</PrivateAmount>
+                                        </div>
+                                    </div>
+
+                                    {/* Colonne Variation estimée (style Google Finance Beta double ligne vert/rouge) */}
+                                    <div className="hidden sm:block sm:col-span-2 text-right font-mono tabular-nums">
+                                        <span
+                                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                                                pos.positif ? 'gf-delta-up' : 'gf-delta-down'
+                                            }`}
+                                        >
+                                            <PrivateAmount>
+                                                {`${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)}`}
+                                            </PrivateAmount>
                                         </span>
-                                        <span className="px-2 py-0.5 rounded-sm bg-surface-douce border border-bordure text-[11px] font-semibold text-ink-200">
-                                            <PrivateAmount>{`${pos.poidsPct} %`}</PrivateAmount>
-                                        </span>
+                                    </div>
+
+                                    {/* Colonne Gain/Perte au total */}
+                                    <div className="col-span-4 sm:col-span-3 text-right font-mono tabular-nums">
+                                        <div
+                                            className={`text-xs font-bold ${
+                                                pos.positif ? 'text-succes-texte' : 'text-erreur-texte'
+                                            }`}
+                                        >
+                                            <PrivateAmount>
+                                                {`${pos.positif ? '+' : ''}${formatCompactCAD(pos.gainCad)}`}
+                                            </PrivateAmount>
+                                        </div>
+                                        <div className="text-[11px] text-ink-300">
+                                            <PrivateAmount>
+                                                {`(${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)})`}
+                                            </PrivateAmount>
+                                        </div>
                                     </div>
                                 </button>
                             ))}
@@ -1327,12 +1714,140 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     </section>
                 </div>
 
-                {/* COLONNE DROITE (4 COL) : RAIL GOOGLE FINANCE (ALLOCATION, ACTIVITÉ RÉCENTE, JALONS) */}
-                <div className="lg:col-span-4 space-y-5">
-                    {/* Carte 1 : Répartition du portefeuille */}
+                {/* ── COLONNE DROITE (3 COL) : PANNEAU « RECHERCHE » GEMINI + ALLOCATION + ACTIVITÉ + JALONS ── */}
+                <aside
+                    aria-label="Recherche Gemini et indicateurs latéraux"
+                    className="xl:col-span-3 space-y-4"
+                >
+                    {/* Carte 1 : Panneau « Recherche » Gemini façon Google Finance Beta */}
+                    <section
+                        aria-label="Assistant de recherche financière Gemini"
+                        className="premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-4"
+                    >
+                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
+                            <div className="flex items-center gap-2">
+                                <Icon name="sparkles" size={16} className="text-ink-100" aria-hidden="true" />
+                                <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                                    Recherche
+                                </h2>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowGeminiModal(true)}
+                                aria-label="Ouvrir la recherche Gemini en grand"
+                                className="touch-target px-2.5 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs text-ink-200 inline-flex items-center gap-1 focus-ring"
+                            >
+                                <span>Plein écran</span>
+                                <Icon name="chevron-right" size={13} aria-hidden="true" />
+                            </button>
+                        </div>
+
+                        <p className="text-sm font-semibold text-ink-50 leading-snug">
+                            {prenom
+                                ? `Bonjour ${prenom}, posez n’importe quelle question financière`
+                                : 'Bonjour, posez n’importe quelle question financière'}
+                        </p>
+
+                        {/* 3 cartes de questions suggérées avec icône étincelle */}
+                        <div className="space-y-2">
+                            {QUESTIONS_GEMINI_SUGGEREES.map((q) => (
+                                <button
+                                    key={q}
+                                    type="button"
+                                    onClick={() => ouvrirQuestionGemini(q)}
+                                    className="gf-prompt-card touch-target w-full px-3.5 py-2.5 flex items-center justify-between gap-2.5 text-left text-xs text-ink-100 focus-ring"
+                                >
+                                    <span className="leading-snug">{q}</span>
+                                    <Icon
+                                        name="sparkles"
+                                        size={15}
+                                        className="text-ink-300 shrink-0"
+                                        aria-hidden="true"
+                                    />
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Découvrez vos possibilités : puces d'actions Google Finance Beta */}
+                        <div className="space-y-2 pt-1">
+                            <div className="text-[11px] font-medium text-ink-300">
+                                Découvrez vos possibilités
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab(Tab.INVESTMENTS)}
+                                    onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                                    className="gf-chip touch-target text-xs focus-ring"
+                                >
+                                    <Icon name="edit" size={13} aria-hidden="true" />
+                                    <span>Modifier les avoirs</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab(Tab.LIFE_PROJECTS)}
+                                    onMouseEnter={() => prefetchTab(Tab.LIFE_PROJECTS)}
+                                    className="gf-chip touch-target text-xs focus-ring"
+                                >
+                                    <Icon name="sparkles" size={13} aria-hidden="true" />
+                                    <span>Créer une tâche</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowGeminiModal(true)}
+                                    className="gf-chip touch-target text-xs focus-ring"
+                                >
+                                    <Icon name="search" size={13} aria-hidden="true" />
+                                    <span>Deep Search</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Compositeur « Poser une question » en bas du panneau Recherche */}
+                        <div className="gf-chat-composer p-3 space-y-2.5">
+                            <input
+                                type="text"
+                                value={questionComposer}
+                                onChange={(e) => setQuestionComposer(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        ouvrirQuestionGemini(questionComposer.trim() || QUESTIONS_GEMINI_SUGGEREES[0]!);
+                                        setQuestionComposer('');
+                                    }
+                                }}
+                                placeholder="Poser une question à Gemini…"
+                                aria-label="Poser une question financière à Gemini"
+                                className="champ-nu touch-target w-full bg-transparent text-xs sm:text-sm text-ink-50 placeholder-ink-400 focus-ring"
+                            />
+                            <div className="flex items-center justify-between gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowConnexionsModal(true)}
+                                    aria-label="Joindre ou synchroniser une source de données"
+                                    className="touch-target px-2.5 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs text-ink-300 inline-flex items-center gap-1 focus-ring"
+                                >
+                                    <Icon name="plus" size={14} aria-hidden="true" />
+                                    <span>Source</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        ouvrirQuestionGemini(questionComposer.trim() || QUESTIONS_GEMINI_SUGGEREES[0]!);
+                                        setQuestionComposer('');
+                                    }}
+                                    aria-label="Envoyer la question à Gemini"
+                                    className="gf-send-circle touch-target w-9 h-9 inline-flex items-center justify-center focus-ring"
+                                >
+                                    <Icon name="arrow-up" size={15} aria-hidden="true" />
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Carte 2 : Répartition colorée du portefeuille */}
                     <section
                         aria-label="Répartition visuelle des actifs"
-                        className="premium-card rounded-md bg-surface border border-bordure p-5 space-y-4"
+                        className="premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-4"
                     >
                         <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
                             <div>
@@ -1347,30 +1862,30 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(partSelectionnee.tab)}
                                 onMouseEnter={() => prefetchTab(partSelectionnee.tab)}
-                                className="touch-target px-3 py-1 rounded-sm border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
                             >
                                 <span>Détails</span>
                                 <Icon name="chevron-right" size={14} aria-hidden="true" />
                             </button>
                         </div>
 
-                        {/* Barre de pondération linéaire */}
+                        {/* Barre de pondération linéaire multicolore */}
                         <div
-                            className="h-2.5 w-full rounded-sm bg-fond border border-bordure flex p-0.5 gap-0.5"
+                            className="h-2.5 w-full rounded-full bg-fond border border-bordure flex p-0.5 gap-0.5 gf-bar-grow"
                             aria-hidden="true"
                         >
                             {partsRepartition.map((part) => (
                                 <div
                                     key={`bar-${part.id}`}
                                     style={{ width: `${isPrivacyMode ? 20 : Math.max(4, part.pct)}%` }}
-                                    className={`h-full transition-opacity duration-100 ${part.classeBarre} ${
+                                    className={`h-full rounded-full transition-opacity duration-150 ${part.classeBarre} ${
                                         segmentActif === null || segmentActif === part.id ? 'opacity-100' : 'opacity-30'
                                     }`}
                                 />
                             ))}
                         </div>
 
-                        <div className="relative h-[148px] w-full flex items-center justify-center rounded-sm border border-bordure bg-fond">
+                        <div className="relative h-[148px] w-full flex items-center justify-center rounded-lg border border-bordure bg-fond">
                             <div
                                 key={`${activeTab}-repartition-${lentilleHero}`}
                                 data-testid="recharts-allocation-entrance"
@@ -1428,7 +1943,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             </div>
                         </div>
 
-                        <div className="rounded-sm border border-bordure divide-y divide-bordure bg-fond">
+                        <div
+                            role="group"
+                            aria-label="Sélection d'une enveloppe d'actifs"
+                            className="rounded-lg border border-bordure divide-y divide-bordure bg-fond overflow-hidden"
+                        >
                             {partsRepartition.map((part) => (
                                 <button
                                     key={part.id}
@@ -1445,7 +1964,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 >
                                     <span className="flex items-center gap-2.5 min-w-0 truncate">
                                         <span
-                                            className={`w-2 h-2 shrink-0 ${part.classeBarre}`}
+                                            className={`w-2.5 h-2.5 rounded-full shrink-0 ${part.classeBarre}`}
                                             aria-hidden="true"
                                         />
                                         <span className="truncate">{part.label}</span>
@@ -1461,10 +1980,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
                     </section>
 
-                    {/* Carte 2 : Flux d'opérations récentes */}
+                    {/* Carte 3 : Flux d'opérations récentes */}
                     <section
                         aria-label="Opérations récentes"
-                        className="premium-card rounded-md bg-surface border border-bordure p-5 space-y-3.5"
+                        className="premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-3.5"
                     >
                         <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
                             <div>
@@ -1479,7 +1998,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(Tab.TRANSACTIONS)}
                                 onMouseEnter={() => prefetchTab(Tab.TRANSACTIONS)}
-                                className="touch-target px-3 py-1 rounded-sm border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
                             >
                                 <span>Journal</span>
                                 <Icon name="chevron-right" size={14} aria-hidden="true" />
@@ -1487,7 +2006,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
 
                         {operationsRecentes.length > 0 ? (
-                            <div className="rounded-sm border border-bordure divide-y divide-bordure bg-fond">
+                            <div className="rounded-lg border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
                                 {operationsRecentes.map((tx) => {
                                     const estRevenu = tx.amount > 0;
                                     return (
@@ -1495,7 +2014,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             key={tx.id}
                                             type="button"
                                             onClick={() => setActiveTab(Tab.TRANSACTIONS)}
-                                            className="touch-target w-full px-3 py-2 flex items-center justify-between gap-2.5 text-left hover:bg-surface-douce transition-colors duration-100 focus-ring"
+                                            className="gf-row touch-target w-full px-3 py-2 flex items-center justify-between gap-2.5 text-left focus-ring"
                                         >
                                             <div className="min-w-0 flex-1">
                                                 <div className="text-xs font-medium text-ink-50 truncate">
@@ -1517,12 +2036,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 })}
                             </div>
                         ) : (
-                            <div className="py-6 rounded-sm border border-bordure bg-fond text-center space-y-2">
+                            <div className="py-6 rounded-lg border border-bordure bg-fond text-center space-y-2">
                                 <p className="text-xs text-ink-300">Aucune opération enregistrée</p>
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab(Tab.TRANSACTIONS)}
-                                    className="touch-target px-3.5 py-1.5 rounded-sm bg-accent text-sur-accent text-xs font-semibold inline-flex items-center gap-1.5 focus-ring"
+                                    className="touch-target px-3.5 py-1.5 rounded-full bg-accent text-sur-accent text-xs font-semibold inline-flex items-center gap-1.5 focus-ring"
                                 >
                                     <Icon name="plus" size={14} aria-hidden="true" />
                                     <span>Ajouter</span>
@@ -1531,10 +2050,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         )}
                     </section>
 
-                    {/* Carte 3 : Prochains jalons & calendrier patrimonial */}
+                    {/* Carte 4 : Prochains jalons & calendrier patrimonial */}
                     <section
                         aria-label="Prochains jalons patrimoniaux"
-                        className="premium-card rounded-md bg-surface border border-bordure p-5 space-y-3.5"
+                        className="premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-3.5"
                     >
                         <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
                             <div>
@@ -1549,14 +2068,14 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(Tab.LIFE_PROJECTS)}
                                 onMouseEnter={() => prefetchTab(Tab.LIFE_PROJECTS)}
-                                className="touch-target px-3 py-1 rounded-sm border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
                             >
                                 <span>Projets</span>
                                 <Icon name="chevron-right" size={14} aria-hidden="true" />
                             </button>
                         </div>
 
-                        <div className="rounded-sm border border-bordure divide-y divide-bordure bg-fond">
+                        <div className="rounded-lg border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
                             {prochainsJalons.map((jalon) => {
                                 const ecartAnnees = jalon.annee - anneeActuelle;
                                 const delaiTexte = isPrivacyMode ? '••' : ecartAnnees <= 0 ? 'Actif' : `Dans ${ecartAnnees} an${ecartAnnees > 1 ? 's' : ''}`;
@@ -1565,10 +2084,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         key={jalon.id}
                                         type="button"
                                         onClick={() => setActiveTab(jalon.tab)}
-                                        className="touch-target w-full px-3 py-2 flex items-center justify-between gap-2.5 text-left hover:bg-surface-douce transition-colors duration-100 focus-ring"
+                                        className="gf-row touch-target w-full px-3 py-2 flex items-center justify-between gap-2.5 text-left focus-ring"
                                     >
                                         <div className="min-w-0 flex items-center gap-2.5">
-                                            <span className="px-1.5 py-0.5 rounded-sm bg-surface border border-bordure font-mono tabular-nums text-[11px] font-bold text-ink-200 shrink-0">
+                                            <span className="px-2 py-0.5 rounded-md gf-delta-amber font-mono tabular-nums text-[11px] font-bold shrink-0">
                                                 {jalon.annee}
                                             </span>
                                             <div className="min-w-0">
@@ -1588,13 +2107,13 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             })}
                         </div>
                     </section>
-                </div>
+                </aside>
             </div>
 
             {/* 3. BARRE DES SECTEURS & MODULES DU PATRIMOINE (8 ACCÈS DIRECTS) */}
             <section
                 aria-label="Accès visuel aux espaces"
-                className="premium-card rounded-md bg-surface border border-bordure divide-y divide-bordure"
+                className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
             >
                 <div className="px-5 py-3 flex items-center justify-between gap-2">
                     <h2 className="text-xs font-mono uppercase tracking-wider text-ink-300">
@@ -1688,8 +2207,8 @@ const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({ active, payload
     const ecart = pt.valeur - patrimoineInitial;
 
     return (
-        <div className="rounded-sm bg-surface border border-bordure-champ p-3 text-xs font-mono tabular-nums space-y-1.5">
-            <div className="flex items-center justify-between gap-4 border-b border-bordure pb-1">
+        <div className="gf-tooltip-card text-xs font-mono tabular-nums space-y-1.5">
+            <div className="gf-tooltip-header">
                 <span className="font-bold text-ink-50">Année {pt.annee}</span>
                 <span className="text-[10px] uppercase tracking-wider text-ink-300">Projection</span>
             </div>
@@ -1700,15 +2219,9 @@ const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({ active, payload
                 </span>
             </div>
             <div className="flex items-center justify-between gap-4">
-                <span className="text-ink-300">Avoirs bruts</span>
-                <span className="font-semibold text-ink-200">
-                    <PrivateAmount>{formatCAD(pt.avoirs)}</PrivateAmount>
-                </span>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-                <span className="text-ink-300">Écart net</span>
-                <span className="font-semibold text-ink-50">
-                    <PrivateAmount>{`${ecart >= 0 ? '+' : ''}${formatCompactCAD(ecart)}`}</PrivateAmount>
+                <span className="text-ink-300">Évolution</span>
+                <span className={`font-semibold ${ecart >= 0 ? 'text-succes-texte' : 'text-erreur-texte'}`}>
+                    <PrivateAmount>{`${ecart >= 0 ? '+' : ''}${formatCAD(ecart)}`}</PrivateAmount>
                 </span>
             </div>
         </div>

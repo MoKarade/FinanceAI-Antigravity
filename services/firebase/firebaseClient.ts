@@ -7,7 +7,17 @@ import {
     getDocFromServer,
     type Firestore,
 } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+import firebaseConfigRaw from '../../firebase-applet-config.json';
+
+const envProjectId = (import.meta.env.VITE_FIREBASE_PROJECT_ID ?? '').trim();
+const firebaseConfig = envProjectId
+    ? {
+          ...firebaseConfigRaw,
+          projectId: envProjectId,
+          authDomain: `${envProjectId}.firebaseapp.com`,
+          storageBucket: `${envProjectId}.firebasestorage.app`,
+      }
+    : firebaseConfigRaw;
 
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 

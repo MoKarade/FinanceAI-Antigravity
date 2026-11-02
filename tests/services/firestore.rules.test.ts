@@ -543,7 +543,7 @@ describe('Firestore Security Rules & Dirty Dozen Red Team Audit', () => {
     });
 
     it('extrait fidèlement l’horodatage Firestore (updatedAt) pour éviter qu’un document distant plus ancien n’écrase un état local plus récent', () => {
-        expect(firebaseAppletConfig.projectId).toBe('financeai-497112');
+        expect(firebaseAppletConfig.projectId).toBe('financeai-demo-public');
         expect(
             extractRemoteTimestampMs({
                 updatedAt: { toMillis: () => 1_762_000_500_000 },

@@ -76,11 +76,16 @@ export function useAppBootEffects(): void {
         // Fix : register direct si le DOM est déjà loaded, sinon on attend l'event.
         if (import.meta.env.PROD && 'serviceWorker' in navigator) {
             const registerSW = () => {
-                navigator.serviceWorker.register('/sw.js').catch((err) => {
-                    // log explicite plutôt qu'un silent catch — utile en cas
-                    // de régression future (anti-pattern silent-failure-hunter).
-                    console.error('[SW] registration failed:', err);
-                });
+                navigator.serviceWorker
+                    .register('/sw.js', { updateViaCache: 'none' })
+                    .then((reg) => {
+                        void reg.update();
+                    })
+                    .catch((err) => {
+                        // log explicite plutôt qu'un silent catch — utile en cas
+                        // de régression future (anti-pattern silent-failure-hunter).
+                        console.error('[SW] registration failed:', err);
+                    });
             };
             if (document.readyState === 'complete') {
                 registerSW();

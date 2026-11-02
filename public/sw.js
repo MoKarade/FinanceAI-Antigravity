@@ -10,8 +10,8 @@
 //
 // Note : ce SW est uniquement chargé en PROD (vite import.meta.env.PROD).
 
-const CACHE_NAME = 'financeai-v5'; // v5 : logo série A — purge de v4 qui gardait l'ancien /icon.svg (cache d'abord) ; v4 : Cloudflare Access — plus aucune réponse redirigée/opaque en cache (purge des caches v3)
-const PRECACHE_URLS = ['/', '/manifest.json', '/icon.svg'];
+const CACHE_NAME = 'financeai-v6'; // v6 : migration Firebase Hosting + fix fetch navigation RequestInit ; v5 : logo série A — purge de v4 qui gardait l'ancien /icon.svg (cache d'abord) ; v4 : Cloudflare Access — plus aucune réponse redirigée/opaque en cache (purge des caches v3)
+const PRECACHE_URLS = ['/manifest.json', '/icon.svg'];
 
 // [CF-ACCESS] Une réponse mettable en cache doit être une réponse DIRECTE de notre origine : ni redirigée (session
 // Access expirée = 302 vers la page de connexion Cloudflare, dont le HTML en 200 serait sinon mémorisé À LA PLACE de
@@ -47,10 +47,15 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys()
-            .then((keys) => Promise.all(
-                keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
-            ))
-            .then(() => self.clients.claim())
+            .then(async (keys) => {
+                const anciens = keys.filter((k) => k !== CACHE_NAME);
+                await Promise.all(anciens.map((k) => caches.delete(k)));
+                await self.clients.claim();
+                if (anciens.length > 0) {
+                    const fenetres = await self.clients.matchAll({ type: 'window' });
+                    await Promise.all(fenetres.map((c) => c.navigate(c.url).catch(() => {})));
+                }
+            })
     );
 });
 
@@ -90,9 +95,10 @@ self.addEventListener('fetch', (event) => {
     // navigateur (stale) → index pointant vers d'anciens hashes de chunks →
     // utilisateur coincé sur du vieux code après un deploy. Online = toujours
     // frais ; offline = fallback cache via le .catch ci-dessous.
+    const cibleFetch = req.mode === 'navigate' ? req.url : req;
     const fetchOpts = req.mode === 'navigate' ? { cache: 'no-store' } : undefined;
     event.respondWith(
-        fetch(req, fetchOpts)
+        fetch(cibleFetch, fetchOpts)
             .then((res) => {
                 if (!cacheable(res)) return res;
                 const clone = res.clone();

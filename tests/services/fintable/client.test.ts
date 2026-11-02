@@ -276,12 +276,12 @@ describe('récepteur de fetch (règle WebIDL du navigateur, simulée)', () => {
 
     it('bascule automatiquement vers https://fintable.io/api/v2 si le proxy relatif (/api/fintable) renvoie le fallback HTML SPA', async () => {
         const prevLocation = (globalThis as { location?: unknown }).location;
-        (globalThis as { location?: unknown }).location = { origin: 'https://financeai-497112.web.app' };
+        (globalThis as { location?: unknown }).location = { origin: 'https://financeai-demo-public.web.app' };
         try {
             const calls: string[] = [];
             const fetchImpl = vi.fn(async (url: string) => {
                 calls.push(url);
-                if (url.startsWith('https://financeai-497112.web.app/api/fintable/')) {
+                if (url.startsWith('https://financeai-demo-public.web.app/api/fintable/')) {
                     return res(200, '<!DOCTYPE html><html><body>SPA</body></html>', {
                         'content-type': 'text/html; charset=utf-8',
                     });
@@ -298,7 +298,7 @@ describe('récepteur de fetch (règle WebIDL du navigateur, simulée)', () => {
             const first = await client.get<Array<{ id: string }>>('/accounts');
             expect(first.data).toEqual([{ id: 'acc_direct_1' }]);
             expect(calls).toEqual([
-                'https://financeai-497112.web.app/api/fintable/accounts',
+                'https://financeai-demo-public.web.app/api/fintable/accounts',
                 'https://fintable.io/api/v2/accounts',
             ]);
 
