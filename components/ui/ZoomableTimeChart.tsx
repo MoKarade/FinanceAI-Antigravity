@@ -558,6 +558,7 @@ export const ZoomableTimeChart: React.FC<ZoomableTimeChartProps> = ({
                 <div className="gf-chart-minimap bg-black/30" aria-hidden="true">
                     <div
                         className="gf-chart-minimap-thumb"
+                        // NOMBRE-NON-MONETAIRE : géométrie de la fenêtre de zoom
                         style={{ left: `${startPct}%`, width: `${widthPct}%` }}
                     />
                 </div>

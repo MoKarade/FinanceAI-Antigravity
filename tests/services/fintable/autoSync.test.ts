@@ -39,7 +39,7 @@ beforeEach(() => {
     _resetAutoSyncForTests();
     useFinanceStore.getState().resetState();
     useFinanceStore.setState({
-        apiKeys: { anthropic: '', finnhub: '', fintable: 'ft_test' },
+        apiKeys: { gemini: '', anthropic: '', finnhub: '', fintable: 'ft_test' },
         isTestMode: false,
         fintableSyncReport: undefined,
     });
@@ -63,7 +63,7 @@ describe('isDailySyncDue', () => {
 
 describe('maybeRunDailyFintableSync — gardes', () => {
     it('sans jeton : ne court pas', async () => {
-        useFinanceStore.setState({ apiKeys: { anthropic: '', finnhub: '', fintable: '' } });
+        useFinanceStore.setState({ apiKeys: { gemini: '', anthropic: '', finnhub: '', fintable: '' } });
         const out = await maybeRunDailyFintableSync();
         expect(out).toEqual({ ran: false, reason: 'no-token' });
         expect(runMock).not.toHaveBeenCalled();

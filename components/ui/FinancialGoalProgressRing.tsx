@@ -6,7 +6,7 @@ import { NO_DATA_LABEL } from './emptyAware';
 
 export type NiveauUrgenceObjectif = 'critique' | 'elevee' | 'moderee' | 'faible' | 'atteint';
 
-export interface MetriquesObjectifFinancier {
+interface MetriquesObjectifFinancier {
     id: string;
     nom: string;
     montantActuel: number | null;
@@ -76,7 +76,7 @@ const LIBELLES_URGENCE: Record<NiveauUrgenceObjectif, string> = {
 /**
  * Calcule le nombre de mois entre `todayIso` (AAAA-MM-JJ) et `deadline` (AAAA-MM ou AAAA-MM-JJ).
  */
-export function calculerMoisRestants(deadline: string | undefined, todayIso: string): number | null {
+function calculerMoisRestants(deadline: string | undefined, todayIso: string): number | null {
     if (!deadline || typeof deadline !== 'string') return null;
     const match = /^(\d{4})-(\d{2})/.exec(deadline.trim());
     const matchToday = /^(\d{4})-(\d{2})/.exec(todayIso.trim());
@@ -122,9 +122,11 @@ function formaterEcheanceRestante(moisRestants: number | null, deadline: string 
     if (moisRestants === null) return deadline ? `Échéance ${deadline}` : 'Sans échéance';
     if (moisRestants < 0) return 'Échéance dépassée';
     if (moisRestants === 0) return 'Ce mois-ci';
+    // MONTANT-MASQUE-AILLEURS : rendu sous PrivateAmount dans la carte d'objectif
     if (moisRestants < 12) return `${moisRestants} mois restants`;
     const annees = Math.floor(moisRestants / 12);
     const mois = moisRestants % 12;
+    // MONTANT-MASQUE-AILLEURS : rendu sous PrivateAmount dans la carte d'objectif
     if (mois === 0) return `${annees} an${annees > 1 ? 's' : ''} restant${annees > 1 ? 's' : ''}`;
     return `${annees} a ${mois} m restants`;
 }
@@ -133,7 +135,7 @@ function formaterEcheanceRestante(moisRestants: number | null, deadline: string 
  * Extrait et normalise les métriques d'un `FinancialGoal` (supporte aussi les fixtures de test `target`/`current`).
  * Aucune valeur non finie n'est jamais convertie en 0.
  */
-export function evaluerObjectifFinancier(
+function evaluerObjectifFinancier(
     goal: FinancialGoal,
     todayIso: string,
 ): MetriquesObjectifFinancier {
@@ -243,6 +245,7 @@ export const FinancialGoalProgressRing: React.FC<FinancialGoalProgressRingProps>
                             strokeWidth={strokeWidth}
                             strokeLinecap="butt"
                             strokeDasharray={circonference}
+                            // MONTANT-MASQUE-AILLEURS : jauge accompagnant le pourcentage sous PrivateAmount
                             strokeDashoffset={dashOffset}
                             style={{
                                 transition: 'stroke-dashoffset 0.85s cubic-bezier(0.16, 1, 0.3, 1)',
@@ -302,6 +305,7 @@ export const FinancialGoalProgressRing: React.FC<FinancialGoalProgressRingProps>
                             strokeWidth={strokeWidth}
                             strokeLinecap="butt"
                             strokeDasharray={circonference}
+                            // MONTANT-MASQUE-AILLEURS : jauge accompagnant le pourcentage sous PrivateAmount
                             strokeDashoffset={dashOffset}
                             style={{
                                 transition: 'stroke-dashoffset 0.85s cubic-bezier(0.16, 1, 0.3, 1)',
@@ -331,7 +335,9 @@ export const FinancialGoalProgressRing: React.FC<FinancialGoalProgressRingProps>
                 <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-ink-300">
                     <span className={`font-semibold ${configGradient.classeTexte}`}>{metriques.libelleUrgence}</span>
                     <span aria-hidden="true">·</span>
-                    <span className="font-mono tabular-nums text-ink-400">{metriques.echeanceTexte}</span>
+                    <span className="font-mono tabular-nums text-ink-400">
+                        <PrivateAmount>{metriques.echeanceTexte}</PrivateAmount>
+                    </span>
                     {metriques.compteCible && (
                         <>
                             <span aria-hidden="true">·</span>

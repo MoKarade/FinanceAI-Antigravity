@@ -15,7 +15,7 @@ function baseState(over: Partial<AppState> = {}): AppState {
         budgetItems: [], config: {} as AppState['config'], projection: {} as AppState['projection'],
         realEstateGoals: [], childGoals: [], debts: [], travelGoals: [],
         lifeEvents: [], retirementGoal: {} as AppState['retirementGoal'], financialGoals: [],
-        initialBalances: {}, apiKeys: { anthropic: '', finnhub: '' },
+        initialBalances: {}, apiKeys: { gemini: '', anthropic: '', finnhub: '' },
         fxRates: { USD: 1, EUR: 1, CAD: 1 }, lastUpdate: 0, categorizationRules: [], aiConversation: [],
         ...over,
     } as AppState;

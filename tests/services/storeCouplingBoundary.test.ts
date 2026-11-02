@@ -32,7 +32,7 @@ const SERVICES_STORE_AUTORISES = [
     'services/aiTools/writeExecutor.ts',
     // [SANDBOX-PROMPTS-MARQUER-CONTEXTE] 2026-09-29 : lit `modeDonneesFictives()` au point de
     // contact SDK pour marquer le `system` quand les données sont fictives (ARCHITECTURE §2).
-    'services/claude.ts',
+    'services/gemini.ts',
     'services/dataRecovery.ts',
     'services/fintable/autoSync.ts',
     'services/firebase/workspaceSync.ts',

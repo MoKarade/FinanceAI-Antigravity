@@ -16,10 +16,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { useFinanceStore } from '../../../store/useFinanceStore';
 import { PayslipUploadCard } from '../../../components/settings/PayslipUploadCard';
-import { analyzePayslip } from '../../../services/claude';
+import { analyzePayslip } from '../../../services/gemini';
 import { createBackupNow } from '../../../services/backupAuto';
 
-vi.mock('../../../services/claude', () => ({ analyzePayslip: vi.fn() }));
+vi.mock('../../../services/gemini', () => ({ analyzePayslip: vi.fn() }));
 vi.mock('../../../components/ui/Toast', () => ({ showToast: vi.fn() }));
 vi.mock('../../../services/backupAuto', () => ({
     createBackupNow: vi.fn(async () => ({ id: 'bk1', timestamp: Date.now() })),

@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { useFinanceStore } from '../../../store/useFinanceStore';
 import { PayslipUploadCard } from '../../../components/settings/PayslipUploadCard';
 
-vi.mock('../../../services/claude', () => ({
+vi.mock('../../../services/gemini', () => ({
     analyzePayslip: vi.fn(),
 }));
 

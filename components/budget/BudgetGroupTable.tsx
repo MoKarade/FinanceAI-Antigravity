@@ -446,6 +446,7 @@ const EditeurPoste: React.FC<EditeurPosteProps> = ({
                                     if (isPrivacyMode) return [MASKED_AMOUNT_LABEL, item.name];
                                     const n = Number(val) || 0;
                                     const diff = displayTarget - n;
+                                    // MONTANT-MASQUE-AILLEURS : court-circuité par if (isPrivacyMode) ci-dessus
                                     const suffix = displayTarget > 0 ? ` (${diff >= 0 ? 'reste ' : 'dépassement '}${formatCAD(Math.abs(diff))})` : '';
                                     return [`${formatCAD(n)}${suffix}`, item.name];
                                 }}

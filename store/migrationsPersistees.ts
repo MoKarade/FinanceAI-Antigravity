@@ -51,12 +51,16 @@ function migratePersistedStateUnsafe(
     if (fromVersion === undefined || fromVersion < 1) {
         state = state as MigratingState;
     }
-    // v1 → v2 : Phase 4 A1 — ajout apiKeys.anthropic (gemini gardé).
-    // v2 → v3 : Phase 4 A5 — suppression de apiKeys.gemini (pas de copie vers anthropic, formats ≠).
+    // v1 → v2 → v3 : normalisation apiKeys.gemini (avec repli depuis anthropic legacy si gemini absent).
     step('v2→v3 (apiKeys)');
     if (fromVersion < 3 && state?.apiKeys) {
         const apiKeys = state.apiKeys;
-        state = { ...state, apiKeys: { anthropic: apiKeys.anthropic || '' } } as MigratingState;
+        state = {
+            ...state,
+            apiKeys: {
+                gemini: apiKeys.gemini || apiKeys.anthropic || '',
+            },
+        } as MigratingState;
     }
     // v3 → v4 : §7.F.5 — ajout apiKeys.finnhub pour le data sourcing marketData (default vide).
     step('v3→v4 (finnhub)');
@@ -64,7 +68,10 @@ function migratePersistedStateUnsafe(
         const apiKeys = state.apiKeys;
         state = {
             ...state,
-            apiKeys: { anthropic: apiKeys.anthropic || '', finnhub: apiKeys.finnhub || '' },
+            apiKeys: {
+                gemini: apiKeys.gemini || apiKeys.anthropic || '',
+                finnhub: apiKeys.finnhub || '',
+            },
         } as MigratingState;
     }
     // v4 → v5 : Phase C.3 — `lifeExpectancy` migré du state local Retirement.tsx vers
@@ -106,6 +113,17 @@ function migratePersistedStateUnsafe(
         delete cleaned.realDataSnapshot;
         delete cleaned.activeTestPersonaId;
         state = cleaned as MigratingState;
+    }
+    // Normalisation finale apiKeys.anthropic → apiKeys.gemini (pour les blobs v4..v7 qui portaient anthropic).
+    if (state?.apiKeys) {
+        const ak = state.apiKeys;
+        state = {
+            ...state,
+            apiKeys: {
+                gemini: ak.gemini || ak.anthropic || '',
+                finnhub: ak.finnhub || '',
+            },
+        } as MigratingState;
     }
     return state;
 }

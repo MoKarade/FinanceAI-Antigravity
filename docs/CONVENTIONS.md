@@ -1,26 +1,19 @@
 # CONVENTIONS — FinanceAI (version détaillée)
 
-> **Ce fichier est l'ancien `CLAUDE.md` dans son INTÉGRALITÉ**, déplacé ici le 2026-07-31.
-> Aucune ligne n'a été supprimée : ce qui suit est le texte complet, verbatim.
+> **Référence opérationnelle actuelle : [`GEMINI.md`](../GEMINI.md)** (architecture 100 % Google — `[FULL-GOOGLE-MIGRATION]`, 2026-11-02).
+> Ce fichier conserve l'historique intégral des conventions et leçons d'ingénierie accumulées sur le dépôt.
 >
-> **Pourquoi ce déplacement.** `CLAUDE.md` se charge à CHAQUE session. Il avait atteint
-> 1 799 lignes (~36 500 tokens) alors que son propre en-tête annonçait « Fichier dense et
-> **court** (il se charge à chaque session = coûte des tokens) ». L'intention était juste,
-> la dérive a gagné. Ça se payait deux fois : en tokens à chaque démarrage, et en ATTENTION
-> — dans 36 000 tokens de règles, les plus importantes se noient.
+> **Pourquoi ce découpage.** Le fichier racine (`GEMINI.md`, qui remplace l'ancien `CLAUDE.md` déplacé ici le 2026-07-31)
+> se charge à CHAQUE session et reste volontairement court (≤ 60 lignes / ≤ 10 Ko).
 >
-> **Ce qui est resté dans `CLAUDE.md`** : l'opérationnel de chaque session (protocole de
-> reprise, cycle git, tenue du BACKLOG, gate, commandes) + les non-négociables + un INDEX
-> des classes de pièges, avec un pointeur vers ce fichier.
+> **Ce qui vit dans `GEMINI.md`** : l'architecture 100 % Google (**Google Gemini** via `services/gemini.ts`,
+> **Firebase Auth**, **Cloud Firestore** + **Google Drive**, **Design System Google Finance**), les commandes, la gate
+> avant commit et les règles métier NON NÉGOCIABLES.
 >
-> **Ce fichier reste la référence de détail.** Chaque leçon ci-dessous a été payée par un vrai
-> bug. Quand une tâche touche un domaine listé dans l'index de `CLAUDE.md`, LIRE la section
-> correspondante ici AVANT de coder — c'est le mode d'emploi prévu, pas une archive morte.
->
-> ⚠️ **Le texte ci-dessous est figé au moment du déplacement.** Là où il contredit `CLAUDE.md`,
-> c'est `CLAUDE.md` qui fait foi — notamment son en-tête (« ~2330 tests Vitest » était déjà
-> faux : le compte MESURÉ le 2026-07-31 est de **3 443 tests sur 299 fichiers**) et la carte des
-> docs, qui inclut désormais ce fichier-ci. Les LEÇONS, elles, restent valides telles quelles.
+> **Ce fichier reste la référence de détail des leçons.** Chaque leçon ci-dessous a été payée par un vrai
+> bug. Quand une tâche touche un domaine sensible, LIRE la section correspondante ici AVANT de coder —
+> c'est le mode d'emploi prévu, pas une archive morte. Là où un détail historique ci-dessous diverge de
+> `GEMINI.md` (ex. migration d'Anthropic/Claude vers Google Gemini `@google/genai`), **c'est `GEMINI.md` qui fait foi**.
 
 ---
 

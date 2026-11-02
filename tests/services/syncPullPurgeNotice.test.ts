@@ -38,7 +38,7 @@ vi.mock('../../services/googleDrive/driveAppData', () => {
         findSyncFile: vi.fn(async () => ({ id: 'file-1', modifiedTime: '2024' })),
         readSyncFile: vi.fn(async () => ({
             schemaVersion: 1, updatedAt: 1_700_000_000_000, deviceId: 'other-device', appVersion: 'test', enc: false,
-            payload: driveState.payload, apiKeys: { anthropic: '', finnhub: '' },
+            payload: driveState.payload, apiKeys: { gemini: '', anthropic: '', finnhub: '' },
         })),
         createSyncFile: vi.fn(async () => 'file-1'),
         updateSyncFile: vi.fn(async () => undefined),

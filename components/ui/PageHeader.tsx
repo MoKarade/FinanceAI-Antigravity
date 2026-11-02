@@ -38,6 +38,7 @@ const TICKER_PAR_TITRE: Record<string, { code: string; bourse: string }> = {
     Profil: { code: 'DOSSIER:ID', bourse: 'MÉNAGE & REVENUS · CAD' },
     Réglages: { code: 'SYS:CFG', bourse: 'SYNCHRONISATION · CAD' },
     Futur: { code: 'PATR:CAD', bourse: 'TRAJECTOIRE NETTE · CAD' },
+    Projection: { code: 'PATR:CAD', bourse: 'TRAJECTOIRE NETTE · CAD' },
 };
 
 export const PageHeader: React.FC<PageHeaderProps> = ({

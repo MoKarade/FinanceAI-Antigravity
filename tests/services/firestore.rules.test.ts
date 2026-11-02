@@ -13,6 +13,8 @@ import {
     packWorkspacePayloadForFirestore,
     unpackWorkspacePayloadFromFirestore,
     makeSafeRevisionId,
+    extractRemoteTimestampMs,
+    PERSISTED_WORKSPACE_KEYS,
     SAFE_ID_REGEX,
     MAX_DISPLAY_NAME_LENGTH,
     MAX_EMAIL_LENGTH,
@@ -36,10 +38,6 @@ import firebaseAppletConfig from '../../firebase-applet-config.json';
 import { buildStarterState } from '../../utils/starterData';
 import { FirebaseAuthGate } from '../../components/auth/FirebaseAuthGate';
 import { AccueilGoogle } from '../../components/AccueilGoogle';
-import {
-    getSqlConnectionConfig,
-    verifyDatabaseConnection,
-} from '../../services/db/sqlClient.ts';
 
 const rulesPath = path.resolve(process.cwd(), 'firestore.rules');
 const rulesSource = readFileSync(rulesPath, 'utf8');
@@ -331,10 +329,23 @@ describe('Firestore Security Rules & Dirty Dozen Red Team Audit', () => {
 
         const rev = makeSafeRevisionId();
         expect(SAFE_ID_REGEX.test(rev)).toBe(true);
-        expect(sanitizeForFirestore({ a: undefined, b: Number.NaN, apiKeys: 'hidden', c: 42 })).toEqual({
-            b: 0,
+        expect(
+            sanitizeForFirestore({
+                a: undefined,
+                b: Number.NaN,
+                inf: Number.POSITIVE_INFINITY,
+                apiKeys: 'hidden',
+                c: 42,
+            }),
+        ).toEqual({
+            b: null,
+            inf: null,
             c: 42,
         });
+        expect(PERSISTED_WORKSPACE_KEYS).toContain('brokerLedger');
+        expect(PERSISTED_WORKSPACE_KEYS).toContain('instruments');
+        expect(PERSISTED_WORKSPACE_KEYS).toContain('aiChatCostUsdTotal');
+        expect(PERSISTED_WORKSPACE_KEYS).toContain('revealedProjectionSig');
     });
 
     it('formate les erreurs de permission Firestore selon le contrat JSON FirestoreErrorInfo', () => {
@@ -531,55 +542,24 @@ describe('Firestore Security Rules & Dirty Dozen Red Team Audit', () => {
         expect(legacyUnpacked).toEqual({ initialBalances: { celi: 5000 } });
     });
 
-    it('vérifie la configuration Cloud SQL (sqlClient.ts) et l’atteignabilité de la base via verifyDatabaseConnection()', async () => {
-        const cfg = getSqlConnectionConfig({
-            SQL_HOST: '/cloudsql/financeai-497112:us-west1:instance',
-            SQL_USER: 'app_user',
-            SQL_PASSWORD: 'secret_password',
-            SQL_DB_NAME: 'financeai_db',
-        });
-        expect(cfg.host).toBe('/cloudsql/financeai-497112:us-west1:instance');
-        expect(cfg.user).toBe('app_user');
-        expect(cfg.database).toBe('financeai_db');
-        expect(cfg.keepAlive).toBe(true);
-
-        const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-        try {
-            const okResult = await verifyDatabaseConnection({
-                env: {
-                    SQL_HOST: '/cloudsql/financeai-497112:us-west1:instance',
-                    SQL_USER: 'app_user',
-                    SQL_DB_NAME: 'financeai_db',
-                },
-                queryProbe: async () => [{ id: 1 }],
-            });
-            expect(okResult.ok).toBe(true);
-            expect(okResult.reachable).toBe(true);
-            expect(infoSpy).toHaveBeenCalledWith(
-                expect.stringContaining('[CloudSQLDiagnostic] Connexion Cloud SQL vérifiée avec succès'),
-            );
-
-            const failResult = await verifyDatabaseConnection({
-                env: {
-                    SQL_HOST: '/cloudsql/financeai-497112:us-west1:instance',
-                    SQL_USER: 'app_user',
-                    SQL_DB_NAME: 'financeai_db',
-                },
-                queryProbe: async () => {
-                    throw new Error('ECONNREFUSED');
-                },
-            });
-            expect(failResult.ok).toBe(false);
-            expect(failResult.reachable).toBe(false);
-            expect(errorSpy).toHaveBeenCalledWith(
-                expect.stringContaining('[CloudSQLDiagnostic] Instance Cloud SQL injoignable'),
-            );
-        } finally {
-            infoSpy.mockRestore();
-            errorSpy.mockRestore();
-        }
+    it('extrait fidèlement l’horodatage Firestore (updatedAt) pour éviter qu’un document distant plus ancien n’écrase un état local plus récent', () => {
+        expect(firebaseAppletConfig.projectId).toBe('google-finance-app');
+        expect(
+            extractRemoteTimestampMs({
+                updatedAt: { toMillis: () => 1_762_000_500_000 },
+            }),
+        ).toBe(1_762_000_500_000);
+        expect(
+            extractRemoteTimestampMs({
+                updatedAt: { seconds: 1_762_000_000 },
+            }),
+        ).toBe(1_762_000_000_000);
+        expect(
+            extractRemoteTimestampMs(
+                {},
+                { lastUpdate: 1_762_000_123_000 },
+            ),
+        ).toBe(1_762_000_123_000);
     });
 
     it('affiche la page d’accueil style Google Finance (AccueilGoogle) sans erreur d’exécution', () => {

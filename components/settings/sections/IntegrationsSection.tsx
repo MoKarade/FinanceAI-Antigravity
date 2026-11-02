@@ -1,5 +1,5 @@
 // components/settings/sections/IntegrationsSection.tsx
-// G22-N4 — extrait de Settings.tsx : clés API & services externes (Anthropic,
+// G22-N4 — extrait de Settings.tsx : clés API & services externes (Google Gemini,
 // Finnhub). Comportement identique ; props apiKeys/setApiKeys threadées.
 
 import React, { useState } from 'react';
@@ -15,36 +15,34 @@ interface IntegrationsSectionProps {
 
 export const IntegrationsSection: React.FC<IntegrationsSectionProps> = ({ apiKeys, setApiKeys }) => {
   const [assistantOuvert, setAssistantOuvert] = useState(false);
-  const cleIa = apiKeys?.anthropic || '';
-  const formatValide =
-    (cleIa.startsWith('AIza') && cleIa.length >= 20) ||
-    (cleIa.startsWith('sk-ant-') && cleIa.length >= 20);
+  const cleIa = apiKeys?.gemini || apiKeys?.anthropic || '';
+  const formatValide = cleIa.startsWith('AIza') && cleIa.length >= 20;
 
   return (
     <div className="space-y-6">
     <Card title="Cles API & Services">
       <div className="space-y-4">
-        <div data-focus-section="apiKeys-anthropic">
-          <label htmlFor="apikey-anthropic" className="block text-body text-ink-300 mb-1">Clé API Google Gemini (IA)</label>
+        <div data-focus-section="apiKeys-gemini">
+          <label htmlFor="apikey-gemini" className="block text-body text-ink-300 mb-1">Clé API Google Gemini (IA)</label>
           <input
-            id="apikey-anthropic"
+            id="apikey-gemini"
             type="password"
             value={cleIa}
-            onChange={(e) => setApiKeys({ ...apiKeys, anthropic: e.target.value })}
+            onChange={(e) => setApiKeys({ ...apiKeys, gemini: e.target.value })}
             className="w-full bg-dark border border-border rounded-sm px-3 py-2 text-white focus:border-primary outline-hidden"
             placeholder="AIzaSy..."
-            aria-describedby="apikey-anthropic-format"
+            aria-describedby="apikey-gemini-format"
           />
           {cleIa && (
-            <div id="apikey-anthropic-format" className="text-meta mt-1" role="status" aria-live="polite">
+            <div id="apikey-gemini-format" className="text-meta mt-1" role="status" aria-live="polite">
               {formatValide
-                ? <span className="text-green-400">Format valide (Gemini 3.8 Flash prêt)</span>
+                ? <span className="text-green-400">Format valide (Gemini 2.5 Flash prêt)</span>
                 : <span className="text-yellow-400">Format inattendu (devrait commencer par <code className="bg-white/10 px-1 rounded-sm">AIza</code>)</span>
               }
             </div>
           )}
           <p className="text-meta text-ink-400 mt-1">
-            Pour Google Gemini 3.8 Flash — conseiller patrimonial, catégorisation, fiscalité et vision PDF/image. Obtiens ta clé sur{' '}
+            Pour Google Gemini 2.5 Flash — conseiller patrimonial, catégorisation, fiscalité et vision PDF/image. Obtiens ta clé sur{' '}
             <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-repere underline">aistudio.google.com/apikey</a>
           </p>
         </div>
@@ -88,7 +86,7 @@ export const IntegrationsSection: React.FC<IntegrationsSectionProps> = ({ apiKey
     <Card icon={<Icon name="sparkles" size={18} className="text-repere" />} title="Assistant financier Google Gemini">
       <div className="space-y-3">
         <p className="text-meta text-ink-300 leading-relaxed">
-          Interroge directement <strong>Google Gemini 3.8 Flash</strong> depuis l’accueil ou la barre supérieure pour analyser ton patrimoine net, optimiser tes cotisations CELI/REER, diagnostiquer ton budget et lire tes relevés PDF ou talons de paie.
+          Interroge directement <strong>Google Gemini 2.5 Flash</strong> depuis l’accueil ou la barre supérieure pour analyser ton patrimoine net, optimiser tes cotisations CELI/REER, diagnostiquer ton budget et lire tes relevés PDF ou talons de paie.
         </p>
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <button

@@ -9,7 +9,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
-    handleRefresh, handleFintableSync, handleVehiculeBail,
+    handleRefresh, handleFintableSync,
     ERREUR_CONFLIT_ETAT, ERREUR_PANNE_ETAT,
 } from '../../mcp/http/routesPlanifiees';
 import type { ResolvedState } from '../../mcp/bootstrap';
@@ -85,16 +85,5 @@ describe('[CODEQL-37] routes planifiées : code fixe, jamais le détail interne'
         expect(status).toBe(200);
         expect(corps).not.toContain(TEMOIN);
         expect(JSON.parse(corps)).toEqual({ ok: false, conflict: true, error: ERREUR_CONFLIT_ETAT });
-    });
-
-    it('/vehicule/bail état illisible : 503 { error: code fixe }, le détail va au journal seulement', async () => {
-        const journal = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-        const { res, fin } = reponse();
-        handleVehiculeBail(requete('GET'), res, storeEnPanne(new Error(TEMOIN)), SECRET, undefined);
-        const { status, corps } = await fin;
-        expect(status).toBe(503);
-        expect(corps).not.toContain(TEMOIN);
-        expect(JSON.parse(corps)).toEqual({ ok: false, error: ERREUR_PANNE_ETAT });
-        expect(journal.mock.calls.flat().join(' ')).toContain(TEMOIN);
     });
 });

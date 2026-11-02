@@ -32,7 +32,7 @@ describe('[HISTORIQUE-YAHOO-DEVISE-NON-LUE] usePastPortfolioHistory — garde de
             useFinanceStore.setState({
                 assets: [asset],
                 isTestMode: false,
-                apiKeys: { anthropic: '', finnhub: 'k-test' },
+                apiKeys: { gemini: '', anthropic: '', finnhub: 'k-test' },
             });
         });
     });

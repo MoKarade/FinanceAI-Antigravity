@@ -84,7 +84,7 @@ beforeEach(() => {
     _resetAutoSyncForTests();
     useFinanceStore.getState().resetState();
     useFinanceStore.setState({
-        apiKeys: { anthropic: '', finnhub: '', fintable: 'ft_test' },
+        apiKeys: { gemini: '', anthropic: '', finnhub: '', fintable: 'ft_test' },
         isTestMode: false,
         fintableSyncReport: undefined,
     });

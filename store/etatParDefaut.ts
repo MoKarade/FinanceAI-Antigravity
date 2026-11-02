@@ -82,7 +82,7 @@ const DEFAULT_APP_STATE: AppState = {
     retirementGoal: { targetAge: 65, targetMonthlyIncome: 4000, governmentPension: 1200 },
     financialGoals: [],
     initialBalances: {},
-    apiKeys: { anthropic: '', finnhub: '' },
+    apiKeys: { gemini: '', finnhub: '' },
     fxRates: DEFAULT_FX_RATES,
     fxRatesEstimated: true, // [FX-FALLBACK-SILENCIEUX] DEFAULT_FX_RATES est un repli en dur.
     // ⚠️⚠️ [FX-TAUX-JAMAIS-ARRIVES] `fxRatesSource` est DÉLIBÉRÉMENT ABSENT de l'état initial.
@@ -199,10 +199,8 @@ export const getInitialStateWithMigration = (): AppState => {
 
     try {
         const savedApiKeysStr = localStorage.getItem(STORAGE_KEYS.apiKeysLegacy);
-        // Phase 4 A5: Gemini retiré — pas de migration depuis l'ancienne clé.
-        // L'utilisateur doit fournir une clé Anthropic Claude.
-        let safeApiKeys: { anthropic: string; finnhub: string } = {
-            anthropic: '',
+        let safeApiKeys: { gemini: string; finnhub: string } = {
+            gemini: '',
             finnhub: '',
         };
         if (savedApiKeysStr) {
@@ -220,7 +218,7 @@ export const getInitialStateWithMigration = (): AppState => {
             try {
                 const parsed = JSON.parse(savedApiKeysStr);
                 safeApiKeys = {
-                    anthropic: parsed.anthropic || '',
+                    gemini: parsed.gemini || parsed.anthropic || '',
                     finnhub: parsed.finnhub || '',
                 };
             } catch { /* parse error, ignorer */ }

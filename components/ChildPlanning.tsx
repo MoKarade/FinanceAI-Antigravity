@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { CHART_TOOLTIP_STYLE, GF_BAR_CURSOR } from '../utils/chartTooltip';
+import { GF_BAR_CURSOR } from '../utils/chartTooltip';
 import { formatCAD, formatCompactCAD, formatPercent } from '../utils/format';
 import { Card } from './ui/Card';
 import { PageHeader } from './ui/PageHeader';
@@ -513,6 +513,7 @@ export const ChildPlanning: React.FC<ChildPlanningProps> = ({ goals = [], setGoa
                                 <div className="mt-1.5 h-1.5 w-full rounded-full bg-surfaceHighlight overflow-hidden" aria-hidden="true">
                                     <div
                                         className={`h-full rounded-full transition-all duration-300 ${respCovers >= 100 ? 'bg-succes-texte' : 'bg-alerte-texte'}`}
+                                        // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
                                         style={{ width: `${Math.min(100, Math.max(0, respCovers))}%` }}
                                     />
                                 </div>
@@ -560,6 +561,7 @@ const ChildCostTooltip: React.FC<ChildCostTooltipProps> = ({ active, payload, is
     return (
         <div className="gf-tooltip-card min-w-[235px]">
             <div className="gf-tooltip-header">
+                {/* NOMBRE-NON-MONETAIRE : axe d'âge (0 à 25 ans) de la projection enfant */}
                 <span className="font-mono text-[11px] font-bold text-ink-50">{childName} · {age} ans</span>
                 <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-neutral">
                     {etape}

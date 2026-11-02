@@ -92,7 +92,7 @@ export interface FinanceState extends AppState {
     clearPendingFocus: () => void;
     /** Champs et règles : `services/fx/ecritureFx.ts` (`EcritureFx`, `champsFxApres`). */
     updateFxRates: (rates: EcritureFx) => void;
-    updateApiKeys: (keys: { anthropic: string; finnhub?: string }) => void;
+    updateApiKeys: (keys: { gemini?: string; anthropic?: string; finnhub?: string; fintable?: string }) => void;
     updateLastUpdate: () => void;
     resetState: () => void;
     /** Active le mode test : sauvegarde l'état actuel + applique des fixtures.
@@ -172,9 +172,13 @@ export const useFinanceStore = create<FinanceState>()(
             // [FX-SERVEUR-JAMAIS-RAFRAICHI] Le corps vit dans `services/fx/ecritureFx.ts`, source unique
             // partagée avec le rafraîchissement SERVEUR (qui ne peut pas importer le store).
             updateFxRates: (ecriture) => set((prev) => champsFxApres(prev, ecriture)),
-            updateApiKeys: (keys) => set((prev) => ({
-                apiKeys: { ...prev.apiKeys, ...keys }
-            })),
+            updateApiKeys: (keys) => set((prev) => {
+                const next = { ...prev.apiKeys, ...keys };
+                if (keys.gemini === undefined && typeof keys.anthropic === 'string' && !next.gemini) {
+                    next.gemini = keys.anthropic;
+                }
+                return { apiKeys: next };
+            }),
             updateLastUpdate: () => set({ lastUpdate: Date.now() }),
             // `set` fait un merge superficiel et `initialState` (AppState) ne contient PAS les flags
             // propres au store (isTestMode/realDataSnapshot/activeTestPersonaId) → on les remet
@@ -205,8 +209,8 @@ export const useFinanceStore = create<FinanceState>()(
     )
 );
 
-// [COUT-IA-MESURE] Seul écrivain du cumul à vie du coût Claude (FinanceAI#50) : chaque réponse payée,
-// mesurée au point de contact SDK (`services/claude.ts`), s'ajoute ici. Le bloc `usage` du hub le lit.
+// [COUT-IA-MESURE] Seul écrivain du cumul à vie du coût IA (FinanceAI#50) : chaque réponse payée,
+// mesurée au point de contact SDK (`services/gemini.ts`), s'ajoute ici. Le bloc `usage` du hub le lit.
 brancherCoutIa((coutUsd) => {
     const s = useFinanceStore.getState();
     s.setAppState({ aiChatCostUsdTotal: (s.aiChatCostUsdTotal ?? 0) + coutUsd });

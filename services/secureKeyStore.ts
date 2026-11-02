@@ -43,7 +43,9 @@ import { logError } from './errorLogger';
 import { STORAGE_KEYS } from '../utils/storageKeys';
 
 export interface PersistedApiKeys {
-    anthropic: string;
+    gemini?: string;
+    /** @deprecated Clé legacy migrée automatiquement vers `gemini`. */
+    anthropic?: string;
     finnhub: string;
     /** [FINTABLE-7] Jeton Fintable (lecture seule). Optionnel : absent = sync in-app inactive.
      *  ⚠️ Déclaré ICI dès l'introduction du champ (finding security-privacy, PR #535) — pas au

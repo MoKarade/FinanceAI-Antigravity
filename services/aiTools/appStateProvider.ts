@@ -17,7 +17,7 @@ import { useFinanceStore } from '../../store/useFinanceStore';
 
 /**
  * Snapshot PLAT, VALIDÉ et CLONÉ de l'état courant. Trois protections (findings panel 2026-07-21) :
- *  - `apiKeys` EXCLU : aucun tool n'en a besoin — les vraies clés (Anthropic/Finnhub) ne doivent
+ *  - `apiKeys` EXCLU : aucun tool n'en a besoin — les vraies clés (Gemini/Finnhub) ne doivent
  *    jamais entrer dans un état que des handlers pourraient sérialiser vers un tool_result (même
  *    principe que l'Omit<'apiKeys'> de realDataSnapshot côté store) ;
  *  - `validateAppStateShape` AVANT normalisation : la MÊME étape que le chemin MCP (loadAppState) —

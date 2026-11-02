@@ -19,7 +19,7 @@ import { setHistorySyncReport, clearHistorySyncReport } from '../../../services/
 import { useFinanceStore } from '../../../store/useFinanceStore';
 import type { Asset } from '../../../types';
 
-vi.mock('../../../services/claude', () => ({ detectSubscriptionsAI: vi.fn() }));
+vi.mock('../../../services/gemini', () => ({ detectSubscriptionsAI: vi.fn() }));
 
 const TITRE: Asset = {
     id: 'a1', symbol: 'XEQT.TO', name: 'XEQT', quantity: 10, currentPrice: 30,

@@ -6,6 +6,7 @@ import { AnimatedNetWorth } from '../ui/AnimatedNetWorth';
 import { formatCompactCAD, formatSigned } from '../../utils/format';
 import { prefetchTab } from '../../utils/tabPrefetch';
 import { partitionRealEstateGoals } from '../../services/realEstatePartition';
+import { useDerivedFinancials } from '../../utils/useDerivedFinancials';
 
 interface GoogleFinanceTickerBarProps {
   activeTab: Tab;
@@ -13,6 +14,7 @@ interface GoogleFinanceTickerBarProps {
   netWorth: number;
   monthlySavings: number;
   currentValues: { celi: number; reer: number; liquidity: number };
+  isPrivacyMode?: boolean;
 }
 
 interface TickerQuote {
@@ -36,23 +38,26 @@ export const GoogleFinanceTickerBar: React.FC<GoogleFinanceTickerBarProps> = ({
   netWorth,
   monthlySavings,
   currentValues,
+  isPrivacyMode,
 }) => {
-  const debts = useFinanceStore((s) => s.debts);
-  const assets = useFinanceStore((s) => s.assets);
-  const transactions = useFinanceStore((s) => s.transactions);
-  const realEstateGoals = useFinanceStore((s) => s.realEstateGoals);
+  const state = useFinanceStore();
+  const derived = useDerivedFinancials(state);
+  const privacyActif = isPrivacyMode ?? state.isPrivacyMode;
 
   const stats = useMemo(() => {
-    const portefeuille = (currentValues.celi || 0) + (currentValues.reer || 0);
-    const nbTitres = (assets ?? []).length;
-    const totalDettesBrut = (debts ?? []).reduce(
-      (acc, d) => acc + (Number.isFinite(d.balance) ? d.balance : 0),
-      0,
-    );
-    const nbDettes = (debts ?? []).length;
-    const { actual: immoActuel } = partitionRealEstateGoals(realEstateGoals ?? []);
+    const portefeuilleDerive =
+      derived.assetBreakdown.celi +
+      derived.assetBreakdown.reer +
+      derived.assetBreakdown.reee +
+      derived.assetBreakdown.nonReg;
+    const portefeuilleProps = (currentValues.celi || 0) + (currentValues.reer || 0);
+    const portefeuille = portefeuilleDerive > 0 ? portefeuilleDerive : portefeuilleProps;
+    const nbTitres = (state.assets ?? []).length;
+    const totalDettesBrut = derived.dettesHorsImmo;
+    const nbDettes = (state.debts ?? []).length;
+    const { actual: immoActuel } = partitionRealEstateGoals(state.realEstateGoals ?? []);
     const nbImmo = immoActuel.length;
-    const nbTx = (transactions ?? []).length;
+    const nbTx = (state.transactions ?? []).length;
 
     return {
       portefeuille,
@@ -62,7 +67,16 @@ export const GoogleFinanceTickerBar: React.FC<GoogleFinanceTickerBarProps> = ({
       nbImmo,
       nbTx,
     };
-  }, [assets, currentValues.celi, currentValues.reer, debts, realEstateGoals, transactions]);
+  }, [
+    currentValues.celi,
+    currentValues.reer,
+    derived.assetBreakdown,
+    derived.dettesHorsImmo,
+    state.assets,
+    state.debts,
+    state.realEstateGoals,
+    state.transactions,
+  ]);
 
   const tickers: TickerQuote[] = [
     {
@@ -90,10 +104,10 @@ export const GoogleFinanceTickerBar: React.FC<GoogleFinanceTickerBarProps> = ({
     {
       id: 'placements',
       symbol: 'PORTF:TSE',
-      label: 'Placements',
+      label: 'Portefeuille',
       tab: Tab.INVESTMENTS,
       valueNode: <PrivateAmount>{formatCompactCAD(stats.portefeuille)}</PrivateAmount>,
-      badgeText: `${stats.nbTitres} titre${stats.nbTitres > 1 ? 's' : ''}`,
+      badgeText: privacyActif ? '••' : `${stats.nbTitres} titre${stats.nbTitres > 1 ? 's' : ''}`,
       badgeClass: 'gf-delta-neutral',
     },
     {
@@ -102,7 +116,7 @@ export const GoogleFinanceTickerBar: React.FC<GoogleFinanceTickerBarProps> = ({
       label: 'Liquidités',
       tab: Tab.TRANSACTIONS,
       valueNode: <PrivateAmount>{formatCompactCAD(currentValues.liquidity || 0)}</PrivateAmount>,
-      badgeText: `${stats.nbTx} opér.`,
+      badgeText: privacyActif ? '••' : `${stats.nbTx} opér.`,
       badgeClass: (currentValues.liquidity || 0) >= 0 ? 'gf-delta-up' : 'gf-delta-amber',
     },
     {
@@ -111,7 +125,11 @@ export const GoogleFinanceTickerBar: React.FC<GoogleFinanceTickerBarProps> = ({
       label: 'Passif & dettes',
       tab: Tab.DEBT,
       valueNode: <PrivateAmount>{formatCompactCAD(stats.totalDettesBrut)}</PrivateAmount>,
-      badgeText: stats.totalDettesBrut > 0 ? `${stats.nbDettes} active${stats.nbDettes > 1 ? 's' : ''}` : '0 dette',
+      badgeText: privacyActif
+        ? '••'
+        : stats.totalDettesBrut > 0
+          ? `${stats.nbDettes} active${stats.nbDettes > 1 ? 's' : ''}`
+          : '0 dette',
       badgeClass: stats.totalDettesBrut > 0 ? 'gf-delta-down' : 'gf-delta-up',
     },
     {
@@ -121,7 +139,11 @@ export const GoogleFinanceTickerBar: React.FC<GoogleFinanceTickerBarProps> = ({
       tab: activeTab === Tab.TAX ? Tab.TAX : Tab.REAL_ESTATE,
       valueNode: (
         <span className="font-mono text-[13px] font-bold text-ink-50">
-          {stats.nbImmo > 0 ? `${stats.nbImmo} bien${stats.nbImmo > 1 ? 's' : ''}` : 'QC · Féd'}
+          {privacyActif
+            ? '••'
+            : stats.nbImmo > 0
+              ? `${stats.nbImmo} bien${stats.nbImmo > 1 ? 's' : ''}`
+              : 'QC · Féd'}
         </span>
       ),
       badgeText: activeTab === Tab.TAX ? 'Fisc QC' : 'Foncier',

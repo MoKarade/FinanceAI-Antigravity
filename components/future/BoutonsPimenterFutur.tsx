@@ -176,7 +176,7 @@ export const BoutonsPimenterFutur: React.FC<BoutonsPimenterFuturProps> = ({
                 className={`gf-chip touch-target whitespace-nowrap ${epargneBoostActif ? 'gf-chip-active' : ''}`}
                 title="Augmenter le rythme d’épargne mensuel de 25 % pour mesurer l’effet boule de neige"
             >
-                <span aria-hidden="true">💰</span>
+                <Icon name="cash" size={14} aria-hidden="true" />
                 <span>Épargne +25 %</span>
             </button>
 
@@ -187,7 +187,7 @@ export const BoutonsPimenterFutur: React.FC<BoutonsPimenterFuturProps> = ({
                 className={`gf-chip touch-target whitespace-nowrap ${retraiteDevanceeActive ? 'gf-chip-active' : ''}`}
                 title="Avancer l’âge cible de la retraite de 3 ans"
             >
-                <span aria-hidden="true">🏖️</span>
+                <Icon name="retirement" size={14} aria-hidden="true" />
                 <span>Retraite −3 ans</span>
             </button>
 
@@ -198,7 +198,7 @@ export const BoutonsPimenterFutur: React.FC<BoutonsPimenterFuturProps> = ({
                 className={`gf-chip touch-target whitespace-nowrap ${rendementBoostActif ? 'gf-chip-active' : ''}`}
                 title="Ajouter +1,5 % de rendement annuel sur les placements (CELI, REER, Non-enreg.)"
             >
-                <span aria-hidden="true">📈</span>
+                <Icon name="investments" size={14} aria-hidden="true" />
                 <span>Rendement +1,5 %</span>
             </button>
 
@@ -209,7 +209,7 @@ export const BoutonsPimenterFutur: React.FC<BoutonsPimenterFuturProps> = ({
                 className={`gf-chip touch-target whitespace-nowrap ${chocBoursierActif ? 'gf-chip-active' : ''}`}
                 title="Simuler un krach boursier de −25 % à l’année 3 avec reprise sur 24 mois"
             >
-                <span aria-hidden="true">🌩️</span>
+                <Icon name="alert" size={14} aria-hidden="true" />
                 <span>Krach −25 %</span>
             </button>
 
@@ -220,7 +220,7 @@ export const BoutonsPimenterFutur: React.FC<BoutonsPimenterFuturProps> = ({
                 className={`gf-chip touch-target whitespace-nowrap ${levierSmithActif ? 'gf-chip-active' : ''}`}
                 title="Activer ou désactiver la Manœuvre Smith (conversion de l’hypothèque en levier d’investissement déductible)"
             >
-                <span aria-hidden="true">🔄</span>
+                <Icon name="refresh" size={14} aria-hidden="true" />
                 <span>Manœuvre Smith</span>
             </button>
 
@@ -231,7 +231,7 @@ export const BoutonsPimenterFutur: React.FC<BoutonsPimenterFuturProps> = ({
                 className={`gf-chip touch-target whitespace-nowrap ${runMC ? 'gf-chip-active' : ''}`}
                 title="Afficher le couloir d’incertitude probabiliste Monte Carlo (P10 / P50 / P90)"
             >
-                <span aria-hidden="true">🎲</span>
+                <Icon name="dice" size={14} aria-hidden="true" />
                 <span>Couloir Monte Carlo</span>
             </button>
 

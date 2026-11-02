@@ -103,7 +103,7 @@ describe('DriveStateSource — écriture', () => {
         const src = new DriveStateSource(token, makeFetch({ fileExists: true, envelope: existing, onWrite: (e) => captured.push(e), created }));
 
         const next = buildDefaultAppState();
-        next.apiKeys = { anthropic: 'sk-secret', finnhub: 'fh-secret' };
+        next.apiKeys = { gemini: 'AIzaSy-secret', finnhub: 'fh-secret' };
         next.config.users[0] = { ...next.config.users[0], name: 'Marc', grossSalary: 5833 };
 
         const res = await src.saveState(next);

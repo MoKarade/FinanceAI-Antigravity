@@ -93,7 +93,7 @@ describe('[A11Y-PRIVACY-INVESTMENTS-DETAIL] décision explicite : les ratios res
         // en dessous. Ils doivent survivre.
         expect(SOURCE, 'part du portefeuille dans la légende des donuts')
             .toContain('{item.percent.toFixed(1)}%');
-        expect(SOURCE, 'écart de rééquilibrage (surplus)').toContain('{a.diffPct.toFixed(1)}%');
+        expect(SOURCE, 'cible de rééquilibrage').toContain('{item.targetPct}%');
         expect(SOURCE, 'gain DCA en pourcentage').toContain('{purchaseStats.gainPct.toFixed(1)}%');
     });
 

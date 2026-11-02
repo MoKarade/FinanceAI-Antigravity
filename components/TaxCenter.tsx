@@ -11,8 +11,8 @@ import { Icon } from './ui/Icon';
 import { CoupleOptimizationCard } from './tax/CoupleOptimizationCard';
 import { BudgetConfig, Asset, Tab } from '../types';
 import { TAB_LABELS } from '../constants';
-// Phase 4 A4: bascule sur services/claude.ts (Sonnet 4.6 + Vision)
-import { analyzePayslip } from '../services/claude';
+// Phase 4 A4: bascule sur services/gemini.ts (Gemini 2.5 Flash + Vision)
+import { analyzePayslip } from '../services/gemini';
 import { logError } from '../services/errorLogger';
 import { causeErreurIa, messageErreurIa } from '../services/messageErreurIa';
 import { assetValueCad } from '../services/portfolio';
@@ -627,6 +627,7 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
                                     <div className="h-2.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5 p-0.5" aria-hidden="true">
                                         <div
                                             className="h-full rounded-l-full bg-succes-texte"
+                                            // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
                                             style={{ width: `${Math.round((realAverages.incomeAvg / Math.max(1, realAverages.incomeAvg + realAverages.expenseAvg)) * 100)}%` }}
                                         />
                                         <div

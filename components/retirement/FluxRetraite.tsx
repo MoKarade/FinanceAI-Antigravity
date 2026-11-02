@@ -5,7 +5,7 @@
 // par année de retraite ; trois jalons chiffrés dessous (départ, 65 ans, dernière année).
 import React, { useMemo } from 'react';
 import { Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart } from 'recharts';
-import { CHART_TOOLTIP_STYLE, GF_BAR_CURSOR, GF_ACTIVE_DOT } from '../../utils/chartTooltip';
+import { GF_BAR_CURSOR, GF_ACTIVE_DOT } from '../../utils/chartTooltip';
 import { MASKED_AMOUNT_LABEL } from '../../utils/privacyAria';
 import { formatCAD } from '../../utils/format';
 import { PrivateAmount } from '../ui/PrivateAmount';
@@ -141,6 +141,7 @@ const FluxRetraiteTooltip: React.FC<FluxRetraiteTooltipProps> = ({ active, paylo
                     <div
                         className="gf-tooltip-bar-fill"
                         style={{
+                            // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
                             width: `${couverturePct}%`,
                             backgroundColor: 'var(--succes-texte)',
                         }}

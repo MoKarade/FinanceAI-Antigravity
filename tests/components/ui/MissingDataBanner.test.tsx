@@ -79,7 +79,7 @@ describe('MissingDataChecklist', () => {
                 ],
             },
             retirementGoal: { targetAge: 65, lifeExpectancy: 92, targetMonthlyIncome: 5000, governmentPension: 1200 },
-            apiKeys: { anthropic: 'sk-x', finnhub: '' },
+            apiKeys: { gemini: 'sk-x', anthropic: 'sk-x', finnhub: '' },
         });
         render(<MissingDataChecklist />);
         expect(screen.getByText(/Configuration complète/)).toBeInTheDocument();
@@ -87,7 +87,7 @@ describe('MissingDataChecklist', () => {
 
     it('lists missing fields as inline banners', () => {
         useFinanceStore.setState({
-            apiKeys: { anthropic: '', finnhub: '' },
+            apiKeys: { gemini: '', anthropic: '', finnhub: '' },
             retirementGoal: { ...initialState.retirementGoal, lifeExpectancy: undefined },
         });
         render(<MissingDataChecklist />);

@@ -172,7 +172,7 @@ describe('Restauration : aller-retour par l\'écran', () => {
             store: {
                 state: {
                     transactions: [],
-                    apiKeys: { anthropic: 'cle-d-un-tiers', finnhub: 'cle-d-un-tiers', fintable: 'jeton-d-un-tiers' },
+                    apiKeys: { gemini: 'cle-d-un-tiers', anthropic: 'cle-d-un-tiers', finnhub: 'cle-d-un-tiers', fintable: 'jeton-d-un-tiers' },
                     isTestMode: true, activeTestPersonaId: 'persona-x', realDataSnapshot: { transactions: [] },
                 },
                 version: 7,

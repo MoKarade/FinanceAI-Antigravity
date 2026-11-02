@@ -36,6 +36,7 @@ type MissingDataField =
     | 'user2.name'
     | 'user2.grossSalary'
     | 'user2.netSalary'
+    | 'geminiKey'
     | 'anthropicKey';
 
 interface FieldDescriptor {
@@ -115,12 +116,19 @@ const MISSING_DATA_FIELDS: Record<MissingDataField, FieldDescriptor> = {
         tab: Tab.PROFILE,
         isMissing: (s) => !s.config?.users?.[1]?.netSalary || s.config.users[1].netSalary <= 0,
     },
-    anthropicKey: {
-        label: 'Clé API Anthropic',
-        section: 'apiKeys-anthropic',
+    geminiKey: {
+        label: 'Clé API Google Gemini',
+        section: 'apiKeys-gemini',
         tab: Tab.SETTINGS,
-        isMissing: (s) => !s.apiKeys?.anthropic?.trim(),
-        helpText: 'Active les diagnostics IA (budget, prochaine action, etc.).',
+        isMissing: (s) => !s.apiKeys?.gemini?.trim() && !s.apiKeys?.anthropic?.trim(),
+        helpText: 'Active les diagnostics IA Google Gemini (budget, fiscalité, vision, etc.).',
+    },
+    anthropicKey: {
+        label: 'Clé API Google Gemini',
+        section: 'apiKeys-gemini',
+        tab: Tab.SETTINGS,
+        isMissing: (s) => !s.apiKeys?.gemini?.trim() && !s.apiKeys?.anthropic?.trim(),
+        helpText: 'Active les diagnostics IA Google Gemini (budget, fiscalité, vision, etc.).',
     },
 };
 

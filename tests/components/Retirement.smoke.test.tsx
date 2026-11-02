@@ -74,7 +74,7 @@ describe('Retirement — smoke (CA-04) + header/sous-onglets (REFONTE-NAV-L4)', 
         expect(screen.queryByText(/Projection inverse|Goal/i)).toBeFalsy();
         // [S5-REFONTE-RETRAITE] Tuiles des maquettes + deuxième graphe.
         expect(screen.getByText('Capital à la retraite (65 ans)')).toBeTruthy();
-        expect(screen.getByText('Capitaux actuels')).toBeTruthy();
+        expect(screen.getByText(/Capitaux actuels/)).toBeTruthy();
         expect(screen.getByText('Flux à la retraite, par mois')).toBeTruthy();
         expect(screen.getByText(/Tient jusqu'à \d+ ans|Épuisé à \d+ ans/)).toBeTruthy();
     });

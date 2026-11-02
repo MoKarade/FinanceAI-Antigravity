@@ -482,9 +482,9 @@ describe('Refonte Google Finance — GoogleFinanceHero & BoutonsPimenterFutur', 
         expect(screen.getByTestId('accueil-google-view')).toBeInTheDocument();
         expect(screen.getByRole('searchbox', { name: /Rechercher dans votre patrimoine/i })).toBeInTheDocument();
         expect(screen.getByText('Trajectoire')).toBeInTheDocument();
-        expect(screen.getByText('Répartition')).toBeInTheDocument();
-        expect(screen.getByText('Opérations récentes')).toBeInTheDocument();
-        expect(screen.getByText('Prochains jalons')).toBeInTheDocument();
+        expect(screen.getByText('Allocation d’actifs')).toBeInTheDocument();
+        expect(screen.getByText('Activité récente')).toBeInTheDocument();
+        expect(screen.getByText('Calendrier & jalons')).toBeInTheDocument();
 
         const trajectoireEntrance = screen.getByTestId('recharts-trajectory-entrance');
         const allocationEntrance = screen.getByTestId('recharts-allocation-entrance');
@@ -499,7 +499,7 @@ describe('Refonte Google Finance — GoogleFinanceHero & BoutonsPimenterFutur', 
         expect(heroSection.className).toContain('premium-card');
         expect(screen.getByTestId('monthly-spending-vs-budget-chart').className).toContain('premium-card');
 
-        const btnLentillePortefeuille = screen.getByRole('button', { name: /Actifs liquides & bourse/i });
+        const btnLentillePortefeuille = screen.getByRole('button', { name: /Portefeuille liquide/i });
         fireEvent.click(btnLentillePortefeuille);
         expect(btnLentillePortefeuille).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByTestId('recharts-trajectory-entrance')).toHaveAttribute('data-chart-lens', 'portefeuille');
@@ -523,7 +523,7 @@ describe('Refonte Google Finance — GoogleFinanceHero & BoutonsPimenterFutur', 
         expect(screen.getByTestId('recharts-allocation-entrance')).toHaveAttribute('data-active-tab', Tab.DASHBOARD);
         expect(screen.getByTestId('recharts-budget-entrance')).toHaveAttribute('data-active-tab', Tab.DASHBOARD);
 
-        fireEvent.click(screen.getByRole('button', { name: /Courbe complète/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Simulateur/i }));
         expect(setActiveTab).toHaveBeenCalledWith(Tab.FUTURE);
     });
 

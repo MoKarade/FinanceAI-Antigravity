@@ -2,12 +2,12 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { encryptApiKeys, decryptApiKeys } from '../../services/sync/keyCipher';
 
 describe('keyCipher — chiffrement des clés API dérivé du sub Google', () => {
-    const keys = { anthropic: 'sk-ant-secret-123', finnhub: 'fh-secret-456' };
+    const keys = { gemini: 'AIzaSy-secret-123', finnhub: 'fh-secret-456' };
     const sub = '110000000000000000001';
 
     it('round-trip : déchiffrer avec le MÊME sub redonne les clés (et le blob n est pas en clair)', async () => {
         const blob = await encryptApiKeys(keys, sub);
-        expect(blob).not.toContain('sk-ant-secret-123');
+        expect(blob).not.toContain('AIzaSy-secret-123');
         expect(blob).not.toContain('fh-secret-456');
         const out = await decryptApiKeys(blob, sub);
         expect(out).toEqual(keys);
@@ -63,7 +63,7 @@ describe('keyCipher — Web Crypto indisponible (navigateur dégradé / contexte
     it('encryptApiKeys lève « Web Crypto indisponible » si crypto.subtle est absent', async () => {
         // sub NON vide pour dépasser le garde « sub manquant » et atteindre deriveKeyFromSub → getSubtle().
         vi.stubGlobal('crypto', {} as Crypto); // crypto présent mais sans .subtle
-        await expect(encryptApiKeys({ anthropic: 'a', finnhub: 'b' }, 'sub-x')).rejects.toThrow(
+        await expect(encryptApiKeys({ gemini: 'a', finnhub: 'b' }, 'sub-x')).rejects.toThrow(
             /Web Crypto indisponible/,
         );
     });

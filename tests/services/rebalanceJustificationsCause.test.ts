@@ -16,19 +16,19 @@ const mocks = vi.hoisted(() => ({
     logError: vi.fn(),
 }));
 
-vi.mock('@anthropic-ai/sdk', () => ({
-    default: class {
-        messages = {
+vi.mock('../../services/geminiClientAdapter', () => ({
+    creerClientCompatibleGemini: vi.fn(() => ({
+        messages: {
             create: vi.fn(async () => {
                 if (mocks.prochaineErreur) throw mocks.prochaineErreur;
                 return { content: [{ type: 'text', text: mocks.prochaineReponse }] };
             }),
-        };
-    },
+        },
+    })),
 }));
 vi.mock('../../services/errorLogger', () => ({ logError: mocks.logError, logErrorThrottled: vi.fn(), }));
 
-import { getRebalanceJustifications } from '../../services/claude';
+import { getRebalanceJustifications } from '../../services/gemini';
 
 const actions = [
     { id: 'a1', label: 'VFV.TO', action: 'Réduire', currentPct: 22, targetPct: 15, diffAmount: -5000 },

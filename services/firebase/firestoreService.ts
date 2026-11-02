@@ -21,17 +21,16 @@ import {
     OperationType,
     handleFirestoreError,
     testFirestoreConnection,
-    type FirestoreErrorInfo,
 } from './firebaseClient';
 
-export interface FirestoreCrudOptions {
+interface FirestoreCrudOptions {
     /** UID attendu du propriétaire du document pour appliquer le contrôle d'accès côté client */
     expectedUid?: string;
     /** Instance d'utilisateur Firebase déjà résolue par le garde d'authentification */
     authenticatedUser?: FirebaseUser | null;
 }
 
-export interface FirestoreDocResult<T = DocumentData> {
+interface FirestoreDocResult<T = DocumentData> {
     id: string;
     exists: boolean;
     data: T | null;
@@ -148,7 +147,7 @@ export async function updateDocument<T extends Record<string, unknown>>(
 /**
  * Écrit ou fusionne un document Firestore après vérification stricte de l'authentification.
  */
-export async function setDocument<T extends Record<string, unknown>>(
+async function setDocument<T extends Record<string, unknown>>(
     collectionName: string,
     docId: string,
     data: T,
@@ -192,7 +191,7 @@ export async function deleteDocument(
 /**
  * Liste les documents d'une collection Firestore après vérification stricte de l'authentification.
  */
-export async function listDocuments<T = DocumentData>(
+async function listDocuments<T = DocumentData>(
     collectionName: string,
     constraints: QueryConstraint[] = [],
     options?: FirestoreCrudOptions,
@@ -252,9 +251,6 @@ export function subscribeToDocument<T = DocumentData>(
 import {
     verifyFirestoreConnectionDiagnostic,
     validateFirebaseConfiguration,
-    type FirestoreDiagnosticReport,
-    type FirebaseConfigValidationResult,
-    type VerifyFirestoreDiagnosticOptions,
 } from './firestoreDiagnostics';
 
 /**
@@ -282,18 +278,6 @@ export const firestoreService = {
 };
 
 export {
-    app,
-    db,
-    auth,
-    googleProvider,
-    firebaseConfig,
-    OperationType,
-    handleFirestoreError,
-    testFirestoreConnection,
     verifyFirestoreConnectionDiagnostic,
     validateFirebaseConfiguration,
-    type FirestoreErrorInfo,
-    type FirestoreDiagnosticReport,
-    type FirebaseConfigValidationResult,
-    type VerifyFirestoreDiagnosticOptions,
 };

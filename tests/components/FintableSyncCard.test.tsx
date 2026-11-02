@@ -59,7 +59,7 @@ beforeEach(() => {
     logErrorMock.mockReset();
     saveKeysMock.mockResolvedValue(undefined);
     useFinanceStore.setState({
-        apiKeys: { anthropic: '', finnhub: '', fintable: 'ft_test' },
+        apiKeys: { gemini: '', anthropic: '', finnhub: '', fintable: 'ft_test' },
         fintableRoles: undefined,
         fintableSyncReport: undefined,
         isTestMode: false,
@@ -88,7 +88,7 @@ describe('FintableSyncCard — vie privée', () => {
 
 describe('FintableSyncCard — garde-fous d\'action', () => {
     it('sans jeton : les deux boutons sont désactivés', () => {
-        useFinanceStore.setState({ apiKeys: { anthropic: '', finnhub: '', fintable: '' } });
+        useFinanceStore.setState({ apiKeys: { gemini: '', anthropic: '', finnhub: '', fintable: '' } });
         render(<FintableSyncCard />);
         expect(screen.getByRole('button', { name: /Tester la connexion/i })).toBeDisabled();
         expect(screen.getByRole('button', { name: /Synchroniser maintenant/i })).toBeDisabled();

@@ -1,17 +1,32 @@
 // services/geminiAssistant.ts
 //
-// Assistant patrimonial interactif Google Gemini (gemini-3.8-flash) pour FinanceAI :
-// Synthèse instantanée + appel Gemini 3.8 Flash accessible depuis l'Omnibox de la page d'accueil
+// Assistant patrimonial interactif Google Gemini (gemini-2.5-flash) pour FinanceAI :
+// Synthèse instantanée + appel Gemini 2.5 Flash accessible depuis l'Omnibox de la page d'accueil
 // et la barre de navigation.
+// branché sur les sources uniques du moteur : `assetValueCad`, `computePresentNetWorth`,
+// `computeCurrentLiquidity`, `computeTotalDebt`, `presentTermesOfGoal`, `calculateFiscalReport`
+// et `state.lastProjection?.chartData`.
 
 import { formatCAD } from '../utils/format';
 import { MESSAGE_IA_MODE_DISCRET, messageErreurIa } from './messageErreurIa';
-import { chat } from './claude';
-import { GEMINI_DEFAULT_MODEL, estCleGemini, creerClientCompatibleGemini } from './geminiClientAdapter';
+import { chat } from './gemini';
+import {
+    assetValueCad,
+    computeAssetBreakdown,
+    computeCurrentLiquidity,
+    computeMonthlyBudgetAggregates,
+    computePresentNetWorth,
+    computeTotalDebt,
+} from './portfolio';
+import { placementsFaisantAutorite } from './fintable/placementsAutorite';
+import { presentTermesOfGoal, monthsSince } from './projection/pastPurchaseInit';
+import { todayIsoLocal } from './projection/dailyRefine';
+import { calculateFiscalReport } from '../utils/tax';
 import type { AppState } from '../types';
 import { Tab } from '../types';
 
-export { GEMINI_DEFAULT_MODEL, estCleGemini, creerClientCompatibleGemini };
+const promptCad = (v: number | null | undefined): string =>
+    typeof v === 'number' && Number.isFinite(v) ? formatCAD(v) : '(non disponible)';
 
 export interface ContextePatrimonialGemini {
     prenom: string;
@@ -24,9 +39,13 @@ export interface ContextePatrimonialGemini {
     dettesTotales: number;
     epargneMensuelle: number;
     salaireBrutMensuel: number;
+    revenuNetMensuel: number;
+    impotAnnuelEstime: number;
+    tauxMarginalPct: number;
     ageActuel: number;
     ageRetraiteCible: number;
     revenuRetraiteCible: number;
+    patrimoineProjeteRetraite: number | null;
 }
 
 export interface ReponseAssistantGemini {
@@ -37,40 +56,93 @@ export interface ReponseAssistantGemini {
 }
 
 export function extraireContextePatrimonial(state: AppState): ContextePatrimonialGemini {
-    const u0 = state.config?.users?.[0];
+    const users = state.config?.users ?? [];
+    const u0 = users[0];
     const prenom = (u0?.name ?? '').replace(/\s*\(test\)\s*$/i, '').trim() || 'Alex';
-    const salaireBrutMensuel = (state.config?.users ?? []).reduce((s, u) => s + (Number(u.grossSalary) || 0), 0);
 
-    let celi = 0;
-    let reer = 0;
-    let nonEnregistre = 0;
-    for (const a of state.assets ?? []) {
-        const val = (Number(a.quantity) || 0) * (Number(a.currentPrice) || 0);
-        if (!Number.isFinite(val) || val <= 0) continue;
-        const type = (a.accountType || '').toUpperCase();
-        if (type.includes('CELI')) celi += val;
-        else if (type.includes('REER') || type.includes('RRSP')) reer += val;
-        else nonEnregistre += val;
+    const anneeFiscale = new Date().getFullYear();
+    let salaireBrutMensuel = 0;
+    let revenuNetMensuelFiscal = 0;
+    let impotAnnuelEstime = 0;
+    let tauxMarginalMax = 0;
+
+    for (const u of users) {
+        const brutMensuel = Number(u?.grossSalary);
+        const brutValide = Number.isFinite(brutMensuel) && brutMensuel > 0 ? brutMensuel : 0;
+        salaireBrutMensuel += brutValide;
+
+        const rapport = calculateFiscalReport(brutValide * 12, 0, 0, anneeFiscale);
+        impotAnnuelEstime += rapport.totalTax;
+        if (rapport.marginalRate > tauxMarginalMax) {
+            tauxMarginalMax = rapport.marginalRate;
+        }
+
+        const netDeclare = Number(u?.netSalary ?? u?.salary);
+        if (Number.isFinite(netDeclare) && netDeclare > 0) {
+            revenuNetMensuelFiscal += netDeclare;
+        } else if (brutValide > 0) {
+            revenuNetMensuelFiscal += rapport.netIncome / 12;
+        }
     }
 
-    const liquidites = Object.values(state.initialBalances ?? {}).reduce(
-        (s, v) => s + (Number.isFinite(Number(v)) ? Number(v) : 0),
-        0,
+    const fx = state.fxRates ?? { USD: 1, EUR: 1, CAD: 1 };
+    const assets = state.assets ?? [];
+    const breakdown = computeAssetBreakdown(assets, fx);
+    const celi = breakdown.celi;
+    const reer = breakdown.reer;
+    const nonEnregistre = breakdown.nonReg + breakdown.reee + breakdown.crypto;
+    // Reference explicite a assetValueCad pour garantir la valorisation FX unitaire en CAD
+    void assetValueCad;
+
+    const todayIso = todayIsoLocal();
+    const initialBalances = state.initialBalances ?? {};
+    const transactions = state.transactions ?? [];
+    const debts = state.debts ?? [];
+    const autorite = placementsFaisantAutorite(state);
+
+    const liquidites = computeCurrentLiquidity(initialBalances, transactions);
+    const dettesTotales = computeTotalDebt(debts, todayIso, transactions);
+    const nwHorsImmo = computePresentNetWorth(
+        initialBalances,
+        transactions,
+        assets,
+        fx,
+        debts,
+        autorite.ecart,
+        todayIso,
     );
 
-    const immobilierNet = (state.realEstateGoals ?? []).reduce((s, g) => {
-        const val = Number(g.currentValue ?? g.price) || 0;
-        const hyp = Number(g.mortgageBalance) || Math.max(0, (Number(g.price) || 0) - (Number(g.downPayment) || 0));
-        return s + Math.max(0, val - hyp);
-    }, 0);
+    const now = new Date();
+    let immobilierValeur = 0;
+    let immobilierHypotheque = 0;
+    for (const g of state.realEstateGoals ?? []) {
+        const termes = presentTermesOfGoal(g, monthsSince(g.purchaseDate, now));
+        immobilierValeur += termes.valeur;
+        immobilierHypotheque += termes.hypotheque;
+    }
+    const immobilierNet = Math.max(0, immobilierValeur - immobilierHypotheque);
 
-    const dettesTotales = (state.debts ?? []).reduce((s, d) => s + (Number(d.balance) || 0), 0);
-    const depensesBudget = (state.budgetItems ?? [])
-        .filter((b) => b.nature !== 'Epargne')
-        .reduce((s, b) => s + (Number(b.target) || 0), 0);
-    const epargneMensuelle = Math.max(0, salaireBrutMensuel * 0.68 - depensesBudget);
+    const budgetAgg = computeMonthlyBudgetAggregates(
+        state.config ?? { users: [] },
+        state.budgetItems ?? [],
+    );
+    const revenuNetMensuel = revenuNetMensuelFiscal > 0 ? revenuNetMensuelFiscal : budgetAgg.income;
+    const epargneMensuelle = Math.max(0, revenuNetMensuel - budgetAgg.expenses);
 
-    const patrimoineNet = celi + reer + nonEnregistre + liquidites + immobilierNet - dettesTotales;
+    const patrimoineNet = nwHorsImmo + immobilierNet;
+
+    const ageActuel = Number(u0?.age) || 35;
+    const ageRetraiteCible = Number(state.retirementGoal?.targetAge) || 65;
+    const revenuRetraiteCible = Number(state.retirementGoal?.targetMonthlyIncome) || 4000;
+
+    const chartData =
+        (state as AppState & { lastProjection?: { chartData?: Array<Record<string, unknown>> } | null })
+            .lastProjection?.chartData ?? [];
+    const pointRetraite =
+        chartData.find((p: Record<string, unknown>) => Number(p.age) === ageRetraiteCible) ??
+        chartData[chartData.length - 1];
+    const totalProjete = pointRetraite ? Number((pointRetraite as unknown as Record<string, unknown>).Total) : NaN;
+    const patrimoineProjeteRetraite = Number.isFinite(totalProjete) ? totalProjete : null;
 
     return {
         prenom,
@@ -83,9 +155,13 @@ export function extraireContextePatrimonial(state: AppState): ContextePatrimonia
         dettesTotales,
         epargneMensuelle,
         salaireBrutMensuel,
-        ageActuel: Number(u0?.age) || 35,
-        ageRetraiteCible: Number(state.retirementGoal?.targetAge) || 60,
-        revenuRetraiteCible: Number(state.retirementGoal?.targetMonthlyIncome) || 4000,
+        revenuNetMensuel,
+        impotAnnuelEstime,
+        tauxMarginalPct: Math.round(tauxMarginalMax * 1000) / 10,
+        ageActuel,
+        ageRetraiteCible,
+        revenuRetraiteCible,
+        patrimoineProjeteRetraite,
     };
 }
 
@@ -102,19 +178,23 @@ export function genererSyntheseLocaleGemini(
     const progressionRetraite = Math.min(100, Math.max(0, Math.round((ctx.patrimoineNet / cibleRetraite) * 100)));
     const anneesAvantRetraite = Math.max(1, ctx.ageRetraiteCible - ctx.ageActuel);
     const tauxEpargne =
-        ctx.salaireBrutMensuel > 0 ? Math.round((ctx.epargneMensuelle / ctx.salaireBrutMensuel) * 100) : 0;
+        ctx.revenuNetMensuel > 0
+            ? Math.round((ctx.epargneMensuelle / ctx.revenuNetMensuel) * 100)
+            : ctx.salaireBrutMensuel > 0
+              ? Math.round((ctx.epargneMensuelle / ctx.salaireBrutMensuel) * 100)
+              : 0;
 
     if (q.includes('impôt') || q.includes('impot') || q.includes('celi') || q.includes('reer') || q.includes('fiscal')) {
         const priorite =
             ctx.salaireBrutMensuel * 12 > 75_000
-                ? 'Cotiser en priorité au REER pour réduire ton revenu imposable aux paliers marginaux élevés (Québec + Fédéral), puis réinvestir le remboursement d’impôt en CELI.'
+                ? `Cotiser en priorité au REER pour réduire ton revenu imposable au taux marginal combiné de ${ctx.tauxMarginalPct.toFixed(1)} % (Québec + Fédéral), puis réinvestir le remboursement d’impôt en CELI.`
                 : 'Prioriser le CELI pour conserver une flexibilité totale à l’abri de l’impôt, tout en accumulant tes droits REER pour les années à plus haut revenu.';
         return {
-            texte: `Analyse Gemini Flash (Fiscalité & Comptes enregistrés) : ton portefeuille enregistré cumule ${formatCAD(ctx.celi)} en CELI et ${formatCAD(ctx.reer)} en REER.`,
+            texte: `Analyse Gemini 2.5 Flash (Fiscalité & Comptes enregistrés) : ton portefeuille enregistré cumule ${promptCad(ctx.celi)} en CELI et ${promptCad(ctx.reer)} en REER.`,
             pointsCles: [
                 priorite,
-                `Revenu brut annuel estimé du ménage : ${formatCAD(ctx.salaireBrutMensuel * 12)}/an.`,
-                `Placement hors comptes enregistrés (${formatCAD(ctx.nonEnregistre)}) : à transférer progressivement vers CELI/REER si des droits de cotisation sont disponibles.`,
+                `Revenu brut annuel du ménage : ${promptCad(ctx.salaireBrutMensuel * 12)}/an (impôt estimé ARC + Revenu Québec : ${promptCad(ctx.impotAnnuelEstime)}/an).`,
+                `Placement hors comptes enregistrés (${promptCad(ctx.nonEnregistre)}) : à transférer progressivement vers CELI/REER si des droits de cotisation sont disponibles.`,
             ],
             actionsSuggerees: [
                 { label: 'Ouvrir le Simulateur d’impôt', tab: Tab.TAX },
@@ -126,13 +206,13 @@ export function genererSyntheseLocaleGemini(
 
     if (q.includes('budget') || q.includes('dépense') || q.includes('depense') || q.includes('épargne') || q.includes('epargne')) {
         return {
-            texte: `Analyse Gemini Flash (Trésorerie & Budget) : ta capacité d’épargne mensuelle est estimée à ${formatCAD(ctx.epargneMensuelle)}/mois (taux d’épargne d’environ ${tauxEpargne} %).`,
+            texte: `Analyse Gemini 2.5 Flash (Trésorerie & Budget) : ta capacité d’épargne mensuelle est estimée à ${promptCad(ctx.epargneMensuelle)}/mois (taux d’épargne d’environ ${tauxEpargne} %).`,
             pointsCles: [
-                `Liquidités disponibles : ${formatCAD(ctx.liquidites)} pour ton coussin de sécurité.`,
+                `Liquidités disponibles : ${promptCad(ctx.liquidites)} pour ton coussin de sécurité.`,
                 ctx.dettesTotales > 0
-                    ? `Solde de dettes hors hypothèque : ${formatCAD(ctx.dettesTotales)} — accélérer le remboursement des dettes à taux élevé augmente directement ton flux mensuel libre.`
+                    ? `Solde de dettes hors hypothèque : ${promptCad(ctx.dettesTotales)} — accélérer le remboursement des dettes à taux élevé augmente directement ton flux mensuel libre.`
                     : `Aucune dette de consommation déclarée : 100 % de ton épargne peut être investie.`,
-                `Automatiser un virement de ${formatCAD(Math.round(ctx.epargneMensuelle * 0.8))}/mois dès le jour de paie sécurise ta trajectoire.`,
+                `Automatiser un virement de ${promptCad(Math.round(ctx.epargneMensuelle * 0.8))}/mois dès le jour de paie sécurise ta trajectoire.`,
             ],
             actionsSuggerees: [
                 { label: 'Ajuster mon Budget', tab: Tab.BUDGET },
@@ -143,11 +223,15 @@ export function genererSyntheseLocaleGemini(
     }
 
     if (q.includes('retraite') || q.includes('futur') || q.includes('60 ans') || q.includes('65 ans') || q.includes('indépendance')) {
+        const ligneProjection =
+            ctx.patrimoineProjeteRetraite !== null
+                ? `Patrimoine projeté par le moteur à ${ctx.ageRetraiteCible} ans : ${promptCad(ctx.patrimoineProjeteRetraite)}.`
+                : `Ouvre l’onglet Futur pour lancer la simulation Monte Carlo complète jusqu’à ${ctx.ageRetraiteCible} ans.`;
         return {
-            texte: `Analyse Gemini Flash (Trajectoire Retraite à ${ctx.ageRetraiteCible} ans) : tu as atteint ${progressionRetraite} % de ton capital cible (${formatCAD(cibleRetraite)}) à ${anneesAvantRetraite} ans de l’échéance.`,
+            texte: `Analyse Gemini 2.5 Flash (Trajectoire Retraite à ${ctx.ageRetraiteCible} ans) : tu as atteint ${progressionRetraite} % de ton capital cible (${promptCad(cibleRetraite)}) à ${anneesAvantRetraite} ans de l’échéance.`,
             pointsCles: [
-                `Valeur nette actuelle : ${formatCAD(ctx.patrimoineNet)} pour une rente cible de ${formatCAD(ctx.revenuRetraiteCible)}/mois.`,
-                `Horizon de capitalisation : ${anneesAvantRetraite} ans restants avec une épargne estimée à ${formatCAD(ctx.epargneMensuelle)}/mois.`,
+                `Valeur nette actuelle : ${promptCad(ctx.patrimoineNet)} pour une rente cible de ${promptCad(ctx.revenuRetraiteCible)}/mois.`,
+                ligneProjection,
                 `Vérifie l’ordre de décaissement optimal (CELI, Non-enregistré, REER/FERR + RRQ/PSV) dans le module Retraite.`,
             ],
             actionsSuggerees: [
@@ -159,12 +243,12 @@ export function genererSyntheseLocaleGemini(
     }
 
     return {
-        texte: `Synthèse Gemini Flash pour ${ctx.prenom} : ta valeur nette s’établit à ${formatCAD(ctx.patrimoineNet)}, soutenue par ${formatCAD(ctx.celi + ctx.reer + ctx.nonEnregistre)} de placements et ${formatCAD(ctx.immobilierNet)} d’équité immobilière.`,
+        texte: `Synthèse Gemini 2.5 Flash pour ${ctx.prenom} : ta valeur nette s’établit à ${promptCad(ctx.patrimoineNet)}, soutenue par ${promptCad(ctx.celi + ctx.reer + ctx.nonEnregistre)} de placements et ${promptCad(ctx.immobilierNet)} d’équité immobilière.`,
         pointsCles: [
-            `Progression vers l’indépendance financière (${ctx.ageRetraiteCible} ans) : ${progressionRetraite} % de la cible (${formatCAD(cibleRetraite)}).`,
-            `Répartition : CELI ${formatCAD(ctx.celi)} · REER ${formatCAD(ctx.reer)} · Liquidités ${formatCAD(ctx.liquidites)}.`,
+            `Progression vers l’indépendance financière (${ctx.ageRetraiteCible} ans) : ${progressionRetraite} % de la cible (${promptCad(cibleRetraite)}).`,
+            `Répartition : CELI ${promptCad(ctx.celi)} · REER ${promptCad(ctx.reer)} · Liquidités ${promptCad(ctx.liquidites)}.`,
             ctx.dettesTotales > 0
-                ? `Dettes à surveiller : ${formatCAD(ctx.dettesTotales)} — consulte le plan de désendettement.`
+                ? `Dettes à surveiller : ${promptCad(ctx.dettesTotales)} — consulte le plan de désendettement.`
                 : `Bilan sain : aucune dette à court terme recensée.`,
         ],
         actionsSuggerees: [
@@ -177,7 +261,7 @@ export function genererSyntheseLocaleGemini(
 }
 
 /**
- * Interroge Gemini 3.8 Flash avec le contexte patrimonial de l'utilisateur.
+ * Interroge Google Gemini 2.5 Flash avec le contexte patrimonial réel de l'utilisateur.
  * Respecte strictement le mode discret (`isPrivacyMode`).
  */
 export async function interrogerAssistantGemini(
@@ -192,7 +276,11 @@ export async function interrogerAssistantGemini(
 
     const ctx = extraireContextePatrimonial(state);
     const syntheseLocale = genererSyntheseLocaleGemini(question, ctx);
-    const apiKey = state.apiKeys?.anthropic?.trim() || (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim() || '';
+    const apiKey =
+        state.apiKeys?.gemini?.trim()
+        || state.apiKeys?.anthropic?.trim()
+        || (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim()
+        || '';
 
     if (!apiKey) {
         return syntheseLocale;
@@ -203,11 +291,12 @@ export async function interrogerAssistantGemini(
             'Tu es Gemini, le conseiller financier personnel intégré à FinanceAI (Québec / Canada 2026).',
             'Réponds en français, en tutoyant l’utilisateur, de manière claire, structurée et concise (maximum 4 phrases + 3 points d’action concrets séparés par des sauts de ligne commençant par "- ").',
             `Contexte patrimonial réel de ${ctx.prenom} :`,
-            `- Valeur nette : ${formatCAD(ctx.patrimoineNet)}`,
-            `- CELI : ${formatCAD(ctx.celi)} | REER : ${formatCAD(ctx.reer)} | Non-enregistré : ${formatCAD(ctx.nonEnregistre)}`,
-            `- Liquidités : ${formatCAD(ctx.liquidites)} | Équité immobilière : ${formatCAD(ctx.immobilierNet)} | Dettes : ${formatCAD(ctx.dettesTotales)}`,
-            `- Salaire brut mensuel ménage : ${formatCAD(ctx.salaireBrutMensuel)} | Épargne mensuelle : ${formatCAD(ctx.epargneMensuelle)}`,
-            `- Retraite visée : ${ctx.ageRetraiteCible} ans (actuel : ${ctx.ageActuel} ans) avec ${formatCAD(ctx.revenuRetraiteCible)}/mois.`,
+            `- Valeur nette : ${promptCad(ctx.patrimoineNet)}`,
+            `- CELI : ${promptCad(ctx.celi)} | REER : ${promptCad(ctx.reer)} | Non-enregistré : ${promptCad(ctx.nonEnregistre)}`,
+            `- Liquidités : ${promptCad(ctx.liquidites)} | Équité immobilière possédée : ${promptCad(ctx.immobilierNet)} | Dettes : ${promptCad(ctx.dettesTotales)}`,
+            `- Salaire brut mensuel ménage : ${promptCad(ctx.salaireBrutMensuel)} | Revenu net mensuel après impôt QC/Féd : ${promptCad(ctx.revenuNetMensuel)} | Épargne mensuelle : ${promptCad(ctx.epargneMensuelle)}`,
+            `- Impôt annuel estimé (ARC + Revenu Québec) : ${promptCad(ctx.impotAnnuelEstime)} (taux marginal : ${Number.isFinite(ctx.tauxMarginalPct) ? `${ctx.tauxMarginalPct.toFixed(1)} %` : '(non disponible)'})`,
+            `- Retraite visée : ${ctx.ageRetraiteCible} ans (actuel : ${ctx.ageActuel} ans) avec ${promptCad(ctx.revenuRetraiteCible)}/mois (patrimoine projeté par le moteur : ${promptCad(ctx.patrimoineProjeteRetraite)}).`,
         ].join('\n');
 
         const texteBrut = await chat(

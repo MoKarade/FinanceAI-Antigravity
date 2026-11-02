@@ -27,7 +27,7 @@ const driveEnvelope = {
         },
         version: 7,
     },
-    apiKeys: { anthropic: 'sk-from-drive', finnhub: 'fh-from-drive' },
+    apiKeys: { gemini: 'sk-from-drive', anthropic: 'sk-from-drive', finnhub: 'fh-from-drive' },
 };
 
 const reloadMock = vi.fn();
@@ -414,7 +414,7 @@ describe('[SEC-AUDIT-SYNC-LEGACY-CLEARTEXT] un blob HÉRITÉ (clés en clair) es
         // raison — perturbation à l'appui (retirer la condition « clés en clair » laissait tout
         // vert). Ici, seule cette condition doit expliquer l'absence de ré-écriture.
         const { encryptApiKeys } = await import('../../services/sync/keyCipher');
-        const chiffre = await encryptApiKeys({ anthropic: 'sk-deja-chiffre', finnhub: 'fh-deja' }, 'sub-123');
+        const chiffre = await encryptApiKeys({ gemini: 'AIzaSy-deja-chiffre', finnhub: 'fh-deja' }, 'sub-123');
         readSpy.mockResolvedValue({ ...sansClair, apiKeysEnc: chiffre });
         try {
             expect(await tirerPuisLireLEnvoi()).toBeNull();
@@ -426,7 +426,7 @@ describe('[SEC-AUDIT-SYNC-LEGACY-CLEARTEXT] un blob HÉRITÉ (clés en clair) es
     it('blob hérité mais clés VIDES → aucun push (rien à rechiffrer)', async () => {
         const driveApi = await import('../../services/googleDrive/driveAppData');
         const readSpy = driveApi.readSyncFile as ReturnType<typeof vi.fn>;
-        readSpy.mockResolvedValue({ ...driveEnvelope, apiKeys: { anthropic: '', finnhub: '' } });
+        readSpy.mockResolvedValue({ ...driveEnvelope, apiKeys: { gemini: '', anthropic: '', finnhub: '' } });
         try {
             expect(await tirerPuisLireLEnvoi()).toBeNull();
         } finally {

@@ -1,6 +1,6 @@
 // components/aiChat/AiChatConfirmModal.tsx
 //
-// [AITOOLS-D] Modal de CONFIRMATION d'une écriture proposée par le chat Claude in-app — le point de
+// [AITOOLS-D] Modal de CONFIRMATION d'une écriture proposée par l'assistant Gemini in-app — le point de
 // contrôle humain du contrat « rien ne s'écrit sans ton clic » (exigence Marc). Affiche le diff
 // avant → après calculé PUREMENT par applyDocument (writeExecutor), puis tranche :
 //   Appliquer → resolvePendingWrite('apply')  (writeExecutor recalcule sur état FRAIS + backup + write)

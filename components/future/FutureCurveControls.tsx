@@ -2,13 +2,13 @@ import React, { useRef, useCallback } from 'react';
 import { Tab } from '../../types';
 import { ProjectionChartPoint } from '../../services/projection/types';
 import { PrivateAmount } from '../ui/PrivateAmount';
-import { formatCompactCAD, formatSigned } from '../../utils/format';
+import { formatSigned } from '../../utils/format';
 import { prefetchTab } from '../../utils/tabPrefetch';
 import type { TimeChartZoom } from '../../hooks/useTimeChartZoom';
 
 export type ModeAffichageCourbe = 'nette' | 'empilee';
 
-export interface JalonCourbeRapide {
+interface JalonCourbeRapide {
     cle: string;
     libelle: string;
     annee: number | null;
@@ -308,6 +308,7 @@ export const FutureTimelineBrush: React.FC<FutureTimelineBrushProps> = ({
                     className="absolute top-0 bottom-0 rounded-full bg-primary/25 border border-primary/60 cursor-grab active:cursor-grabbing flex items-center justify-between"
                     style={{
                         left: `${startRatio * 100}%`,
+                        // NOMBRE-NON-MONETAIRE : position géométrique du curseur de zoom temporel
                         width: `${spanRatio * 100}%`,
                     }}
                 >

@@ -757,7 +757,7 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
 
     const handleAiDiagnosis = () => {
         if (!apiKey) {
-            showToast("Clé API Anthropic requise pour le diagnostic IA.", "info");
+            showToast("Clé API Google Gemini requise pour le diagnostic IA.", "info");
             return;
         }
         // [PRIVACY-CONTEXTE-IA] (décision Marc 2026-09-05 : MASQUER) Lu à l'instant du geste, comme le
@@ -980,16 +980,19 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                             <div className="h-3 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5 p-0.5" aria-hidden="true">
                                 <div
                                     className="h-full rounded-l-full bg-succes-texte transition-all"
+                                    // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
                                     style={{ width: `${Math.max(0, Math.min(100, (fiscalBreakdown.netDisplay / fiscalBreakdown.grossDisplay) * 100))}%` }}
                                     title="Revenu net disponible"
                                 />
                                 <div
                                     className="h-full bg-erreur-texte transition-all"
+                                    // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
                                     style={{ width: `${Math.max(0, Math.min(100, ((fiscalBreakdown.fedTaxDisplay + fiscalBreakdown.qcTaxDisplay) / fiscalBreakdown.grossDisplay) * 100))}%` }}
                                     title="Impôts fédéral + Québec"
                                 />
                                 <div
                                     className="h-full rounded-r-full bg-alerte-texte transition-all"
+                                    // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
                                     style={{ width: `${Math.max(0, Math.min(100, ((fiscalBreakdown.rrqDisplay + fiscalBreakdown.aeRqapDisplay) / fiscalBreakdown.grossDisplay) * 100))}%` }}
                                     title="RRQ + AE + RQAP"
                                 />
@@ -1023,6 +1026,7 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                             <div className="h-2.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5 p-0.5" aria-hidden="true">
                                 <div
                                     className="h-full rounded-l-full bg-succes-texte"
+                                    // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
                                     style={{ width: `${Math.max(0, Math.min(100, (Math.max(0, coupleAnalysis.user1Savings) / Math.max(1, Math.max(0, coupleAnalysis.user1Savings) + Math.max(0, coupleAnalysis.user2Savings))) * 100))}%` }}
                                 />
                                 <div

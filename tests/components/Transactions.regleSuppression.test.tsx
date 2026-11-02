@@ -8,7 +8,7 @@ import { Transactions } from '../../components/Transactions';
 import { showToast } from '../../components/ui/Toast';
 import type { CategorizationRule } from '../../types';
 
-vi.mock('../../services/claude', () => ({ categorizeBatch: vi.fn() }));
+vi.mock('../../services/gemini', () => ({ categorizeBatch: vi.fn() }));
 vi.mock('../../components/ui/Toast', () => ({ showToast: vi.fn() }));
 
 const RULE: CategorizationRule = { id: 'r1', pattern: 'IGA', category: 'Épicerie', createdAt: '2026-01-01T00:00:00.000Z' };

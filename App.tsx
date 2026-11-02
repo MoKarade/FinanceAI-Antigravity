@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { Layout } from './components/Layout';
-import { hasMeaningfulData } from './utils/onboarding';
-import { buildStarterState } from './utils/starterData';
 import { recoverUser230kData, hasInflatedStarterProperty, saveProtectedDossierSnapshot } from './services/dataRecovery';
 import { scheduleIdleTabPrefetch } from './utils/tabPrefetch';
 import { ToastContainer, showToast } from './components/ui/Toast';
@@ -18,12 +16,10 @@ import { useAppBootEffects } from './hooks/useAppBootEffects';
 import { useTabNavigation } from './hooks/useTabNavigation';
 import { useAssetDataHydration } from './hooks/useAssetDataHydration';
 import { lazyWithRetry } from './utils/lazyWithRetry';
-import { pushNow, subscribeSyncStatus, getSyncStatus, hasConnectedBefore, type SyncStatus } from './services/sync/syncOrchestrator';
+import { pushNow, subscribeSyncStatus, getSyncStatus, type SyncStatus } from './services/sync/syncOrchestrator';
 import { PassphraseGate } from './components/auth/PassphraseGate';
 import { SyncStatusBanner } from './components/sync/SyncStatusBanner';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
-import { STORAGE_KEYS } from './utils/storageKeys';
-import NavApps from './components/NavApps';
 
 const CommandPalette = lazyWithRetry(() => import('./components/ui/CommandPalette').then(m => ({ default: m.CommandPalette })), 'CommandPalette');
 const SyncConflictModal = lazyWithRetry(() => import('./components/sync/SyncConflictModal').then(m => ({ default: m.SyncConflictModal })), 'SyncConflictModal');
@@ -93,13 +89,9 @@ export const App: React.FC = () => {
 
     const bootRecoveryRan = useRef(false);
 
-    // Démarrage instantané sans assistant d'introduction ni blocage : si le dossier local est vierge
-    // et qu'aucune synchronisation Drive n'est active, on initialise un dossier patrimonial complet.
+    // Récupération automatique au démarrage si une sauvegarde locale ou un bouclier anti-mode test existe,
+    // sans injecter de données simulées en production (conformément à la règle No-fake-data).
     useEffect(() => {
-        try {
-            localStorage.setItem(STORAGE_KEYS.onboardingDone, 'true');
-        } catch { /* ignore */ }
-
         const current = useFinanceStore.getState();
         if (!bootRecoveryRan.current) {
             if (hasInflatedStarterProperty(current) || current.realDataSnapshot) {
@@ -112,14 +104,7 @@ export const App: React.FC = () => {
                 void recoverUser230kData(false);
             }
         }
-
-        if (syncStatus.connected || syncStatus.busy || syncStatus.needsPassphrase || hasConnectedBefore()) {
-            return;
-        }
-        if (!hasMeaningfulData(useFinanceStore.getState())) {
-            setAppState(buildStarterState());
-        }
-    }, [syncStatus.connected, syncStatus.busy, syncStatus.needsPassphrase, setAppState]);
+    }, []);
 
     // Bouclier zéro perte : chaque modification du dossier réel (hors mode test) met à jour l'empreinte protégée.
     useEffect(() => {
@@ -164,7 +149,7 @@ export const App: React.FC = () => {
         return importerReleveManuel(rawData, {
             transactions: state.transactions,
             budgetItems: state.budgetItems,
-            apiKeyAnthropic: state.apiKeys.anthropic,
+            apiKeyAnthropic: state.apiKeys.gemini || state.apiKeys.anthropic,
             setAppState,
         });
     };
@@ -182,7 +167,6 @@ export const App: React.FC = () => {
             <Suspense fallback={null}>
                 <ProjectionEngine calculatedMonthlySavings={calculatedMonthlySavings} />
             </Suspense>
-            <NavApps courant="financeai" />
             <Layout
                 activeTab={activeTab}
                 setActiveTab={handleSetTab}

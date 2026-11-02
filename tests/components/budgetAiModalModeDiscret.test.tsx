@@ -18,8 +18,8 @@ import { showToast } from '../../components/ui/Toast';
 import type { BudgetConfig, BudgetCategory, User } from '../../types';
 
 const chatStream = vi.fn((..._args: unknown[]) => (async function* () { yield JSON.stringify(['Réduis l’épicerie.', 'Bloque 200 $.', 'Revois les abonnements.']); })());
-vi.mock('../../services/claude', async () => {
-    const reel = await vi.importActual<typeof import('../../services/claude')>('../../services/claude');
+vi.mock('../../services/gemini', async () => {
+    const reel = await vi.importActual<typeof import('../../services/gemini')>('../../services/gemini');
     return { ...reel, MODEL_HAIKU: 'claude-haiku-test', chatStream: (...args: unknown[]) => chatStream(...args) };
 });
 vi.mock('../../components/ui/Toast', () => ({ showToast: vi.fn() }));

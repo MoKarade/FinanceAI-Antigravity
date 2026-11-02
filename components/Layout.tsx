@@ -11,10 +11,11 @@ import { BackupReminder } from './BackupReminder';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { isCoupleMode } from '../services/couple/netWorthByOwner';
 import { HubConnexionsModal } from './future/HubConnexionsModal';
-import { GeminiAssistantModal } from './aiChat/GeminiAssistantModal';
+import { GoogleFinanceTickerBar } from './app/GoogleFinanceTickerBar';
 import { prefetchTab, getAdjacentTabs } from '../utils/tabPrefetch';
 
 const BandeauModeTest = lazyWithRetry(() => import('./test/BandeauModeTest').then(m => ({ default: m.BandeauModeTest })), 'BandeauModeTest');
+const GeminiAssistantModal = lazyWithRetry(() => import('./aiChat/GeminiAssistantModal').then(m => ({ default: m.GeminiAssistantModal })), 'GeminiAssistantModal');
 
 interface LayoutProps {
   activeTab: Tab;
@@ -40,10 +41,10 @@ export const Layout: React.FC<LayoutProps> = ({
   isLoading: _isLoading,
   isPrivacyMode,
   togglePrivacyMode,
-  netWorth: _netWorth,
-  monthlySavings: _monthlySavings = 0,
+  netWorth,
+  monthlySavings = 0,
   financialGoals: _financialGoals = [],
-  currentValues: _currentValues = { celi: 0, reer: 0, liquidity: 0 },
+  currentValues = { celi: 0, reer: 0, liquidity: 0 },
   onOpenGuide: _onOpenGuide,
   onGeneratePDF: _onGeneratePDF
 }) => {
@@ -254,7 +255,7 @@ export const Layout: React.FC<LayoutProps> = ({
             onClick={() => setShowGeminiModal(true)}
             title={isSidebarCollapsed ? 'Conseiller Gemini' : undefined}
             aria-label="Ouvrir le conseiller financier Gemini"
-            className="touch-target h-10 px-2.5 rounded-xl flex items-center justify-center gap-2 text-meta font-semibold bg-repere-fond text-repere border border-bordure-lien hover:opacity-90 transition-opacity focus-ring"
+            className="touch-target h-10 px-2.5 rounded-xl flex items-center justify-center gap-2 text-meta font-semibold bg-repere-doux text-repere border border-bordure hover:opacity-90 transition-opacity focus-ring"
           >
             <Icon name="sparkles" size={16} className="shrink-0" aria-hidden="true" />
             <span className={isSidebarCollapsed ? 'sr-only' : 'truncate'}>Conseiller Gemini</span>
@@ -420,6 +421,17 @@ export const Layout: React.FC<LayoutProps> = ({
           </div>
           )}
 
+          {activeTab !== Tab.DASHBOARD && (
+            <GoogleFinanceTickerBar
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              netWorth={netWorth}
+              monthlySavings={monthlySavings}
+              currentValues={currentValues}
+              isPrivacyMode={isPrivacyMode}
+            />
+          )}
+
           <BackupReminder onNavigateToSettings={() => setActiveTab(Tab.SETTINGS)} />
           {children}
         </div>
@@ -535,10 +547,12 @@ export const Layout: React.FC<LayoutProps> = ({
       />
 
       {showGeminiModal && (
-        <GeminiAssistantModal
-          isOpen={showGeminiModal}
-          onClose={() => setShowGeminiModal(false)}
-        />
+        <Suspense fallback={null}>
+          <GeminiAssistantModal
+            isOpen={showGeminiModal}
+            onClose={() => setShowGeminiModal(false)}
+          />
+        </Suspense>
       )}
     </div>
   );

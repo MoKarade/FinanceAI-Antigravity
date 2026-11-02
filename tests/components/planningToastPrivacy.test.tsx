@@ -23,7 +23,7 @@ import { useFinanceStore } from '../../store/useFinanceStore';
 import { MASKED_PAYEE_LABEL } from '../../utils/privacyAria';
 import type { Transaction } from '../../types';
 
-vi.mock('../../services/claude', () => ({ detectSubscriptionsAI: vi.fn() }));
+vi.mock('../../services/gemini', () => ({ detectSubscriptionsAI: vi.fn() }));
 vi.mock('../../components/ui/Toast', () => ({ showToast: vi.fn() }));
 
 // 3 débits mensuels stables au même marchand → détecté comme abonnement récurrent.

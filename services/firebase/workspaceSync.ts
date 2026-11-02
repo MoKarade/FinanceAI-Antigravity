@@ -13,7 +13,6 @@ import { hasMeaningfulData } from '../../utils/onboarding';
 import { buildStarterState } from '../../utils/starterData';
 import {
     cleanCandidateState,
-    computeCandidateNetWorth,
     isStarterTemplateState,
     recoverUser230kData,
 } from '../dataRecovery';
@@ -25,11 +24,11 @@ import type { AppState } from '../../types';
 const USER_PROFILE_PROPS = blueprint.entities.UserProfile.properties;
 const WORKSPACE_PROPS = blueprint.entities.FinancialWorkspace.properties;
 
-export const MAX_UID_LENGTH = USER_PROFILE_PROPS.uid.maxLength ?? 128;
+const MAX_UID_LENGTH = USER_PROFILE_PROPS.uid.maxLength ?? 128;
 export const MAX_DISPLAY_NAME_LENGTH = USER_PROFILE_PROPS.displayName.maxLength ?? 120;
 export const MAX_EMAIL_LENGTH = USER_PROFILE_PROPS.email.maxLength ?? 254;
-export const MAX_PHOTO_URL_LENGTH = USER_PROFILE_PROPS.photoURL.maxLength ?? 500;
-export const MAX_REVISION_ID_LENGTH = WORKSPACE_PROPS.revisionId.maxLength ?? 64;
+const MAX_PHOTO_URL_LENGTH = USER_PROFILE_PROPS.photoURL.maxLength ?? 500;
+const MAX_REVISION_ID_LENGTH = WORKSPACE_PROPS.revisionId.maxLength ?? 64;
 export const SAFE_ID_REGEX = new RegExp(WORKSPACE_PROPS.ownerId.pattern ?? '^[a-zA-Z0-9_\\-]+$');
 
 export const PERSISTED_WORKSPACE_KEYS = [
@@ -42,6 +41,7 @@ export const PERSISTED_WORKSPACE_KEYS = [
     'investmentTransactions',
     'realEstateGoals',
     'retirementGoal',
+    'childGoal',
     'childGoals',
     'travelGoals',
     'lifeEvents',
@@ -50,27 +50,58 @@ export const PERSISTED_WORKSPACE_KEYS = [
     'projection',
     'categorizationRules',
     'subscriptions',
+    'dismissedSubscriptions',
+    'healthWeights',
+    'setupOptOut',
     'fxRates',
+    'fxRatesEstimated',
+    'fxRatesSource',
+    'fxLastAttemptAt',
+    'fxLastAttemptCause',
+    'fxObservationDate',
+    'lastUpdate',
+    'aiConversation',
+    'aiConversations',
+    'activeAiConversationId',
+    'aiChatModel',
+    'aiChatCostUsdTotal',
+    'insurancePolicies',
+    'rentalProperties',
+    'privateBusinesses',
+    'weddingGoal',
+    'vehicleReplacements',
+    'majorRenovations',
+    'charitableGoals',
+    'documents',
+    'categoryReview',
+    'fintableSync',
+    'fintableSyncReport',
+    'fintableBrokerBalances',
+    'fintableBrokerHistory',
+    'fintableRoles',
+    'brokerLedger',
+    'instruments',
+    'brokerAccountRegimes',
+    'projectionRunMC',
+    'isProjectionLocked',
+    'revealedProjectionSig',
+    'lockedProjectionCurve',
+    'monthlyHistory',
+    'annualSnapshots',
+    'dismissedNudges',
+    'coupleSplitMode',
 ] as const;
-
-export type PersistedWorkspaceKey = (typeof PERSISTED_WORKSPACE_KEYS)[number];
 
 export interface FirebaseWorkspaceSyncStatus {
     state: 'idle' | 'connecting' | 'synced' | 'syncing' | 'error';
     lastSyncedAt: number | null;
     errorMessage: string | null;
-    sqlState?: 'idle' | 'syncing' | 'synced' | 'error';
-    sqlLastSyncedAt?: number | null;
-    sqlErrorMessage?: string | null;
 }
 
 let currentSyncStatus: FirebaseWorkspaceSyncStatus = {
     state: 'idle',
     lastSyncedAt: null,
     errorMessage: null,
-    sqlState: 'idle',
-    sqlLastSyncedAt: null,
-    sqlErrorMessage: null,
 };
 
 const statusListeners = new Set<(status: FirebaseWorkspaceSyncStatus) => void>();
@@ -98,14 +129,14 @@ export function subscribeFirebaseSyncStatus(
 
 /**
  * Nettoie récursivement une valeur pour qu'elle soit compatible avec les Maps et Lists natives de Firestore
- * (aucun `undefined`, aucune fonction, aucun `NaN` ou `Infinity`, et exclusion stricte de `apiKeys`).
+ * (aucun `undefined`, aucune fonction, aucun `NaN` ou `Infinity` remplacé par `null` selon No-fake-data, et exclusion stricte de `apiKeys`).
  */
 export function sanitizeForFirestore(value: unknown, depth = 0): unknown {
     if (depth > 12) return null;
     if (value === null || value === undefined) return null;
     if (typeof value === 'boolean' || typeof value === 'string') return value;
     if (typeof value === 'number') {
-        return Number.isFinite(value) ? value : 0;
+        return Number.isFinite(value) ? value : null;
     }
     if (Array.isArray(value)) {
         return value
@@ -129,9 +160,11 @@ export function sanitizeForFirestore(value: unknown, depth = 0): unknown {
  */
 export function extractSanitizedWorkspacePayload(state: AppState): Record<string, unknown> {
     const cleaned = cleanCandidateState(state);
+    const cleanedRecord = cleaned as unknown as Record<string, unknown>;
+    const stateRecord = state as unknown as Record<string, unknown>;
     const payload: Record<string, unknown> = {};
     for (const key of PERSISTED_WORKSPACE_KEYS) {
-        const rawVal = cleaned[key as keyof AppState] ?? state[key as keyof AppState];
+        const rawVal = cleanedRecord[key] ?? stateRecord[key];
         if (rawVal !== undefined) {
             payload[key] = sanitizeForFirestore(rawVal);
         }
@@ -263,116 +296,45 @@ export function makeSafeRevisionId(): string {
 }
 
 /**
- * Sauvegarde l'état assaini du dossier patrimonial dans Cloud SQL (PostgreSQL) via `/api/sql/workspace`.
+ * Extrait l'horodatage en millisecondes d'un document Firestore (`/workspaces/{uid}`)
+ * à partir de `updatedAt` (Timestamp Firestore, epoch ms ou chaîne ISO) ou de `statePayload.lastUpdate`.
  */
-export async function pushWorkspaceToCloudSql(user: FirebaseUser): Promise<boolean> {
-    const isTestEnv = typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test';
-    if (isTestEnv || typeof fetch === 'undefined') return false;
-    const currentState = useFinanceStore.getState();
-    if (currentState.isTestMode || isStarterTemplateState(currentState)) return false;
-
-    notifySyncStatus({ sqlState: 'syncing', sqlErrorMessage: null });
-    try {
-        const idToken = await user.getIdToken();
-        const statePayload = extractSanitizedWorkspacePayload(currentState);
-        const netWorthCad = computeCandidateNetWorth(currentState);
-        const response = await fetch('/api/sql/workspace', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${idToken}`,
-            },
-            body: JSON.stringify({
-                displayName: (user.displayName || '').slice(0, MAX_DISPLAY_NAME_LENGTH),
-                netWorthCad,
-                statePayload,
-            }),
-        });
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+export function extractRemoteTimestampMs(
+    data: Record<string, unknown>,
+    remotePayload?: Partial<AppState> | null,
+): number | null {
+    const rawUpdated = data.updatedAt;
+    if (rawUpdated && typeof rawUpdated === 'object') {
+        const maybeToMillis = (rawUpdated as { toMillis?: () => unknown }).toMillis;
+        if (typeof maybeToMillis === 'function') {
+            const ms = maybeToMillis.call(rawUpdated);
+            if (typeof ms === 'number' && Number.isFinite(ms)) return ms;
         }
-        notifySyncStatus({
-            sqlState: 'synced',
-            sqlLastSyncedAt: Date.now(),
-            sqlErrorMessage: null,
-        });
-        return true;
-    } catch (err) {
-        notifySyncStatus({
-            sqlState: 'error',
-            sqlErrorMessage:
-                err instanceof Error ? err.message : 'Synchronisation Cloud SQL indisponible',
-        });
-        return false;
+        const seconds = (rawUpdated as { seconds?: unknown }).seconds;
+        if (typeof seconds === 'number' && Number.isFinite(seconds)) {
+            return seconds * 1000;
+        }
     }
-}
-
-/**
- * Restaure le dossier patrimonial depuis Cloud SQL (PostgreSQL) via `/api/sql/workspace`.
- */
-export async function pullWorkspaceFromCloudSql(user: FirebaseUser): Promise<boolean> {
-    const isTestEnv = typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test';
-    if (isTestEnv || typeof fetch === 'undefined') return false;
-
-    notifySyncStatus({ sqlState: 'syncing', sqlErrorMessage: null });
-    try {
-        const idToken = await user.getIdToken();
-        const response = await fetch('/api/sql/workspace', {
-            method: 'GET',
-            headers: {
-                Authorization: `Bearer ${idToken}`,
-            },
-        });
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        const data = (await response.json()) as {
-            exists?: boolean;
-            backup?: { statePayload?: Partial<AppState> | null } | null;
-        };
-        const remotePayload = data.backup?.statePayload;
-        if (
-            data.exists &&
-            remotePayload &&
-            hasMeaningfulData(remotePayload) &&
-            !isStarterTemplateState(remotePayload)
-        ) {
-            const cleanedRemote = cleanCandidateState(remotePayload);
-            applyingRemoteSnapshot = true;
-            try {
-                useFinanceStore.getState().setAppState({
-                    ...cleanedRemote,
-                    lastUpdate: Date.now(),
-                });
-            } finally {
-                applyingRemoteSnapshot = false;
-            }
-            notifySyncStatus({
-                sqlState: 'synced',
-                sqlLastSyncedAt: Date.now(),
-                sqlErrorMessage: null,
-            });
-            return true;
-        }
-        notifySyncStatus({
-            sqlState: 'synced',
-            sqlLastSyncedAt: Date.now(),
-            sqlErrorMessage: null,
-        });
-        return false;
-    } catch (err) {
-        notifySyncStatus({
-            sqlState: 'error',
-            sqlErrorMessage:
-                err instanceof Error ? err.message : 'Lecture Cloud SQL indisponible',
-        });
-        return false;
+    if (typeof rawUpdated === 'number' && Number.isFinite(rawUpdated)) {
+        return rawUpdated;
     }
+    if (typeof rawUpdated === 'string') {
+        const parsed = Date.parse(rawUpdated);
+        if (Number.isFinite(parsed)) return parsed;
+    }
+    if (
+        remotePayload &&
+        typeof remotePayload.lastUpdate === 'number' &&
+        Number.isFinite(remotePayload.lastUpdate)
+    ) {
+        return remotePayload.lastUpdate;
+    }
+    return null;
 }
 
 /**
  * Recherche dans le bouclier local, les sauvegardes auto IndexedDB et Google Drive un vrai dossier
- * personnalisé (hors gabarit Alex), et ne se replie sur `buildStarterState()` qu'en dernier recours.
+ * personnalisé (hors gabarit Alex), et ne se replie sur `buildStarterState()` que sur demande explicite.
  */
 export async function recoverOrEnsureInitialWorkspace(
     forceEvenIfNotEmpty = false,
@@ -452,11 +414,12 @@ export async function recoverOrEnsureInitialWorkspace(
         return 'restored-idb';
     }
 
-    if (!hasMeaningfulData(afterRecovery)) {
+    if (forceEvenIfNotEmpty && !hasMeaningfulData(afterRecovery)) {
         const starter = buildStarterState();
         useFinanceStore.getState().setAppState(starter);
+        return 'restored-starter';
     }
-    return 'restored-starter';
+    return 'kept';
 }
 
 /**
@@ -509,8 +472,8 @@ let lastSerializedPayload = '';
 let applyingRemoteSnapshot = false;
 
 /**
- * Pousse immédiatement l'état courant du dossier patrimonial vers `/workspaces/{uid}` (Firestore)
- * ainsi que vers Cloud SQL PostgreSQL (`/api/sql/workspace`), en ignorant le mode test et le gabarit Alex.
+ * Pousse immédiatement l'état courant du dossier patrimonial vers `/workspaces/{uid}` (Cloud Firestore),
+ * en ignorant le mode test et le gabarit Alex.
  */
 export async function pushWorkspaceToFirestore(user: FirebaseUser): Promise<void> {
     const uid = (user.uid || '').slice(0, MAX_UID_LENGTH);
@@ -526,8 +489,6 @@ export async function pushWorkspaceToFirestore(user: FirebaseUser): Promise<void
     lastKnownRevisionId = revisionId;
     lastSerializedPayload = JSON.stringify(statePayload);
     notifySyncStatus({ state: 'syncing', errorMessage: null });
-
-    void pushWorkspaceToCloudSql(user);
 
     if (!activeWorkspaceDocExists) {
         try {
@@ -582,8 +543,8 @@ export async function pushWorkspaceToFirestore(user: FirebaseUser): Promise<void
 }
 
 /**
- * Démarre la synchronisation bidirectionnelle en temps réel entre le store Zustand,
- * Cloud Firestore (`/workspaces/{uid}`) et Cloud SQL PostgreSQL.
+ * Démarre la synchronisation bidirectionnelle en temps réel entre le store Zustand
+ * et Cloud Firestore (`/workspaces/{uid}`).
  */
 export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
     const uid = (user.uid || '').slice(0, MAX_UID_LENGTH);
@@ -611,11 +572,28 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                     ? isStarterTemplateState(remotePayload)
                     : false;
 
+                const currentLocalState = useFinanceStore.getState();
+                const localHasMeaningfulData =
+                    hasMeaningfulData(currentLocalState) &&
+                    !isStarterTemplateState(currentLocalState);
+                const localLastUpdate =
+                    typeof currentLocalState.lastUpdate === 'number' &&
+                    Number.isFinite(currentLocalState.lastUpdate)
+                        ? currentLocalState.lastUpdate
+                        : 0;
+                const remoteUpdatedAtMs = extractRemoteTimestampMs(data, remotePayload);
+                const isRemoteOlderThanLocal =
+                    localHasMeaningfulData &&
+                    remoteUpdatedAtMs !== null &&
+                    localLastUpdate > 0 &&
+                    remoteUpdatedAtMs < localLastUpdate;
+
                 if (
                     remotePayload &&
                     remoteHasData &&
                     !remoteIsStarter &&
-                    remoteRevision !== lastKnownRevisionId
+                    remoteRevision !== lastKnownRevisionId &&
+                    !isRemoteOlderThanLocal
                 ) {
                     applyingRemoteSnapshot = true;
                     try {
@@ -624,7 +602,7 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                         lastSerializedPayload = JSON.stringify(sanitizedRemote);
                         useFinanceStore.getState().setAppState({
                             ...sanitizedRemote,
-                            lastUpdate: Date.now(),
+                            lastUpdate: remoteUpdatedAtMs ?? Date.now(),
                         });
                     } finally {
                         applyingRemoteSnapshot = false;
@@ -635,15 +613,14 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                         lastSyncedAt: Date.now(),
                         errorMessage: null,
                     });
-                    void pushWorkspaceToCloudSql(user);
+                } else if (isRemoteOlderThanLocal) {
+                    initialSnapshotHandled = true;
+                    void pushWorkspaceToFirestore(user).catch(() => {});
                 } else if (!remoteHasData || remoteIsStarter) {
                     initialSnapshotHandled = true;
                     void (async () => {
-                        const pulledFromSql = await pullWorkspaceFromCloudSql(user);
-                        if (!pulledFromSql) {
-                            await recoverOrEnsureInitialWorkspace(false);
-                        }
-                        if (!isStarterTemplateState(useFinanceStore.getState())) {
+                        await recoverOrEnsureInitialWorkspace(false);
+                        if (!isStarterTemplateState(useFinanceStore.getState()) && hasMeaningfulData(useFinanceStore.getState())) {
                             await pushWorkspaceToFirestore(user).catch(() => {});
                         } else {
                             notifySyncStatus({
@@ -665,11 +642,8 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                 initialSnapshotHandled = true;
                 activeWorkspaceDocExists = false;
                 void (async () => {
-                    const pulledFromSql = await pullWorkspaceFromCloudSql(user);
-                    if (!pulledFromSql) {
-                        await recoverOrEnsureInitialWorkspace(false);
-                    }
-                    if (!isStarterTemplateState(useFinanceStore.getState())) {
+                    await recoverOrEnsureInitialWorkspace(false);
+                    if (!isStarterTemplateState(useFinanceStore.getState()) && hasMeaningfulData(useFinanceStore.getState())) {
                         await pushWorkspaceToFirestore(user).catch(() => {});
                     } else {
                         notifySyncStatus({

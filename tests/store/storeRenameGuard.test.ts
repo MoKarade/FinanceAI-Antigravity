@@ -33,30 +33,28 @@ import { INITIAL_CONFIG } from '../../constants';
 import { stripComments } from '../../utils/stripComments';
 
 describe('[STORE-RENAME-NO-GUARD] les noms consommés par un palier restent consommés, et jamais réutilisés', () => {
-    it('v2→v3 : `apiKeys.gemini` est bien JETÉ par la chaîne complète (et anthropic préservé)', () => {
-        // Comportemental, pas un scan : un blob v2 qui porte encore gemini traverse v2→…→v7.
-        // ⚠️ REDONDANCE mesurée (perturbations 2026-09-04) : DEUX paliers reconstruisent apiKeys
-        // (v2→v3 ET v3→v4) et chacun jette gemini à lui seul — perturber un seul reste vert, les
-        // deux rougit. Ce test défend le FAIT (la chaîne jette le nom), pas un palier précis.
+    it('v2→v3 : `apiKeys.anthropic` legacy est bien CONSOMMÉ par la chaîne complète (et gemini préservé)', () => {
+        // Comportemental, pas un scan : un blob v2 qui porte encore anthropic traverse v2→…→v7.
+        // Les paliers reconstruisent apiKeys autour de `gemini` et `finnhub`, et consomment `anthropic`.
         const out = migratePersistedState(
             { apiKeys: { anthropic: 'clef-a', gemini: 'clef-g' } }, 2,
         ) as { apiKeys: Record<string, unknown> };
-        expect(out.apiKeys.anthropic).toBe('clef-a');
-        expect('gemini' in out.apiKeys, 'gemini a survécu au palier v2→v3 — le palier ne consomme plus son nom').toBe(false);
+        expect(out.apiKeys.gemini).toBe('clef-g');
+        expect('anthropic' in out.apiKeys, 'anthropic a survécu aux paliers — le palier ne consomme plus son nom').toBe(false);
     });
 
     it('les noms retirés ne réapparaissent dans AUCUN défaut (la porte de la réutilisation)', () => {
         // Un nom réutilisé commencerait sa nouvelle vie ici : dans les défauts du contrat.
         const d = buildDefaultAppState();
-        expect('gemini' in (d.apiKeys as Record<string, unknown>)).toBe(false);
+        expect('anthropic' in (d.apiKeys as Record<string, unknown>)).toBe(false);
         for (const u of INITIAL_CONFIG.users) {
             expect(Object.prototype.hasOwnProperty.call(u, 'salary'),
                 'un défaut utilisateur pose `salary` — nom RÉSERVÉ au legacy (net mensuel d\'avant le renommage)').toBe(false);
         }
-        // Et le TYPE ne re-déclare gemini nulle part (usage/déclaration, source décommentée).
+        // Et le TYPE ne re-déclare openai nulle part (usage/déclaration, source décommentée).
         const types = stripComments(readFileSync('types.ts', 'utf8'));
         expect(types.replace(/\s/g, '').length).toBeGreaterThan(10_000); // anti-vacuité du décommentage
-        expect(types).not.toMatch(/\bgemini\s*[?:]/);
+        expect(types).not.toMatch(/\bopenai\s*[?:]/);
     });
 
     it('ANTI-OBSOLESCENCE : le repli legacy `netSalary || salary` existe toujours — sinon, re-juger l\'entrée `salary`', () => {

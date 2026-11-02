@@ -16,11 +16,11 @@ import { BudgetAiModal, type BudgetAiPayload } from '../../components/budget/Bud
 /** Le flux renvoyé par le faux `chatStream`, réécrit par cas. */
 let reponseModele = '';
 
-vi.mock('../../services/claude', async () => {
-    const reel = await vi.importActual<typeof import('../../services/claude')>('../../services/claude');
+vi.mock('../../services/gemini', async () => {
+    const reel = await vi.importActual<typeof import('../../services/gemini')>('../../services/gemini');
     return {
         ...reel,
-        MODEL_HAIKU: 'claude-haiku-test',
+        MODEL_HAIKU: 'gemini-flash-lite-test',
         // eslint-disable-next-line require-yield
         chatStream: async function* () { yield reponseModele; },
     };

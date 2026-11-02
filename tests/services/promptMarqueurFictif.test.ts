@@ -20,14 +20,15 @@ import { stripComments } from '../helpers/source';
 import { toPosix } from '../helpers/toPosix';
 
 const sdk = vi.hoisted(() => ({ create: vi.fn() }));
-vi.mock('@anthropic-ai/sdk', () => ({
-    default: class {
-        messages = { create: sdk.create };
-    },
+vi.mock('../../services/geminiClientAdapter', () => ({
+    creerClientCompatibleGemini: () => ({
+        maxRetries: 2,
+        messages: { create: sdk.create },
+    }),
 }));
 
 import { marquerSystemFictif, DONNEES_FICTIVES_MARQUEUR } from '../../utils/promptSafety';
-import { chat } from '../../services/claude';
+import { chat } from '../../services/gemini';
 import { useFinanceStore } from '../../store/useFinanceStore';
 
 describe('marquerSystemFictif — fragment pur', () => {

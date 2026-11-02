@@ -7,7 +7,7 @@
 // scénarios selon le type de bien) ; les hypothèses se règlent dans « Financement ».
 import React, { useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
-import { CHART_TOOLTIP_STYLE, GF_CROSSHAIR_CURSOR, GF_ACTIVE_DOT } from '../../utils/chartTooltip';
+import { GF_CROSSHAIR_CURSOR, GF_ACTIVE_DOT } from '../../utils/chartTooltip';
 import { formatCAD, formatCompactCAD, formatNumber } from '../../utils/format';
 import { maskedTick } from '../../utils/chartPrivacy';
 import { MASKED_AMOUNT_LABEL } from '../../utils/privacyAria';

@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { useFinanceStore } from '../../../store/useFinanceStore';
 import { CoupleOptimizationCard } from '../../../components/tax/CoupleOptimizationCard';
 
-vi.mock('../../../services/claude', () => ({
+vi.mock('../../../services/gemini', () => ({
     getCoupleOptimizationStrategies: vi.fn(),
 }));
 
@@ -31,7 +31,7 @@ describe('CoupleOptimizationCard (Phase G.4)', () => {
 
     it('rend le bouton "Générer 3 stratégies IA" en mode couple avec clé', () => {
         useFinanceStore.setState({
-            apiKeys: { ...initialState.apiKeys, anthropic: 'sk-test' },
+            apiKeys: { ...initialState.apiKeys, gemini: 'AIza-test' },
             config: {
                 ...initialState.config,
                 users: [
@@ -44,9 +44,9 @@ describe('CoupleOptimizationCard (Phase G.4)', () => {
         expect(screen.getByText(/Générer 3 stratégies IA/i)).toBeInTheDocument();
     });
 
-    it('affiche message "configure clé" si pas de clé Anthropic', () => {
+    it('affiche message "configure clé" si pas de clé Google Gemini', () => {
         useFinanceStore.setState({
-            apiKeys: { ...initialState.apiKeys, anthropic: '' },
+            apiKeys: { ...initialState.apiKeys, gemini: '' },
             config: {
                 ...initialState.config,
                 users: [
@@ -56,6 +56,6 @@ describe('CoupleOptimizationCard (Phase G.4)', () => {
             },
         });
         render(<CoupleOptimizationCard />);
-        expect(screen.getByRole('button', { name: /Ajouter ma clé Anthropic/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Ajouter ma clé Gemini/i })).toBeInTheDocument();
     });
 });

@@ -3,10 +3,8 @@ import { Tab, AppState } from '../../types';
 import { useFinanceStore, type FinanceState } from '../../store/useFinanceStore';
 import { Icon } from '../ui/Icon';
 import { showToast } from '../ui/Toast';
-// [PERF-SDK-BOOT-PRELOAD] LAZY : cette carte importe `services/claude.ts` (analyzePayslip) — son
-// import STATIQUE ici mettait claude.ts dans le graphe de BOOT (TabRouter → PageSetupGate → carte),
-// ce qui hissait le SDK Anthropic (`ai-vendor`, ~126 Ko) dans le modulepreload téléchargé par TOUS
-// les visiteurs au démarrage. C'était LA chaîne responsable (tracée), pas les onglets lazy du ticket.
+// [PERF-SDK-BOOT-PRELOAD] LAZY : cette carte importe `services/gemini.ts` (analyzePayslip) — son
+// import STATIQUE ici mettait gemini.ts dans le graphe de BOOT (TabRouter → PageSetupGate → carte).
 import { lazyWithRetry } from '../../utils/lazyWithRetry';
 const PayslipUploadCard = lazyWithRetry(
     () => import('../settings/PayslipUploadCard').then((m) => ({ default: m.PayslipUploadCard })),

@@ -1,8 +1,8 @@
 // services/aiTools/registry.ts
 //
-// [AITOOLS-B] Registre des tools consommés par le chat Claude IN-APP (SDK Anthropic tool-use).
+// [AITOOLS-B] Registre des tools consommés par le chat Gemini IN-APP (tool-use).
 // Ce sont les MÊMES specs que le serveur MCP (mcp/tools/*.spec.ts) — la parité « mêmes réponses
-// que claude.ai » est garantie par construction (une seule logique) et verrouillée par
+// que le serveur MCP » est garantie par construction (une seule logique) et verrouillée par
 // tests/aiTools/registryParity.test.ts (même état → même payload).
 //
 // Périmètre Lot B : LECTURE SEULE (11 tools — 8 data-aware + 3 calculateurs stateless).

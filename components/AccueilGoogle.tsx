@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { Suspense, useMemo, useState } from 'react';
 import {
     ComposedChart,
     Bar,
@@ -18,6 +18,7 @@ import { useFinanceStore } from '../store/useFinanceStore';
 import { useNetWorthVariation } from '../hooks/useNetWorthVariation';
 import { useTodayIsoLocal } from '../hooks/useSimulationParams';
 import { presentTermesOfGoal, monthsSince } from '../services/projection/pastPurchaseInit';
+import { assetValueCad } from '../services/portfolio';
 import { formatCAD, formatCompactCAD, formatPercent } from '../utils/format';
 import { maskedTick } from '../utils/chartPrivacy';
 import { MASKED_AMOUNT_LABEL } from '../utils/privacyAria';
@@ -29,10 +30,15 @@ import { ChartDataTable, type ChartDataColumn } from './ui/ChartDataTable';
 import { FinancialGoalsProgressSection } from './ui/FinancialGoalProgressRing';
 import { MonthlySpendingVsBudgetChart } from './dashboard/MonthlySpendingVsBudgetChart';
 import { HubConnexionsModal } from './future/HubConnexionsModal';
-import { GeminiAssistantModal } from './aiChat/GeminiAssistantModal';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { prefetchTab } from '../utils/tabPrefetch';
 
-export interface AccueilGoogleProps {
+const GeminiAssistantModal = lazyWithRetry(
+    () => import('./aiChat/GeminiAssistantModal').then((m) => ({ default: m.GeminiAssistantModal })),
+    'GeminiAssistantModal',
+);
+
+interface AccueilGoogleProps {
     state: AppState;
     setActiveTab: (tab: Tab) => void;
     isPrivacyMode: boolean;
@@ -349,27 +355,17 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             return echantillon;
         }
 
-        const tauxAnnuel = (state.projection?.returnRate ?? 6.5) / 100;
-        const points: PointTrajectoire[] = [];
-        const nbPoints = Math.min(nbAnnees, 9);
-        for (let i = 0; i <= nbPoints; i++) {
-            const t = (i / Math.max(1, nbPoints)) * nbAnnees;
-            const facteur = Math.pow(1 + tauxAnnuel, t);
-            const cumulEpargne =
-                tauxAnnuel > 0.001
-                    ? epargneMensuelle * 12 * ((facteur - 1) / tauxAnnuel)
-                    : epargneMensuelle * 12 * t;
-            const valeurProjetee = Math.round(valeurHeroAffichee * facteur + cumulEpargne * ratioLentille);
-            const dettesProjetees = Math.round(totalDettes * Math.max(0, 1 - t / 25));
-            points.push({
-                annee: String(Math.round(anneeCourante + t)),
-                valeur: valeurProjetee,
-                avoirs: Math.max(0, valeurProjetee + dettesProjetees),
-                dettes: dettesProjetees,
-            });
-        }
-        return points;
-    }, [todayIso, horizon, lastProjection, patrimoineNet, valeurHeroAffichee, state.projection?.returnRate, epargneMensuelle, totalDettes]);
+        const dettesReelles = Math.max(0, Math.round(totalDettes));
+        const valeurReelle = Math.round(valeurHeroAffichee);
+        return [
+            {
+                annee: String(anneeCourante),
+                valeur: valeurReelle,
+                avoirs: Math.max(0, valeurReelle + dettesReelles),
+                dettes: dettesReelles,
+            },
+        ];
+    }, [todayIso, horizon, lastProjection, patrimoineNet, valeurHeroAffichee, totalDettes]);
 
     const gainHorizon = useMemo(() => {
         if (donneesTrajectoire.length < 2) return null;
@@ -473,7 +469,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 const val = Math.max(
                     0,
                     Math.round(
-                        (Number(a.quantity) || 0) * (Number(a.currentPrice) || 0) ||
+                        assetValueCad(a, state.fxRates) ||
                             Number(rec.value) ||
                             0,
                     ),
@@ -510,7 +506,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             poidsPct: p.pct,
             tab: p.tab,
         }));
-    }, [state.assets, partsRepartition]);
+    }, [state.assets, state.fxRates, partsRepartition]);
 
     const resultatsOmnibox = useMemo(() => {
         const q = requete.trim().toLowerCase();
@@ -681,7 +677,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             {
                 key: 'valeur',
                 label: 'Valeur nette projetée',
-                format: (v) => (isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCAD(Number(v) || 0)),
+                format: (v) => (isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCAD(Number(v))),
             },
         ],
         [isPrivacyMode],
@@ -693,7 +689,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             {
                 key: 'valeur',
                 label: 'Montant',
-                format: (v) => (isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCAD(Number(v) || 0)),
+                format: (v) => (isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCAD(Number(v))),
             },
             {
                 key: 'pct',
@@ -714,7 +710,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             {/* 1. BANDEAU D'INDICES PATRIMONIAUX & BARRE DE RECHERCHE STYLE GOOGLE FINANCE */}
             <section
                 aria-label="Synthèse patrimoniale et recherche rapide"
-                className="rounded-md bg-surface border border-bordure divide-y divide-bordure"
+                className="premium-card rounded-md bg-surface border border-bordure divide-y divide-bordure"
             >
                 {/* Ruban supérieur des 5 indices de comptes (Google Finance Market Strip) */}
                 <div
@@ -870,7 +866,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                     {asset.symbol || asset.name}
                                                 </span>
                                                 <PrivateAmount className="font-mono tabular-nums text-ink-200">
-                                                    {formatCAD((asset.quantity || 0) * (asset.currentPrice || 0))}
+                                                    {formatCAD(assetValueCad(asset, state.fxRates))}
                                                 </PrivateAmount>
                                             </button>
                                         ))}
@@ -910,7 +906,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     {/* Fiche principale de cotation & trajectoire Google Finance */}
                     <section
                         aria-label="Trajectoire du patrimoine"
-                        className="rounded-md bg-surface border border-bordure divide-y divide-bordure"
+                        className="premium-card rounded-md bg-surface border border-bordure divide-y divide-bordure"
                     >
                         {/* En-tête de cotation Google Finance */}
                         <div className="p-5 sm:p-6 space-y-4">
@@ -1272,7 +1268,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     {/* Tableau Watchlist Google Finance : Vos positions & comptes suivis */}
                     <section
                         aria-label="Positions et comptes suivis"
-                        className="rounded-md bg-surface border border-bordure divide-y divide-bordure"
+                        className="premium-card rounded-md bg-surface border border-bordure divide-y divide-bordure"
                     >
                         <div className="px-5 py-3.5 flex items-center justify-between gap-2">
                             <div>
@@ -1336,7 +1332,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     {/* Carte 1 : Répartition du portefeuille */}
                     <section
                         aria-label="Répartition visuelle des actifs"
-                        className="rounded-md bg-surface border border-bordure p-5 space-y-4"
+                        className="premium-card rounded-md bg-surface border border-bordure p-5 space-y-4"
                     >
                         <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
                             <div>
@@ -1468,7 +1464,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     {/* Carte 2 : Flux d'opérations récentes */}
                     <section
                         aria-label="Opérations récentes"
-                        className="rounded-md bg-surface border border-bordure p-5 space-y-3.5"
+                        className="premium-card rounded-md bg-surface border border-bordure p-5 space-y-3.5"
                     >
                         <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
                             <div>
@@ -1493,7 +1489,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         {operationsRecentes.length > 0 ? (
                             <div className="rounded-sm border border-bordure divide-y divide-bordure bg-fond">
                                 {operationsRecentes.map((tx) => {
-                                    const estRevenu = tx.amount < 0;
+                                    const estRevenu = tx.amount > 0;
                                     return (
                                         <button
                                             key={tx.id}
@@ -1538,7 +1534,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     {/* Carte 3 : Prochains jalons & calendrier patrimonial */}
                     <section
                         aria-label="Prochains jalons patrimoniaux"
-                        className="rounded-md bg-surface border border-bordure p-5 space-y-3.5"
+                        className="premium-card rounded-md bg-surface border border-bordure p-5 space-y-3.5"
                     >
                         <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
                             <div>
@@ -1563,11 +1559,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         <div className="rounded-sm border border-bordure divide-y divide-bordure bg-fond">
                             {prochainsJalons.map((jalon) => {
                                 const ecartAnnees = jalon.annee - anneeActuelle;
-                                const delaiTexte = isPrivacyMode
-                                    ? '••'
-                                    : ecartAnnees <= 0
-                                      ? 'Actif'
-                                      : `Dans ${ecartAnnees} an${ecartAnnees > 1 ? 's' : ''}`;
+                                const delaiTexte = isPrivacyMode ? '••' : ecartAnnees <= 0 ? 'Actif' : `Dans ${ecartAnnees} an${ecartAnnees > 1 ? 's' : ''}`;
                                 return (
                                     <button
                                         key={jalon.id}
@@ -1602,7 +1594,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             {/* 3. BARRE DES SECTEURS & MODULES DU PATRIMOINE (8 ACCÈS DIRECTS) */}
             <section
                 aria-label="Accès visuel aux espaces"
-                className="rounded-md bg-surface border border-bordure divide-y divide-bordure"
+                className="premium-card rounded-md bg-surface border border-bordure divide-y divide-bordure"
             >
                 <div className="px-5 py-3 flex items-center justify-between gap-2">
                     <h2 className="text-xs font-mono uppercase tracking-wider text-ink-300">
@@ -1671,11 +1663,13 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             />
 
             {showGeminiModal && (
-                <GeminiAssistantModal
-                    isOpen={showGeminiModal}
-                    onClose={() => setShowGeminiModal(false)}
-                    initialQuery={requete}
-                />
+                <Suspense fallback={null}>
+                    <GeminiAssistantModal
+                        isOpen={showGeminiModal}
+                        onClose={() => setShowGeminiModal(false)}
+                        initialQuery={requete}
+                    />
+                </Suspense>
             )}
         </div>
     );
@@ -1720,5 +1714,3 @@ const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({ active, payload
         </div>
     );
 };
-
-export default AccueilGoogle;

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Tab } from '../../types';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { messageErreurIa, MESSAGE_IA_MODE_DISCRET } from '../../services/messageErreurIa';
-import { getCoupleOptimizationStrategies, type CoupleOptimizationStrategy, type CoupleTaxContext } from '../../services/claude';
+import { getCoupleOptimizationStrategies, type CoupleOptimizationStrategy, type CoupleTaxContext } from '../../services/gemini';
 import { formatCAD } from '../../utils/format';
 import { PrivateAmount } from '../ui/PrivateAmount';
 
@@ -47,7 +47,7 @@ const CONFIDENCE_LABELS: Record<CoupleOptimizationStrategy['confidence'], string
 
 export const CoupleOptimizationCard: React.FC = () => {
     const config = useFinanceStore(s => s.config);
-    const apiKey = useFinanceStore(s => s.apiKeys.anthropic);
+    const apiKey = useFinanceStore(s => s.apiKeys.gemini || s.apiKeys.anthropic || '');
     const navigateWithFocus = useFinanceStore(s => s.navigateWithFocus);
 
     const [strategies, setStrategies] = useState<CoupleOptimizationStrategy[]>([]);
@@ -71,7 +71,7 @@ export const CoupleOptimizationCard: React.FC = () => {
         if (useFinanceStore.getState().isPrivacyMode) { setErreur(MESSAGE_IA_MODE_DISCRET); return; }
         setIsLoading(true);
         setErreur(null);
-        // [COUPLE-CTX-FAKE-ZERO] ⚠️ PAS de `|| 0` ici. `promptCad` (services/claude.ts) rend
+        // [COUPLE-CTX-FAKE-ZERO] ⚠️ PAS de `|| 0` ici. `promptCad` (services/gemini.ts) rend
         // « (non disponible) » sur une valeur NON FINIE — c'est exactement sa raison d'être. Un
         // `|| 0` la court-circuitait : un salaire absent devenait un « 0 $ » AFFIRMÉ au modèle, qui
         // bâtissait ensuite des stratégies de fractionnement REER/CELI sur ce revenu fantôme.
@@ -122,7 +122,7 @@ export const CoupleOptimizationCard: React.FC = () => {
                         {!apiKey ? (
                             <button
                                 type="button"
-                                onClick={() => navigateWithFocus(Tab.SETTINGS, 'apiKeys-anthropic')}
+                                onClick={() => navigateWithFocus(Tab.SETTINGS, 'apiKeys-gemini')}
                                 className="w-full h-11 rounded-lg border border-white/40 text-body text-ink-100 hover:bg-white/5 transition-colors focus-ring"
                             >
                                 Ajouter ma clé Gemini pour l'activer

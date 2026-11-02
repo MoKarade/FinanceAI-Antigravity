@@ -2,8 +2,8 @@
 //
 // [GODFILE-APP] L'import MANUEL de relevé bancaire (collage CSV) d'App.tsx, extrait tel quel
 // (65 lignes de handler dans le composant). Comportement inchangé : dédup + appariement des
-// virements sur l'historique COMPLET, journal d'audit, classification IA paresseuse (le SDK
-// Anthropic reste hors du bundle de boot), catégories appliquées sur l'état FRAIS du store.
+// virements sur l'historique COMPLET, journal d'audit, classification IA paresseuse (le client
+// Gemini reste hors du bundle de boot), catégories appliquées sur l'état FRAIS du store.
 
 import type { AppState } from '../../types';
 import { showToast } from '../ui/Toast';
@@ -20,12 +20,13 @@ import { useFinanceStore } from '../../store/useFinanceStore';
 interface DepsImportReleve {
     transactions: AppState['transactions'];
     budgetItems: AppState['budgetItems'];
-    apiKeyAnthropic: string | undefined;
+    apiKeyGemini?: string;
+    apiKeyAnthropic?: string;
     setAppState: (patch: Partial<AppState>) => void;
 }
 
 export async function importerReleveManuel(rawData: string, deps: DepsImportReleve): Promise<void> {
-    const { transactions, budgetItems, apiKeyAnthropic, setAppState } = deps;
+    const { transactions, budgetItems, apiKeyGemini, apiKeyAnthropic, setAppState } = deps;
     const result = parseBankCsv(rawData);
     const combined = [...result.transactions, ...transactions];
     const deduped = markDuplicates(combined);
@@ -55,21 +56,20 @@ export async function importerReleveManuel(rawData: string, deps: DepsImportRele
         : '';
 
     // Auto-catégorisation IA (choix Marc) : classe les NOUVELLES transactions non
-    // dupliquées / non-transfert encore « à classer ». Lazy-import de claude.ts →
-    // ne tire PAS le SDK Anthropic dans le bundle de BOOT (règle CLAUDE.md).
-    const apiKey = apiKeyAnthropic;
+    // dupliquées / non-transfert encore « à classer ». Lazy-import de gemini.ts.
+    const apiKey = apiKeyGemini ?? apiKeyAnthropic;
     const newIds = new Set(result.transactions.map(t => t.id));
     const toClassify = withTransfers.filter(t =>
         newIds.has(t.id) && !t.isDuplicate && !t.isTransfer &&
         (t.category === 'Uncategorized' || t.category === 'Inconnu' || t.category === ''),
     );
     if (!apiKey || toClassify.length === 0) {
-        showToast(apiKey ? `${baseMsg}${transferMsg}` : `${baseMsg}${transferMsg} Ajoute ta clé Anthropic pour la classification auto.`, 'success');
+        showToast(apiKey ? `${baseMsg}${transferMsg}` : `${baseMsg}${transferMsg} Ajoute ta clé Google Gemini pour la classification auto.`, 'success');
         return;
     }
     showToast(`${baseMsg}${transferMsg} Classification IA en cours…`, 'info');
     try {
-        const { categorizeBatch } = await import('../../services/claude');
+        const { categorizeBatch } = await import('../../services/gemini');
         // 'Inconnu' EXCLU des cibles : c'est un statut « à classer », pas une destination.
         // [TX-CATEGORY-RULES] + jeu canonique des règles : cibles IA disponibles même quand
         // le budget est encore vide (post-purge), cohérentes avec l'import et le Budget.

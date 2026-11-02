@@ -18,7 +18,7 @@ describe('[PH4-F] subscriptions — migration additive (rétrocompat, sans bump 
             assets: [{ symbol: 'AAPL', quantity: 1 }],
             transactions: [{ id: 1, amount: -10 }],
             retirementGoal: { targetAge: 65, lifeExpectancy: 90 },
-            apiKeys: { anthropic: 'x', finnhub: '' },
+            apiKeys: { gemini: 'x', anthropic: 'x', finnhub: '' },
         };
         const migrated = migratePersistedState(v7, 7) as Record<string, unknown>;
         // Aucun champ existant perdu.

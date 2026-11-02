@@ -33,7 +33,6 @@ export {
     resolveConflict,
     disconnectSync,
     deleteRemoteData,
-    hasConnectedBefore,
     handleInactivityLogout,
 } from './syncLifecycle';
 

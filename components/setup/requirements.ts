@@ -59,6 +59,7 @@ export type RequirementId =
     | 'transactions'
     | 'debts'
     | 'lifeProjects'
+    | 'geminiKey'
     | 'anthropicKey';
 
 export const REQUIREMENTS: Record<RequirementId, Requirement> = {
@@ -178,13 +179,22 @@ export const REQUIREMENTS: Record<RequirementId, Requirement> = {
         icon: 'life-projects',
         isMet: (s) => (s.travelGoals?.length ?? 0) > 0 || (s.lifeEvents?.length ?? 0) > 0,
     },
+    geminiKey: {
+        id: 'geminiKey',
+        label: 'Clé API Google Gemini (IA)',
+        manque: 'clé API manquante',
+        help: 'Nécessaire pour les fonctions IA Gemini. Se saisit dans Réglages · Clés API (jamais stockée dans les sauvegardes).',
+        icon: 'sparkles',
+        isMet: (s) => Boolean(s.apiKeys?.gemini?.trim() || s.apiKeys?.anthropic?.trim()),
+        focus: { tab: Tab.SETTINGS, section: 'apiKeys-gemini' },
+    },
     anthropicKey: {
         id: 'anthropicKey',
         label: 'Clé API Google Gemini (IA)',
         manque: 'clé API manquante',
         help: 'Nécessaire pour les fonctions IA Gemini. Se saisit dans Réglages · Clés API (jamais stockée dans les sauvegardes).',
         icon: 'sparkles',
-        isMet: (s) => !!(s.apiKeys?.anthropic && s.apiKeys.anthropic.trim()),
-        focus: { tab: Tab.SETTINGS, section: 'apiKeys-anthropic' },
+        isMet: (s) => Boolean(s.apiKeys?.gemini?.trim() || s.apiKeys?.anthropic?.trim()),
+        focus: { tab: Tab.SETTINGS, section: 'apiKeys-gemini' },
     },
 };

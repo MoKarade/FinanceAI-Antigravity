@@ -9,7 +9,7 @@
  * Trois étages :
  *  1. le module pur (`services/aiChat/coutIa.ts`) : tokens → coût, jamais un coût fabriqué ;
  *  2. le comportement réel : `chat` (SDK simulé) fait grossir le cumul du store, du bon montant ;
- *  3. la GARDE : chaque site `messages.(create|stream)(` de `services/claude.ts` signale son usage —
+ *  3. la GARDE : chaque site `messages.(create|stream)(` de `services/gemini.ts` signale son usage —
  *     un nouveau site muet rougit, sans liste écrite à la main.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -18,14 +18,15 @@ import { resolve } from 'node:path';
 import { stripComments } from '../helpers/source';
 
 const sdk = vi.hoisted(() => ({ create: vi.fn() }));
-vi.mock('@anthropic-ai/sdk', () => ({
-    default: class {
-        messages = { create: sdk.create };
-    },
+vi.mock('../../services/geminiClientAdapter', () => ({
+    creerClientCompatibleGemini: () => ({
+        maxRetries: 2,
+        messages: { create: sdk.create },
+    }),
 }));
 
 import { brancherCoutIa, signalerUsageIa, usageDepuisSdk } from '../../services/aiChat/coutIa';
-import { chat } from '../../services/claude';
+import { chat } from '../../services/gemini';
 import { useFinanceStore } from '../../store/useFinanceStore';
 
 describe('usageDepuisSdk — tokens du SDK', () => {
@@ -120,8 +121,8 @@ describe('chat — le cumul du store grossit du coût réel', () => {
     });
 });
 
-describe('garde — chaque site SDK de services/claude.ts signale son usage', () => {
-    const source = stripComments(readFileSync(resolve(__dirname, '../../services/claude.ts'), 'utf-8'));
+describe('garde — chaque site SDK de services/gemini.ts signale son usage', () => {
+    const source = stripComments(readFileSync(resolve(__dirname, '../../services/gemini.ts'), 'utf-8'));
     const sitesSdk = (source.match(/\bmessages\.(create|stream)\(/g) ?? []).length;
     const signalements = (source.match(/\bsignalerUsageIa\(/g) ?? []).length;
 

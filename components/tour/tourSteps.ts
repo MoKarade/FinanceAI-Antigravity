@@ -32,7 +32,7 @@ export const TOUR_STEPS: ReadonlyArray<TourStep> = [
   {
     tab: Tab.TRANSACTIONS,
     title: '🧾 Transactions',
-    body: "Importe tes relevés (ou connecte ta banque) et catégorise tes dépenses. L'IA peut le faire pour toi si tu actives Claude.",
+    body: "Importe tes relevés (ou connecte ta banque) et catégorise tes dépenses. L'IA peut le faire pour toi si tu actives Gemini.",
   },
   {
     tab: Tab.BUDGET,

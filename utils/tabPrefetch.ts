@@ -4,24 +4,35 @@ import { apresPremierAffichage } from './apresPremierAffichage';
 
 const prefetchedTabs = new Set<Tab>();
 
+const COMPONENT_MODULES = import.meta.glob([
+    '../components/*.tsx',
+    '../components/budget/*.tsx',
+    '../components/life/*.tsx',
+]);
+
+function loadComponentModule(path: string): Promise<unknown> {
+    const loader = COMPONENT_MODULES[path];
+    return loader ? loader() : Promise.resolve();
+}
+
 const TAB_LOADERS: Partial<Record<Tab, () => Promise<unknown>>> = {
-    [Tab.DASHBOARD]: () => import('../components/AccueilGoogle'),
+    [Tab.DASHBOARD]: () => loadComponentModule('../components/AccueilGoogle.tsx'),
     [Tab.FUTURE]: () => Promise.all([
-        import('../components/FutureProjection'),
-        import('../components/FutureKpiStrip'),
+        loadComponentModule('../components/FutureProjection.tsx'),
+        loadComponentModule('../components/FutureKpiStrip.tsx'),
     ]),
-    [Tab.TRANSACTIONS]: () => import('../components/Transactions'),
-    [Tab.BUDGET]: () => import('../components/budget/BudgetWorkspace'),
-    [Tab.DEBT]: () => import('../components/DebtManager'),
-    [Tab.INVESTMENTS]: () => import('../components/Investments'),
-    [Tab.RETIREMENT]: () => import('../components/Retirement'),
-    [Tab.REAL_ESTATE]: () => import('../components/RealEstate'),
-    [Tab.REAL_ESTATE_PROJECTS]: () => import('../components/life/RealEstateProjects'),
-    [Tab.CHILD]: () => import('../components/ChildPlanning'),
-    [Tab.LIFE_PROJECTS]: () => import('../components/LifeProjects'),
-    [Tab.TAX]: () => import('../components/TaxCenter'),
-    [Tab.SETTINGS]: () => import('../components/Settings'),
-    [Tab.PROFILE]: () => import('../components/Profile'),
+    [Tab.TRANSACTIONS]: () => loadComponentModule('../components/Transactions.tsx'),
+    [Tab.BUDGET]: () => loadComponentModule('../components/budget/BudgetWorkspace.tsx'),
+    [Tab.DEBT]: () => loadComponentModule('../components/DebtManager.tsx'),
+    [Tab.INVESTMENTS]: () => loadComponentModule('../components/Investments.tsx'),
+    [Tab.RETIREMENT]: () => loadComponentModule('../components/Retirement.tsx'),
+    [Tab.REAL_ESTATE]: () => loadComponentModule('../components/RealEstate.tsx'),
+    [Tab.REAL_ESTATE_PROJECTS]: () => loadComponentModule('../components/life/RealEstateProjects.tsx'),
+    [Tab.CHILD]: () => loadComponentModule('../components/ChildPlanning.tsx'),
+    [Tab.LIFE_PROJECTS]: () => loadComponentModule('../components/LifeProjects.tsx'),
+    [Tab.TAX]: () => loadComponentModule('../components/TaxCenter.tsx'),
+    [Tab.SETTINGS]: () => loadComponentModule('../components/Settings.tsx'),
+    [Tab.PROFILE]: () => loadComponentModule('../components/Profile.tsx'),
 };
 
 /**

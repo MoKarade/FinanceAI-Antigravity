@@ -1,8 +1,8 @@
 # FinanceAI MCP Server (v0.11.0)
 
-Serveur MCP (Model Context Protocol) qui expose FinanceAI à Claude : **poser des
+Serveur MCP (Model Context Protocol) qui expose FinanceAI à un client MCP (Gemini, etc.) : **poser des
 questions** sur ses vraies finances (patrimoine, projection, impôts, retraite) ET
-**déposer des documents** (paie, relevés, feuillets) que Claude **range au bon
+**déposer des documents** (paie, relevés, feuillets) que l'assistant **range au bon
 endroit** — le tout synchronisé **automatiquement** avec l'app via Google Drive.
 
 > FinanceAI est **local-first, sans backend**. L'état vit dans le navigateur + le
@@ -11,7 +11,7 @@ endroit** — le tout synchronisé **automatiquement** avec l'app via Google Dri
 > - **`FileStateSource`** — un export JSON local (`$FINANCEAI_STATE_FILE`), pour
 >   prototyper sans Google ;
 > - **`DriveStateSource`** (recommandé) — le **même blob Drive que l'app** → synchro
->   automatique (Claude écrit, l'app récupère). Activée par `npm run mcp:auth`.
+>   automatique (le serveur MCP écrit, l'app récupère). Activée par `npm run mcp:auth`.
 >
 > Les tools (lecture + écriture) sont identiques quelle que soit la source.
 
@@ -46,7 +46,7 @@ ta source d'état ») au lieu de planter.
 | `search_transactions` | Recherche dans SES transactions (filtre texte/catégorie/montant) |
 
 ### Écriture (Lot 2) — ingestion de documents
-Claude lit la pièce jointe (PDF/image) et en extrait les valeurs ; le tool ne fait que la **fusion sûre**
+Le modèle lit la pièce jointe (PDF/image) et en extrait les valeurs ; le tool ne fait que la **fusion sûre**
 (sauvegarde horodatée avant écriture — fichier `.bak` local en mode fichier, **backup Drive**
 `financeai-sync.json.<ISO>.bak.json` rolling 5 dans appDataFolder en mode Drive — dédup, résumé).
 Écriture Drive protégée par une **garde de concurrence** : si l'app a synchronisé entre la lecture et
@@ -80,7 +80,7 @@ Deux remparts, comme dans le chat in-app :
    et **chaque tool data-aware** porte la même clause en fin de description (`CLAUSE_DONNEES_TOOL`,
    posée dans les `.spec.ts` — donc lue aussi par le chat in-app, la garde de parité l'exige).
 
-Ce cadre ATTÉNUE sans éliminer : la confirmation d'outil que Claude Desktop demande par défaut reste
+Ce cadre ATTÉNUE sans éliminer : la confirmation d'outil que le client MCP demande par défaut reste
 le dernier mot, hors du contrôle de ce dépôt. Gardes : `tests/mcp/httpServer.test.ts` lit `instructions`
 dans `initialize` et la clause dans `tools/list` (contrôle : `ping` ne la porte pas).
 
@@ -94,7 +94,7 @@ Tous les tools d'écriture (lot 2) retournent un objet `ApplyResult` :
 {
   nextState: AppState;          // L'état complet après application du document
   changes: Change[];            // Déltas d'écriture : liste de {field, before, after, note?}
-  summary: string;              // Résumé lisible pour Claude (ex: « 5 transactions ajoutées »)
+  summary: string;              // Résumé lisible pour le modèle (ex: « 5 transactions ajoutées »)
   rejectedCount?: number;       // Nombre de lignes rejetées pour qualité de donnée
                                 // (montant aberrant, date invalide, ligne incomplète)
   dupIntraLotCount?: number;    // Sous-ensemble SUSPECT des doublons : deux lignes DISTINCTES
@@ -146,12 +146,12 @@ L'état persisté de l'app est stocké sous la clé `financeai-storage` (format 
 > et normalise un état partiel (les champs manquants prennent les valeurs par défaut).
 >
 > ⚠️ Le fichier est en **clair sur ton disque** — garde-le local, ne le commit pas.
-> Les **clés API** (Anthropic/Finnhub) ne sont pas dans cet export (elles vivent
+> Les **clés API** (Gemini/Finnhub) ne sont pas dans cet export (elles vivent
 > chiffrées dans IndexedDB) ; ce n'est pas un problème : **aucun** des tools data-aware
 > n'en a besoin (moteur pur, hors-ligne). C'est un **instantané** : ré-exporte pour
 > rafraîchir après des changements dans l'app.
 
-## Configuration Claude Desktop
+## Configuration du client MCP local
 
 ### Option recommandée — une commande
 
@@ -161,18 +161,15 @@ npm run mcp:setup
 npm run mcp:setup -- "/chemin/vers/financeai-state.json"
 ```
 
-Écrit (ou met à jour) l'entrée `financeai` dans le `claude_desktop_config.json` de
-Claude Desktop avec des **chemins absolus** (`node` courant + `tsx` + `mcp/stdio.ts`),
+Écrit (ou met à jour) l'entrée `financeai` dans le fichier de configuration du client MCP
+avec des **chemins absolus** (`node` courant + `tsx` + `mcp/stdio.ts`),
 sans dépendre de `npx`/PATH et en gérant les espaces dans le chemin (OneDrive…).
 Les autres serveurs MCP déjà configurés sont préservés. Par défaut, l'état est
-attendu à `~/financeai-state.json`. Ensuite : quitter **complètement** Claude
-Desktop et le rouvrir ; vérifier **Settings → Developer** (`financeai` = `running`).
+attendu à `~/financeai-state.json`.
 
 ### Option manuelle
 
-Éditer le fichier de config :
-- **Windows** : `%APPDATA%\Claude\claude_desktop_config.json`
-- **macOS** : `~/Library/Application Support/Claude/claude_desktop_config.json`
+Exemple de configuration MCP (`mcpServers`) :
 
 ```jsonc
 {
@@ -194,11 +191,9 @@ Desktop et le rouvrir ; vérifier **Settings → Developer** (`financeai` = `run
   `npm install` doit avoir été fait dans le projet.
 - macOS/Linux : chemins en `/Users/...` (un seul slash), reste identique.
 
-Redémarrer Claude Desktop. Les tools apparaissent dans le sélecteur MCP.
+## Transport HTTP (Streamable HTTP) (Lot 2)
 
-## Transport HTTP (Streamable HTTP) — chantier claude.ai (Lot 2)
-
-Pour brancher **claude.ai (web/mobile)**, le serveur doit être joignable en HTTP.
+Pour brancher un client MCP distant (web/mobile), le serveur doit être joignable en HTTP.
 L'entrée `mcp/http.ts` expose le MÊME registre de tools en **Streamable HTTP** :
 
 ```bash
@@ -213,10 +208,10 @@ MCP_HTTP_PORT=9090 npm run mcp:http   # port custom
   Un hôte non-loopback SANS `$PORT` est **refusé au démarrage** (données financières sans auth) —
   opt-in explicite `MCP_HTTP_ALLOW_EXPOSED=1` en connaissance de cause.
 - Corps de requête plafonné (5 Mo → 413) ; arrêt SIGTERM borné (grâce 5 s puis fermeture forcée loguée).
-- Le mode **stdio** (`npm run mcp:dev`, Claude Desktop) reste inchangé.
+- Le mode **stdio** (`npm run mcp:dev`) reste inchangé.
 - **Authentification (Lot 3)** : définir `FINANCEAI_OAUTH_SIGNING_KEY` (≥32 car.) +
   `FINANCEAI_ACCESS_KEY` (≥32 car. ; plus court = alerte + `ping`, et `FINANCEAI_ACCESS_KEY_STRICT=1` ferme `/oauth/authorize`) + `FINANCEAI_PUBLIC_URL` active un **OAuth 2.1
-  mono-utilisateur** : `/mcp` exige alors un Bearer, claude.ai fait le flux
+  mono-utilisateur** : `/mcp` exige alors un Bearer, le client fait le flux
   authorize/token, et la « porte » est ta clé d'accès (saisie une fois). Sans ces
   variables, le serveur refuse de démarrer sur un hôte exposé (loopback seulement).
   Le refresh token Google va en **Secret Manager** si `FINANCEAI_GOOGLE_SECRET` est
@@ -264,7 +259,7 @@ par erreur), ou tentative d'accès suspecte dans les logs Cloud Run. Effet : **t
 d'accès, refresh tokens et codes d'autorisation émis deviennent invalides **immédiatement** —
 c'est le seul levier qui révoque tout d'un coup, puisque le serveur est sans état.
 
-**Impact** : claude.ai perd la connexion au connecteur et redemandera une autorisation (saisie de
+**Impact** : le client MCP distant perd la connexion au connecteur et redemandera une autorisation (saisie de
 `FINANCEAI_ACCESS_KEY`). Aucune donnée financière n'est touchée — l'état vit dans le Drive.
 
 ```bash
@@ -287,104 +282,16 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST "$FINANCEAI_PUBLIC_URL/mcp" --d
 gcloud secrets versions disable <NUMÉRO_ANCIENNE_VERSION> --secret=financeai-oauth-signing-key
 ```
 
-**Ensuite** : re-brancher le connecteur dans claude.ai (Réglages → Connecteurs → autoriser).
+**Ensuite** : re-brancher le connecteur dans le client MCP distant.
 Si l'incident touche aussi la porte elle-même, faire tourner `FINANCEAI_ACCESS_KEY` de la même
 façon — les deux clés sont indépendantes, et la rotation de l'une n'invalide pas l'autre.
 
-## Hub perso — GET /hub/summary (HUB-01)
-
-Le serveur HTTP expose un résumé pour le dashboard du hub (`hubperso.com`), conforme au
-contrat [`@mokarade/hub-contract` v1](https://github.com/MoKarade/hub-contract) (pinné
-`#v1.0.0` dans `package.json`) :
-
-- **Activation** : définir `FINANCEAI_HUB_TOKEN` (≥16 caractères — refus de démarrer
-  sinon). Sans la variable, la route n'existe pas (404).
-- **Auth** : le hub envoie le header `x-hub-token` ; comparaison en temps constant,
-  **401** si absent ou invalide. Réponse toujours en `Cache-Control: no-store`.
-- **Données** : VRAIES métriques (`buildFinancialOverview`) + signaux financiers
-  (`mcp/financialSignals.ts`, partagés avec `get_next_best_actions`) → metrics/alerts.
-  État de plus de 6 h (`freshness`) → `status: "degraded"` + `dataAsOf` ; état illisible
-  → summary `status: "error"` (HTTP 200) — le widget montre la panne, jamais du vide.
-
-#### Les 6 métriques publiées (HUB-PLACEMENTS-SEANCE, 2026-08-19)
-
-Le contrat plafonne à **6 métriques**, et le hub rend la **première en gros**. L'ordre est donc un
-arbitrage, pas une liste :
-
-| # | libellé | source |
-|---|---|---|
-| 1 | `Valeur nette` (sans `trend` : la séance vit sur « Placements ») | `buildFinancialOverview` |
-| 2 | `Cashflow mensuel` | idem |
-| 3 | `Liquidités` | idem |
-| 4 | `Placements (séance du <date>)` | `computePortfolioSessionMetrics` |
-| 5 | `Variation de la séance` | idem |
-| 6 | `Variation 7 jours` | idem |
-
-`Investissements`, `Dette totale` et `Espace CELI dispo` ont été RETIRÉS pour faire la place : la
-variation dit tout ce que la valeur des placements disait et davantage, et les deux autres sont les
-grandeurs les plus stables du lot (rien à apprendre d'un coup d'œil quotidien).
-
-⚠️ **Les trois métriques de placements se REFUSENT** (`services/history/portfolioSessionMetrics.ts`)
-quand la donnée ne permet pas de les affirmer : série absente ou d'un seul point, séance de référence
-plus vieille que 3 jours civils, ou aucune vraie clôture aux deux bornes. Une métrique refusée n'est
-**pas publiée** — le hub n'affiche que ce qu'il reçoit, donc l'omettre est la seule façon honnête de
-dire « je ne sais pas ». Un `0` fabriquerait « journée stable ».
-
-⚠️ **Les trois sortantes ne REVIENNENT pas** quand les placements se refusent : une carte dont la
-composition change selon la fraîcheur des cours serait illisible. On publie **moins**, pas autre chose.
-
-⚠️ **« Séance », jamais « aujourd'hui »** : `Asset.priceHistory` n'avance que lorsque l'app navigateur
-s'ouvre (`hydrateAssetHistories`, appelé depuis `App.tsx` pour les titres dont `lastHistorySync > 24 h`).
-Le cron serveur (`refreshPrices.ts`) ne rafraîchit que `currentPrice`, jamais l'historique daté. Et
-les marchés ferment. La date de référence est donc presque toujours une séance passée : le libellé la
-porte.
-
-⚠️ **`dataAsOf` = la donnée la plus ANCIENNE** entre le push Drive et la clôture affichée. Servir
-l'horodatage du push pendant qu'on affiche la clôture de l'avant-veille surestimerait la fraîcheur de
-ce qui est à l'écran.
-
-### En local (stdio n'expose rien ; HTTP seulement)
-
-```powershell
-# jeton (≥16 caractères)
-node -e "console.log('HUB=' + require('crypto').randomBytes(24).toString('base64url'))"
-# puis
-$env:FINANCEAI_HUB_TOKEN="le-jeton" ; npm run mcp:http
-```
-
-### Sur Cloud Run — via Secret Manager (durable)
-
-⚠️ Poser `FINANCEAI_HUB_TOKEN` à la main avec `gcloud run services update --update-env-vars`
-**ne marche pas durablement** : (1) ça ne rebuild pas l'image (le code `/hub/summary`
-doit être déployé, pas seulement la variable), et (2) le prochain `deploy.sh`
-l'efface (`--set-env-vars` remplace tout). Le jeton doit donc vivre dans **Secret
-Manager**, comme les clés OAuth — `deploy.sh` le monte alors automatiquement, à chaque
-déploiement, s'il existe.
-
-```bash
-# 1. Créer le secret (nouveau jeton — occasion de faire la rotation si l'ancien a fuité)
-node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))" \
-  | tr -d '\n' | gcloud secrets create financeai-hub-token --data-file=- --project="$PROJECT_ID"
-
-# 2. Donner au compte de service Cloud Run l'accès en lecture (même SA que les 3 autres secrets)
-gcloud secrets add-iam-policy-binding financeai-hub-token \
-  --member="serviceAccount:$RUNTIME_SA" \
-  --role="roles/secretmanager.secretAccessor" --project="$PROJECT_ID"
-
-# 3. Redéployer : deploy.sh détecte le secret, le monte, et rebuild l'image à jour
-PROJECT_ID="$PROJECT_ID" ./mcp/deploy.sh
-```
-
-Le hub enverra ce même jeton dans le header `x-hub-token`. Rotation : ajoute une nouvelle
-version au secret (`gcloud secrets versions add financeai-hub-token --data-file=-`) puis
-redéploie.
-
-## Refresh planifié — POST /refresh (HUB-REFRESH-CRON)
+## Refresh planifié — POST /refresh
 
 Jusqu'ici, **seule l'app navigateur** poussait l'état dans Drive : dès l'onglet fermé, la
 valeur nette figeait (les cours ne bougeaient plus). Cette route permet à un déclencheur
-EXTERNE de rafraîchir les prix côté serveur — plus besoin d'ouvrir FinanceAI pour que le
-hub soit à jour.
+EXTERNE de rafraîchir les prix côté serveur — plus besoin d'ouvrir FinanceAI pour que les
+cours soient à jour.
 
 - **Ce que ça fait** : lit le blob Drive, rafraîchit les `currentPrice` via le moteur PARTAGÉ
   (`services/priceRefresh` — devise protégée, changement réel uniquement, provider-aware),
@@ -392,7 +299,7 @@ hub soit à jour.
   QUE les cours** : dettes, budgets, relevés saisis ne sont jamais modifiés. Aucun prix
   inventé — un symbole sans provider est SKIPPÉ avec sa raison (no-fake-data).
 - **Activation** : définir `FINANCEAI_REFRESH_SECRET` (≥16 caractères — refus de démarrer
-  sinon). Sans la variable, la route n'existe pas (404), comme `/hub/summary`.
+  sinon). Sans la variable, la route n'existe pas (404).
 - **Auth** : header `Authorization: Bearer <secret>` ; comparaison en temps constant,
   **401** si absent ou invalide. Réponse `Cache-Control: no-store`.
 - **Taux de change** ([FX-SERVEUR-JAMAIS-RAFRAICHI], 2026-09-24) : la même passe lit les taux de la
@@ -431,10 +338,10 @@ curl -sS -X POST "$MCP_URL/refresh" -H "Authorization: Bearer $REFRESH_SECRET" -
 # → {"ok":true,"refreshed":[…],"unchanged":[…],"skipped":[…],"saved":true}
 ```
 
-### Sur Cloud Run — via Secret Manager (comme le hub)
+### Sur Cloud Run — via Secret Manager
 
-Même logique que `financeai-hub-token` : le secret vit dans Secret Manager, `deploy.sh` le
-monte automatiquement s'il existe (survit à chaque redéploiement).
+Le secret vit dans Secret Manager, `deploy.sh` le monte automatiquement s'il existe
+(survit à chaque redéploiement).
 
 ```bash
 # 1. Le secret d'auth du refresh (≥16 caractères ; garde-le, c'est le même côté GitHub)
@@ -458,79 +365,6 @@ PROJECT_ID="$PROJECT_ID" ./mcp/deploy.sh
 
 Rotation : `gcloud secrets versions add financeai-refresh-secret --data-file=-`, mets à jour
 le secret GitHub `FINANCEAI_REFRESH_SECRET`, puis redéploie.
-
-## Bail du véhicule — GET /vehicule/bail (VEHICULE-BAIL)
-
-Le seul endroit où FinanceAI parle à une AUTRE app que le hub, et il est volontairement minuscule.
-Décision et alternatives rejetées : [`docs/adr/0017`](../docs/adr/0017-endpoint-bail-vehicule-pour-carai.md).
-
-- **Pourquoi** : CarAI affiche « ce que j'ai payé sur le prix total du bail » dans son bandeau
-  d'accueil. Elle connaît les TERMES du bail (dates, durée, kilométrage) et **aucun dollar** ; la
-  mensualité et le solde vivent ici. `/hub/summary` ne peut pas les porter (six métriques, et le
-  bail d'une voiture n'a pas sa place sur la carte financière), et le hub ne relaie pas d'app à app
-  (il est **générique par le contrat**).
-- **Ce que ça rend** : UNE dette — celle du véhicule. `{ nom, devise, solde, mensualite,
-  tauxAnnuelPourcent, montantOrigine, debut, finTerme, champsAbsents[], dataAsOf }`. Rien d'autre :
-  ni patrimoine, ni autres dettes, ni transactions.
-  ⚠️ Tout champ que l'état ne porte pas est `null` **et nommé dans `champsAbsents`** — le
-  consommateur s'abstient au lieu de deviner si un `null` veut dire « zéro » ou « je ne sais pas ».
-  ⚠️ `montantOrigine` n'est PAS le total qui sera versé dès que le taux est non nul : le total versé
-  est `mensualite × durée`. Il sert de CONTRÔLE de cohérence, jamais de numérateur.
-- **Quelle dette** : `kind: 'auto-lease'`, sinon `kind: 'auto'`, sinon `category: 'Car'`.
-  ⚠️ Le repli par catégorie n'est pas un raffinement, c'est **le chemin réel** : aucun producteur
-  n'écrit `kind` (l'outil MCP `apply_debt` ne l'expose pas). Sélectionner sur le seul `kind` ne
-  trouverait rien chez un utilisateur réel.
-- **Activation** : définir `FINANCEAI_VEHICULE_TOKEN` (≥16 caractères — refus de démarrer sinon),
-  **DISTINCT de `FINANCEAI_HUB_TOKEN`** : celui-ci n'ouvre que la dette du véhicule, là où le jeton
-  du hub ouvre la valeur nette et le cashflow. Sans la variable, la route n'existe pas (404).
-  `FINANCEAI_VEHICULE_DETTE` (optionnel) nomme la dette exacte quand plusieurs véhicules coexistent.
-- **Auth** : header `Authorization: Bearer <secret>`, comparaison en temps constant, **401** si
-  absent ou invalide. **405** hors GET. Réponse toujours `Cache-Control: no-store` — un solde est un
-  instantané.
-- **Réponses** : `200 { ok:true, statut:"trouve", bail }` ; `404 { statut:"introuvable" }` si aucune
-  dette de véhicule ; **`409 { statut:"ambigu", candidates:[…] }`** si plusieurs — on REFUSE de
-  choisir, parce que publier la mauvaise dette mettrait un montant faux et *crédible* sur l'écran
-  d'accueil de CarAI ; `503` si l'état est illisible.
-
-### Activer sur Cloud Run
-
-⚠️ **Cette route est restée 404 en production du 15/09 jusqu'à ce que ce bloc existe.** Le
-handler, ses deux fichiers de tests et la doc ci-dessus étaient là ; `mcp/deploy.sh` ne montait
-simplement pas le secret, donc `FINANCEAI_VEHICULE_TOKEN` était absent du service et la route
-n'était jamais câblée. **Rien n'était rouge** : un 404 est la réponse NORMALE d'une route
-volontairement désactivée, donc son absence ressemblait à un choix. `tests/mcp/deploySecretsCables.test.ts`
-interdit désormais de relire une variable dans `mcp/http.ts` sans la câbler ici.
-
-⚠️ **Ne pas poser la variable à la main dans la console** : `--set-secrets` et `--set-env-vars`
-REMPLACENT l'existant, donc le prochain déploiement l'effacerait sans bruit.
-
-```bash
-# 1. Le secret (≥16 caractères — le serveur refuse de démarrer sous ce seuil)
-openssl rand -base64 24 | tr -d '\n' | gcloud secrets create financeai-vehicule-token \
-  --project "$PROJECT_ID" --data-file=-
-
-# 2. Le compte de service de Cloud Run doit pouvoir le lire
-gcloud secrets add-iam-policy-binding financeai-vehicule-token --project "$PROJECT_ID" \
-  --member "serviceAccount:$(gcloud projects describe "$PROJECT_ID" --format 'value(projectNumber)')-compute@developer.gserviceaccount.com" \
-  --role roles/secretmanager.secretAccessor
-
-# 3. (optionnel) Nommer la dette exacte si plusieurs véhicules coexistent
-#    Sans lui, la route choisit par kind/catégorie et REFUSE (409) s'il y a plusieurs candidates.
-printf '<nom-de-la-dette>' | gcloud secrets create financeai-vehicule-dette --project "$PROJECT_ID" --data-file=-
-
-# 4. Redéployer — le script annonce « GET /vehicule/bail ACTIF »
-PROJECT_ID="$PROJECT_ID" ./mcp/deploy.sh
-```
-
-Puis, côté CarAI : `FINANCEAI_BAIL_URL=<url-du-service>/vehicule/bail` et
-`FINANCEAI_BAIL_TOKEN=<la-même-valeur-qu'au-point-1>`.
-
-Test manuel (curl) :
-
-```bash
-curl -sS "$MCP_URL/vehicule/bail" -H "Authorization: Bearer $FINANCEAI_VEHICULE_TOKEN"
-# → {"ok":true,"statut":"trouve","bail":{"nom":"<nom de la dette>","solde":<solde>,"mensualite":<mensualité>,…}}
-```
 
 ## Magasin de marché — POST /market-store (MARCHE-ROUTE)
 
@@ -631,14 +465,14 @@ financeai-fintable-roles-json --data-file=.fintable-roles.json`, puis redéploie
 ## Synchronisation Google Drive (auto) — recommandé
 
 Au lieu d'exporter un fichier, le connecteur lit/écrit le **même blob Drive que l'app**
-→ Claude voit les données à jour et ses écritures reviennent dans l'app (polling app 60 s + au focus).
+→ le client MCP voit les données à jour et ses écritures reviennent dans l'app (polling app 60 s + au focus).
 
 ```bash
 # autorise une fois (consentement Google, refresh token stocké en local) :
 npm run mcp:auth            # utilise le client OAuth FinanceAI PARTAGÉ (rien à créer dans Google Cloud)
 # ou ton propre client OAuth « Desktop » :
 npm run mcp:auth -- <client_id> <client_secret>
-# tout-en-un (config Claude Desktop + autorisation) :
+# tout-en-un (config locale + autorisation) :
 npm run mcp:connect
 ```
 
@@ -650,13 +484,12 @@ npm run mcp:connect
 - ⚠️ Une **passphrase** active (coffre chiffré) empêche le connecteur de lire le Drive
   (message clair « retire la passphrase »).
 
-## Déployer sur Cloud Run → utiliser depuis claude.ai (web + téléphone)
+## Déployer sur Cloud Run → utiliser depuis le web ou le téléphone
 
-Pour parler à Claude de tes finances depuis le **web ou le téléphone** (pas seulement
-Claude Desktop), le serveur MCP doit être hébergé. Recette Google Cloud Run. Coût :
-**quasi nul** en `min-instances 0` (scale-to-zero — tu ne paies que les requêtes, ~0 $
-à l'usage solo ; contrepartie : un cold start de ~2 s au réveil, qui vide le cache
-anti-rejeu OAuth en mémoire). `MIN_INSTANCES=1` supprime le cold start et garde le cache
+Pour interroger tes finances depuis le **web ou le téléphone**, le serveur MCP doit être hébergé.
+Recette Google Cloud Run. Coût : **quasi nul** en `min-instances 0` (scale-to-zero — tu ne paies
+que les requêtes, ~0 $ à l'usage solo ; contrepartie : un cold start de ~2 s au réveil, qui vide le
+cache anti-rejeu OAuth en mémoire). `MIN_INSTANCES=1` supprime le cold start et garde le cache
 chaud, mais facture le temps d'inactivité (non gratuit). ⚠️ Commandes `gcloud`.
 
 ### Une fois (préparation GCP)
@@ -699,11 +532,10 @@ PROJECT_ID=ton-projet ./mcp/deploy.sh
 Le script déploie, récupère l'URL publique, puis re-déploie avec `FINANCEAI_PUBLIC_URL`
 (l'issuer OAuth). Il affiche à la fin l'URL du connecteur (`https://…run.app/mcp`).
 
-### Brancher claude.ai
+### Brancher un client MCP distant
 
-Dans claude.ai (ou l'app mobile) → **Settings → Connectors → Add custom connector** →
-colle `https://…run.app/mcp`. Claude découvre l'OAuth tout seul ; à la connexion, entre
-**ta clé d'accès**. C'est fait — pose « si j'achète une voiture demain ? » sur tes vrais chiffres.
+Ajoute le connecteur personnalisé `https://…run.app/mcp` dans ton client MCP compatible OAuth 2.1.
+À la connexion, entre **ta clé d'accès**. C'est fait — pose « si j'achète une voiture demain ? » sur tes vrais chiffres.
 
 ### Déploiement continu (optionnel)
 
@@ -722,18 +554,15 @@ configurés — sinon il est ignoré (le déploiement manuel `mcp/deploy.sh` res
 
 ## Installation 1 clic (bundle `.mcpb`)
 
-Pour distribuer le connecteur sans terminal (Node est embarqué dans Claude Desktop) :
+Pour distribuer le connecteur sans terminal :
 
 ```bash
 npm run mcp:pack            # → dist/FinanceAI.mcpb (esbuild bundle + manifest .mcpb v0.3 + client partagé)
 ```
 
-L'utilisateur télécharge le `.mcpb`, l'ouvre (Claude Desktop l'installe en 1 clic), puis
-dit « connecte mes finances » (tool `connect_drive`). La carte **« Connecter à Claude »**
-(Réglages → Système de l'app) propose ce téléchargement (`VITE_CONNECTOR_MCPB_URL`,
-défaut `/financeai-connector.mcpb`).
+L'utilisateur télécharge le `.mcpb`, l'ouvre, puis dit « connecte mes finances » (tool `connect_drive`).
 
-## Test rapide depuis Claude Desktop
+## Test rapide depuis un client MCP
 
 Calculatrice (sans état) :
 - « Ping mon MCP financeai »
@@ -767,7 +596,7 @@ Exemples : `tools/getTaxRoom.tool.ts` (calculatrice, ~30 lignes),
 ## Architecture
 
 ```
-Claude Desktop / bundle .mcpb
+Client MCP / bundle .mcpb
      |
      |-- stdio --> mcp/stdio.ts ── source = DriveStateSource (si autorisé)  sinon  FileStateSource
                        |                          \__ makeStateStore (cache + get + save) __/
@@ -794,5 +623,4 @@ Claude Desktop / bundle .mcpb
   **OAuth local** (loopback, `mcp:auth`) + **polling app** + bundle **`.mcpb`** 1 clic +
   client OAuth partagé. Cf `docs/MCP_CONNECTOR_DESIGN.md`.
 - **Reste (backlog)** : héberger le `.mcpb` + test install réel ; ouverture bêta
-  (mode Test Google → vérification `drive.appdata`) ; option transport HTTP distant
-  (claude.ai de partout, nécessiterait un backend de tokens).
+  (mode Test Google → vérification `drive.appdata`) ; transport HTTP distant sur Cloud Run.

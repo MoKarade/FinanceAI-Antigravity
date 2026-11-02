@@ -1496,7 +1496,6 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     const libelleMC = mcSublabel(runMC, results?.mcIterationsRun);
     const anneeDe = (monthIndex: number) => calendarFromMonthIndex(startYear, startMonth, monthIndex).year;
     const pointRetraite = (chartData as ProjectionChartPoint[]).find((d) => d.monthIndex >= 0 && d.isRetired) ?? null;
-    const pointImmo = (chartData as ProjectionChartPoint[]).find((d) => d.monthIndex >= 0 && Number(d.Immobilier) > 0) ?? null;
     const dernierPoint = chartData.length > 0 ? (chartData[chartData.length - 1] as ProjectionChartPoint) : null;
     const anneesHorizon = dernierPoint ? Math.max(0, Math.round((dernierPoint.monthIndex - todayMonthIndex) / 12)) : null;
     const naviguerVers = (tab: Tab) => useFinanceStore.getState().setActiveTab(tab);
@@ -2467,7 +2466,9 @@ const FutureCurveTooltip = React.memo(({ active, payload }: FutureCurveTooltipPr
                     <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-[11px] font-semibold text-ink-50 truncate">
                             {pt.dateLabel || (pt.year != null ? `Année ${pt.year}` : '')}
-                            {pt.age != null && Number.isFinite(pt.age) ? ` · ${Math.floor(pt.age)} ans` : ''}
+                            {pt.age != null && Number.isFinite(pt.age) && (
+                                <> · <PrivateAmount>{`${Math.floor(pt.age)} ans`}</PrivateAmount></>
+                            )}
                         </span>
                         <span className={`shrink-0 px-1 py-0.5 rounded-sm text-[9px] font-mono font-semibold ${estPasse ? 'gf-delta-neutral' : 'gf-delta-amber'}`}>
                             {estPasse ? 'Réel' : 'Projeté'}
@@ -2506,7 +2507,9 @@ const FutureCurveTooltip = React.memo(({ active, payload }: FutureCurveTooltipPr
                 <div className="gf-tooltip-header">
                     <span className="text-xs font-semibold text-ink-50">
                         {pt.dateLabel || (pt.year != null ? `Année ${pt.year}` : '')}
-                        {pt.age != null && Number.isFinite(pt.age) ? ` · ${Math.floor(pt.age)} ans` : ''}
+                        {pt.age != null && Number.isFinite(pt.age) && (
+                            <> · <PrivateAmount>{`${Math.floor(pt.age)} ans`}</PrivateAmount></>
+                        )}
                     </span>
                     <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold ${estPasse ? 'gf-delta-neutral' : 'gf-delta-amber'}`}>
                         {estPasse ? 'Réel' : 'Projeté'}
@@ -2544,6 +2547,7 @@ const FutureCurveTooltip = React.memo(({ active, payload }: FutureCurveTooltipPr
                                     </div>
                                     {partPct > 0 && (
                                         <div className="h-1 w-full rounded-full bg-surfaceHighlight overflow-hidden" aria-hidden="true">
+                                            {/* NOMBRE-NON-MONETAIRE : BARRE-DECORATIVE accompagnant le montant sous PrivateAmount */}
                                             <div className="h-full rounded-full" style={{ width: `${partPct}%`, backgroundColor: couleurSerie(c.cle) }} />
                                         </div>
                                     )}

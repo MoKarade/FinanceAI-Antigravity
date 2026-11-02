@@ -36,7 +36,7 @@ const makeState = (overrides: Partial<AppState> = {}): AppState => ({
     retirementGoal: { targetAge: 65, targetMonthlyIncome: 4000, governmentPension: 1200 },
     financialGoals: [],
     initialBalances: {},
-    apiKeys: { anthropic: '', finnhub: '' },
+    apiKeys: { gemini: '', anthropic: '', finnhub: '' },
     fxRates: { USD: 1.40, EUR: 1.47, CAD: 1.00 },
     lastUpdate: 0,
     categorizationRules: [],

@@ -1,20 +1,20 @@
 // services/aiChat/models.ts
 //
-// [B3-CHAT-MODEL] Source UNIQUE des modèles Claude offerts dans le chat (demande Marc : « choisir
-// quel ia » par conversation). Module LÉGER (zéro import — boot-safe : consommé statiquement par
-// l'ancien chat (retiré)). `services/claude.ts` dérive ses constantes MODEL_SONNET/MODEL_HAIKU d'ici
-// (jamais deux littéraux d'id qui divergent — classe « littéral dupliqué à côté de la source »).
+// [B3-CHAT-MODEL] Source UNIQUE des modèles Google Gemini offerts dans le chat (demande Marc : « choisir
+// quel ia » par conversation). Module LÉGER (zéro import lourd — boot-safe). `services/gemini.ts`
+// dérive ses constantes MODEL_SONNET/MODEL_HAIKU d'ici (jamais deux littéraux d'id qui divergent —
+// classe « littéral dupliqué à côté de la source »).
 
 import type { AiChatModelKey } from '../../types';
-// `.js` : ce module est aussi chargé côté serveur par le relais (ESM natif du runtime Node Vercel).
+// `.js` : ce module est aussi chargé côté serveur (ESM natif du runtime Node).
 import { PRICING_USD_PER_MTOK } from './pricing.js';
 
 /** Ids API complets par clé de chat. ⚠️ Chaque id DOIT avoir une entrée dans PRICING_USD_PER_MTOK
  *  (services/aiChat/pricing) — parité verrouillée par tests/services/aiChatPricing.test.ts. */
 export const MODEL_IDS: Record<AiChatModelKey, string> = {
-    haiku: 'claude-haiku-5-5',
-    sonnet: 'claude-sonnet-5-5',
-    opus: 'claude-opus-5-5',
+    haiku: 'gemini-2.5-flash-lite',
+    sonnet: 'gemini-2.5-flash',
+    opus: 'gemini-2.5-pro',
 };
 
 /** Défaut historique du chat (choix Marc, AITOOLS-B) — utilisé quand `aiChatModel` est absent. */
@@ -30,38 +30,33 @@ const ratioVsSonnet = (key: AiChatModelKey): string => {
 
 /** Options du sélecteur UI (ordre = du plus économique au plus capable). */
 export const AI_CHAT_MODELS: Array<{ key: AiChatModelKey; label: string; description: string }> = [
-    { key: 'haiku', label: 'Haiku', description: `Rapide et économique (${ratioVsSonnet('haiku')} le coût de Sonnet)` },
-    { key: 'sonnet', label: 'Sonnet', description: 'Équilibre qualité/coût (défaut)' },
-    { key: 'opus', label: 'Opus', description: `Le plus capable (${ratioVsSonnet('opus')} le coût de Sonnet)` },
+    { key: 'haiku', label: '2.5 Flash-Lite', description: `Rapide et économique (${ratioVsSonnet('haiku')} le coût de Flash)` },
+    { key: 'sonnet', label: '2.5 Flash', description: 'Équilibre qualité/coût (défaut)' },
+    { key: 'opus', label: '2.5 Pro', description: `Raisonnement approfondi (${ratioVsSonnet('opus')} le coût de Flash)` },
 ];
 
 /** Ceinture : une valeur inconnue (état synchronisé par une version future/corrompu) retombe sur le
  *  défaut — jamais un id de modèle invalide envoyé à l'API. */
 export function resolveChatModelKey(value: unknown): AiChatModelKey {
-    return value === 'haiku' || value === 'sonnet' || value === 'opus' ? value : DEFAULT_AI_CHAT_MODEL;
+    if (value === 'haiku' || value === 'sonnet' || value === 'opus') return value;
+    if (value === 'flash-lite' || value === 'gemini-2.5-flash-lite') return 'haiku';
+    if (value === 'flash' || value === 'gemini-2.5-flash') return 'sonnet';
+    if (value === 'pro' || value === 'gemini-2.5-pro') return 'opus';
+    return DEFAULT_AI_CHAT_MODEL;
 }
 
 /**
  * [TX-STALE-MODEL-LABEL] Libellé LISIBLE d'un id de modèle, DÉRIVÉ de la table ci-dessus.
- * Pourquoi : une surface affichait « Claude Sonnet 4.6 » en dur pendant une opération qui tourne
- * sur Haiku depuis la bascule — un libellé recopié ne suit jamais le modèle qu'il prétend nommer
- * (classe `DOC-METRIQUE-RECOPIEE` appliquée à l'UI). Rendu ici plutôt qu'au site d'affichage pour
- * que TOUTE surface qui nomme un modèle lise la même source.
+ * Pourquoi : une surface affichait un nom de modèle en dur pendant une opération — un libellé
+ * recopié ne suit jamais le modèle qu'il prétend nommer (classe `DOC-METRIQUE-RECOPIEE` appliquée
+ * à l'UI). Rendu ici plutôt qu'au site d'affichage pour que TOUTE surface qui nomme un modèle
+ * lise la même source.
  * Un id inconnu rend l'id brut : honnête (on ne sait pas le traduire) plutôt qu'un faux nom.
  */
 export function modelLabelFromId(id: string): string {
-    if (id === 'claude-haiku-5-5') return 'Gemini 3.8 Flash';
-    if (id === 'claude-sonnet-5-5') return 'Gemini 3.8 Flash';
-    if (id === 'claude-opus-5-5') return 'Gemini Pro';
+    if (id === 'gemini-2.5-flash-lite' || id === 'claude-haiku-5-5') return 'Gemini 2.5 Flash-Lite';
+    if (id === 'gemini-2.5-flash' || id === 'claude-sonnet-5-5') return 'Gemini 2.5 Flash';
+    if (id === 'gemini-2.5-pro' || id === 'claude-opus-5-5') return 'Gemini 2.5 Pro';
     const entry = AI_CHAT_MODELS.find((m) => MODEL_IDS[m.key] === id);
     return entry ? `Gemini ${entry.label}` : id;
 }
-
-/**
- * [IA-LOCALE] Modèle servi par la passerelle IA LOCALE (Ollama sur le PC de Marc, via tunnel) quand le
- * relais `api/_lib/relay.ts` route un appel Claude texte vers elle. Le relais réécrit `model` en cet
- * id et la réponse le porte (`msg.model`) : c'est la seule façon fiable de savoir qu'un tour n'a PAS
- * été facturé par Anthropic (no-fake-data : un tour local chiffré au tarif Sonnet serait un coût inventé).
- */
-export const LOCAL_MODEL_ID = 'gpt-oss-atelier';
-

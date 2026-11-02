@@ -109,7 +109,7 @@ export const TabRouter: React.FC<TabRouterProps> = ({
                     <Transactions
                         transactions={state.transactions}
                         setTransactions={(t) => setAppState({ transactions: typeof t === 'function' ? (t as (prev: Transaction[]) => Transaction[])(state.transactions) : t })}
-                        apiKey={state.apiKeys.anthropic}
+                        apiKey={state.apiKeys.gemini}
                         budgetItems={state.budgetItems}
                         categorizationRules={state.categorizationRules || []}
                         setCategorizationRules={(rules) => setAppState({ categorizationRules: rules })}
@@ -123,7 +123,7 @@ export const TabRouter: React.FC<TabRouterProps> = ({
                         config={state.config}
                         budgetItems={state.budgetItems}
                         setBudgetItems={(items) => setAppState({ budgetItems: items })}
-                        apiKey={state.apiKeys.anthropic}
+                        apiKey={state.apiKeys.gemini}
                     />
                 )}
 
@@ -138,7 +138,7 @@ export const TabRouter: React.FC<TabRouterProps> = ({
                         setInvestmentAccounts={(accs) => setAppState({ investmentAccounts: accs })}
                         investmentTransactions={state.investmentTransactions}
                         setInvestmentTransactions={(txs) => setAppState({ investmentTransactions: txs })}
-                        apiKey={state.apiKeys.anthropic}
+                        apiKey={state.apiKeys.gemini}
                         transactions={state.transactions}
                         budgetItems={state.budgetItems}
                         config={state.config}
@@ -150,7 +150,7 @@ export const TabRouter: React.FC<TabRouterProps> = ({
                 {activeTab === Tab.TAX && (
                     <TaxCenter
                         config={state.config}
-                        assets={state.assets} apiKey={state.apiKeys.anthropic}
+                        assets={state.assets} apiKey={state.apiKeys.gemini}
                     />
                 )}
 

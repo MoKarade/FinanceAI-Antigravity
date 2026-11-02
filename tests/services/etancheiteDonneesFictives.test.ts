@@ -4,7 +4,7 @@
 // pendant qu'elle tourne sur des données fictives** (mode test persona, et demain le bac à sable).
 //
 // ⚠️ Pourquoi ce lot existe alors que le mode test vit depuis des mois. Mesuré le 2026-09-21 :
-// `services/backupAuto.ts`, `services/pdfReport.ts` et `services/claude.ts` ne contenaient
+// `services/backupAuto.ts`, `services/pdfReport.ts` et `services/gemini.ts` ne contenaient
 // AUCUNE occurrence de `isTestMode` — zéro, dans les trois. C'était tolérable tant que le mode
 // test ne servait qu'à des personas figés (« Karim », « jc-re1 ») : un persona ne ressemble à
 // rien de réel, donc personne ne confond. Ça cesse de l'être dès que l'état fictif est une COPIE
@@ -12,7 +12,7 @@
 // sauvegarde relue six mois plus tard, ou dans une réponse du modèle.
 //
 // ⚠️ Ce que ces gardes ne couvrent PAS, et c'est écrit plutôt que sous-entendu : les prompts
-// envoyés au modèle (`services/claude.ts`). C'est le seul des trois canaux qui SORT de la
+// envoyés au modèle (`services/gemini.ts`). C'est le seul des trois canaux qui SORT de la
 // machine — le backup va dans IndexedDB (local, chiffré par une clé de device) et le PDF reste
 // sur le disque. Il est traité à part parce qu'il n'a pas de point d'entrée unique (sept
 // fonctions, trois appels SDK directs) et parce que la réponse juste n'y est probablement pas un
@@ -20,7 +20,7 @@
 // ⚠️ CORRECTION (2026-09-22, RE-MESURÉ) : la phrase ci-dessus disait « sept fonctions, trois
 // appels SDK directs, pas de point d'entrée unique ». FAUX dans les deux sens. Mesuré sur
 // `\.messages\.(create|stream)\(` : **CINQ** points de contact SDK, et ils portent TOUS un
-// `system` — quatre dans `services/claude.ts` (chat, chatStream, analyzePayslip,
+// `system` — quatre dans `services/gemini.ts` (chat, chatStream, analyzePayslip,
 // analyzeBankStatement) et un dans l'agent d'outils (`services/aiTools/agentLoop.ts`, retiré le
 // 29/10/2026 avec l'ancien assistant, FinanceAI#15 : il ne reste que les quatre de `claude.ts`).
 // Il y avait donc bien une taille de guêpe.

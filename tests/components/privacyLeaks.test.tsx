@@ -45,7 +45,7 @@ vi.mock('recharts', async () => {
             formatter ? React.createElement('div', null, String(formatter(SAMPLE_TICK, 'Série'))) : null,
     };
 });
-vi.mock('../../services/claude', () => ({ categorizeBatch: vi.fn(), analyzePayslip: vi.fn() }));
+vi.mock('../../services/gemini', () => ({ categorizeBatch: vi.fn(), analyzePayslip: vi.fn() }));
 vi.mock('../../components/ui/Toast', () => ({ showToast: vi.fn() }));
 
 /** Texte du DOM sans aucune espace (formatCAD sépare les milliers par une espace fine insécable). */

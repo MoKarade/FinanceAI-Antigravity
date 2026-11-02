@@ -3,13 +3,13 @@ import { Icon, type IconName } from '../ui/Icon';
 import { Card } from '../ui/Card';
 import { CollapsibleSection } from '../ui/CollapsibleSection';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { getRealEstateAdvice, type RealEstateContext, type RealEstateAdvice } from '../../services/claude';
+import { getRealEstateAdvice, type RealEstateContext, type RealEstateAdvice } from '../../services/gemini';
 import { messageErreurIa, MESSAGE_IA_MODE_DISCRET } from '../../services/messageErreurIa';
 
 /**
  * Phase F.8 — Conseils IA Immobilier poussés.
  *
- * Appelle Claude Haiku avec le contexte du projet immobilier en cours et
+ * Appelle Gemini Flash-Lite avec le contexte du projet immobilier en cours et
  * affiche 3 insights catégorisés (cost / timing / leverage / tax / risk).
  */
 
@@ -28,7 +28,7 @@ interface RealEstateAdviceCardProps {
 }
 
 export const RealEstateAdviceCard: React.FC<RealEstateAdviceCardProps> = ({ context, replie = false }) => {
-    const apiKey = useFinanceStore(s => s.apiKeys.anthropic);
+    const apiKey = useFinanceStore(s => s.apiKeys.gemini || s.apiKeys.anthropic || '');
     const [advice, setAdvice] = useState<RealEstateAdvice | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);

@@ -5,7 +5,7 @@
 // est-ce que l'app déclare des tools à l'API Anthropic depuis quelque part ?
 //
 // Depuis le retrait de l'ancien assistant (29/10/2026, FinanceAI#15 : LIA est l'assistant, ses
-// pouvoirs passent par le serveur MCP et le hub), la réponse est NON : `services/claude.ts` est le
+// pouvoirs passent par le serveur MCP et le hub), la réponse est NON : `services/gemini.ts` est le
 // seul fichier de production qui appelle le SDK, et il n'envoie aucun `tools`. Cette garde l'empêche
 // de revenir sans qu'on le décide : un `tools:` ad hoc échapperait à la garde de parité (elle
 // regarde `mcp/server.ts`, pas les appels au SDK) ET à `noMcpSdkInSpecs` (qui vise l'import du SDK
@@ -56,17 +56,17 @@ describe('[AITOOLS-CALLSITE-UNIQUE-GARDE] aucun endroit ne déclare de tools au 
         expect(importers).toEqual([]);
     });
 
-    it('le seul site d\'appel du SDK est `services/claude.ts`, et il ne passe AUCUN `tools`', () => {
+    it('le seul site d\'appel du SDK est `services/gemini.ts`, et il ne passe AUCUN `tools`', () => {
         // Mesuré : 1 fichier de production appelle `messages.create(`/`messages.stream(`.
         const callSites = FILES.filter((f) => /messages\.(create|stream)\s*\(/.test(stripComments(readFileSync(f, 'utf8'))))
             .map(rel).sort();
-        expect(callSites).toEqual(['services/claude.ts']);
+        expect(callSites).toEqual(['services/gemini.ts']);
 
         // C'est CETTE assertion qui ferme le trou : ce site ne doit jamais se mettre à déclarer des
         // tools de son côté. Anti-vacuité par témoin : le fichier contient bien du vrai code après
         // décommentage.
-        const claude = readCodeOnly(resolve(ROOT, 'services/claude.ts'), 'messages.create(');
-        expect(/\btools\s*:/.test(claude), 'services/claude.ts déclare des `tools` hors du registre partagé').toBe(false);
+        const gemini = readCodeOnly(resolve(ROOT, 'services/gemini.ts'), 'messages.create(');
+        expect(/\btools\s*:/.test(gemini), 'services/gemini.ts déclare des `tools` hors du registre partagé').toBe(false);
     });
 
     it('le détecteur de `tools` rougit sur un appel qui en déclare (contre-épreuve)', () => {

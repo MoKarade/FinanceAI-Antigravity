@@ -35,7 +35,7 @@ const nonReg200k = (owner?: AssetOwner): Asset => ({
 function impotTotalAffiche(config: BudgetConfig, assets: Asset[]): string {
     render(<TaxCenter config={config} assets={assets} />);
     const label = screen.getByText('Impôt total');
-    const montant = label.nextElementSibling?.textContent ?? '';
+    const montant = (label.parentElement?.nextElementSibling ?? label.nextElementSibling)?.textContent ?? '';
     cleanup();
     return montant;
 }

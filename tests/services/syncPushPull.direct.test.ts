@@ -327,7 +327,7 @@ describe('[SYNC-PUSH-PULL-NO-UNIT-TEST] pullNow — chemins d\'échec du blob ch
 
     it('contrôle : bundle VALIDE → restauré (le vrai déchiffrement, seule la frontière est simulée)', async () => {
         setPassphrase('passphrase-de-test-12');
-        const bundle = { payload: { state: { transactions: [{ id: 'tx-drive', amount: 5 }] }, version: 7 }, apiKeys: { anthropic: '', finnhub: '' } };
+        const bundle = { payload: { state: { transactions: [{ id: 'tx-drive', amount: 5 }] }, version: 7 }, apiKeys: { gemini: '', anthropic: '', finnhub: '' } };
         readSyncFileMock.mockResolvedValue(drive({ encPayload: await encryptBackup(bundle, 'passphrase-de-test-12') }) as never);
         await pullNow();
         expect(localStorage.getItem(STORE_KEY)).toContain('tx-drive');

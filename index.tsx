@@ -33,13 +33,6 @@ installerDiagnosticConsole(window, () => {
   return { assets, fxRates: fxRates as Record<string, number> | undefined };
 });
 
-// [LIA-1253][#1267] LIA, présente tout le temps : montée par `demarrerLia` HORS du rendu (document.body), donc ni le
-// Suspense, ni l'ErrorBoundary, ni le LoginGate ne la retirent. Import dynamique pour la garder hors du chunk d'entrée
-// (le paquet est lourd) ; lancé ici, au chargement du module, sans attendre React. Une panne est écrite, jamais avalée.
-import('./services/lia/demarrage')
-  .then((m) => m.demarrerLiaApp())
-  .catch((e: unknown) => console.error('[LIA] démarrage impossible', e));
-
 // [S5-REFONTE-PERF] Fin du « premier affichage » (voir `.demarrage` dans index.css) : au premier
 // geste — la navigation qui suit retrouve ses fondus — ou après 5 s. Phase de CAPTURE : la classe
 // tombe avant que React traite le clic, donc l'écran qu'il monte s'anime normalement.

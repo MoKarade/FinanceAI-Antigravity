@@ -28,7 +28,7 @@ import { render, fireEvent, within } from '@testing-library/react';
 import { Transactions } from '../../components/Transactions';
 import type { Transaction } from '../../types';
 
-vi.mock('../../services/claude', () => ({ categorizeBatch: vi.fn() }));
+vi.mock('../../services/gemini', () => ({ categorizeBatch: vi.fn() }));
 vi.mock('../../components/ui/Toast', () => ({ showToast: vi.fn() }));
 
 function makeTx(id: number, payee: string): Transaction {

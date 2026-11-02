@@ -82,13 +82,11 @@ describe('[VEHICULE-BAIL] le script de déploiement câble ce que le serveur lit
       'FINANCEAI_OAUTH_SIGNING_KEY',
       'FINANCEAI_ACCESS_KEY',
       'FINANCEAI_PUBLIC_URL',
-      'FINANCEAI_HUB_TOKEN',
-      'FINANCEAI_VEHICULE_TOKEN',
       'FINTABLE_TOKEN',
     ]) {
       expect(lues, `mcp/http.ts devrait lire ${attendue}`).toContain(attendue);
     }
-    expect(lues.length).toBeGreaterThanOrEqual(10);
+    expect(lues.length).toBeGreaterThanOrEqual(8);
   });
 
   it('chaque variable lue est nommée dans mcp/deploy.sh (ou exceptée avec sa raison)', () => {
@@ -108,15 +106,14 @@ describe('[VEHICULE-BAIL] le script de déploiement câble ce que le serveur lit
     }
   });
 
-  // Le câblage du bail passe par une CONDITION sur le secret : sans elle, le script
-  // monterait une référence à un secret inexistant et `gcloud run deploy` échouerait pour
-  // tout le monde, y compris ceux qui n'ont pas de véhicule enregistré.
-  it('le bail du véhicule est monté CONDITIONNELLEMENT, comme les autres routes optionnelles', () => {
+  // Le câblage de /refresh passe par une CONDITION sur le secret : sans elle, le script
+  // monterait une référence à un secret inexistant et `gcloud run deploy` échouerait.
+  it('la route /refresh est montée CONDITIONNELLEMENT, comme les autres routes optionnelles', () => {
     expect(SOURCE_DEPLOY).toMatch(
-      /gcloud secrets describe financeai-vehicule-token[\s\S]*?FINANCEAI_VEHICULE_TOKEN=financeai-vehicule-token:latest/,
+      /gcloud secrets describe financeai-refresh-secret[\s\S]*?FINANCEAI_REFRESH_SECRET=financeai-refresh-secret:latest/,
     );
     // Et l'absence se DIT, plutôt que de laisser croire que la route existe.
-    expect(SOURCE_DEPLOY).toContain('GET /vehicule/bail désactivé');
+    expect(SOURCE_DEPLOY).toContain('POST /refresh désactivé');
   });
 });
 

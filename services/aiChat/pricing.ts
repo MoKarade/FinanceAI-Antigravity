@@ -1,24 +1,21 @@
 // services/aiChat/pricing.ts
 //
-// [B4-CHAT-COST] Coût API RÉEL du chat : tokens d'usage (response.usage du SDK Anthropic) × tarif
+// [B4-CHAT-COST] Coût API RÉEL du chat : tokens d'usage (usageMetadata de l'API Google Gemini) × tarif
 // public du modèle. Module PUR et léger (boot-safe). Le coût est calculé en USD (les tarifs
-// Anthropic sont en USD) et converti en CAD À L'AFFICHAGE via fxRates.USD (source unique FX de
+// Google Gemini sont en USD) et converti en CAD À L'AFFICHAGE via fxRates.USD (source unique FX de
 // l'app) — jamais de taux en dur.
 //
-// Tarifs : https://platform.claude.com/docs/en/about-claude/pricing (relevés le 2026-10-28).
+// Tarifs Google Gemini API : https://ai.google.dev/gemini-api/docs/pricing (relevés le 2026-10-28).
 // ⚠️ Pas des constantes fiscales (FISCAL_REFERENCE hors périmètre) mais bien du
-// money-critical : datées + sourcées, à rafraîchir si Anthropic change ses prix.
-//  - cache READ  = 0,1 × le tarif input (Haiku 5.5), 0,05 × chez Sonnet 5.5 et Opus 5.5 (champ `lectureCache`) ;
-//  - cache WRITE = 1,25 × le tarif input (TTL 5 min — le seul utilisé par le chat, cf. l'ancien chat (retiré)
-//    `cache_control: ephemeral` sur les pièces jointes ; le TTL 1h/2× n'est pas utilisé ici).
+// money-critical : datées + sourcées, à rafraîchir si Google change ses prix.
 
-/** Tokens consommés, champs du SDK agrégés sur tous les tours d'une boucle agentique. */
+/** Tokens consommés, champs d'usage agrégés sur tous les tours d'une boucle agentique. */
 export interface AiTokenUsage {
     inputTokens: number;
     outputTokens: number;
     /** cache_creation_input_tokens (écriture de cache, facturée 1,25× l'input). */
     cacheWriteTokens: number;
-    /** cache_read_input_tokens (lecture de cache, facturée 0,1× l'input). */
+    /** cache_read_input_tokens (lecture de cache, facturée au facteur `lectureCache`). */
     cacheReadTokens: number;
 }
 
@@ -40,26 +37,15 @@ export function addUsage(a: AiTokenUsage, b: AiTokenUsage): AiTokenUsage {
  * le disait pas.
  *
  * Un id **daté** (de la forme `…-AAAAMMJJ`) désigne un instantané figé : son tarif ne peut pas
- * changer sous nos pieds. Un id **flottant** (`claude-sonnet-5-5`) est un alias qu'Anthropic peut
+ * changer sous nos pieds. Un id **flottant** (`gemini-2.5-flash`) est un alias que le fournisseur peut
  * repointer vers un autre instantané, avec un autre tarif — et rien dans l'app ne le remarquerait.
  * Le coût affiché à l'écran deviendrait faux **en silence**, ce qui est exactement le mode de panne
  * que `no-fake-data` vise : un chiffre plausible vaut moins qu'une absence honnête.
- *
- * Le ticket proposait « épingler des instantanés datés partout ». Ce n'est PAS faisable ici :
- * inventer un identifiant d'instantané casserait tous les appels, et l'app n'a aucun moyen de le
- * découvrir seule. C'est la seconde branche du ticket qui est livrée — **dater la vérification** et
- * rendre la distinction EXPLICITE, pour qu'un alias non revérifié soit visible plutôt que supposé
- * à jour.
- *
- * ⚠️ Volontairement PAS de test qui lit l'horloge pour crier « tarif périmé » : un contrôle qui
- * rougit à une date sans qu'aucune ligne n'ait changé est une bombe (leçon du dépôt sur les tests
- * qui figent une année). C'est un INVENTAIRE qui porte la dette — et il doit décroître : un id daté
- * n'a rien à y faire, et le test le refuse.
  */
 export interface TarifModele {
     readonly input: number;
     readonly output: number;
-    /** Date du relevé sur docs.claude.com/pricing — ce que l'app peut honnêtement affirmer. */
+    /** Date du relevé sur ai.google.dev/pricing — ce que l'app peut honnêtement affirmer. */
     readonly releveLe: string;
     /**
      * `true` = l'id est un ALIAS que le fournisseur peut repointer. Le tarif ci-dessus était juste
@@ -70,12 +56,13 @@ export interface TarifModele {
     readonly lectureCache?: number;
 }
 
-/** USD par MILLION de tokens, par id de modèle COMPLET (docs.claude.com/pricing).
+/** USD par MILLION de tokens, par id de modèle COMPLET (ai.google.dev/gemini-api/docs/pricing).
  *  ⚠️ Doit couvrir TOUS les ids de MODEL_IDS (services/aiChat/models) — parité verrouillée par test. */
 export const PRICING_USD_PER_MTOK: Record<string, TarifModele> = {
-    // Famille 5.5 : aucun instantané daté n'existe (l'id sans date est l'id officiel) → traitée comme
-    // un alias, cf. `ALIAS_A_EPINGLER`. Haiku 5.5 : grille des prompts de 100 000 jetons ou moins
-    // (au-delà : 0,50 $ / 2,50 $ ; aucun appel de l'app n'approche cette taille).
+    'gemini-2.5-flash-lite': { input: 0.1, output: 0.4, releveLe: '2026-10-28', aliasFlottant: true },
+    'gemini-2.5-flash': { input: 0.3, output: 2.5, releveLe: '2026-10-28', aliasFlottant: true, lectureCache: 0.05 },
+    'gemini-2.5-pro': { input: 1.25, output: 10, releveLe: '2026-10-28', aliasFlottant: true, lectureCache: 0.05 },
+    // Entrées de rétrocompatibilité pour les historiques de conversation antérieurs à la migration Gemini :
     'claude-haiku-5-5': { input: 0.1, output: 0.5, releveLe: '2026-10-28', aliasFlottant: true },
     'claude-sonnet-5-5': { input: 2, output: 10, releveLe: '2026-10-28', aliasFlottant: true, lectureCache: 0.05 },
     'claude-opus-5-5': { input: 4, output: 20, releveLe: '2026-10-28', aliasFlottant: true, lectureCache: 0.05 },
@@ -90,19 +77,34 @@ export const PRICING_USD_PER_MTOK: Record<string, TarifModele> = {
  */
 export const ALIAS_A_EPINGLER: ReadonlyArray<{ id: string; raison: string }> = [
     {
+        id: 'gemini-2.5-flash-lite',
+        raison: "identifiant canonique stable sans suffixe AAAAMMJJ publié par Google Gemini ; "
+            + "traité comme alias flottant pour que toute révision tarifaire soit re-vérifiée.",
+    },
+    {
+        id: 'gemini-2.5-flash',
+        raison: "identifiant canonique stable sans suffixe AAAAMMJJ publié par Google Gemini ; "
+            + "traité comme alias flottant pour que toute révision tarifaire soit re-vérifiée.",
+    },
+    {
+        id: 'gemini-2.5-pro',
+        raison: "identifiant canonique stable sans suffixe AAAAMMJJ publié par Google Gemini ; "
+            + "traité comme alias flottant pour que toute révision tarifaire soit re-vérifiée.",
+    },
+    {
         id: 'claude-haiku-5-5',
-        raison: "aucun identifiant d'instantané daté connu de l'app pour ce modèle ; en inventer un "
-            + "casserait tous les appels du chat, ce qui est bien pire qu'un tarif qui dérive.",
+        raison: "entrée de rétrocompatibilité pour les historiques de conversation antérieurs ; "
+            + "conservée comme alias flottant tant qu'elle figure dans la table des tarifs.",
     },
     {
         id: 'claude-sonnet-5-5',
-        raison: "même raison que Haiku : l'id sans date est le seul que publie Anthropic. À épingler "
-            + "dès qu'un instantané daté existe — c'est l'ajout d'un suffixe, pas un changement de code.",
+        raison: "entrée de rétrocompatibilité pour les historiques de conversation antérieurs ; "
+            + "conservée comme alias flottant tant qu'elle figure dans la table des tarifs.",
     },
     {
         id: 'claude-opus-5-5',
-        raison: "même raison que Haiku : l'id sans date est le seul que publie Anthropic. À épingler "
-            + "dès qu'un instantané daté existe — c'est l'ajout d'un suffixe, pas un changement de code.",
+        raison: "entrée de rétrocompatibilité pour les historiques de conversation antérieurs ; "
+            + "conservée comme alias flottant tant qu'elle figure dans la table des tarifs.",
     },
 ];
 
@@ -115,8 +117,8 @@ export function provenanceTarif(modelId: string, table: Readonly<Record<string, 
     const t = table[modelId];
     if (!t) return null;
     return t.aliasFlottant
-        ? `Tarif Anthropic relevé le ${t.releveLe}. L'identifiant « ${modelId} » est un alias : le fournisseur peut l'avoir repointé depuis, le coût est donc un ordre de grandeur.`
-        : `Tarif Anthropic relevé le ${t.releveLe} pour cette version figée du modèle.`;
+        ? `Tarif Google Gemini relevé le ${t.releveLe}. L'identifiant « ${modelId} » est un alias : le fournisseur peut l'avoir repointé depuis, le coût est donc un ordre de grandeur.`
+        : `Tarif Google Gemini relevé le ${t.releveLe} pour cette version figée du modèle.`;
 }
 
 const CACHE_READ_FACTOR = 0.1;

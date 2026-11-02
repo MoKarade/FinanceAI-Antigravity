@@ -20,7 +20,7 @@ import { render, fireEvent, screen } from '@testing-library/react';
 import { Transactions } from '../../components/Transactions';
 import type { Transaction } from '../../types';
 
-vi.mock('../../services/claude', () => ({ categorizeBatch: vi.fn() }));
+vi.mock('../../services/gemini', () => ({ categorizeBatch: vi.fn() }));
 vi.mock('../../components/ui/Toast', () => ({ showToast: vi.fn() }));
 
 const TX: Transaction = { id: 1, date: '2026-01-01', payee: 'Alpha', amount: -100, category: 'Autre', status: 'processed' };

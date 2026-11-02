@@ -4,6 +4,7 @@ import { formatCAD, formatCompactCAD, formatPercent } from '../../utils/format';
 import { PrivateAmount } from '../ui/PrivateAmount';
 import { Icon } from '../ui/Icon';
 import { useAnimatedNumber } from '../../hooks/useAnimatedNumber';
+import { useFinanceStore } from '../../store/useFinanceStore';
 import { couleurSerie } from './seriesConfig';
 
 interface GoogleFinanceHeroProps {
@@ -55,6 +56,7 @@ export const GoogleFinanceHero: React.FC<GoogleFinanceHeroProps> = ({
     onResetZoom,
     onOpenConnections,
 }) => {
+    const isPrivacyMode = useFinanceStore((s) => s.isPrivacyMode);
     const pointActif = jourAffiche ?? pointAncre;
     const valeurActive = estFini(pointActif?.NetWorth) ? pointActif.NetWorth : null;
     const valeurAncre = estFini(pointAncre?.NetWorth) ? pointAncre.NetWorth : null;
@@ -151,7 +153,7 @@ export const GoogleFinanceHero: React.FC<GoogleFinanceHeroProps> = ({
                             className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-surfaceHighlight text-ink-100 border border-bordure hover:border-bordure-champ transition-colors touch-target"
                             title="Libérer le jour figé et reprendre la lecture au survol"
                         >
-                            <span>📌</span>
+                            <Icon name="lock" size={12} aria-hidden="true" />
                             <span className="text-ink-300 underline">Libérer</span>
                         </button>
                     )}
@@ -203,7 +205,7 @@ export const GoogleFinanceHero: React.FC<GoogleFinanceHeroProps> = ({
                         {repartition.map((s) => (
                             <div
                                 key={s.cle}
-                                style={{ width: `${s.pct}%`, backgroundColor: s.color }}
+                                style={{ width: `${isPrivacyMode ? 20 : s.pct}%`, backgroundColor: s.color }}
                                 className="h-full transition-all duration-200 first:rounded-l-full last:rounded-r-full"
                                 title={s.label}
                             />

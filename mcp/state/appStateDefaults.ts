@@ -40,7 +40,7 @@ export function buildDefaultAppState(): AppState {
         retirementGoal: { targetAge: 65, targetMonthlyIncome: 4000, governmentPension: 1200 },
         financialGoals: [],
         initialBalances: {},
-        apiKeys: { anthropic: '', finnhub: '' },
+        apiKeys: { gemini: '', finnhub: '' },
         fxRates: DEFAULT_FX_RATES,
         fxRatesEstimated: true, // [FX-FALLBACK-SILENCIEUX] DEFAULT_FX_RATES est un repli en dur.
         // ⚠️⚠️ [FX-TAUX-JAMAIS-ARRIVES] `fxRatesSource` est DÉLIBÉRÉMENT ABSENT de l'état initial.

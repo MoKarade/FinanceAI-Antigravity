@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Transactions } from '../../components/Transactions';
 
-vi.mock('../../services/claude', () => ({ categorizeBatch: vi.fn() }));
+vi.mock('../../services/gemini', () => ({ categorizeBatch: vi.fn() }));
 vi.mock('../../components/ui/Toast', () => ({ showToast: vi.fn() }));
 
 beforeEach(() => {

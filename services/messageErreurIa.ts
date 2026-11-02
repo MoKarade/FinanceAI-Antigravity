@@ -1,8 +1,8 @@
 // services/messageErreurIa.ts
 //
-// [AI-BUDGETMODAL-ERROR-COLLAPSE] Ce que l'app DIT quand un appel à Claude échoue.
+// [AI-BUDGETMODAL-ERROR-COLLAPSE] Ce que l'app DIT quand un appel à Google Gemini échoue.
 //
-// ⚠️ LE DÉFAUT : quatre écrans affichaient « Vérifie ta clé Anthropic » quelle que soit la cause.
+// ⚠️ LE DÉFAUT : quatre écrans affichaient « Vérifie ta clé Google Gemini » quelle que soit la cause.
 // Une coupure de réseau, un quota atteint, un service indisponible et une clé réellement refusée
 // donnaient la même phrase — celle qui n'est vraie que dans le dernier cas. C'est un message de
 // DIAGNOSTIC : il envoie l'utilisateur regarder le mauvais endroit, et une clé parfaitement valide
@@ -12,13 +12,13 @@
 // ⚠️ Deux des quatre écrans écrivaient `catch { }` — sans lier l'erreur. Ils ne pouvaient donc pas
 // dire autre chose, quoi qu'on écrive ici : la première moitié du correctif est de CAPTURER.
 //
-// ⚠️ CE MODULE NE RE-CLASSIFIE RIEN. `services/claude.ts` porte déjà `httpStatusOf` et
+// ⚠️ CE MODULE NE RE-CLASSIFIE RIEN. `services/gemini.ts` porte déjà `httpStatusOf` et
 // `classifyCategorizeError` — mais ses trois catégories répondent à « faut-il réessayer ce
 // chunk ? », pas à « que dire à quelqu'un ». `retryable` fusionne le réseau et le 429, qui ne se
 // racontent pas pareil ; `fatal` ne dit rien d'utile à un humain. On dérive donc du MÊME statut
 // HTTP, pas d'une seconde lecture de l'erreur, et les deux fonctions restent distinctes parce
 // qu'elles répondent à deux questions distinctes.
-import { httpStatusOf, VisionTronqueeError, VisionReponseInvalideError } from './claude';
+import { httpStatusOf, VisionTronqueeError, VisionReponseInvalideError } from './gemini';
 
 /** [AI-PRIVACY-CONSEILS-NON-GATES] (décision Marc 2026-09-05 : MASQUER — audit 2026-09-07) Le seul
  *  texte du refus des trois cartes de conseil (couple, immobilier, rééquilibrage) en mode discret :
@@ -30,29 +30,28 @@ export const MESSAGE_IA_MODE_DISCRET =
 type CauseErreurIa =
     | 'cle-absente'      // aucune clé configurée : l'appel n'a même pas été tenté
     | 'cle-refusee'      // 401 / 403 : la clé existe et le service la rejette
-    | 'session-access'   // 401 du MUR (session du hub) : la session de connexion a expiré, la clé n'y est pour rien
+    | 'session-access'   // 401 de session expirée : la session de connexion a expiré, la clé n'y est pour rien
     | 'quota'            // 429 : trop de requêtes, ou crédit épuisé
     | 'reseau'           // aucun statut HTTP : coupure, DNS, timeout client
-    | 'service'          // 5xx : c'est Anthropic qui est en panne, pas nous
+    | 'service'          // 5xx : c'est Google Gemini qui est en panne, pas nous
     | 'requete'          // autre 4xx : la requête elle-même est refusée
     | 'tronque'          // stop_reason max_tokens : le document a été LU puis COUPÉ (Vision)
     | 'reponse-invalide' // réponse reçue (200) mais inexploitable : JSON cassé, refus du classificateur
     | 'annule';          // AbortError : l'utilisateur a fermé — ce n'est PAS une erreur
 
 /**
- * [SESSION-HUB] Texte porté par le 401 du relais quand la session du hub manque ou expire (api/_lib/accesHub.ts `messageRefus`, relais, proxys).
- * Sans cette distinction, une session expirée s'affichait « Clé Anthropic refusée » et poussait à supprimer une clé valide.
- * Un test verrouille que le relais émet bien ce marqueur.
+ * [SESSION-AUTH] Texte porté par un 401 quand la session d'authentification manque ou expire.
+ * Sans cette distinction, une session expirée s'affichait « Clé Google Gemini refusée » et poussait à supprimer une clé valide.
  */
 export const MARQUEUR_SESSION_ACCESS = 'session du hub';
 
 const MESSAGES: Record<CauseErreurIa, string> = {
-    'cle-absente': 'Aucune clé Anthropic configurée. Ajoute-la dans Configuration pour utiliser l\'IA.',
-    'cle-refusee': 'Clé Anthropic refusée par le service. Vérifie-la dans Configuration.',
-    'session-access': 'Ta session de connexion au hub a expiré. Recharge la page pour te reconnecter — ta clé Anthropic n\'est pas en cause.',
-    quota: 'Quota Anthropic atteint (trop de requêtes ou crédit épuisé). Réessaie dans quelques minutes.',
+    'cle-absente': 'Aucune clé Google Gemini configurée. Ajoute-la dans Configuration pour utiliser l\'IA.',
+    'cle-refusee': 'Clé Google Gemini refusée par le service. Vérifie-la dans Configuration.',
+    'session-access': 'Ta session de connexion a expiré. Recharge la page pour te reconnecter — ta clé Google Gemini n\'est pas en cause.',
+    quota: 'Quota Google Gemini atteint (trop de requêtes ou crédit épuisé). Réessaie dans quelques minutes.',
     reseau: 'Connexion au service interrompue. Vérifie ton accès Internet, puis réessaie.',
-    service: 'Le service Anthropic est momentanément indisponible. Réessaie dans quelques minutes.',
+    service: 'Le service Google Gemini est momentanément indisponible. Réessaie dans quelques minutes.',
     requete: 'Le service a refusé la requête. Rien à corriger de ton côté — c\'est un défaut de l\'app.',
     tronque: 'Le document est trop long pour être lu en une seule fois : il a été coupé avant la fin. Réimporte-le en plusieurs parties (une page ou un mois à la fois).',
     'reponse-invalide': 'Le service a bien reçu le document mais sa réponse est inexploitable (format inattendu ou refus). Réessaie ; si ça persiste, c\'est un défaut de l\'app, pas de ta connexion.',

@@ -10,7 +10,6 @@ import {
 import firebaseConfig from '../../firebase-applet-config.json';
 
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-export { firebaseConfig };
 
 function createFirestoreInstance(): Firestore {
     try {
@@ -28,7 +27,6 @@ export const db = createFirestoreInstance();
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('https://www.googleapis.com/auth/drive.appdata');
-googleProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
 googleProvider.addScope('https://www.googleapis.com/auth/userinfo.email');
 
 export enum OperationType {

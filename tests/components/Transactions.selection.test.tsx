@@ -17,9 +17,9 @@ import { render, fireEvent, within } from '@testing-library/react';
 import { Transactions } from '../../components/Transactions';
 import type { Transaction } from '../../types';
 
-// services/claude : on ne déclenche jamais l'IA dans ces tests, mais l'import
+// services/gemini : on ne déclenche jamais l'IA dans ces tests, mais l'import
 // doit être mocké (pas d'appel réseau au montage).
-vi.mock('../../services/claude', () => ({
+vi.mock('../../services/gemini', () => ({
     categorizeBatch: vi.fn(),
 }));
 

@@ -46,7 +46,7 @@ export interface SyncEnvelope {
      * LEGACY (anciens blobs) : clés API EN CLAIR. Plus jamais écrit depuis 2026-05-29 (remplacé par
      * `apiKeysEnc`). Encore LU en rétro-compat — un ancien blob sera ré-écrit chiffré au prochain push.
      */
-    apiKeys?: { anthropic: string; finnhub: string };
+    apiKeys?: { gemini?: string; anthropic?: string; finnhub: string };
     /**
      * Clés API CHIFFRÉES (AES-GCM, clé dérivée du `sub` Google — cf keyCipher). Format actuel.
      * Sort les clés du clair dans Drive (C1, 2026-05-29). Absent si aucune clé / crypto indispo.
@@ -91,7 +91,7 @@ export interface DecideOnLoadInput {
 }
 
 /** Clés API synchronisées (jamais persistées en clair dans Drive). [ARCH-SYNC-SPLIT] partagé push/pull/snapshot. */
-export type ApiKeys = { anthropic: string; finnhub: string };
+export type ApiKeys = { gemini: string; anthropic?: string; finnhub: string };
 
 /** Compte succinct d'un payload pour l'UI de conflit (aide l'utilisateur à choisir sans se tromper). */
 export interface ConflictSideCounts {

@@ -135,7 +135,7 @@ export async function pullNow(): Promise<void> {
         // Payload + clés EFFECTIFS à appliquer. Pour un blob clair (`enc:false`), ce sont directement
         // ceux de l'enveloppe ; pour un blob chiffré (`enc:true`), ils sortent du déchiffrement.
         let effectivePayload: unknown = drive.payload;
-        let restoredKeys: ApiKeys = { anthropic: '', finnhub: '' };
+        let restoredKeys: ApiKeys = { gemini: '', finnhub: '' };
         // [SEC-AUDIT-SYNC-LEGACY-CLEARTEXT] Le blob lu portait-il des clés EN CLAIR ?
         let clesEnClairSurDrive = false;
 
@@ -172,7 +172,11 @@ export async function pullNow(): Promise<void> {
             }
             effectivePayload = bundle.payload ?? null;
             const k = bundle.apiKeys;
-            restoredKeys = { anthropic: k?.anthropic ?? '', finnhub: k?.finnhub ?? '' };
+            restoredKeys = {
+                gemini: k?.gemini || k?.anthropic || '',
+                ...(k?.anthropic !== undefined ? { anthropic: k.anthropic } : {}),
+                finnhub: k?.finnhub ?? '',
+            };
         } else {
             // Chemin EN CLAIR historique (INCHANGÉ). Clés API : nouveau format CHIFFRÉ (apiKeysEnc) →
             // déchiffré via le sub ; sinon ancien blob EN CLAIR (rétro-compat — sera ré-écrit au prochain
@@ -195,7 +199,11 @@ export async function pullNow(): Promise<void> {
                 // [SEC-AUDIT-SYNC-LEGACY-CLEARTEXT] Blob d'AVANT le chiffrement des clés (2026-05-29) :
                 // les clés y sont EN CLAIR. On les lit (rétro-compat) et on retient qu'il faudra
                 // ré-écrire le blob chiffré — voir plus bas.
-                restoredKeys = drive.apiKeys;
+                restoredKeys = {
+                    gemini: drive.apiKeys.gemini || drive.apiKeys.anthropic || '',
+                    ...(drive.apiKeys.anthropic !== undefined ? { anthropic: drive.apiKeys.anthropic } : {}),
+                    finnhub: drive.apiKeys.finnhub ?? '',
+                };
                 clesEnClairSurDrive = true;
             }
         }

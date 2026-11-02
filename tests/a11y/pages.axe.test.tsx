@@ -85,7 +85,7 @@ const emptyState: AppState = {
     retirementGoal: { targetAge: 65, targetMonthlyIncome: 4000, governmentPension: 1200 },
     financialGoals: [],
     initialBalances: {},
-    apiKeys: { anthropic: '', finnhub: '' },
+    apiKeys: { gemini: '', anthropic: '', finnhub: '' },
     fxRates: { USD: 1.35, EUR: 1.45, CAD: 1 },
     lastUpdate: Date.now(),
     categorizationRules: [],

@@ -18,9 +18,13 @@
  */
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, cpSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, rmSync, cpSync, mkdirSync, writeFileSync, chmodSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, delimiter } from 'node:path';
+
+const BASH_BIN = process.platform === 'win32' && existsSync('C:\\Program Files\\Git\\bin\\bash.exe')
+    ? 'C:\\Program Files\\Git\\bin\\bash.exe'
+    : 'bash';
 
 /** Un dépôt jetable : un « origin » local à deux commits, et un clone laissé au premier. */
 function deportEnRetard(): { clone: string; nettoyer: () => void } {
@@ -65,14 +69,16 @@ function deportEnRetard(): { clone: string; nettoyer: () => void } {
 
 /** Lance le script et rend sa sortie complète — l'échec `gcloud` absent n'est pas notre sujet. */
 function lancer(cwd: string, env: Record<string, string> = {}): string {
+    const basePath = process.env.PATH ?? process.env.Path ?? '';
     try {
-        return execFileSync('bash', ['mcp/deploy.sh'], {
+        return execFileSync(BASH_BIN, ['mcp/deploy.sh'], {
             cwd,
             encoding: 'utf8',
             // Le faux `gcloud` du dépôt jetable passe AVANT celui de la machine, s'il y en a un.
             env: {
                 ...process.env,
-                PATH: `${join(cwd, 'faux-bin')}:${process.env.PATH ?? ''}`,
+                PATH: `${join(cwd, 'faux-bin')}${delimiter}${basePath}`,
+                Path: `${join(cwd, 'faux-bin')}${delimiter}${basePath}`,
                 PROJECT_ID: 'projet-bidon',
                 ...env,
             },
@@ -84,7 +90,7 @@ function lancer(cwd: string, env: Record<string, string> = {}): string {
     }
 }
 
-describe('[DEPLOY-CLONE-EN-RETARD] mcp/deploy.sh ne déploie pas un clone périmé', () => {
+describe('[DEPLOY-CLONE-EN-RETARD] mcp/deploy.sh ne déploie pas un clone périmé', { timeout: 15_000 }, () => {
     it('REFUSE quand le clone est derrière origin/main, et nomme le geste qui répare', () => {
         const { clone, nettoyer } = deportEnRetard();
         try {

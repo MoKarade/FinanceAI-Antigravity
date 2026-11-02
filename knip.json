@@ -5,7 +5,6 @@
     "mcp/stdio.ts",
     "mcp/server.ts",
     "scripts/*.{ts,cjs}",
-    "middleware.ts",
     "public/sw.js",
     "api/**/*.ts",
     "vitest.mutation.config.ts"

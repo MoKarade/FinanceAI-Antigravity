@@ -248,6 +248,7 @@ export const DrillDownCompte: React.FC<DrillDownCompteProps> = ({
                                         className="gf-chart-minimap-thumb"
                                         style={{
                                             left: `${zoom.windowRatio.start * 100}%`,
+                                            // NOMBRE-NON-MONETAIRE : géométrie de la fenêtre de zoom
                                             width: `${Math.max(4, (zoom.windowRatio.end - zoom.windowRatio.start) * 100)}%`,
                                         }}
                                     />

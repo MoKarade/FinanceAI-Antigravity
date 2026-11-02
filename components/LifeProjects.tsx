@@ -142,6 +142,7 @@ export const LifeProjects: React.FC<LifeProjectsProps> = ({
                         <div className="mt-1.5 h-1.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex" aria-hidden="true">
                             <div
                                 className="h-full bg-repere"
+                                // NOMBRE-NON-MONETAIRE : BARRE-DECORATIVE accompagnant le budget sous PrivateAmount
                                 style={{ width: `${Math.round((tous.filter((p) => p.genre === 'voyage').reduce((s, p) => s + p.cout, 0) / Math.max(1, tous.reduce((s, p) => s + p.cout, 0))) * 100)}%` }}
                             />
                             <div className="h-full bg-alerte-texte" style={{ flex: 1 }} />

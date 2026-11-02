@@ -1,5 +1,5 @@
 import React from 'react';
-import { CHART_TOOLTIP_STYLE, GF_CROSSHAIR_CURSOR, GF_ACTIVE_DOT } from '../../utils/chartTooltip';
+import { GF_CROSSHAIR_CURSOR, GF_ACTIVE_DOT } from '../../utils/chartTooltip';
 import { Card } from '../ui/Card';
 import { RealEstateGoal } from '../../types';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';

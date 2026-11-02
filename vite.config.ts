@@ -1,68 +1,7 @@
 import path from 'path';
 import { execSync } from 'node:child_process';
-import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
-import { relayClaude, iaLocaleDepuisEnv } from './api/_lib/relay';
-
-// [P0-PROXY] Middleware dev : monte le relais BYOK (api/_lib/relay.ts, code Web-standard partagé
-// avec la fonction Edge Vercel) sous /api/claude en `npm run dev` — sans dépendre de `vercel dev`.
-// Corps de REQUÊTE bufferisé (petits JSON texte — Vision reste en direct, hors relais) ;
-// corps de RÉPONSE streamé chunk par chunk (préserve le SSE de chatStream).
-const claudeRelayDevPlugin = (env: Record<string, string>): Plugin => ({
-    name: 'financeai-claude-relay-dev',
-    configureServer(server) {
-        server.middlewares.use('/api/claude', (req, res) => {
-            void (async () => {
-                const chunks: Buffer[] = [];
-                for await (const c of req) chunks.push(c as Buffer);
-                const ctrl = new AbortController();
-                res.on('close', () => { if (!res.writableEnded) ctrl.abort(); });
-                res.on('error', () => { /* socket fermé par le client (abort mi-stream) — no-op voulu */ });
-                const headers = new Headers();
-                for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers.set(k, v);
-                const original = (req as unknown as { originalUrl?: string }).originalUrl ?? req.url ?? '';
-                const request = new Request(`http://localhost${original}`, {
-                    method: req.method,
-                    headers,
-                    body: chunks.length ? new Uint8Array(Buffer.concat(chunks)) : undefined,
-                    signal: ctrl.signal,
-                });
-                const response = await relayClaude(request, {
-                    // [SESSION-HUB] Dev local : pas de cookie du hub sur localhost → pas de contrôle de session. Ce plugin
-                    // (`configureServer`) ne tourne que sous `vite` / `vite preview` ; la fonction Vercel appelle
-                    // `relayClaude(request)` sans option (tests/api/accessConfigFichiers.test.ts le verrouille).
-                    access: null,
-                    env: (k) => env[k] || undefined,
-                    // [IA-LOCALE] Même lecture qu'en prod, depuis .env.local (IA_LOCALE_URL / _CLE / …).
-                    iaLocale: iaLocaleDepuisEnv((k) => env[k] || undefined),
-                });
-                res.statusCode = response.status;
-                response.headers.forEach((v, k) => res.setHeader(k, v));
-                if (response.body) {
-                    const reader = response.body.getReader();
-                    for (;;) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        res.write(value);
-                    }
-                }
-                res.end();
-            })().catch((e) => {
-                // DEV LOCAL uniquement : logguer la vraie cause est sans risque (la clé vit dans les
-                // headers de la requête, jamais dans l'objet d'erreur) et rend le relais diagnosticable.
-                console.error('[relais dev /api/claude]', e);
-                if (!res.headersSent) {
-                    res.statusCode = 502;
-                    res.setHeader('content-type', 'application/json');
-                    res.end(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'Relais dev indisponible.' } }));
-                } else {
-                    // Flux déjà entamé (SSE) : ne PAS injecter de JSON en queue de stream — terminer sec.
-                    res.end();
-                }
-            });
-        });
-    },
-});
 
 // G22-F2 — version AUTO (plus de bump manuel). CalVer `AAAA.M.J` dérivée de la date
 // de build : change à chaque déploiement, robuste même sur clone git shallow (Vercel)
@@ -138,7 +77,7 @@ export default defineConfig(({ mode }) => {
       preview: {
         proxy: yahooProxy,
       },
-      plugins: [react(), claudeRelayDevPlugin(env)],
+      plugins: [react()],
       define: {
         __APP_VERSION__: JSON.stringify(APP_VERSION),
         __GIT_SHA__: JSON.stringify(GIT_SHA),
@@ -179,28 +118,13 @@ export default defineConfig(({ mode }) => {
                 // demande : son groupe reste hors du démarrage (vérifié sur dist/index.html).
                 { name: 'recharts', test: /[\\/]node_modules[\\/](recharts|victory-vendor|d3-[^/]+|internmap)[\\/]/, priority: 2 },
                 // Tout ce que l'entrée importe STATIQUEMENT (donc chargé au démarrage quoi qu'il
-                // arrive) va dans UN chunk « noyau ». Sans ce groupe, chaque module partagé avec une
-                // page chargée à la demande devenait son propre petit chunk : ~15 requêtes au
-                // démarrage, que le Lighthouse mobile simule en HTTP/1.1 (6 connexions, allers-retours
-                // lents) — mesuré : FCP 3,0 → 2,6 s, score mobile 0,88 → 0,92 en les regroupant.
-                // ⚠️ Ne casse AUCUNE frontière asynchrone (le piège de [PERF-SDK-BOOT-PRELOAD]
-                // ci-dessous) : seul le graphe STATIQUE de l'entrée est concerné, un module atteint
-                // seulement par import() n'y est jamais.
+                // arrive) va dans UN chunk « noyau ».
                 {
                   name: (id, ctx) => (!id.includes('node_modules/') && grapheDemarrage((m) => ctx.getModuleInfo(m)).has(id) ? 'noyau' : null),
                   priority: 1,
                 },
               ],
             },
-            // [PERF-SDK-BOOT-PRELOAD] La règle `@anthropic-ai/ → 'ai-vendor'` est RETIRÉE : un
-            // chunk manuel dont le contenu n'est atteint QUE par import() devient EAGER (le chunk
-            // manuel casse la frontière asynchrone — l'entry l'importait STATIQUEMENT et le SDK
-            // ~126 Ko était modulepreload au BOOT, mesuré, alors qu'aucune chaîne statique source
-            // n'existe). Sans la règle, Rolldown range le SDK dans le chunk async naturel de
-            // claude.ts — téléchargé au PREMIER usage IA seulement (mesuré sur dist/index.html).
-            // Même retrait pour `jspdf → 'pdf-vendor'` : dès que la règle SDK est partie, le
-            // reshuffle a fait apparaître pdf-vendor dans le preload de boot (MÊME piège manualChunk
-            // eager) — jspdf n'est atteint que par import() (pdfReport), il n'a rien à faire au boot.
           },
         },
       },

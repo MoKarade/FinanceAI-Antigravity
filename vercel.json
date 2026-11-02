@@ -1,32 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':!*.md' ':!docs/**' ':!.github/**'",
-  "functions": {
-    "api/claude/**": {
-      "supportsCancellation": true
-    }
-  },
   "git": {
     "deploymentEnabled": {
       "**": false,
       "*": false,
-      "claude/*": false,
       "main": true
     }
   },
-  "redirects": [
-    {
-      "source": "/(.*)",
-      "has": [
-        {
-          "type": "host",
-          "value": "finance-ai(-mokarades-projects)?\\.vercel\\.app"
-        }
-      ],
-      "destination": "https://finance.hubperso.com/$1",
-      "permanent": false
-    }
-  ],
   "rewrites": [
     {
       "source": "/api/history/yahoo/:symbol",
@@ -51,7 +32,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://api.anthropic.com https://generativelanguage.googleapis.com https://finnhub.io https://api.coingecko.com https://www.bankofcanada.ca https://www.googleapis.com https://accounts.google.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; worker-src 'self' blob:; frame-src https://accounts.google.com https://*.firebaseapp.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none';"
+          "value": "default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://generativelanguage.googleapis.com https://finnhub.io https://api.coingecko.com https://www.bankofcanada.ca https://www.googleapis.com https://accounts.google.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; worker-src 'self' blob:; frame-src https://accounts.google.com https://*.firebaseapp.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none';"
         },
         {
           "key": "X-Frame-Options",

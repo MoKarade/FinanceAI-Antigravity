@@ -135,6 +135,7 @@ export const FuturePeriodSelector: React.FC<Props> = ({
                             aria-pressed={actif}
                             onClick={() => (actif ? zoom.reset() : zoom.showRange(0, targetEnd))}
                             className={`touch-target gf-chart-ctrl-btn focus-ring ${actif ? 'gf-chart-ctrl-btn-active' : ''}`}
+                            // NOMBRE-NON-MONETAIRE : DUREE-FIXE de bouton de zoom (5, 10, 20 ans)
                             title={`Zoomer sur ${y} ans`}
                         >
                             {y}A

@@ -76,7 +76,7 @@ function subTabForSection(section: string | null | undefined): SubTab | null {
 export const Settings: React.FC<SettingsProps> = ({
   apiKeys,
   setApiKeys,
-  config,
+  config: _config,
   setConfig: _setConfig,
   initialBalances,
   setInitialBalances,
@@ -102,7 +102,7 @@ export const Settings: React.FC<SettingsProps> = ({
   const { pct } = useCompletudeOnglets();
   const large = useViewportXl();
   const setActiveTab = useFinanceStore(s => s.setActiveTab);
-  const aFaire = (id: SubTab) => id === 'integrations' && !apiKeys.anthropic;
+  const aFaire = (id: SubTab) => id === 'integrations' && !(apiKeys.gemini || apiKeys.anthropic);
   const onglets = SUB_TABS.map((t) => ({
     ...t,
     badge: t.id === 'completude' ? `${pct} %` : aFaire(t.id) ? <span className="text-warning-400">à faire</span> : undefined,
@@ -121,7 +121,7 @@ export const Settings: React.FC<SettingsProps> = ({
             setInitialBalances={setInitialBalances}
             transactions={transactions}
             onImportData={onImportData}
-            apiKey={apiKeys.anthropic}
+            apiKey={apiKeys.gemini || apiKeys.anthropic || ''}
           />
         );
       case 'patrimoine':

@@ -20,7 +20,7 @@ const strategies = [
     { title: 'Transférer les crédits', description: 'Transférer les frais médicaux au conjoint au revenu le plus bas.', estimated_savings_cad: 420, confidence: 'low' as const },
 ];
 
-vi.mock('../../services/claude', () => ({
+vi.mock('../../services/gemini', () => ({
     getCoupleOptimizationStrategies: vi.fn(async () => strategies),
 }));
 

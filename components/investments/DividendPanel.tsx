@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { CHART_TOOLTIP_STYLE, CHART_TOOLTIP_ITEM_STYLE } from '../../utils/chartTooltip';
 import { Card } from '../ui/Card';
 import { Icon } from '../ui/Icon';
 import { PrivateAmount } from '../ui/PrivateAmount';

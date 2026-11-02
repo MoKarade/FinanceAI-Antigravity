@@ -12,7 +12,7 @@ import { hasMeaningfulData } from '../utils/onboarding';
 import { buildStarterState } from '../utils/starterData';
 import { computePresentTermes } from './portfolio';
 import { presentTermesOfGoal, monthsSince } from './projection/pastPurchaseInit';
-import { initSync, connectAndSync, pullNow } from './sync/syncOrchestrator';
+import { initSync, pullNow } from './sync/syncOrchestrator';
 import { isGoogleAuthConfigured, getCachedToken } from './googleDrive/gisAuth';
 import {
     findSyncFile,
@@ -23,8 +23,8 @@ import {
 import { STORAGE_KEYS } from '../utils/storageKeys';
 import firebaseAppletConfig from '../firebase-applet-config.json';
 
-export const PROTECTED_DOSSIER_STORAGE_KEY = 'financeai:protected_dossier:v1';
-export const GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY = 'financeai:google_drive_client_id:v1';
+const PROTECTED_DOSSIER_STORAGE_KEY = 'financeai:protected_dossier:v1';
+const GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY = 'financeai:google_drive_client_id:v1';
 
 /** Active automatiquement l'authentification Google Drive avec le client OAuth provisionné. */
 export function ensureDefaultGoogleAuthConfigured(): void {
@@ -53,7 +53,7 @@ export interface RecoverableSnapshotInfo {
 }
 
 /** Détecte si un état est lui-même un persona de test actif. */
-export function isTestPersonaState(candidate: Record<string, unknown>): boolean {
+function isTestPersonaState(candidate: Record<string, unknown>): boolean {
     if (candidate.isTestMode === true) return true;
     if (typeof candidate.activeTestPersonaId === 'string' && candidate.activeTestPersonaId.length > 0) {
         return true;
@@ -178,7 +178,7 @@ export function saveProtectedDossierSnapshot(
 }
 
 /** Lit l'empreinte protégée du dossier réel si elle existe (et qu'elle n'est pas le gabarit Alex). */
-export function loadProtectedDossierSnapshot(): { timestamp: number; state: Partial<AppState> } | null {
+function loadProtectedDossierSnapshot(): { timestamp: number; state: Partial<AppState> } | null {
     if (typeof localStorage === 'undefined') return null;
     try {
         const raw = localStorage.getItem(PROTECTED_DOSSIER_STORAGE_KEY);
@@ -198,7 +198,7 @@ export function loadProtectedDossierSnapshot(): { timestamp: number; state: Part
 }
 
 /** Extrait un `Partial<AppState>` depuis n'importe quel format d'enveloppe (`{ store: { state } }`, `{ payload: { state } }`, `{ state }`, ou racine). */
-export function extractStateFromAnyEnvelope(raw: unknown): Partial<AppState> | null {
+function extractStateFromAnyEnvelope(raw: unknown): Partial<AppState> | null {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
     const obj = raw as Record<string, unknown>;
     if (obj.store && typeof obj.store === 'object' && obj.store !== null) {
@@ -360,7 +360,7 @@ export async function listRecoverableSnapshots(): Promise<RecoverableSnapshotInf
 }
 
 /** Applique un état restauré dans le store Zustand, met à jour localStorage et désactive tout mode test. */
-export function applyRecoveredState(candidate: Partial<AppState>): void {
+function applyRecoveredState(candidate: Partial<AppState>): void {
     const cleaned = cleanCandidateState(candidate);
     useFinanceStore.setState((prev) => ({
         ...prev,
@@ -382,7 +382,7 @@ export function restoreSpecificSnapshot(snapshot: RecoverableSnapshotInfo): void
 }
 
 /**
- * Fouille Google Drive (`appDataFolder` et fichiers de sauvegarde Drive) avec le jeton Google actif
+ * Fouille Google Drive (`appDataFolder`) avec le jeton Google actif
  * pour retrouver et restaurer le vrai dossier de l'utilisateur (hors gabarit Alex).
  */
 export async function chercherEtRestaurerDepuisGoogleDrive(): Promise<{
@@ -453,52 +453,7 @@ export async function chercherEtRestaurerDepuisGoogleDrive(): Promise<{
             }
         }
     } catch {
-        // Continuer vers l'espace Drive standard
-    }
-
-    // 3. Recherche d'une sauvegarde JSON dans le Google Drive de l'utilisateur (`spaces=drive`)
-    if (typeof fetch !== 'undefined') {
-        try {
-            const params = new URLSearchParams({
-                spaces: 'drive',
-                q: "trashed = false and (name contains 'financeai' or name contains 'backup')",
-                fields: 'files(id,name,modifiedTime)',
-                orderBy: 'modifiedTime desc',
-                pageSize: '15',
-            });
-            const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (res.ok) {
-                const data = (await res.json()) as {
-                    files?: Array<{ id: string; name: string; modifiedTime: string }>;
-                };
-                for (const file of data.files ?? []) {
-                    if (!file.name.endsWith('.json')) continue;
-                    try {
-                        const rawContent = await readAppDataFile<unknown>(token, file.id);
-                        const candidate = extractStateFromAnyEnvelope(rawContent);
-                        if (
-                            candidate &&
-                            !isTestPersonaState(candidate as Record<string, unknown>) &&
-                            hasMeaningfulData(candidate) &&
-                            !isStarterTemplateState(candidate)
-                        ) {
-                            applyRecoveredState(candidate);
-                            return {
-                                restored: true,
-                                netWorth: computeCandidateNetWorth(useFinanceStore.getState()),
-                                sourceLabel: `Google Drive (${file.name})`,
-                            };
-                        }
-                    } catch {
-                        // Continuer
-                    }
-                }
-            }
-        } catch {
-            // Scope drive.readonly non accordé ou hors-ligne
-        }
+        // appDataFolder inaccessible ou hors-ligne
     }
 
     return null;
@@ -589,7 +544,7 @@ export async function recoverUser230kData(force = false): Promise<{
         };
     }
 
-    if (!hasMeaningfulData(current)) {
+    if (force && !hasMeaningfulData(current)) {
         const starter = buildStarterState();
         applyRecoveredState(starter);
         return {
@@ -607,17 +562,4 @@ export async function recoverUser230kData(force = false): Promise<{
         netWorth: computeCandidateNetWorth(current),
         sourceLabel: 'Dossier actif',
     };
-}
-
-/** Active et connecte Google Drive avec un identifiant Client OAuth Google. */
-export async function configureAndConnectGoogleDrive(clientId: string): Promise<void> {
-    const cleanId = clientId.trim();
-    if (!cleanId) return;
-    try {
-        localStorage.setItem(GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY, cleanId);
-    } catch {
-        // Ignorer si localStorage indisponible
-    }
-    initSync(cleanId);
-    await connectAndSync();
 }

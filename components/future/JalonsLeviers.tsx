@@ -84,6 +84,7 @@ export const TableJalons: React.FC<{ jalons: JalonProjection[]; etroit: boolean 
                                     <span className="inline-flex items-center gap-1.5 text-tiny font-mono text-ink-300 bg-surface/60 px-2 py-0.5 rounded-full border border-bordure">
                                         <span>{j.annee}</span>
                                         <span>·</span>
+                                        {/* MONTANT-MASQUE-AILLEURS : j.age passé sous PrivateAmount par l'appelant */}
                                         <span>{j.age} ans</span>
                                     </span>
                                     <span className={`font-mono text-sm font-bold whitespace-nowrap ${j.ton === 'fire' ? 'text-warning-400' : 'text-ink-50'}`}>

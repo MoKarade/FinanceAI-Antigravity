@@ -14,7 +14,8 @@
 import { encryptJson, decryptJson } from '../secureKeyStore';
 
 interface ApiKeysPlain {
-    anthropic: string;
+    gemini: string;
+    anthropic?: string;
     finnhub: string;
 }
 
@@ -66,7 +67,11 @@ export async function decryptApiKeys(blob: string, sub: string): Promise<ApiKeys
         try {
             const key = await deriveKeyFromSub(sub, iterations);
             const out = await decryptJson<Partial<ApiKeysPlain>>(key, blob);
-            return { anthropic: out?.anthropic ?? '', finnhub: out?.finnhub ?? '' };
+            return {
+                gemini: out?.gemini || out?.anthropic || '',
+                ...(out?.anthropic !== undefined ? { anthropic: out.anthropic } : {}),
+                finnhub: out?.finnhub ?? '',
+            };
         } catch {
             // Mauvais paramètre d'itérations (blob legacy) → on tente le suivant. NON avalé : si les
             // DEUX échouent, on lève ci-dessous (pas de silence).

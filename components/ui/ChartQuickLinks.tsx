@@ -4,7 +4,7 @@ import { Tab } from '../../types';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { prefetchTab } from '../../utils/tabPrefetch';
 
-export interface ChartQuickLinkItem {
+interface ChartQuickLinkItem {
     label: string;
     tab: Tab;
     section?: string;
@@ -68,5 +68,3 @@ export const ChartQuickLinks: React.FC<ChartQuickLinksProps> = ({
         </nav>
     );
 };
-
-export default ChartQuickLinks;

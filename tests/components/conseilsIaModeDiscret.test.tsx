@@ -3,7 +3,7 @@
 // [AI-PRIVACY-CONSEILS-NON-GATES] (audit 2026-09-07) Décision Marc 2026-09-05 : MASQUER — « en mode
 // discret, les montants ne partent pas non plus vers l'assistant ». Appliquée au chat, au diagnostic
 // Budget et aux cartes de signaux, elle ne l'était PAS aux trois cartes de CONSEIL, dont le prompt
-// porte des montants en clair (`promptCad` dans `services/claude.ts`) : brut/net des deux conjoints,
+// porte des montants en clair (`promptCad` dans `services/gemini.ts`) : brut/net des deux conjoints,
 // prix / mise de fonds / mensualité / loyer, Δ en dollars de chaque action de rééquilibrage. Cause
 // structurelle : `amountPrivacyScan` ne scanne que `components/`, et le prompt se compose au service.
 // Même paire de gardes que `budgetAiModalModeDiscret` : le service n'est PAS appelé, et l'écran dit
@@ -22,8 +22,8 @@ import type { BudgetConfig, User, Asset, ProjectionConfig } from '../../types';
 const couple = vi.fn(async () => []);
 const immo = vi.fn(async () => null);
 const rebal = vi.fn(async () => ({ forme: 'sans-reponse' as const }));
-vi.mock('../../services/claude', async () => {
-    const reel = await vi.importActual<typeof import('../../services/claude')>('../../services/claude');
+vi.mock('../../services/gemini', async () => {
+    const reel = await vi.importActual<typeof import('../../services/gemini')>('../../services/gemini');
     return {
         ...reel,
         getCoupleOptimizationStrategies: (...a: unknown[]) => couple(...(a as [])),
@@ -50,7 +50,7 @@ const config: BudgetConfig = {
     splitMode: '50/50',
 };
 const setDiscret = (v: boolean) => act(() => { useFinanceStore.setState({ isPrivacyMode: v } as never); });
-const avecCle = () => act(() => { useFinanceStore.setState({ config, apiKeys: { anthropic: 'sk-test', finnhub: '' } } as never); });
+const avecCle = () => act(() => { useFinanceStore.setState({ config, apiKeys: { gemini: 'sk-test', anthropic: 'sk-test', finnhub: '' } } as never); });
 
 afterEach(() => {
     cleanup();

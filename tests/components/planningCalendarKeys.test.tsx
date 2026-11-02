@@ -21,7 +21,7 @@ import { render } from '@testing-library/react';
 import { Planning } from '../../components/Planning';
 import type { Transaction } from '../../types';
 
-vi.mock('../../services/claude', () => ({ detectSubscriptionsAI: vi.fn() }));
+vi.mock('../../services/gemini', () => ({ detectSubscriptionsAI: vi.fn() }));
 vi.mock('../../components/ui/Toast', () => ({ showToast: vi.fn() }));
 
 const TX: Transaction[] = [

@@ -80,14 +80,6 @@ import { pullNow } from './syncPull';
 import { deleteAllChatAttachmentsFromDrive, resetAttachmentDriveMemos } from '../aiChat/attachmentDriveStore';
 import { clearAttachmentCache } from '../aiChat/attachments';
 
-/**
- * A-t-on DÉJÀ connecté un compte Drive sur cet appareil ? (méta locale présente). Sert à l'app pour
- * ne jamais afficher l'écran d'accueil à un utilisateur de retour, même avant le pull (cf onboarding).
- */
-export function hasConnectedBefore(): boolean {
-    return !!readSyncMeta()?.connectedEmail;
-}
-
 /** À appeler au boot : configure le Client ID et publie l'état initial (a-t-on déjà connecté ?). */
 export function initSync(clientId: string | undefined | null): void {
     configureGoogleAuth(clientId);

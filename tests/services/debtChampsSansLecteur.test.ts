@@ -52,7 +52,7 @@ const TOLERES: ReadonlyArray<{ champ: string; fichier: string; recepteur: string
         raison: "`RentalProperty.amortizationYears` — un IMMEUBLE LOCATIF, pas une dette. Homonyme.",
     },
     {
-        champ: 'amortizationYears', fichier: 'services/claude.ts', recepteur: 'ctx',
+        champ: 'amortizationYears', fichier: 'services/gemini.ts', recepteur: 'ctx',
         raison: "Contexte de prompt IA : l'amortissement de l'HYPOTHÈQUE du ménage, pas d'une dette.",
     },
     {

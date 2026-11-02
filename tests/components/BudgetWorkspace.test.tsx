@@ -37,8 +37,8 @@ vi.mock('recharts', async () => {
         Line: () => null,
     };
 });
-// services/claude importe le SDK Anthropic — jamais appelé ici, mais mocké au montage.
-vi.mock('../../services/claude', () => ({
+// services/gemini importe le SDK Anthropic — jamais appelé ici, mais mocké au montage.
+vi.mock('../../services/gemini', () => ({
     categorizeBatch: vi.fn(),
     detectSubscriptionsAI: vi.fn(),
 }));

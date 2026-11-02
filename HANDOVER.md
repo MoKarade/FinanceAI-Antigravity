@@ -1,8 +1,15 @@
-# SESSION HANDOVER — pour le prochain Claude
+# SESSION HANDOVER — FinanceAI (Google Antigravity & Gemini)
 
 > **À lire EN PREMIER si tu reprends FinanceAI.** Ce document remplace
 > la lecture séquentielle de tous les autres. Pointeurs vers les détails
-> à la fin.
+> à la fin (`GEMINI.md`, `docs/ARCHITECTURE.md`).
+>
+> ## 🟦 Session 2026-11-02 — **`[FULL-GOOGLE-MIGRATION]`** : bascule architecturale 100 % Google (Google Gemini, Firebase Auth, Cloud Firestore, Google Drive, Google Finance UI)
+> Migration complète de FinanceAI vers l'écosystème **100 % Google** :
+> - **IA Google Gemini** : remplacement intégral d'Anthropic/Claude et de LIA/Hubperso par le SDK officiel `@google/genai` (`services/gemini.ts`, `services/geminiAssistant.ts`, modèles `gemini-2.5-flash` et `gemini-2.5-pro`, tarification Gemini dans `services/aiChat/pricing.ts` et `models.ts`, clé unique `apiKeys.gemini` chiffrée `AES-256-GCM` en IndexedDB).
+> - **Authentification & Cloud** : **Firebase Auth** (Google Sign-In) + **Cloud Firestore** (`services/firebase/workspaceSync.ts`, isolation stricte par `users/{uid}/workspaces/main` via `firestore.rules`) + **Google Drive** (`appDataFolder` chiffré). Retrait des dépendances et routes héritées (`@anthropic-ai/sdk`, `@mokarade/lia-ui`, relais Claude et garde de session Hubperso).
+> - **Design System Google Finance** : jetons visuels Material 3 (`#1a73e8`, `#8ab4f8`, `#1e8e3e`, `#d93025`, surfaces claires et sombres Google Finance, typographie Google Sans / Roboto Mono).
+> - **Documentation & Gouvernance** : création de `GEMINI.md` à la racine (règles métier non négociables), mise à jour de `AGENTS.md`, `.agents/rules/financeai.md`, `README.md`, `docs/ARCHITECTURE.md` (§2 inventaire `SERVICES_STORE_AUTORISES` avec `services/gemini.ts`, `services/firebase/workspaceSync.ts`, `services/dataRecovery.ts`), `docs/CONVENTIONS.md` et `docs/compliance.md`.
 >
 > ## 🟦 Session 2026-10-29 — **`[53]`** : onglet « Apps » de navigation entre les apps du parc (FinanceAI#53, mission .github#846)
 > `components/NavApps.tsx` (`<details>` natif, zéro état/fetch/donnée) + `utils/appsDuParc.ts` (copie figée de `Hubperso/lib/sources.ts`) + bloc `.nav-apps*` en fin de `index.css`. Monté dans `App.tsx` sous `!isFirstLaunch` : l'app n'est servie qu'au propriétaire (`middleware.ts`), donc pas de test de rôle ; ni écran de passphrase (early return) ni accueil. Doc : `docs/claude/nav-apps.md`. Tests : `tests/navApps.test.tsx`, `tests/appsDuParc.test.ts`. Compte de tests de `docs/claude/entete.md` non remesuré (aucun test ne le verrouille). Essai Chromium et skills de design non faits (indisponibles ici).

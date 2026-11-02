@@ -24,15 +24,20 @@ function currentApiKeys(): ApiKeys {
         // DEVICE-LOCAL (coffre chiffré), il ne voyage pas par le Drive. Choix conservateur — un
         // jeton bancaire synchronisé cross-device élargirait sa surface sans nécessité (la sync
         // in-app tourne là où Marc ouvre l'app, il peut le recoller ailleurs si besoin).
-        return { anthropic: k?.anthropic ?? '', finnhub: k?.finnhub ?? '' };
+        const gemini = k?.gemini || k?.anthropic || '';
+        return {
+            gemini,
+            ...(k?.anthropic !== undefined ? { anthropic: k.anthropic } : {}),
+            finnhub: k?.finnhub ?? '',
+        };
     } catch {
-        return { anthropic: '', finnhub: '' };
+        return { gemini: '', finnhub: '' };
     }
 }
 
 /** Vrai s'il y a au moins une clé à synchroniser (évite d'écrire un objet de clés vides). */
 export function hasAnyKey(k: ApiKeys): boolean {
-    return Boolean(k.anthropic || k.finnhub);
+    return Boolean(k.gemini || k.anthropic || k.finnhub);
 }
 
 // ── Helpers purs (testables) ─────────────────────────────────────────────────

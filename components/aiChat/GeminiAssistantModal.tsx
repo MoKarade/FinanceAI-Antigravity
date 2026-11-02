@@ -74,7 +74,8 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({
     const [echanges, setEchanges] = useState<EchangeGemini[]>([]);
 
     const cleConfiguree = Boolean(
-        state.apiKeys?.anthropic?.trim() ||
+        state.apiKeys?.gemini?.trim() ||
+            state.apiKeys?.anthropic?.trim() ||
             (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim(),
     );
 
@@ -123,7 +124,7 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({
             initialFocusRef={inputRef}
             icon={<Icon name="sparkles" size={22} className="text-repere shrink-0" />}
             title="Gemini · Conseiller patrimonial"
-            subtitle="Propulsé par Google Gemini 3.8 Flash · Analyse instantanée de ton dossier"
+            subtitle="Propulsé par Google Gemini 2.5 Flash · Analyse instantanée de ton dossier"
         >
             <div className="space-y-4">
                 {/* En-tête d'état Gemini + KPI rapides du dossier */}
@@ -137,8 +138,8 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({
                         </span>
                         <span className="text-xs font-semibold text-ink-100">
                             {cleConfiguree
-                                ? 'Gemini 3.8 Flash actif (clé connectée)'
-                                : 'Gemini Flash · Mode synthèse instantanée locale'}
+                                ? 'Gemini 2.5 Flash actif (clé connectée)'
+                                : 'Gemini 2.5 Flash · Mode synthèse instantanée locale'}
                         </span>
                     </div>
 
@@ -154,7 +155,7 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({
                                 type="button"
                                 onClick={() => {
                                     onClose();
-                                    navigateWithFocus(Tab.SETTINGS, 'apiKeys-anthropic');
+                                    navigateWithFocus(Tab.SETTINGS, 'apiKeys-gemini');
                                 }}
                                 className="touch-target px-3 py-1 rounded-full bg-repere-fond text-repere border border-bordure-lien font-semibold hover:opacity-90 transition-opacity focus-ring"
                             >

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { PrivateText } from '../ui/PrivateText';
 import { Icon } from '../ui/Icon';
 import { parseBankCsv, extractedTxnsToCsv, type ParsedBankCsv } from '../../services/import/parseBankCsv';
-import { analyzeBankStatement } from '../../services/claude';
+import { analyzeBankStatement } from '../../services/gemini';
 import { logError } from '../../services/errorLogger';
 import { causeErreurIa, messageErreurIa } from '../../services/messageErreurIa';
 import { Card } from '../ui/Card';
@@ -12,7 +12,7 @@ import { formatCAD } from '../../utils/format';
 interface ImportBankStatementProps {
     /** Reçoit le texte brut (CSV) ; l'app le re-parse + fusionne + dédoublonne. */
     onImport: (rawText: string) => void;
-    /** Clé Anthropic — requise UNIQUEMENT pour analyser un PDF/image (le CSV reste 100 % local). */
+    /** Clé Google Gemini — requise UNIQUEMENT pour analyser un PDF/image (le CSV reste 100 % local). */
     apiKey?: string;
     /** Classe optionnelle pour le conteneur Card (ex. `h-full` en grille). */
     className?: string;
@@ -27,7 +27,7 @@ const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10 Mo
 /**
  * Import de relevé bancaire — deux sources, même pipeline :
  *  - CSV/TSV : parsé EN LOCAL (rien ne quitte le navigateur), toutes banques.
- *  - PDF/image : extrait par Claude Vision (analyzeBankStatement) puis converti en
+ *  - PDF/image : extrait par Google Gemini Vision (analyzeBankStatement) puis converti en
  *    CSV canonique (extractedTxnsToCsv) → re-parsé par parseBankCsv comme un CSV.
  * Choix de fichier → aperçu (séparateur/colonnes + 3 premières lignes) → confirmation.
  * Le tri chronologique + la fusion/dédup se font en aval (analyzeBankStatement trie ;
@@ -49,10 +49,10 @@ export const ImportBankStatement: React.FC<ImportBankStatementProps> = ({ onImpo
             if (isCsvLike) {
                 text = await file.text();
             } else {
-                // PDF / image → extraction IA. Le relevé est envoyé à Claude (consenti
+                // PDF / image → extraction IA. Le relevé est envoyé à Google Gemini (consenti
                 // à l'import) car un PDF ne peut pas être parsé localement.
                 if (!apiKey) {
-                    setError("Clé Anthropic requise pour analyser un PDF/image. Ajoute-la dans Réglages, ou importe un CSV (100 % local).");
+                    setError("Clé Google Gemini requise pour analyser un PDF/image. Ajoute-la dans Réglages, ou importe un CSV (100 % local).");
                     return;
                 }
                 if (file.size > MAX_PDF_BYTES) {
@@ -103,12 +103,12 @@ export const ImportBankStatement: React.FC<ImportBankStatementProps> = ({ onImpo
         <Card icon={<Icon name="import" size={18} />} title="Importer un relevé bancaire (CSV ou PDF)" className={className}>
             <div className="space-y-3">
             <p className="text-meta text-ink-400">
-                CSV exporté de ta banque (100 % local) — ou PDF/image de relevé, analysé par l'IA (Claude) puis classé.
+                CSV exporté de ta banque (100 % local) — ou PDF/image de relevé, analysé par l'IA (Google Gemini) puis classé.
             </p>
             {/* [SEC-VISION-CONSENT-INJECTION] Loi 25 : consentement éclairé avant l'envoi de PII. Le CSV reste
-                local ; un PDF/image, lui, PART chez Anthropic → le dire explicitement AVANT le choix du fichier. */}
+                local ; un PDF/image, lui, PART chez Google Gemini → le dire explicitement AVANT le choix du fichier. */}
             <p className="text-tiny text-amber-300/90 bg-amber-900/10 border border-warning-500/20 rounded-lg px-3 py-2">
-                Confidentialité : un <strong>PDF ou une image</strong> est envoyé à Anthropic (Claude) pour en
+                Confidentialité : un <strong>PDF ou une image</strong> est envoyé à Google Gemini pour en
                 extraire les transactions — il contient des données personnelles (montants, nom, n° de compte).
                 Un <strong>CSV</strong> ne quitte jamais ton navigateur. Choisis un CSV si tu préfères tout garder local.
             </p>

@@ -8,7 +8,7 @@
 import type { AppState } from '../../types';
 import { showToast } from '../ui/Toast';
 import { logError } from '../../services/errorLogger';
-import { isFxRatesEstimated, hasForeignCurrencyAssets } from '../../services/portfolio';
+import { hasForeignCurrencyAssets } from '../../services/portfolio';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { fxSourceEffective, fxFaitAutorite } from '../../services/fx/provenance';
 import { todayIsoLocal } from '../../services/projection/dailyRefine';

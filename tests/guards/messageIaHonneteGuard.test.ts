@@ -28,7 +28,7 @@ const SOURCE_DES_MESSAGES = 'services/messageErreurIa.ts';
 // propres échecs (`AddStockForm`, `FutureHistorySection`) — `messageErreurIa` ne les couvre pas, et
 // élargir la garde à eux la ferait rougir sur du code qu'elle n'a rien à proposer pour réparer.
 // Consigné au BACKLOG (`[AI-FINNHUB-CAUSE-COLLAPSE]`) plutôt qu'étendu à la va-vite.
-const ACCUSE_LA_CLE = /(Vérifie|vérifie|Configure|configure)[^<>{}\n]{0,60}cl[ée][^<>{}\n]{0,20}Anthropic/;
+const ACCUSE_LA_CLE = /(Vérifie|vérifie|Configure|configure)[^<>{}\n]{0,60}cl[ée][^<>{}\n]{0,20}(Google Gemini|Gemini|Anthropic)/;
 
 const EXEMPTIONS: ReadonlyArray<{ fichier: string; jeton: string; raison: string }> = [
 ];
@@ -66,8 +66,8 @@ describe('[AI-BUDGETMODAL-ERROR-COLLAPSE] la clé n\'est accusée que quand elle
         // Anti-vacuité inversée : si les messages n'existaient nulle part, « aucun composant ne les
         // écrit » serait vrai et ne prouverait rien.
         const module = readFileSync(resolve(process.cwd(), SOURCE_DES_MESSAGES), 'utf8');
-        expect(module).toMatch(/Clé Anthropic refusée/);
-        expect(module).toMatch(/Aucune clé Anthropic configurée/);
+        expect(module).toMatch(/Clé Google Gemini refusée/);
+        expect(module).toMatch(/Aucune clé Google Gemini configurée/);
     });
 
     it('aucun composant n\'écrit « vérifie ta clé » en dur, hors exemption déclarée', () => {

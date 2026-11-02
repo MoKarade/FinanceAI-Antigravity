@@ -192,16 +192,16 @@ describe('useFinanceStore', () => {
 
     it('enableTestMode PRÉSERVE les clés API à travers un switch de persona (credentials intacts)', () => {
         const store = () => useFinanceStore.getState();
-        store().updateApiKeys({ anthropic: 'ANTHRO_KEY', finnhub: 'FH_KEY' });
+        store().updateApiKeys({ gemini: 'GEMINI_KEY', finnhub: 'FH_KEY' });
         // 1re activation : les clés survivent.
         store().enableTestMode({ transactions: [{ id: 'a' } as never] }, 'A');
-        expect(store().apiKeys).toEqual({ anthropic: 'ANTHRO_KEY', finnhub: 'FH_KEY' });
+        expect(store().apiKeys).toEqual({ gemini: 'GEMINI_KEY', finnhub: 'FH_KEY' });
         // Switch de persona : un persona peut tenter de poser ses propres apiKeys vides — ignorés.
-        store().enableTestMode({ transactions: [{ id: 'b' } as never], apiKeys: { anthropic: '', finnhub: '' } } as never, 'B');
-        expect(store().apiKeys).toEqual({ anthropic: 'ANTHRO_KEY', finnhub: 'FH_KEY' });
+        store().enableTestMode({ transactions: [{ id: 'b' } as never], apiKeys: { gemini: '', finnhub: '' } } as never, 'B');
+        expect(store().apiKeys).toEqual({ gemini: 'GEMINI_KEY', finnhub: 'FH_KEY' });
         // Et au retour hors test, les clés réelles sont toujours là.
         store().disableTestMode();
-        expect(store().apiKeys).toEqual({ anthropic: 'ANTHRO_KEY', finnhub: 'FH_KEY' });
+        expect(store().apiKeys).toEqual({ gemini: 'GEMINI_KEY', finnhub: 'FH_KEY' });
     });
 
     it('personaResetBase NE réinitialise PAS fxRates / lastUpdate / apiKeys (omission volontaire)', () => {

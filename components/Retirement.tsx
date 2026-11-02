@@ -318,6 +318,7 @@ export const Retirement: React.FC<RetirementProps> = ({
                 <section aria-label="Résumé" className="grid grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_1.4fr] gap-2.5 xl:gap-3.5 gf-spring-grid">
                     <div className={`${tuile} col-span-2 xl:col-span-1`}>
                         <div className="flex items-center justify-between gap-2">
+                            {/* NOMBRE-NON-MONETAIRE : âge cible de retraite saisi en réglage */}
                             <span className={etiquette}>Capital à la retraite ({goal.targetAge} ans)</span>
                             <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-up">Cible</span>
                         </div>
@@ -332,6 +333,7 @@ export const Retirement: React.FC<RetirementProps> = ({
                     </div>
                     <div className={tuile}>
                         <div className="flex items-center justify-between gap-2">
+                            {/* NOMBRE-NON-MONETAIRE : espérance de vie saisie en hypothèse */}
                             <span className={etiquette}>Héritage ({lifeExpectancy} ans)</span>
                             <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold ${finalNetWorth > 0 ? 'gf-delta-up' : 'gf-delta-down'}`}>
                                 {finalNetWorth > 0 ? 'Solde +' : 'Épuisé'}
@@ -351,6 +353,7 @@ export const Retirement: React.FC<RetirementProps> = ({
                         <span className="font-mono text-[11px] font-semibold tracking-[0.08em] xl:tracking-[0.06em] uppercase text-ink-400">Capitaux actuels · Placements ↗</span>
                         {!isPrivacyMode && liveCSVBalances.TOTAL > 0 && (
                             <div className="h-1.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5" aria-hidden="true">
+                                {/* MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode */}
                                 <div className="h-full bg-repere" style={{ width: `${Math.round((liveCSVBalances.REER / Math.max(1, liveCSVBalances.TOTAL)) * 100)}%` }} />
                                 <div className="h-full bg-succes-texte" style={{ width: `${Math.round((liveCSVBalances.CELI / Math.max(1, liveCSVBalances.TOTAL)) * 100)}%` }} />
                                 <div className="h-full bg-alerte-texte" style={{ flex: 1 }} />

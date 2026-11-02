@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useWriteConfirmation } from '../../hooks/useWriteConfirmation';
 import { Icon } from '../ui/Icon';
-import { analyzePayslip } from '../../services/claude';
+import { analyzePayslip } from '../../services/gemini';
 import { showToast } from '../ui/Toast';
 import { Card } from '../ui/Card';
 import { useFinanceStore } from '../../store/useFinanceStore';
@@ -16,7 +16,7 @@ import { isCoupleMode } from '../../services/couple/netWorthByOwner';
 /**
  * Phase C.2 — upload IA de relevé de salaire dans le Hub Configuration.
  *
- * Réutilise `analyzePayslip` (Claude Sonnet Vision) déjà utilisé dans TaxCenter.
+ * Réutilise `analyzePayslip` (Google Gemini Vision) déjà utilisé dans TaxCenter.
  *
  * [AI-VISION-PAYSLIP-NOGATE] L'écriture passe par le MÊME chemin que le chat in-app
  * (`executeWriteTool` + `apply_payslip` + `AiChatConfirmModal`) : diff avant → après MONTRÉ,
@@ -36,7 +36,7 @@ interface PayslipUploadCardProps {
 }
 
 export const PayslipUploadCard: React.FC<PayslipUploadCardProps> = ({ targetUserIndex: initialTarget = 0, className = '' }) => {
-    const apiKey = useFinanceStore(s => s.apiKeys.anthropic);
+    const apiKey = useFinanceStore(s => s.apiKeys.gemini || s.apiKeys.anthropic || '');
     const config = useFinanceStore(s => s.config);
 
     const [target, setTarget] = useState<0 | 1>(initialTarget);
@@ -55,7 +55,7 @@ export const PayslipUploadCard: React.FC<PayslipUploadCardProps> = ({ targetUser
     const handleFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return;
         if (!apiKey) {
-            showToast('Clé API Anthropic requise pour analyser les relevés.', 'info');
+            showToast('Clé API Google Gemini requise pour analyser les relevés.', 'info');
             return;
         }
 
@@ -180,11 +180,11 @@ export const PayslipUploadCard: React.FC<PayslipUploadCardProps> = ({ targetUser
                     Relevé (image/PDF) → l'IA Vision extrait brut, net, impôt et fréquence, et remplit le profil.
                 </p>
                 {/* [SEC-VISION-CONSENT-INJECTION] Loi 25 : consentement éclairé — la fiche de paie (nom,
-                    employeur, salaire exact) part BRUTE chez Anthropic. (Depuis [FMT-PROMPT-MIGRER],
+                    employeur, salaire exact) part BRUTE chez Google Gemini. (Depuis [FMT-PROMPT-MIGRER],
                     la catégorisation texte envoie aussi les montants exacts — seuls les noms de
                     marchands restent tronqués.) À dire explicitement avant l'envoi. */}
                 <p className="text-tiny text-amber-300/90 bg-amber-900/10 border border-warning-500/20 rounded-lg px-3 py-2">
-                    Confidentialité : la fiche de paie (image/PDF) est envoyée à Anthropic (Claude) pour en
+                    Confidentialité : la fiche de paie (image/PDF) est envoyée à Google Gemini pour en
                     extraire les montants — elle contient des données personnelles (nom, employeur, salaire exact).
                 </p>
 

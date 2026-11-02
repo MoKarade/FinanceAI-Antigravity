@@ -31,7 +31,7 @@ describe('[FMT-PROMPT-MIGRER] le consentement dit ce que l\'app fait', () => {
     });
 
     it('le mécanisme d\'arrondi a disparu des deux fichiers qui le portaient', () => {
-        for (const f of ['services/claude.ts', 'components/budget/BudgetAiModal.tsx']) {
+        for (const f of ['services/gemini.ts', 'components/budget/BudgetAiModal.tsx']) {
             const code = f.endsWith('.tsx') ? stripCommentsJsx(lire(f)) : stripComments(lire(f));
             expect(ARRONDI_100.test(code), `${f} ré-arrondit à 100 $ : le texte de consentement `
                 + '(Onboarding) doit alors re-promettre l\'arrondi DANS LE MÊME LOT').toBe(false);

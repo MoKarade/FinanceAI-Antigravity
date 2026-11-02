@@ -199,9 +199,9 @@ describe('executeWriteTool (AITOOLS-D)', () => {
     });
 
     it('les VRAIES apiKeys du store SURVIVENT à un apply (le snapshot les exclut, le patch aussi)', async () => {
-        useFinanceStore.setState({ apiKeys: { anthropic: 'sk-vraie-cle', finnhub: 'fh-vraie' } } as never);
+        useFinanceStore.setState({ apiKeys: { gemini: 'sk-vraie-cle', finnhub: 'fh-vraie' } } as never);
         const res = await executeWriteTool(applyDebtSpec as never, DEBT_ARGS, async () => 'apply');
         expect(parseResult(res).applied).toBe(true);
-        expect(useFinanceStore.getState().apiKeys).toEqual({ anthropic: 'sk-vraie-cle', finnhub: 'fh-vraie' });
+        expect(useFinanceStore.getState().apiKeys).toEqual({ gemini: 'sk-vraie-cle', finnhub: 'fh-vraie' });
     });
 });

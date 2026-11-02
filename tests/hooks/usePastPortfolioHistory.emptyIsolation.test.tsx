@@ -29,7 +29,7 @@ describe('[HISTORY-OBJET-VIDE-PARTAGE] usePastPortfolioHistory — le résultat 
         vi.clearAllMocks();
         _resetPastHistoryFetchCache();
         act(() => {
-            useFinanceStore.setState({ assets: [], fxRates: { USD: 1.35, EUR: 1.5, CAD: 1 }, isTestMode: false, apiKeys: { anthropic: '', finnhub: '' } });
+            useFinanceStore.setState({ assets: [], fxRates: { USD: 1.35, EUR: 1.5, CAD: 1 }, isTestMode: false, apiKeys: { gemini: '', anthropic: '', finnhub: '' } });
         });
     });
 

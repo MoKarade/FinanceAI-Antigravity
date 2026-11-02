@@ -7,8 +7,8 @@
 ## Vie privée — Loi 25 (Québec) + RGPD
 - [ ] **Minimisation** : on ne collecte que le strict nécessaire au calcul financier.
 - [ ] **Consentement** : `services/consent.ts` couvre toute nouvelle collecte/usage.
-- [ ] **Local-first** : les données ne quittent pas l'appareil sauf backup chiffré explicite (Google Drive).
-- [ ] **Chiffrement au repos** : AES-256-GCM, IndexedDB non-extractible, PBKDF2 600k. Clés API exclues des exports/backups.
+- [ ] **Local-first & Cloud isolé** : les données ne quittent pas l'appareil sauf synchronisation authentifiée de l'utilisateur (**Cloud Firestore** `users/{uid}/workspaces/main` protégé par `firestore.rules` et sauvegarde chiffrée **Google Drive** `appDataFolder`).
+- [ ] **Chiffrement au repos** : AES-256-GCM, IndexedDB non-extractible, PBKDF2 600k. Clés API (`apiKeys.gemini`, `apiKeys.finnhub`) exclues de `localStorage`, des exports et des synchronisations.
 - [ ] **Droits** : effacement et export des données utilisateur possibles.
 - [ ] **Pas de fuite PII** : `errorLogger` scrub montants + secrets ; aucun montant/clé en clair dans un log ou une URL.
 
@@ -18,9 +18,9 @@
 - [ ] Conservation de l'argent prouvée (`/audit-financier` : forme-bilan `ΔNW == ΔΣactifs − ΔΣdettes`).
 
 ## Intégrité produit
-- [ ] **No-fake-data** : aucune donnée simulée en prod ; projection non calculée → `<ProjectionRequired>`.
-- [ ] **Source unique** : tout calcul long-terme dérive de `lastProjection.chartData` ; patrimoine net via `computeRawNetWorth`.
+- [ ] **No-fake-data** : aucune donnée simulée en prod ; projection non calculée → `<ProjectionRequired>` ; aucune valeur non finie/absente affichée comme `0` (y compris dans un prompt **Google Gemini**).
+- [ ] **Source unique** : tout calcul long-terme dérive de `lastProjection.chartData` ; patrimoine net via `computeRawNetWorth` et `computePresentTermes`.
 
 ## Sécurité applicative
-- [ ] Aucun secret versionné ; CSP sans origine non justifiée ; injection de prompt LLM neutralisée (`utils/promptSafety.ts`).
+- [ ] Aucun secret versionné ; CSP stricte (`vercel.json` + `index.html`) ; injection de prompt Gemini neutralisée (`utils/promptSafety.ts`).
 - [ ] `npm audit` = 0 vulnérabilité critique/haute.

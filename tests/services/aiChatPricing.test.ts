@@ -11,7 +11,7 @@ import {
     ALIAS_A_EPINGLER, provenanceTarif,
     type AiTokenUsage,
 } from '../../services/aiChat/pricing';
-import { MODEL_SONNET } from '../../services/claude';
+import { MODEL_SONNET } from '../../services/gemini';
 import { formatCostCad } from '../../utils/format';
 
 const usage = (u: Partial<AiTokenUsage>): AiTokenUsage => ({ ...EMPTY_USAGE, ...u });
@@ -57,10 +57,10 @@ describe('models (B3)', () => {
         // provenance identique pour un instantané figé et un alias repointable n'apprendrait rien.
         // Aucun id daté ne reste dans la table (la famille 5.5 n'en a pas) : l'instantané figé est
         // fourni par une table de test — la fonction doit continuer à savoir le dire.
-        const fige = provenanceTarif('claude-exemple-20260101', {
-            'claude-exemple-20260101': { input: 1, output: 5, releveLe: '2026-06-24', aliasFlottant: false },
+        const fige = provenanceTarif('gemini-exemple-20260101', {
+            'gemini-exemple-20260101': { input: 1, output: 5, releveLe: '2026-06-24', aliasFlottant: false },
         });
-        const flottant = provenanceTarif('claude-sonnet-5-5');
+        const flottant = provenanceTarif('gemini-2.5-flash');
         expect(fige).toBeTruthy();
         expect(flottant).toBeTruthy();
         expect(fige).not.toBe(flottant);
@@ -70,10 +70,10 @@ describe('models (B3)', () => {
         expect(fige).toContain('2026-06-24');
         expect(flottant).toContain('2026-10-28');
         // Modèle sans tarif : `null`, cohérent avec `chatCostUsd` — jamais une phrase inventée.
-        expect(provenanceTarif('claude-inconnu-9')).toBeNull();
+        expect(provenanceTarif('gemini-inconnu-9')).toBeNull();
     });
 
-    it('MODEL_SONNET (services/claude) dérive de la MÊME source — jamais deux littéraux qui divergent', () => {
+    it('MODEL_SONNET (services/gemini) dérive de la MÊME source — jamais deux littéraux qui divergent', () => {
         expect(MODEL_SONNET).toBe(MODEL_IDS.sonnet);
     });
 
@@ -86,26 +86,26 @@ describe('models (B3)', () => {
 });
 
 describe('chatCostUsd (B4)', () => {
-    it('1M tokens input Sonnet 5.5 = 2 $ US ; 1M output = 10 $ US (tarif public relevé le 2026-10-28)', () => {
-        expect(chatCostUsd(usage({ inputTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(2, 10);
-        expect(chatCostUsd(usage({ outputTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(10, 10);
+    it('1M tokens input Gemini 2.5 Flash = 0,30 $ US ; 1M output = 2,50 $ US (tarif public relevé le 2026-10-28)', () => {
+        expect(chatCostUsd(usage({ inputTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(0.3, 10);
+        expect(chatCostUsd(usage({ outputTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(2.5, 10);
     });
 
-    it('cache : write = 1,25× l\'input ; read = 0,05× (Sonnet 5.5, Opus 5.5) ou 0,1× (Haiku 5.5)', () => {
-        expect(chatCostUsd(usage({ cacheReadTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(0.1, 10);
-        expect(chatCostUsd(usage({ cacheReadTokens: 1_000_000 }), MODEL_IDS.opus)).toBeCloseTo(0.2, 10);
+    it('cache : write = 1,25× l\'input ; read = 0,05× (Gemini 2.5 Flash, Gemini 2.5 Pro) ou 0,1× (Gemini 2.5 Flash-Lite)', () => {
+        expect(chatCostUsd(usage({ cacheReadTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(0.015, 10);
+        expect(chatCostUsd(usage({ cacheReadTokens: 1_000_000 }), MODEL_IDS.opus)).toBeCloseTo(0.0625, 10);
         expect(chatCostUsd(usage({ cacheReadTokens: 1_000_000 }), MODEL_IDS.haiku)).toBeCloseTo(0.01, 10);
-        expect(chatCostUsd(usage({ cacheWriteTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(2.5, 10);
+        expect(chatCostUsd(usage({ cacheWriteTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(0.375, 10);
     });
 
-    it('Opus 2×/Haiku 0,05× le tarif input de Sonnet (ordre de grandeur verrouillé)', () => {
+    it('Gemini 2.5 Pro = 1,25 $ / Gemini 2.5 Flash-Lite = 0,10 $ par 1M input (ordre de grandeur verrouillé)', () => {
         const oneM = usage({ inputTokens: 1_000_000 });
-        expect(chatCostUsd(oneM, MODEL_IDS.opus)).toBeCloseTo(4, 10);
+        expect(chatCostUsd(oneM, MODEL_IDS.opus)).toBeCloseTo(1.25, 10);
         expect(chatCostUsd(oneM, MODEL_IDS.haiku)).toBeCloseTo(0.1, 10);
     });
 
     it('modèle sans tarif → null HONNÊTE (jamais un 0 plausible)', () => {
-        expect(chatCostUsd(usage({ inputTokens: 1000 }), 'claude-inconnu-9')).toBeNull();
+        expect(chatCostUsd(usage({ inputTokens: 1000 }), 'gemini-inconnu-9')).toBeNull();
     });
 
     it('champs non finis/négatifs ignorés (jamais de NaN dans un cumul $)', () => {

@@ -2,7 +2,7 @@ import { formatCAD } from '../../utils/format';
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildCoupleProfileLines } from '../../services/claude';
+import { buildCoupleProfileLines } from '../../services/gemini';
 
 /**
  * [COUPLE-CTX-FAKE-ZERO] + [TOOL-TAXSITUATION-FAKE-ZERO] — vague 1e, 2026-08-19.

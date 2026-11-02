@@ -2,12 +2,13 @@
 // Onglet Sauvegarde :
 // 1. État du dossier actif et indicateur de protection (bouclier anti-mode test + persistance)
 // 2. Récupération directe des points de sauvegarde détectés (IndexedDB, localStorage, Google Drive)
-// 3. Synchronisation unifiée Cloud Firestore + Cloud SQL (PostgreSQL) via compte Google
-// 4. Carte de synchronisation Google Drive
+// 3. Synchronisation unifiée Cloud Firestore & Google Drive via compte Google
+// 4. Carte de synchronisation Google Drive et verrou d'écritures MCP
 // 5. Instantanés locaux (AutoBackupPanel) et export/import de fichiers (BackupPanel)
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { GoogleDriveSyncCard } from '../GoogleDriveSyncCard';
+import { WriteLockCard } from '../WriteLockCard';
 import { AutoBackupPanel } from '../AutoBackupPanel';
 import { BackupPanel } from '../BackupPanel';
 import { useFirebaseAuth } from '../../auth/FirebaseAuthGate';
@@ -50,7 +51,6 @@ export const BackupSection: React.FC = () => {
     signInWithGoogle,
     signOutUser,
     syncWorkspaceNow,
-    restoreFromCloudSqlNow,
   } = useFirebaseAuth();
 
   const transactionsCount = state.transactions.length;
@@ -97,6 +97,7 @@ export const BackupSection: React.FC = () => {
           await syncWorkspaceNow();
         }
         await refreshRecoverableList();
+        // MONTANT-HORS-ECRAN
         showToast(
           `Dossier retrouvé (${driveRes.sourceLabel} · ${formatCAD(driveRes.netWorth)}).`,
           'success',
@@ -108,6 +109,7 @@ export const BackupSection: React.FC = () => {
         await syncWorkspaceNow();
       }
       await refreshRecoverableList();
+      // MONTANT-HORS-ECRAN
       showToast(
         `Dossier rétabli (${res.sourceLabel} · ${formatCAD(res.netWorth)}).`,
         'success',
@@ -123,6 +125,7 @@ export const BackupSection: React.FC = () => {
       await syncWorkspaceNow();
     }
     await refreshRecoverableList();
+    // MONTANT-HORS-ECRAN
     showToast(
       `Sauvegarde restaurée (${snap.label} · ${formatCAD(snap.netWorth)}).`,
       'success',
@@ -150,6 +153,7 @@ export const BackupSection: React.FC = () => {
     await connectAndSync();
     const driveRecovered = await chercherEtRestaurerDepuisGoogleDrive();
     if (driveRecovered?.restored) {
+      // MONTANT-HORS-ECRAN
       showToast(
         `Dossier Google Drive restauré (${driveRecovered.sourceLabel} · ${formatCAD(driveRecovered.netWorth)}).`,
         'success',
@@ -265,7 +269,7 @@ export const BackupSection: React.FC = () => {
                 )}
               </div>
               <div className="flex items-center justify-between gap-2 text-ink-300">
-                <span>Cloud Firestore &amp; Cloud SQL</span>
+                <span>Cloud Firestore &amp; Google Drive</span>
                 <span className="font-semibold text-ink-50">
                   {user ? 'Synchronisés' : 'Prêts (1 clic Google)'}
                 </span>
@@ -318,12 +322,12 @@ export const BackupSection: React.FC = () => {
 
       <Card
         icon={<Icon name="cloud" size={18} />}
-        title="Synchronisation Cloud Firestore & Cloud SQL"
+        title="Synchronisation Cloud Firestore & Google Drive"
       >
         <div className="space-y-4">
           <p className="text-tiny text-ink-300 leading-relaxed">
             Une seule connexion avec votre compte Google active la sauvegarde temps réel de votre
-            dossier dans <strong>Cloud Firestore</strong>, <strong>Cloud SQL (PostgreSQL)</strong> et{' '}
+            dossier dans <strong>Cloud Firestore</strong> et{' '}
             <strong>Google Drive</strong>, sans jamais avoir à ressaisir d’identifiant technique.
           </p>
 
@@ -349,18 +353,12 @@ export const BackupSection: React.FC = () => {
                   </span>
                 </div>
                 <div className="text-tiny text-ink-400">
-                  Firestore :{' '}
+                  Cloud Firestore :{' '}
                   {cloudStatus.state === 'synced'
                     ? 'Synchronisé en temps réel'
                     : cloudStatus.state === 'syncing'
                       ? 'Synchronisation…'
-                      : 'Actif'}{' '}
-                  · Cloud SQL (PostgreSQL) :{' '}
-                  {cloudStatus.sqlState === 'synced'
-                    ? 'Sauvegardé'
-                    : cloudStatus.sqlState === 'syncing'
-                      ? 'Envoi…'
-                      : 'Prêt'}
+                      : 'Actif'}
                 </div>
               </div>
 
@@ -370,14 +368,7 @@ export const BackupSection: React.FC = () => {
                   onClick={() => void syncWorkspaceNow()}
                   className="touch-target h-11 px-3.5 rounded-xl bg-surface-douce border border-bordure-champ text-ink-200 text-xs font-semibold hover:bg-bordure focus-ring"
                 >
-                  Synchroniser Firestore &amp; Cloud SQL
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void restoreFromCloudSqlNow()}
-                  className="touch-target h-11 px-3.5 rounded-xl bg-surface-douce border border-bordure-champ text-ink-200 text-xs font-semibold hover:bg-bordure focus-ring"
-                >
-                  Restaurer depuis Cloud SQL
+                  Synchroniser Cloud Firestore
                 </button>
                 <button
                   type="button"
@@ -413,6 +404,7 @@ export const BackupSection: React.FC = () => {
         </Card>
       )}
 
+      <WriteLockCard />
       <AutoBackupPanel />
       <BackupPanel />
     </div>

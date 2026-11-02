@@ -23,7 +23,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { stripCommentsJsx } from '../../utils/stripComments';
 
-vi.mock('../../services/claude', () => ({ categorizeBatch: vi.fn() }));
+vi.mock('../../services/gemini', () => ({ categorizeBatch: vi.fn() }));
 vi.mock('../../components/ui/Toast', () => ({ showToast: vi.fn() }));
 
 const SOURCE = resolve(__dirname, '../../components/Transactions.tsx');

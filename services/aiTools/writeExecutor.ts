@@ -7,7 +7,7 @@
 //   3. Appliquer → recalcul du diff sur un état FRAIS (anti-course : l'état a pu bouger pendant
 //      que l'utilisateur lisait le modal — un prix rafraîchi, un autre onglet), backup IndexedDB
 //      AVANT d'écrire, puis setAppState (le push Drive suit via schedulePush, câblage existant) ;
-//   4. Annuler → tool_result honnête « refusé par l'utilisateur » (Claude peut reproposer).
+//   4. Annuler → tool_result honnête « refusé par l'utilisateur » (Gemini peut reproposer).
 //
 // ⚠️ apiKeys : le snapshot les EXCLUT (défauts vides) → appliquer nextState TEL QUEL écraserait
 // les vraies clés en mémoire. On les retire toujours du patch appliqué.

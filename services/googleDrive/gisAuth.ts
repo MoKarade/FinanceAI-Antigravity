@@ -48,7 +48,6 @@ export class AuthInteractionRequiredError extends Error {
 }
 const DRIVE_SCOPES = [
     'https://www.googleapis.com/auth/drive.appdata',
-    'https://www.googleapis.com/auth/drive.readonly',
     'https://www.googleapis.com/auth/userinfo.email',
 ].join(' ');
 
@@ -381,7 +380,6 @@ async function acquireTokenViaFirebasePopup(): Promise<string> {
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/drive.appdata');
-    provider.addScope('https://www.googleapis.com/auth/drive.readonly');
     provider.addScope('https://www.googleapis.com/auth/userinfo.email');
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);

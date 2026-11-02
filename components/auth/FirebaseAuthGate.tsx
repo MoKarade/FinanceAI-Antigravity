@@ -15,8 +15,6 @@ import {
     upsertUserProfile,
     startWorkspaceRealtimeSync,
     pushWorkspaceToFirestore,
-    pushWorkspaceToCloudSql,
-    pullWorkspaceFromCloudSql,
     recoverOrEnsureInitialWorkspace,
     subscribeFirebaseSyncStatus,
     getFirebaseSyncStatus,
@@ -31,7 +29,7 @@ import { connectAndSync } from '../../services/sync/syncOrchestrator';
 import { Icon } from '../ui/Icon';
 import { showToast } from '../ui/Toast';
 
-export interface FirebaseAuthContextValue {
+interface FirebaseAuthContextValue {
     user: FirebaseUser | null;
     authReady: boolean;
     syncStatus: FirebaseWorkspaceSyncStatus;
@@ -40,7 +38,6 @@ export interface FirebaseAuthContextValue {
     signInWithGoogle: () => Promise<void>;
     signOutUser: () => Promise<void>;
     syncWorkspaceNow: () => Promise<void>;
-    restoreFromCloudSqlNow: () => Promise<void>;
     restoreInitialDataNow: () => Promise<void>;
 }
 
@@ -48,9 +45,6 @@ const DEFAULT_SYNC_STATUS: FirebaseWorkspaceSyncStatus = {
     state: 'idle',
     lastSyncedAt: null,
     errorMessage: null,
-    sqlState: 'idle',
-    sqlLastSyncedAt: null,
-    sqlErrorMessage: null,
 };
 
 const FirebaseAuthContext = createContext<FirebaseAuthContextValue>({
@@ -62,7 +56,6 @@ const FirebaseAuthContext = createContext<FirebaseAuthContextValue>({
     signInWithGoogle: async () => {},
     signOutUser: async () => {},
     syncWorkspaceNow: async () => {},
-    restoreFromCloudSqlNow: async () => {},
     restoreInitialDataNow: async () => {},
 });
 
@@ -70,7 +63,7 @@ export function useFirebaseAuth(): FirebaseAuthContextValue {
     return useContext(FirebaseAuthContext);
 }
 
-export interface FirebaseAuthGateProps {
+interface FirebaseAuthGateProps {
     children: React.ReactNode;
     /** Force l'affichage du portail d'authentification même en environnement de test unitaire. */
     forceAuthGate?: boolean;
@@ -78,7 +71,7 @@ export interface FirebaseAuthGateProps {
 
 /**
  * Portail d'authentification Firebase et orchestrateur de la synchronisation temps réel
- * Cloud Firestore (`/workspaces/{uid}`) + Cloud SQL PostgreSQL + Google Drive.
+ * Cloud Firestore (`/workspaces/{uid}`) + Google Drive.
  */
 export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
     children,
@@ -157,10 +150,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                 await connectAndSync();
                 const driveRecovered = await chercherEtRestaurerDepuisGoogleDrive();
                 if (driveRecovered?.restored) {
-                    await Promise.all([
-                        pushWorkspaceToFirestore(credential.user),
-                        pushWorkspaceToCloudSql(credential.user),
-                    ]);
+                    await pushWorkspaceToFirestore(credential.user);
                     showToast(
                         `Dossier retrouvé (${driveRecovered.sourceLabel}) et synchronisé.`,
                         'success',
@@ -169,7 +159,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                 }
             }
             showToast(
-                'Compte Google connecté · Firestore, Cloud SQL et Google Drive synchronisés.',
+                'Compte Google connecté · Cloud Firestore et Google Drive synchronisés.',
                 'success',
             );
         } catch (err: unknown) {
@@ -198,23 +188,10 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
     const syncWorkspaceNow = useCallback(async () => {
         if (!user) return;
         try {
-            await Promise.all([
-                pushWorkspaceToFirestore(user),
-                pushWorkspaceToCloudSql(user),
-            ]);
-            showToast('Dossier synchronisé dans Cloud Firestore et Cloud SQL.', 'success');
+            await pushWorkspaceToFirestore(user);
+            showToast('Dossier synchronisé dans Cloud Firestore.', 'success');
         } catch {
             showToast('Échec de la synchronisation Cloud.', 'error');
-        }
-    }, [user]);
-
-    const restoreFromCloudSqlNow = useCallback(async () => {
-        if (!user) return;
-        const ok = await pullWorkspaceFromCloudSql(user);
-        if (ok) {
-            showToast('Dossier restauré depuis Cloud SQL (PostgreSQL).', 'success');
-        } else {
-            showToast('Aucune sauvegarde Cloud SQL distincte trouvée.', 'info');
         }
     }, [user]);
 
@@ -236,7 +213,6 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
         signInWithGoogle,
         signOutUser,
         syncWorkspaceNow,
-        restoreFromCloudSqlNow,
         restoreInitialDataNow,
     };
 

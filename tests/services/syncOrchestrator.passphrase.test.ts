@@ -268,7 +268,7 @@ describe('5) Rétro-compat : ancien blob enc:false lu SANS passphrase → restau
             appVersion: 'legacy',
             enc: false,
             payload: { state: { transactions: [{ id: 'tx-legacy', amount: 7 }] }, version: 7 },
-            apiKeys: { anthropic: 'sk-legacy-clear', finnhub: 'fh-legacy' }, // ancien format clés en clair
+            apiKeys: { gemini: 'sk-legacy-clear', anthropic: 'sk-legacy-clear', finnhub: 'fh-legacy' }, // ancien format clés en clair
         };
         readSyncFileMock.mockResolvedValueOnce(legacy);
         // Aucune passphrase en session.

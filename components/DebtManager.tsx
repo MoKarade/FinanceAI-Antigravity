@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { CHART_TOOLTIP_STYLE, GF_CROSSHAIR_CURSOR, GF_ACTIVE_DOT } from '../utils/chartTooltip';
+import { GF_CROSSHAIR_CURSOR, GF_ACTIVE_DOT } from '../utils/chartTooltip';
 import { Card } from './ui/Card';
 import { PrivateAmount } from './ui/PrivateAmount';
 import { PrivateSliderValue } from './ui/PrivateSliderValue';
@@ -472,6 +472,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ debts, setDebts }) => 
                                     <div className="h-2.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5 p-0.5" aria-hidden="true">
                                         <div
                                             className="h-full rounded-l-full bg-repere transition-all"
+                                            // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
                                             style={{ width: `${Math.round((totalDebt / Math.max(1, totalDebt + simulation.totalInterest)) * 100)}%` }}
                                             title="Capital remboursé"
                                         />
@@ -605,6 +606,7 @@ const DebtExtinctionTooltip: React.FC<DebtExtinctionTooltipProps> = ({ active, p
                     <div
                         className="gf-tooltip-bar-fill"
                         style={{
+                            // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
                             width: `${pctRembourse}%`,
                             background: 'var(--succes-texte)',
                         }}

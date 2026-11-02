@@ -27,7 +27,7 @@ describe('[PH2-c-1] usePastPortfolioHistory — dédup module du fetch', () => {
             useFinanceStore.setState({
                 assets: [asset],
                 isTestMode: false,
-                apiKeys: { anthropic: '', finnhub: 'k-test' },
+                apiKeys: { gemini: '', anthropic: '', finnhub: 'k-test' },
             });
         });
     });
@@ -63,7 +63,7 @@ describe('[PH2-c-1] usePastPortfolioHistory — dédup module du fetch', () => {
 
         // L'utilisateur corrige sa clé → l'effet re-tourne (dep finnhubKey) → le symbole SANS
         // résultat a été purgé du Set → re-fetch autorisé (la sig inclut la clé).
-        act(() => { useFinanceStore.setState({ apiKeys: { anthropic: '', finnhub: 'k-fixed' } }); });
+        act(() => { useFinanceStore.setState({ apiKeys: { gemini: '', anthropic: '', finnhub: 'k-fixed' } }); });
         await waitFor(() => expect(getHistory).toHaveBeenCalledTimes(2));
         await waitFor(() => expect(a.result.current.isLoading).toBe(false));
         expect(a.result.current.points.length).toBeGreaterThan(0); // 2e tentative OK (mock par défaut)

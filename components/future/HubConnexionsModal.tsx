@@ -31,7 +31,8 @@ export const HubConnexionsModal: React.FC<HubConnexionsModalProps> = ({ isOpen, 
     const fxRates = useFinanceStore((s) => s.fxRates);
     const assets = useFinanceStore((s) => s.assets);
     const transactions = useFinanceStore((s) => s.transactions);
-    const setAppState = useFinanceStore((s) => s.setAppState);
+    const isPrivacyMode = useFinanceStore((s) => s.isPrivacyMode);
+    const updateFxRates = useFinanceStore((s) => s.updateFxRates);
     const navigateWithFocus = useFinanceStore((s) => s.navigateWithFocus);
     const setActiveTab = useFinanceStore((s) => s.setActiveTab);
 
@@ -64,7 +65,7 @@ export const HubConnexionsModal: React.FC<HubConnexionsModalProps> = ({ isOpen, 
         setFxBusy(true);
         try {
             const rates = await fetchFxRates();
-            setAppState({ fxRates: rates });
+            updateFxRates(rates);
             showToast(`Devises actualisées (USD = ${rates.USD.toFixed(4)} · EUR = ${rates.EUR.toFixed(4)})`, 'success');
         } catch {
             showToast('Impossible de joindre la Banque du Canada pour le moment.', 'error');
@@ -148,7 +149,7 @@ export const HubConnexionsModal: React.FC<HubConnexionsModalProps> = ({ isOpen, 
                             className="gf-chip touch-target text-ink-100"
                         >
                             <Icon name="transactions" size={14} />
-                            <span>Importer relevé bancaire ({transactions.length} tx)</span>
+                            <span>Importer relevé bancaire ({isPrivacyMode ? '••' : `${transactions.length} tx`})</span>
                         </button>
                         <button
                             type="button"
@@ -156,7 +157,7 @@ export const HubConnexionsModal: React.FC<HubConnexionsModalProps> = ({ isOpen, 
                             className="gf-chip touch-target text-ink-100"
                         >
                             <Icon name="investments" size={14} />
-                            <span>Importer positions courtier ({assets.length} actifs)</span>
+                            <span>Importer positions courtier ({isPrivacyMode ? '••' : `${assets.length} actifs`})</span>
                         </button>
                         <button
                             type="button"

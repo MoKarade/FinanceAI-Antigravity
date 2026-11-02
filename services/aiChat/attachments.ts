@@ -1,6 +1,6 @@
 // services/aiChat/attachments.ts
 //
-// [AITOOLS-B1] Pièces jointes du chat Claude in-app (images + PDF + texte/CSV) — demande Marc
+// [AITOOLS-B1] Pièces jointes du chat Gemini in-app (images + PDF + texte/CSV) — demande Marc
 // 2026-07-22 (« que je puisse mettre des docs ou image ou autre »).
 //
 // Contrats (validés avec Marc, roadmap chat B) :
@@ -14,9 +14,9 @@
 //    VISION_INJECTION_GUARD) → balises de cadre neutralisées avant insertion dans le prompt ;
 //    le nom de fichier est borné/sanitized (il entre dans le prompt comme titre).
 //
-// Pur (aucun store, aucun réseau) → testable. Seul import lourd : AUCUN (types Anthropic effacés).
+// Pur (aucun store, aucun réseau) → testable. Seul import lourd : AUCUN.
 
-import type Anthropic from '@anthropic-ai/sdk';
+import type { GeminiContentBlockParam } from '../geminiClientAdapter';
 import { neutralizeFrameTags, sanitizePromptText } from '../../utils/promptSafety';
 import { logError } from '../errorLogger';
 
@@ -137,8 +137,8 @@ export async function readAttachment(file: File): Promise<AiAttachmentPayload> {
 export function buildUserContent(
     neutralizedText: string,
     attachments: AiAttachmentPayload[],
-): Anthropic.ContentBlockParam[] {
-    const blocks: Anthropic.ContentBlockParam[] = [];
+): GeminiContentBlockParam[] {
+    const blocks: GeminiContentBlockParam[] = [];
     for (const a of attachments) {
         // Garde par TYPE + longueur, jamais par truthiness seule : un base64 VIDE ('') passait la
         // truthiness et droppait le bloc EN SILENCE — combiné à un envoi sans texte, le tour

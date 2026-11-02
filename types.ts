@@ -1131,7 +1131,9 @@ export interface AppState {
   setupOptOut?: Record<string, boolean>;
   initialBalances: Record<string, number>;
   apiKeys: {
-    anthropic: string; // Phase 4 A5 — Claude API key (Anthropic) — remplace Gemini
+    gemini: string;    // Clé API Google Gemini
+    /** @deprecated Clé legacy migrée automatiquement vers `gemini`. */
+    anthropic?: string;
     finnhub: string;   // §7.F.5 — marketData (quotes/history/profile) — optionnel
     /** [FINTABLE-7] Jeton Fintable LECTURE SEULE — sync bancaire depuis le navigateur. Optionnel
      *  (absent = la sync in-app est simplement inactive). Comme les autres clés : jamais persisté
@@ -1186,7 +1188,7 @@ export interface AppState {
   aiConversations?: AiConversation[];
   /** Id de la conversation ACTIVE (celle d'`aiConversation`) — null tant qu'aucune n'a été archivée. */
   activeAiConversationId?: string | null;
-  /** [B3-CHAT-MODEL] Modèle Claude de la conversation ACTIVE (choix par conversation — porté dans
+  /** [B3-CHAT-MODEL] Modèle Google Gemini de la conversation ACTIVE (choix par conversation — porté dans
    *  `AiConversation.model` à l'archivage/bascule). ADDITIF optionnel (absent = 'sonnet', le
    *  comportement historique). */
   aiChatModel?: AiChatModelKey;

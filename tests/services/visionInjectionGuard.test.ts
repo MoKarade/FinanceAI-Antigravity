@@ -18,7 +18,7 @@ describe('[SEC-VISION-CONSENT-INJECTION] clause anti-injection Vision', () => {
     });
 
     it('les 2 appels Vision (paie + relevé) incluent la clause', () => {
-        const src = readFileSync(resolve(process.cwd(), 'services/claude.ts'), 'utf8');
+        const src = readFileSync(resolve(process.cwd(), 'services/gemini.ts'), 'utf8');
         // 2 appels Vision doivent exister (prouve le volume avant d'affirmer la couverture).
         const visionCalls = (src.match(/makeClient\(apiKey, 'vision'\)/g) || []).length;
         expect(visionCalls).toBe(2);

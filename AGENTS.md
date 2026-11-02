@@ -1,6 +1,6 @@
-# AGENTS.md : consignes permanentes pour les agents (Jules)
+# AGENTS.md : consignes permanentes pour les agents (Google Antigravity & Gemini)
 
-Ce fichier dit comment travailler ici. `CLAUDE.md` fait foi pour le métier (garde-fous, données, sécurité) : lis les deux. Mis en place par MoKarade/.github#76.
+Ce fichier dit comment travailler ici. `GEMINI.md` fait foi pour le métier (architecture 100 % Google, garde-fous, données, sécurité) et `docs/COMPTE-RENDU.md` pour la forme des réponses : lis les deux.
 
 ## Périmètre
 - L'issue est ta seule consigne. Si elle liste des « Fichiers permis », ne touche à AUCUN autre fichier, même pour « bien faire ». Si la tâche exige davantage, arrête-toi et écris-le dans la PR au lieu d'élargir.
@@ -8,7 +8,7 @@ Ce fichier dit comment travailler ici. `CLAUDE.md` fait foi pour le métier (gar
 - Une tâche tient en cinq fichiers et environ 400 lignes de diff au plus. Si elle exige davantage, arrête-toi et écris-le dans la PR.
 
 ## Interdits
-- Chemins protégés : `scripts/hooks/`, `qualite/`, `vercel.json`, `drizzle/`, `.env*`, `.claude/`, `api/`, `mcp/`, `vite.config.ts`, `index.html`, `settings*`, `commit-gate*`. Les workflows de `.github/` ne se modifient que si l'issue les liste dans « Fichiers permis » (jamais `garde-fou*.yml`, la relecture IA, `.mergify.yml`, `CODEOWNERS`) ; aucune référence `secrets.` ni permission élargie.
+- Chemins protégés : `scripts/hooks/`, `qualite/`, `vercel.json`, `drizzle/`, `.env*`, `api/`, `mcp/`, `vite.config.ts`, `index.html`, `firestore.rules`, `settings*`, `commit-gate*`. Les workflows de `.github/` ne se modifient que si l'issue les liste dans « Fichiers permis » (jamais `garde-fou*.yml`, la relecture IA, `.mergify.yml`, `CODEOWNERS`) ; aucune référence `secrets.` ni permission élargie.
 - Secrets, jetons, clés, authentification, droits d'accès, migrations de base (y compris une simple référence `secrets.X` ou une variable d'environnement secrète).
 - Toute donnée personnelle de Marc (adresse, montant réel, nom de tiers) dans le code, les tests, la doc ou le texte de la PR : données fictives seulement.
 - Désactiver, sauter ou affaiblir un test, un seuil ou un contrôle.
@@ -23,6 +23,6 @@ Ce fichier dit comment travailler ici. `CLAUDE.md` fait foi pour le métier (gar
 ## Livrer
 - Branche par défaut : `main`. PR vers `main`, en brouillon si tu peux.
 - Titre `type: verbe et objet en français` (`docs:`, `test:`, `fix:`, `chore:`). Corps : Avant / Après / Comment.
-- Une ligne `Tâche : #<numéro de l'issue>` (ou `Tâche : MoKarade/<dépôt>#n`). N'écris jamais `Fixes`, `Closes` ni `Resolves` : la tâche se ferme seulement par la preuve « Acceptée » posée par Claude.
+- Une ligne `Tâche : #<numéro de l'issue>` (ou `Tâche : MoKarade/<dépôt>#n`). N'écris jamais `Fixes`, `Closes` ni `Resolves` : la tâche se ferme seulement par la preuve « Acceptée » posée par l'agent principal (Google Antigravity / Gemini).
 - Avant de livrer, lance : `npm run typecheck && npm run lint && npm run test && npm run build`. Montre dans la PR la sortie de la commande du « Fini quand » de l'issue.
-- Une PR qui change un écran porte des captures avant/après prises avec des données fictives, laisse verts les tests de thème (couleurs en variables, cibles de 44 px) et ne change ni le comportement ni les textes au-delà de la demande.
+- Une PR qui change un écran porte des captures avant/après prises avec des données fictives, laisse verts les tests de thème (couleurs en variables Google Finance, cibles de 44 px) et ne change ni le comportement ni les textes au-delà de la demande.

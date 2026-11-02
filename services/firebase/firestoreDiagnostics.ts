@@ -1,17 +1,16 @@
 import { doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { app, db, auth } from './firebaseClient';
-import { firestoreService } from './firestoreService';
 import { logError } from '../errorLogger';
 
-export interface FirebaseConfigValidationResult {
+interface FirebaseConfigValidationResult {
     valid: boolean;
     missingOrInvalidFields: string[];
     projectId: string;
     firestoreDatabaseId: string;
 }
 
-export interface FirestoreDiagnosticReport {
+interface FirestoreDiagnosticReport {
     ok: boolean;
     timestamp: string;
     projectId: string;
@@ -26,7 +25,7 @@ export interface FirestoreDiagnosticReport {
     error?: string;
 }
 
-export interface VerifyFirestoreDiagnosticOptions {
+interface VerifyFirestoreDiagnosticOptions {
     /** Sonde serveur injectable pour les tests unitaires déterministes */
     serverProbe?: () => Promise<void>;
     /** Configuration injectable pour tester les cas de configuration invalide */
@@ -91,19 +90,19 @@ export async function verifyFirestoreConnectionDiagnostic(
     options?: VerifyFirestoreDiagnosticOptions,
 ): Promise<FirestoreDiagnosticReport> {
     const startedAt = Date.now();
-    const targetConfig = options?.configOverride ?? firestoreService.config ?? firebaseConfig;
+    const targetConfig = options?.configOverride ?? firebaseConfig;
     const configCheck = validateFirebaseConfiguration(targetConfig);
 
-    const appOptions = firestoreService.app?.options ?? app.options;
+    const appOptions = app?.options ?? {};
     const serviceAligned =
         configCheck.valid &&
-        firestoreService.db === db &&
-        firestoreService.auth === auth &&
+        Boolean(db) &&
+        Boolean(auth) &&
         appOptions.projectId === targetConfig.projectId &&
         appOptions.appId === targetConfig.appId;
 
-    const authInitialized = Boolean(firestoreService.auth);
-    const currentUserUid = firestoreService.auth?.currentUser?.uid ?? null;
+    const authInitialized = Boolean(auth);
+    const currentUserUid = auth?.currentUser?.uid ?? null;
 
     if (!configCheck.valid || !serviceAligned) {
         const latencyMs = Math.max(0, Date.now() - startedAt);
@@ -148,7 +147,7 @@ export async function verifyFirestoreConnectionDiagnostic(
     const probe =
         options?.serverProbe ??
         (async () => {
-            await getDocFromServer(doc(firestoreService.db, 'test', 'connection'));
+            await getDocFromServer(doc(db, 'test', 'connection'));
         });
 
     try {

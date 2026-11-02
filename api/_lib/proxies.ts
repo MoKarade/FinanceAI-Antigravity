@@ -1,16 +1,6 @@
 // api/_lib/proxies.ts
-// [SESSION-HUB] 2026-10-28 (garde remplacée, FinanceAI#1159) — proxys Yahoo (historique, recherche) et Fintable, en fonctions gardées.
-//
-// AVANT (2026-09-25) : de simples réécritures vercel.json (`/api/history/yahoo/:symbol` → query1.finance.yahoo.com, etc.) : aucun
-// contrôle possible, donc ouvertes à quiconque connaît l'adresse *.vercel.app. MAINTENANT : la réécriture pointe vers une
-// fonction (chemin STATIQUE : les attrape-tout ne sont pas routés sur ce projet Vite, cf. api/claude/v1/messages.ts) qui
-// applique le MÊME contrôle de session du hub que le relais Claude (accesHub.ts), plus un débit par IP.
-//
-// Décision Yahoo (motivée) : GARDÉ par la session, pas seulement limité en débit. Le navigateur de Marc envoie le cookie du hub
-// (`.hubperso.com`, même site) : aucune perte d'usage, et l'API n'est plus un proxy Yahoo public utilisable par n'importe qui.
-//
+// Proxys Yahoo (historique, recherche) et Fintable, en fonctions gardées avec limitation de débit par IP.
 // Chaque proxy est une LISTE BLANCHE : hôte amont fixe, paramètres validés un à un, GET seulement, délai borné, aucun cookie.
-import { controlerAcces, messageRefus, statutRefus, type OptionsAcces } from './accesHub.js';
 import { essayerDebit, ipClient } from './garde.js';
 
 const DELAI_AMONT_MS = 15_000;
@@ -18,7 +8,6 @@ const DEBIT_PROXY_PAR_MIN = 120;
 const UA = 'Mozilla/5.0 (compatible; FinanceAI/1.0)';
 
 export interface ProxyOptions {
-    access?: OptionsAcces | null;
     /** Tests : fetch injectable. */
     fetchImpl?: typeof fetch;
 }
@@ -30,16 +19,9 @@ function erreur(status: number, message: string, type = 'proxy_error'): Response
     });
 }
 
-/** Garde commune : méthode GET, session du hub, débit par IP. `null` = tout va bien. */
-async function garder(request: Request, opts: ProxyOptions): Promise<Response | null> {
+/** Garde commune : méthode GET et débit par IP. `null` = tout va bien. */
+function garder(request: Request): Response | null {
     if (request.method !== 'GET') return erreur(405, 'Méthode non autorisée.');
-    const acces = opts.access === null
-        ? { autorise: true as const }
-        : await controlerAcces(request.headers, opts.access);
-    if (!acces.autorise) {
-        const raison = acces.raison ?? 'session_absente';
-        return erreur(statutRefus(raison), messageRefus(raison), 'access_denied');
-    }
     const debit = essayerDebit(`px:${ipClient(request.headers)}`, DEBIT_PROXY_PAR_MIN);
     if (!debit.ok) {
         const r = erreur(429, 'Trop de requêtes.');
@@ -103,12 +85,9 @@ function cheminFintableDuChemin(pathname: string): string | undefined {
 
 /** GET /api/yahoo/history?symbol=…&range=…&interval=… | &period1=…&period2=… */
 export async function proxyYahooHistorique(request: Request, opts: ProxyOptions = {}): Promise<Response> {
-    const refus = await garder(request, opts);
+    const refus = garder(request);
     if (refus) return refus;
     const u = new URL(request.url);
-    // [À MESURER en prévisualisation] Selon la version du runtime, `request.url` porte l'URL réécrite (`?symbol=`) ou l'URL
-    // d'origine (`/api/history/yahoo/<symbole>`) : les deux formes sont lues, la requête d'abord.
-    // Paramètre répété (null) = REFUS, jamais un repli silencieux sur le chemin d'origine.
     const param = unique(u, 'symbol');
     if (param === null) return erreur(400, 'Symbole ambigu.');
     const symbole = param ?? symboleDuChemin(u.pathname) ?? '';
@@ -125,7 +104,7 @@ export async function proxyYahooHistorique(request: Request, opts: ProxyOptions 
 
 /** GET /api/yahoo/search?q=…&quotesCount=…&newsCount=…&listsCount=… */
 export async function proxyYahooRecherche(request: Request, opts: ProxyOptions = {}): Promise<Response> {
-    const refus = await garder(request, opts);
+    const refus = garder(request);
     if (refus) return refus;
     const u = new URL(request.url);
     const terme = u.searchParams.get('q') ?? '';
@@ -147,7 +126,7 @@ const CHEMIN_FINTABLE = /^[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*$/;
  * L'en-tête `Authorization: Bearer <jeton Fintable>` du navigateur est relayé ; il n'est jamais journalisé.
  */
 export async function proxyFintable(request: Request, opts: ProxyOptions = {}): Promise<Response> {
-    const refus = await garder(request, opts);
+    const refus = garder(request);
     if (refus) return refus;
     const u = new URL(request.url);
     const param = unique(u, 'path');

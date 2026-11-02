@@ -112,12 +112,12 @@ const computeDiagnostics = (state: AppState, persistance: EtatPersistance): LogL
         level: fxSource === 'api' ? 'info' : 'warn',
     });
 
-    const hasAnthropic = !!state.apiKeys.anthropic;
+    const hasGemini = !!(state.apiKeys.gemini || state.apiKeys.anthropic);
     lines.push({
         text: stamp(
-            `API_KEYS: Google Gemini ${hasAnthropic ? '✓' : '✗'}`
+            `API_KEYS: Google Gemini ${hasGemini ? '✓' : '✗'}`
         ),
-        level: hasAnthropic ? 'info' : 'warn',
+        level: hasGemini ? 'info' : 'warn',
     });
 
     // FA-8 (2026-06-11) — libellé COMPOSÉ depuis les constantes réelles de utils/tax.ts

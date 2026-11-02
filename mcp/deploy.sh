@@ -14,9 +14,8 @@
 #     (les 2 clés OAuth sont montées en variables d'env ; le refresh Google est lu à l'exécution).
 #
 # Secrets OPTIONNELS — chacun ACTIVE une route, et son absence la laisse désactivée (le script
-# le dit à chaque déploiement) : financeai-hub-token, financeai-refresh-secret,
-# financeai-finnhub-key, financeai-fintable-{sync-secret,token,roles-json},
-# financeai-vehicule-{token,dette}.
+# le dit à chaque déploiement) : financeai-refresh-secret, financeai-finnhub-key,
+# financeai-fintable-{sync-secret,token,roles-json}, financeai-market-secret, financeai-eodhd-key.
 #
 # ⚠️ CE SCRIPT EST LE SEUL ENDROIT OÙ LE CÂBLAGE SURVIT. `--set-secrets` et `--set-env-vars`
 # REMPLACENT l'existant : une variable posée à la main dans la console est effacée au
@@ -92,21 +91,10 @@ echo "▶ Déploiement de $SERVICE sur $REGION (projet $PROJECT_ID, min-instance
 EXISTING_URL="$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)' 2>/dev/null || true)"
 PUBLIC_URL="${EXISTING_URL:-https://pending.invalid}"
 
-# Secrets montés en variables d'env. Les 2 clés OAuth sont obligatoires ; le jeton du
-# hub perso est OPTIONNEL — monté seulement si le secret `financeai-hub-token` existe
-# (sinon GET /hub/summary reste désactivé, pas d'échec). Le monter ici plutôt qu'en
-# variable posée à la main garantit qu'il SURVIT à chaque redéploiement (--set-secrets
-# et --set-env-vars remplacent l'existant : une var posée hors script serait effacée).
+# Secrets montés en variables d'env. Les 2 clés OAuth sont obligatoires.
 SECRETS="FINANCEAI_OAUTH_SIGNING_KEY=financeai-oauth-signing-key:latest,FINANCEAI_ACCESS_KEY=financeai-access-key:latest"
-if gcloud secrets describe financeai-hub-token --project "$PROJECT_ID" >/dev/null 2>&1; then
-  SECRETS="${SECRETS},FINANCEAI_HUB_TOKEN=financeai-hub-token:latest"
-  echo "  Hub : secret financeai-hub-token trouvé → GET /hub/summary ACTIF."
-else
-  echo "  Hub : secret financeai-hub-token absent → GET /hub/summary désactivé."
-  echo "        Pour l'activer : crée le secret puis redéploie (cf mcp/README.md § Hub perso)."
-fi
 
-# Refresh planifié des prix (HUB-REFRESH-CRON) — OPTIONNEL, même logique que le hub :
+# Refresh planifié des prix — OPTIONNEL :
 # monté seulement si le secret `financeai-refresh-secret` existe (sinon POST /refresh reste
 # désactivé, 404). La clé Finnhub est optionnelle (repli CoinGecko pour la crypto sans clé).
 if gcloud secrets describe financeai-refresh-secret --project "$PROJECT_ID" >/dev/null 2>&1; then
@@ -143,32 +131,6 @@ if gcloud secrets describe financeai-fintable-sync-secret --project "$PROJECT_ID
 else
   echo "  Fintable : secret financeai-fintable-sync-secret absent → POST /fintable-sync désactivé."
   echo "             Pour l'activer : crée les 3 secrets (sync-secret + token + roles-json) puis redéploie."
-fi
-
-# [VEHICULE-BAIL] GET /vehicule/bail — ce que FinanceAI sait du bail du véhicule, lu par CarAI
-# (ADR 0017). OPTIONNEL, même logique que les précédents.
-#
-# ⚠️ CETTE ROUTE A ÉTÉ ÉCRITE, TESTÉE, DOCUMENTÉE — ET INJOIGNABLE EN PRODUCTION. Le code
-# ne câble la route que si `FINANCEAI_VEHICULE_TOKEN` existe (cf `mcp/http.ts`), et ce script
-# ne le montait pas : le service déployé répondait donc 404 sur une URL que CarAI interrogeait
-# déjà. Rien n'était rouge — un 404 est exactement ce que la route est CENSÉE rendre quand elle
-# est volontairement désactivée, donc son absence ressemblait à un choix.
-#
-# ⚠️ Et poser la variable à la main dans la console NE MARCHE PAS DURABLEMENT : `--set-secrets`
-# et `--set-env-vars` REMPLACENT l'existant à chaque déploiement (cf le commentaire du bloc
-# `SECRETS` plus haut). Le seul endroit où ce câblage survit est ici.
-if gcloud secrets describe financeai-vehicule-token --project "$PROJECT_ID" >/dev/null 2>&1; then
-  SECRETS="${SECRETS},FINANCEAI_VEHICULE_TOKEN=financeai-vehicule-token:latest"
-  echo "  Véhicule : secret financeai-vehicule-token trouvé → GET /vehicule/bail ACTIF."
-  # Nomme la dette qui compte quand plusieurs véhicules coexistent. Sans lui la route choisit
-  # par `kind`/catégorie, et REFUSE (409) s'il y a plusieurs candidates — elle ne devine pas.
-  if gcloud secrets describe financeai-vehicule-dette --project "$PROJECT_ID" >/dev/null 2>&1; then
-    SECRETS="${SECRETS},FINANCEAI_VEHICULE_DETTE=financeai-vehicule-dette:latest"
-    echo "             Dette nommée par financeai-vehicule-dette."
-  fi
-else
-  echo "  Véhicule : secret financeai-vehicule-token absent → GET /vehicule/bail désactivé (404)."
-  echo "             Pour l'activer : crée le secret puis redéploie (cf mcp/README.md § Bail du véhicule)."
 fi
 
 # [MARCHE-ROUTE] POST /market-store — met à jour le magasin de marché (clôtures EODHD, taux de la Banque
@@ -230,7 +192,7 @@ else
   URL="$EXISTING_URL"
 fi
 
-echo "✅ Déployé. Branche claude.ai → Settings → Connectors → Add custom connector :"
+echo "✅ Déployé. Point d'entrée MCP OAuth 2.1 :"
 echo "     URL du serveur MCP : ${URL}/mcp"
-echo "   claude.ai découvrira l'OAuth via ${URL}/.well-known/oauth-protected-resource."
+echo "   Découverte OAuth via ${URL}/.well-known/oauth-protected-resource."
 echo "   Sonde santé : ${URL}/health"

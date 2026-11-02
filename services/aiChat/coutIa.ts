@@ -1,8 +1,8 @@
 // services/aiChat/coutIa.ts
 //
-// [COUT-IA-MESURE] Coût RÉEL des appels Claude de l'app, mesuré AU POINT DE CONTACT SDK
-// (`services/claude.ts` : chaque `messages.create(` / `messages.stream(`), avec le tarif de
-// `pricing.ts`. Le cumul à vie (`aiChatCostUsdTotal`) alimente le bloc `usage` du résumé du hub :
+// [COUT-IA-MESURE] Coût RÉEL des appels Google Gemini de l'app, mesuré AU POINT DE CONTACT SDK
+// (`services/gemini.ts` : chaque `messages.create(` / `messages.stream(`), avec le tarif de
+// `pricing.ts`. Le cumul à vie (`aiChatCostUsdTotal`) alimente le bloc `usage` du résumé :
 // sans écrivain il restait figé à 0 $ pendant que catégorisation, Planning, Impôts et lecture de
 // talon coûtaient de vrais dollars (FinanceAI#50) — un chiffre non mesuré, donc faux.
 //
@@ -45,7 +45,7 @@ export function brancherCoutIa(fn: Abonne): () => void {
 /**
  * À appeler UNE fois par réponse du modèle. Coût inconnu (modèle sans tarif) ou usage absent :
  * trace dans la console, rien n'est cumulé — jamais un coût fabriqué (no-fake-data).
- * Un échec de l'abonné ne doit jamais faire échouer l'appel Claude payé : il est journalisé, pas avalé.
+ * Un échec de l'abonné ne doit jamais faire échouer l'appel Gemini payé : il est journalisé, pas avalé.
  */
 export function signalerUsageIa(modelId: string, usageSdk: UsageSdk | null | undefined): void {
     const usage = usageDepuisSdk(usageSdk);

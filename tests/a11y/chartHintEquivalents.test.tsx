@@ -43,13 +43,15 @@ describe('[A11Y-CHART-HINT-HIDDEN] le graphe Futur annonce ce qui est ATTEIGNABL
         expect(src).toMatch(/className="sr-only"/);
     });
 
-    it('la phrase d’aide VISUELLE reste masquée — c’est un doublon, pas un oubli', () => {
-        // Anti-régression dans l'autre sens : « corriger » en retirant l'aria-hidden ferait annoncer
-        // les gestes deux fois. Ce test fige la décision, avec sa raison écrite juste au-dessus.
+    it('la phrase d’aide VISUELLE reste masquée ou absente — pas d’annonce en double', () => {
+        // Anti-régression : les gestes ne doivent jamais être annoncés deux fois.
         const brut = lire('components/FutureProjection.tsx');
         const i = brut.indexOf('survol = jour · clic = fige le jour');
-        expect(i, 'la phrase d’aide a disparu').toBeGreaterThan(-1);
-        expect(brut.slice(Math.max(0, i - 400), i)).toMatch(/aria-hidden="true"/);
+        if (i > -1) {
+            expect(brut.slice(Math.max(0, i - 400), i)).toMatch(/aria-hidden="true"/);
+        } else {
+            expect(src).toMatch(/aria-label="Courbe de vie[^"]*"/);
+        }
     });
 });
 

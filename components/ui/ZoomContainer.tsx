@@ -25,6 +25,7 @@ function extrairePointComparaison(row: Record<string, unknown>): {
 } {
     const xRaw = row.date ?? row.age ?? row.year ?? row.month ?? '';
     let xLabel = String(xRaw);
+    // NOMBRE-NON-MONETAIRE : étiquette d'axe X de comparaison rendue sous PrivateAmount ou hors montant
     if (typeof row.age === 'number') xLabel = `${row.age} ans`;
     else if (typeof row.month === 'number') xLabel = row.month === 0 ? "auj." : `${row.month} m`;
     else if (typeof row.year === 'number') xLabel = `An ${row.year}`;
@@ -139,6 +140,7 @@ export const ZoomContainer: React.FC<ZoomContainerProps> = ({ zoom, className = 
                     <div
                         aria-hidden="true"
                         className="pointer-events-none absolute inset-y-2 z-10 bg-repere/10 border-x border-repere/50 rounded-xs"
+                        // NOMBRE-NON-MONETAIRE : géométrie de sélection de plage à la souris
                         style={{ left: `${dragRange.leftPct}%`, width: `${dragRange.widthPct}%` }}
                     />
                     <div className="absolute top-1 left-1 z-20 inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-surface border border-repere/40 text-tiny font-mono shadow-lg">
@@ -226,6 +228,7 @@ export const ZoomContainer: React.FC<ZoomContainerProps> = ({ zoom, className = 
                 <div className="gf-chart-minimap" aria-hidden="true">
                     <div
                         className="gf-chart-minimap-thumb"
+                        // NOMBRE-NON-MONETAIRE : géométrie de la mini-carte de zoom
                         style={{ left: `${startPct}%`, width: `${widthPct}%` }}
                     />
                 </div>

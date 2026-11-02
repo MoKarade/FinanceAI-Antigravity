@@ -33,16 +33,16 @@ const FICHIER = 'mcp/http.ts';
 const TEMOIN = 'createServer';
 
 describe('log de démarrage — aucun identifiant de Marc en clair', () => {
-    it('la VALEUR de FINANCEAI_VEHICULE_DETTE n\'est interpolée nulle part', () => {
+    it('la VALEUR de FINTABLE_ROLES_JSON (rawRoles) n\'est interpolée nulle part', () => {
         const code = readCodeOnly(FICHIER, TEMOIN);
-        expect(code).not.toContain('${vehiculeNomDette}');
+        expect(code).not.toContain('${rawRoles}');
     });
 
     it('anti-vacuité : la variable EXISTE encore dans ce fichier', () => {
         // Sans ce cas, retirer complètement la fonctionnalité rendrait la garde ci-dessus
         // verte pour la mauvaise raison — elle serait satisfaite par la disparition de son objet.
         const code = readCodeOnly(FICHIER, TEMOIN);
-        expect(code).toContain('vehiculeNomDette');
+        expect(code).toContain('rawRoles');
     });
 
 });

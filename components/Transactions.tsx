@@ -9,8 +9,8 @@ import { logError } from '../services/errorLogger';
 import { Tab, Transaction, BudgetCategory, CategorizationRule } from '../types';
 import { TAB_LABELS } from '../constants';
 import { showToast } from './ui/Toast';
-// Phase 4 A3: bascule sur services/claude.ts (Haiku 4.5 pour vitesse)
-import { categorizeBatch, CATEGORIZE_MODEL_ID } from '../services/claude';
+// Phase 4 A3: bascule sur services/gemini.ts (Flash-Lite pour vitesse)
+import { categorizeBatch, CATEGORIZE_MODEL_ID } from '../services/gemini';
 import { modelLabelFromId } from '../services/aiChat/models';
 import { RULE_CATEGORIES } from '../services/import/categoryRules';
 // [TX-CATEGORIZE] La catégorie « Abonnements » ne se décide plus sur le seul libellé : chez un
@@ -580,6 +580,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
             </div>
             {!isPrivacyMode && (moisCourant.entrees > 0 || Math.abs(moisCourant.sorties) > 0) && (
                 <div className="h-2.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5 p-0.5" aria-hidden="true">
+                    {/* MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode */}
                     <div className="h-full rounded-l-full bg-succes-texte transition-all" style={{ width: `${pctEntreesMois}%` }} />
                     <div className="h-full rounded-r-full bg-erreur-texte transition-all" style={{ width: `${pctSortiesMois}%` }} />
                 </div>
@@ -675,6 +676,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                     </PrivateAmount>
                     {!isPrivacyMode && (
                         <div className="mt-2 h-1.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex" aria-hidden="true">
+                            {/* MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode */}
                             <div className="h-full bg-succes-texte" style={{ width: `${pctEntreesMois}%` }} />
                             <div className="h-full bg-erreur-texte" style={{ width: `${pctSortiesMois}%` }} />
                         </div>

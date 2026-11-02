@@ -4,7 +4,7 @@
 
 # FinanceAI
 
-Application personnelle de planification financière complète : suivi en temps réel, projections fiscales canadiennes (ARC + Revenu Québec), simulation Monte Carlo de la retraite, assistant IA (Claude).
+Application personnelle de planification financière complète (architecture 100 % Google) : suivi en temps réel, projections fiscales canadiennes et québécoises (ARC + Revenu Québec), simulation Monte Carlo de la retraite, assistant IA **Google Gemini**, synchronisation **Cloud Firestore** & **Google Drive**, authentification **Firebase Auth / Google Sign-In**, interface **Google Finance**.
 
 ## 🚀 Lancer localement
 
@@ -12,8 +12,8 @@ Application personnelle de planification financière complète : suivi en temps 
 
 ```bash
 npm install
-# Mettre ANTHROPIC_API_KEY dans .env.local (optionnel — assistant IA)
-# Mettre ERA_CONTEXT_TOKEN dans .env.local (optionnel — synchronisation transactions)
+# Clé API Google Gemini (apiKeys.gemini) saisie dans l'interface (chiffrée AES-256-GCM en IndexedDB)
+# Variables Firebase optionnelles (VITE_FIREBASE_*) dans .env.local pour Firebase Auth + Cloud Firestore
 npm run dev
 ```
 
@@ -34,7 +34,7 @@ npm run build         # Vite 8 (--mode production)
 Tests manuels : ~195 cas couvrant les onglets actifs — voir
 [`docs/HISTORIQUE.md`](docs/HISTORIQUE.md).
 
-*(Le nombre de tests était écrit ici, daté du 2026-08-17, pendant que le `CLAUDE.md` en portait
+*(Le nombre de tests était écrit ici, daté du 2026-08-17, pendant que le `GEMINI.md` en portait
 un autre daté du 2026-08-20. Deux chiffres, deux dates, une seule vérité : celui qui n'est pas
 relu ment en silence. Un compteur se lit dans la CI.)*
 
@@ -83,11 +83,11 @@ relu ment en silence. Un compteur se lit dans la CI.)*
 
 L'architecture détaillée est maintenue dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Résumé :
 
-- L'app vit côté navigateur et persiste localement (localStorage + IndexedDB chiffré). Elle n'a pas de backend de données, mais deux petits services serveur l'accompagnent : `api/` (relais Vercel pour les appels Claude) et `mcp/` (serveur MCP). Finnhub et CoinGecko sont appelés depuis le client.
-- `api/` : `api/_lib/relay.ts` et `api/claude/v1/messages.ts` (chemin statique, requis par Vercel). Le relais garde la clé Anthropic de l'utilisateur (BYOK) et peut router les appels texte ou à outils « custom » Haiku/Sonnet vers la passerelle IA locale (Ollama via l'Atelier), avec bascule automatique sur Anthropic. Décision : [`docs/adr/0018-ia-locale-via-relais.md`](docs/adr/0018-ia-locale-via-relais.md).
+- L'app adopte une architecture **100 % Google** côté navigateur et persiste localement (`localStorage` + IndexedDB chiffré `AES-256-GCM`), avec synchronisation infonuagique via **Cloud Firestore** (`services/firebase/workspaceSync.ts`, isolée par `users/{uid}/workspaces/main`) et **Google Drive** (`appDataFolder` chiffré). L'authentification repose sur **Firebase Auth** (Google Sign-In) et Google Identity Services (OAuth 2.0 PKCE).
+- Les fonctions d'intelligence artificielle passent par **Google Gemini** (`services/gemini.ts` et `services/geminiAssistant.ts` via le SDK officiel `@google/genai`, clé utilisateur `apiKeys.gemini` chiffrée en IndexedDB). Le serveur MCP (`mcp/`) expose les outils financiers typés.
 - Le moteur de projection (`services/projection.ts` + `services/projection/` — une soixantaine de fichiers) est le coeur de l'app. Voir [`docs/PROJECTION.md`](docs/PROJECTION.md) pour les détails.
 - Le state global est Zustand v5 + persist (schema v7 avec migrations v1→v7).
-- `services/eraContext.ts` est dormant (MCP-only) — l'UI Era a été retirée.
+- L'interface applique le **Design System Google Finance** (thèmes clair et sombre Material 3, typographie Google Sans / Roboto Mono, variables CSS sémantiques).
 
 ## 🔐 Sécurité
 
@@ -101,26 +101,26 @@ L'architecture détaillée est maintenue dans [`docs/ARCHITECTURE.md`](docs/ARCH
 
 ## 🛠️ Stack
 
-- **Frontend** : React 19.2 + Vite 8 (Rolldown) + TypeScript 5.8 strict + Tailwind CSS 3
+- **Frontend** : React 19.2 + Vite 8 (Rolldown) + TypeScript 5.9 strict + Tailwind CSS (Design System **Google Finance** / Material 3)
 - **State** : Zustand 5 (avec `persist` + `partialize`, schema v7 + migrations v1→v7)
-- **Tests** : Vitest 4 + @testing-library/react + axe-core (compte : voir `CLAUDE.md`, source unique)
+- **Tests** : Vitest + @testing-library/react + axe-core (compte : voir `GEMINI.md`, source unique)
 - **Validation** : Zod 3
 - **Charts** : Recharts 3 (lazy-loaded)
-- **Backend** : aucun — 100 % navigateur, déploiement statique **Vercel** (`vercel.json`)
-- **LLM** : Anthropic Claude (famille 5.5 : Haiku + Sonnet + Opus via `@anthropic-ai/sdk` — modèle fixé par usage, réglages dans `services/aiChat/reglages.ts`)
-- **Vision** : Claude Vision pour OCR relevés/paies PDF
+- **Auth & Cloud** : **Firebase Auth** (Google Sign-In) + **Cloud Firestore** (`users/{uid}/workspaces/main`) + déploiement **Vercel** (`vercel.json`)
+- **LLM** : **Google Gemini** (`gemini-2.5-flash` + `gemini-2.5-pro` via `@google/genai` — `services/gemini.ts`, réglages dans `services/aiChat/reglages.ts`)
+- **Vision** : **Gemini Vision** (`gemini-2.5-flash`) pour OCR relevés bancaires et talons de paie PDF/images
 - **Data marché** : Finnhub REST API (cours actions + ETF, cache 1h) ; CoinGecko (crypto)
-- **Sync** : Google Drive (chiffrement optionnel par passphrase, AES-256-GCM)
+- **Sync** : **Cloud Firestore** (temps réel multi-appareils) + **Google Drive** (`appDataFolder`, chiffrement optionnel par passphrase, AES-256-GCM)
 - **MCP** : Model Context Protocol server (Node.js)
 
 ## 📈 Fonctionnalités clés
 
 ### Suivi en temps réel
-- Synchronisation transactions Era Context (9 endpoints, AbortController)
-- Import OCR relevés/paies PDF (Claude Vision) — extraction montants, dates, catégories
-- Reconnaissance auto des catégories (rules + LLM)
+- Import CSV universel et synchronisation des transactions
+- Import OCR relevés/paies PDF (**Gemini Vision**) — extraction montants, dates, catégories
+- Reconnaissance auto des catégories (règles locales + **Google Gemini**)
 - Détection d'abonnements récurrents
-- Sync Google Drive bidirectionnelle (données chiffrées optionnellement)
+- Sync **Cloud Firestore** et **Google Drive** bidirectionnelle (données chiffrées optionnellement)
 
 ### Budget et goals
 - Budget v2 : règle 50/30/20 (Besoins/Envies/Épargne) réel vs théorique
@@ -159,13 +159,12 @@ L'architecture détaillée est maintenue dans [`docs/ARCHITECTURE.md`](docs/ARCH
 - Clés API exclues des sauvegardes et du localStorage
 - Zéro transmission de PII — toutes les données restent dans le navigateur
 
-### Assistant IA
-- **LIA** (l'assistant du hub perso, lia-ui) est la seule interface d'assistant ; l'ancien onglet Assistant, sa bulle flottante et son chat intégré sont retirés (28-29/10/2026, FinanceAI#15). Ses pouvoirs sur les chiffres de l'app arrivent avec MemoryAI#281
-- Connecteur MCP `financeAImcp` : Claude.ai lit les chiffres et écrit avec confirmation à deux temps (aperçu puis jeton, rien n'est écrit sans accord)
-- Dans l'app : diagnostic budget (streamé, annulable), suggestions Planning, catégorisation (Haiku), lecture de talon de paie et de relevés ; les écritures de Impôts et du talon de paie passent par le modal « Appliquer » (diff avant → après)
-- Modèles : Haiku (tâches rapides) / Sonnet (défaut) / Opus, famille 5.5
-- Mode discret : aucun montant n'est envoyé à l'IA ; aucune PII envoyée
-- Les anciennes conversations enregistrées ne sont ni lues ni effacées
+### Assistant IA (Google Gemini)
+- **Google Gemini** (`services/gemini.ts` et `services/geminiAssistant.ts` via `@google/genai`) propulse toutes les fonctions d'intelligence artificielle de l'application avec la clé utilisateur `apiKeys.gemini` chiffrée en IndexedDB
+- Connecteur MCP `financeAImcp` : lecture des indicateurs financiers et écriture avec confirmation à deux temps (aperçu puis jeton, rien n'est écrit sans accord)
+- Dans l'app : diagnostic budget (streamé, annulable), suggestions Planning, catégorisation par lot (`gemini-2.5-flash`), lecture de talon de paie et de relevés bancaires (**Gemini Vision**) ; les écritures d'Impôts et du talon de paie passent par le modal « Appliquer » (diff avant → après)
+- Modèles : `gemini-2.5-flash` (défaut rapide, catégorisation, vision) et `gemini-2.5-pro` (analyses approfondies et stratégies complexes)
+- Mode discret : aucun montant n'est envoyé à Gemini ; aucune PII envoyée ; contexte fictif explicitement marqué en mode test (`[SANDBOX-PROMPTS-MARQUER-CONTEXTE]`)
 
 ### Accessibilité
 - Contraste WCAG AA vérifié (script `scripts/check-contrast.ts`)

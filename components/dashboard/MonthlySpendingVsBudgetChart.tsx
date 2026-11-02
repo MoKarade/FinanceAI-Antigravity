@@ -169,12 +169,12 @@ export const MonthlySpendingVsBudgetChart: React.FC<MonthlySpendingVsBudgetChart
         {
             key: 'depenses',
             label: 'Dépenses réelles',
-            format: (v) => (isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCAD(Number(v) || 0)),
+            format: (v) => (isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCAD(Number(v))),
         },
         {
             key: 'budget',
             label: 'Budget cible',
-            format: (v) => (isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCAD(Number(v) || 0)),
+            format: (v) => (isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCAD(Number(v))),
         },
     ], [isPrivacyMode]);
 
@@ -183,12 +183,12 @@ export const MonthlySpendingVsBudgetChart: React.FC<MonthlySpendingVsBudgetChart
         {
             key: 'depenses',
             label: 'Dépensé ce mois',
-            format: (v) => (isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCAD(Number(v) || 0)),
+            format: (v) => (isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCAD(Number(v))),
         },
         {
             key: 'budget',
             label: 'Budget cible',
-            format: (v) => (isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCAD(Number(v) || 0)),
+            format: (v) => (isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCAD(Number(v))),
         },
     ], [isPrivacyMode]);
 
@@ -198,7 +198,7 @@ export const MonthlySpendingVsBudgetChart: React.FC<MonthlySpendingVsBudgetChart
         <section
             data-testid="monthly-spending-vs-budget-chart"
             aria-label="Dépenses mensuelles vs Budget cible"
-            className={`rounded-md bg-surface border border-bordure divide-y divide-bordure gf-chart-enter ${className}`}
+            className={`premium-card rounded-md bg-surface border border-bordure divide-y divide-bordure gf-chart-enter ${className}`}
         >
             {/* En-tête : titre, indicateurs de santé budgétaire du mois et sélecteur de vue */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4">
@@ -563,6 +563,7 @@ const BudgetMensuelTooltip: React.FC<BudgetMensuelTooltipProps> = ({ active, pay
                         <div
                             className="gf-tooltip-bar-fill"
                             style={{
+                                // NOMBRE-NON-MONETAIRE : BARRE-DECORATIVE de ratio accompagnant le badge sous PrivateAmount
                                 width: `${Math.min(100, Math.max(0, ratio ?? 0))}%`,
                                 backgroundColor: depasse ? 'var(--texte-doux)' : 'var(--accent)',
                             }}
@@ -626,6 +627,7 @@ const BudgetPosteTooltip: React.FC<BudgetPosteTooltipProps> = ({ active, payload
                         <div
                             className="gf-tooltip-bar-fill"
                             style={{
+                                // NOMBRE-NON-MONETAIRE : BARRE-DECORATIVE de ratio accompagnant le badge sous PrivateAmount
                                 width: `${Math.min(100, Math.max(0, ratio ?? 0))}%`,
                                 backgroundColor: depasse ? 'var(--texte-doux)' : 'var(--accent)',
                             }}

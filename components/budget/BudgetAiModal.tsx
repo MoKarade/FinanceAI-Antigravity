@@ -4,7 +4,7 @@ import { logError } from '../../services/errorLogger';
 import { messageErreurIa } from '../../services/messageErreurIa';
 import { Modal } from '../ui/Modal';
 import { Icon } from '../ui/Icon';
-import { chatStream, safeJsonValidate, MODEL_HAIKU } from '../../services/claude';
+import { chatStream, safeJsonValidate, MODEL_HAIKU } from '../../services/gemini';
 import { z } from 'zod';
 import { sanitizePromptText, wrapUserData, PROMPT_DATA_ISOLATION_NOTE } from '../../utils/promptSafety';
 import { useFinanceStore } from '../../store/useFinanceStore';
@@ -116,7 +116,7 @@ export const BudgetAiModal: React.FC<BudgetAiModalProps> = ({ apiKey, payload, o
                     accumulator += chunk;
                     setStreamingText(accumulator);
                 }
-                // [BUDGET-AI-DUP-PARSING] `safeJsonValidate` (services/claude.ts) au lieu d'un
+                // [BUDGET-AI-DUP-PARSING] `safeJsonValidate` (services/gemini.ts) au lieu d'un
                 // parsing réimplémenté ici : il gère déjà les fences ```json, la prose autour, et
                 // rend `null` au lieu de JETER sur un JSON malformé — l'ancienne version faisait
                 // remonter l'exception au `catch` global, qui affichait « erreur » et perdait TOUT

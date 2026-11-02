@@ -13,7 +13,7 @@ vi.mock('react-i18next', () => ({
     useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'fr' } }),
 }));
 
-const defaultApiKeys: AppState['apiKeys'] = { anthropic: 'ANT_SECRET', finnhub: '' };
+const defaultApiKeys: AppState['apiKeys'] = { gemini: 'GEMINI_SECRET', finnhub: '' };
 const defaultConfig: BudgetConfig = {
     users: [
         { name: 'Marc', monthlyGross: 7000, rrspContribution: 0, fhsaContribution: 0, birthYear: 1990, canadaArrivalYear: 2009 } as unknown as User,
@@ -101,8 +101,8 @@ describe('Settings', () => {
         expect(screen.getByRole('navigation', { name: 'Sections des réglages' })).toBeInTheDocument();
     });
 
-    it('mobile : « à faire » sur Clés API tant que la clé Anthropic manque', () => {
-        render(<Settings {...baseProps} apiKeys={{ ...defaultApiKeys, anthropic: '' }} />);
+    it('mobile : « à faire » sur Clés API tant que la clé Google Gemini manque', () => {
+        render(<Settings {...baseProps} apiKeys={{ ...defaultApiKeys, gemini: '', anthropic: '' }} />);
         const nav = screen.getByRole('navigation', { name: 'Sections des réglages' });
         expect(within(nav).getByRole('button', { name: /^Clés API/ }).textContent).toContain('à faire');
     });
@@ -129,7 +129,7 @@ describe('Settings', () => {
         // [EXPORT-JSON-PERD-FINTABLE] L'export lit l'état PERSISTÉ (plus les props) : on y pose une
         // clé API — le partialize doit l'écarter — et une transaction, pour que l'enveloppe existe.
         useFinanceStore.setState({
-            apiKeys: { anthropic: 'ANT_SECRET', finnhub: 'FIN_SECRET' },
+            apiKeys: { gemini: 'ANT_SECRET', anthropic: 'ANT_SECRET', finnhub: 'FIN_SECRET' },
             transactions: [{ id: 't1', date: '2026-01-02', amount: -10, payee: 'x', category: 'Épicerie' }] as unknown as AppState['transactions'],
         });
         render(<Settings {...baseProps} />);

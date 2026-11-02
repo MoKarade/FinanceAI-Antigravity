@@ -4,7 +4,7 @@
 // Demande utilisateur (« les catégories des transactions sont très mal réglées ») : les
 // règles couvrent ~88 % d'un corpus réel (mesuré sur environ 2 000 transactions de relevés
 // bancaires) — gratuites, instantanées,
-// reproductibles. L'IA (categorizeBatch, clé Anthropic) ne sert QU'EN SECOURS sur le reste.
+// reproductibles. L'IA (categorizeBatch, clé Google Gemini) ne sert QU'EN SECOURS sur le reste.
 //
 // PRIORITÉ : premières règles gagnent (spécifique avant générique — ex. « Virement envoyé à
 // /Loyer » doit tomber en Logement AVANT la règle Interac générique). Matching sur payee
@@ -44,7 +44,7 @@ export type RuleCategory = (typeof RULE_CATEGORIES)[number];
 // categorizeBatch) ne doit JAMAIS entrer verbatim dans les données : hors du jeu canonique, le
 // rapprochement fuzzy partagé (réel/moyenne/grand livre) peut l'absorber sous un poste au nom
 // englobant (« Sport » ⊂ « Tran-sport ») sans trace (finding silent-failure-hunter PR #501/#502).
-// Helpers PURS consommés par mcp/ingest/applyDocument.ts ET services/claude.ts (une seule source,
+// Helpers PURS consommés par mcp/ingest/applyDocument.ts ET services/gemini.ts (une seule source,
 // pas deux copies qui dérivent — leçon AITOOLS-SEC).
 
 /** Clé de comparaison insensible casse/accents (« epicerie » ≡ « Épicerie »). */

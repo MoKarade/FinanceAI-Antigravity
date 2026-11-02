@@ -22,7 +22,7 @@
 
 import { makeAttemptLimiter, type AttemptLimiter } from './rateLimit';
 
-export type LimitedRoute = '/mcp' | '/hub/summary' | '/refresh' | '/fintable-sync' | '/vehicule/bail' | '/market-store';
+export type LimitedRoute = '/mcp' | '/refresh' | '/fintable-sync' | '/market-store';
 
 export interface RouteLimit { max: number; windowMs: number }
 
@@ -30,13 +30,11 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 
 /** Plafonds par route (appels AUTHENTIFIÉS / fenêtre). Généreux pour l'usage réel : cron /refresh toutes les 6 h,
- *  /fintable-sync quotidien, /hub/summary interrogé par le hub, rafales d'outils de claude.ai sur /mcp. */
+ *  /fintable-sync quotidien, rafales d'outils MCP sur /mcp. */
 export const ROUTE_LIMITS: Record<LimitedRoute, RouteLimit> = {
     '/mcp': { max: 300, windowMs: MINUTE },
     '/refresh': { max: 12, windowMs: HOUR },
     '/fintable-sync': { max: 12, windowMs: HOUR },
-    '/hub/summary': { max: 120, windowMs: HOUR },
-    '/vehicule/bail': { max: 60, windowMs: HOUR },
     '/market-store': { max: 12, windowMs: HOUR },
 };
 

@@ -28,7 +28,7 @@ describe('[CA-10] usePastPortfolioHistory — modes & anti-fuite', () => {
         vi.clearAllMocks();
         _resetPastHistoryFetchCache();
         act(() => {
-            useFinanceStore.setState({ assets: [], fxRates: { USD: 1.35, EUR: 1.5, CAD: 1 }, isTestMode: false, apiKeys: { anthropic: '', finnhub: '' } });
+            useFinanceStore.setState({ assets: [], fxRates: { USD: 1.35, EUR: 1.5, CAD: 1 }, isTestMode: false, apiKeys: { gemini: '', anthropic: '', finnhub: '' } });
         });
     });
 
@@ -37,7 +37,7 @@ describe('[CA-10] usePastPortfolioHistory — modes & anti-fuite', () => {
             useFinanceStore.setState({
                 isTestMode: true,
                 // clé présente : prouve que c'est bien le MODE TEST (et non l'absence de clé) qui coupe le fetch.
-                apiKeys: { anthropic: '', finnhub: 'k-test' },
+                apiKeys: { gemini: '', anthropic: '', finnhub: 'k-test' },
                 assets: [celiAsset([{ date: '2025-01-01', price: 10 }, { date: '2025-06-01', price: 12 }])],
             });
         });
@@ -59,7 +59,7 @@ describe('[CA-10] usePastPortfolioHistory — modes & anti-fuite', () => {
         ]);
         act(() => {
             useFinanceStore.setState({
-                isTestMode: false, apiKeys: { anthropic: '', finnhub: 'k-real' },
+                isTestMode: false, apiKeys: { gemini: '', anthropic: '', finnhub: 'k-real' },
                 assets: [celiAsset(undefined)], // pas de priceHistory → déclenche le fetch
             });
         });
@@ -85,7 +85,7 @@ describe('[CA-10] usePastPortfolioHistory — modes & anti-fuite', () => {
     });
 
     it('garde : aucun actif → résultat vide, isLoading faux, aucun fetch', async () => {
-        act(() => { useFinanceStore.setState({ assets: [], isTestMode: false, apiKeys: { anthropic: '', finnhub: 'k' } }); });
+        act(() => { useFinanceStore.setState({ assets: [], isTestMode: false, apiKeys: { gemini: '', anthropic: '', finnhub: 'k' } }); });
         const { result } = renderHook(() => usePastPortfolioHistory());
 
         // Laisse passer un tick : aucun effet de fetch ne doit partir.
@@ -99,7 +99,7 @@ describe('[CA-10] usePastPortfolioHistory — modes & anti-fuite', () => {
     it('mode réel SANS clé finnhub → pas de fetch, reconstruction de ce qu\'on a (no-fake)', async () => {
         act(() => {
             useFinanceStore.setState({
-                isTestMode: false, apiKeys: { anthropic: '', finnhub: '' }, // pas de clé
+                isTestMode: false, apiKeys: { gemini: '', anthropic: '', finnhub: '' }, // pas de clé
                 assets: [celiAsset([{ date: '2025-01-01', price: 20 }, { date: '2025-06-01', price: 20 }])],
             });
         });

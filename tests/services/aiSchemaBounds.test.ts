@@ -17,19 +17,19 @@ const mocks = vi.hoisted(() => ({
     logError: vi.fn(),
 }));
 
-vi.mock('@anthropic-ai/sdk', () => ({
-    default: class {
-        messages = {
+vi.mock('../../services/geminiClientAdapter', () => ({
+    creerClientCompatibleGemini: vi.fn(() => ({
+        messages: {
             create: vi.fn(async () => ({
                 content: [{ type: 'text', text: mocks.nextResponseText }],
             })),
-        };
-    },
+        },
+    })),
 }));
 
 vi.mock('../../services/errorLogger', () => ({ logError: mocks.logError, logErrorThrottled: vi.fn(), }));
 
-import { categorizeBatch } from '../../services/claude';
+import { categorizeBatch } from '../../services/gemini';
 
 const tx = (id: number, payee: string): Transaction =>
     ({ id, date: '2026-06-05', payee, amount: -50, category: 'Uncategorized', status: 'processed' } as Transaction);

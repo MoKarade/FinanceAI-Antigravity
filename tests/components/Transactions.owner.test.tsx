@@ -11,7 +11,7 @@ import { Transactions } from '../../components/Transactions';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import type { Transaction } from '../../types';
 
-vi.mock('../../services/claude', () => ({ categorizeBatch: vi.fn() }));
+vi.mock('../../services/gemini', () => ({ categorizeBatch: vi.fn() }));
 vi.mock('../../components/ui/Toast', () => ({ showToast: vi.fn() }));
 
 const initialState = useFinanceStore.getState();

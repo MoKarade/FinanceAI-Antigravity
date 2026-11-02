@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { CHART_TOOLTIP_STYLE, CHART_TOOLTIP_ITEM_STYLE } from '../utils/chartTooltip';
 import {
     Asset,
     AppState,
@@ -46,7 +45,7 @@ import { refreshAssetPrices, applyPricePatches } from '../services/priceRefresh'
 import { DividendPanel } from './investments/DividendPanel';
 import { formatCAD, formatDate, formatVariationPct } from '../utils/format';
 import { logError } from '../services/errorLogger';
-import { getRebalanceJustifications, type RebalanceActionInput } from '../services/claude';
+import { getRebalanceJustifications, type RebalanceActionInput } from '../services/gemini';
 import { messageErreurIa, MESSAGE_IA_MODE_DISCRET } from '../services/messageErreurIa';
 import { AddStockForm } from './investments/AddStockForm';
 import { showToast } from './ui/Toast';
@@ -160,9 +159,9 @@ const DEFAULT_TARGET_MODEL: ReadonlyArray<TargetModelEntry> = [
 export const Investments: React.FC<InvestmentsProps> = ({
     assets, setAssets, projection, setProjection, apiKey
 }) => {
-    // Phase E.7 — apiKey du store (fallback prop pour rétrocompat) pour appeler Claude
-    const anthropicKeyFromStore = useFinanceStore(s => s.apiKeys.anthropic);
-    const claudeKey = anthropicKeyFromStore || apiKey || '';
+    // Phase E.7 — apiKey du store (fallback prop pour rétrocompat) pour appeler Gemini
+    const geminiKeyFromStore = useFinanceStore(s => s.apiKeys.gemini || s.apiKeys.anthropic);
+    const geminiKey = geminiKeyFromStore || apiKey || '';
 
     // [A11Y-CHARTS] tables de données sr-only pour les donuts d'allocation (Recharts opaque aux
     // lecteurs d'écran). Classe d'actif visible ; Valeur $ ET part % masquées en mode privé (parité PrivateAmount ;
@@ -804,6 +803,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                     <div
                                         key={l.cle}
                                         className={`h-full ${idx === 0 ? 'bg-succes-texte' : idx === 1 ? 'bg-repere' : idx === 2 ? 'bg-alerte-texte' : 'bg-primary'}`}
+                                        // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
                                         style={{ width: `${Math.max(3, l.poids)}%` }}
                                         title={`${l.symbole} (${l.compte})`}
                                     />
@@ -831,6 +831,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                             <div className="mt-1 h-2 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gap-0.5 p-0.5" aria-hidden="true">
                                 <div
                                     className="h-full rounded-l-full bg-repere"
+                                    // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
                                     style={{ width: `${Math.min(95, Math.max(8, (valeurPortefeuille / Math.max(1, horizonSnapshot.netWorth)) * 100))}%` }}
                                 />
                                 <div className="h-full rounded-r-full bg-succes-texte" style={{ flex: 1 }} />
@@ -1100,7 +1101,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                             </PrivateAmount>
                             <div className="flex items-center gap-2">
                                 {/* Phase E.7 — bouton justifications IA */}
-                                {hasActions && claudeKey && (
+                                {hasActions && geminiKey && (
                                     <button
                                         type="button"
                                         onClick={async () => {
@@ -1120,7 +1121,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                                 targetPct: a.targetPct,
                                                 diffAmount: a.diffAmount,
                                             }));
-                                            const res = await getRebalanceJustifications(inputs, claudeKey);
+                                            const res = await getRebalanceJustifications(inputs, geminiKey);
                                             // [AI-REBALANCE-CAUSE-PERDUE] Chaque forme a sa phrase.
                                             // « rien à justifier » n'est PAS un échec : le bouton
                                             // est gardé par `hasActions`, donc ce cas n'arrive pas
@@ -1621,6 +1622,7 @@ const AllocationDonutTooltip: React.FC<AllocationDonutTooltipProps> = ({ active,
                     <div
                         className="gf-tooltip-bar-fill"
                         style={{
+                            // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
                             width: `${Math.min(100, Math.max(0, pct))}%`,
                             background: 'var(--repere)',
                         }}

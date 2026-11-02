@@ -48,11 +48,11 @@ describe('[MCP-RATE-LIMIT] routeRateLimit (pur)', () => {
     it('échecs d\'authentification : blocage PAR ADRESSE seulement, levé après la fenêtre', () => {
         let t = 0;
         const g = makeRouteGuard({ now: () => t, failureMax: 3, failureWindowMs: 10_000 });
-        for (let i = 0; i < 3; i++) { const e = g.enter('/hub/summary', A('/hub/summary', false, '6.6.6.6')); expect(e.ok).toBe(true); if (e.ok) e.done(401); }
-        expect(g.enter('/hub/summary', A('/hub/summary', false, '6.6.6.6'))).toMatchObject({ ok: false, reason: 'echecs' });
-        expect(g.enter('/hub/summary', A('/hub/summary', false, '7.7.7.7')).ok).toBe(true); // une autre adresse n'est pas touchée
+        for (let i = 0; i < 3; i++) { const e = g.enter('/refresh', A('/refresh', false, '6.6.6.6')); expect(e.ok).toBe(true); if (e.ok) e.done(401); }
+        expect(g.enter('/refresh', A('/refresh', false, '6.6.6.6'))).toMatchObject({ ok: false, reason: 'echecs' });
+        expect(g.enter('/refresh', A('/refresh', false, '7.7.7.7')).ok).toBe(true); // une autre adresse n'est pas touchée
         t += 10_001;
-        expect(g.enter('/hub/summary', A('/hub/summary', false, '6.6.6.6')).ok).toBe(true);
+        expect(g.enter('/refresh', A('/refresh', false, '6.6.6.6')).ok).toBe(true);
     });
 
     it('un secret VALIDE n\'est JAMAIS bloqué, même depuis une adresse au quota d\'échecs épuisé', () => {
@@ -74,7 +74,7 @@ describe('[MCP-RATE-LIMIT] routeRateLimit (pur)', () => {
         expect(g.enter('/refresh', A('/refresh', false, 'a')).ok).toBe(false);
         expect(g.enter('/mcp', A('/mcp', false, 'a')).ok).toBe(true);
         // 3 autres adresses évincent la plus ancienne (« a » repart de zéro) : mémoire bornée
-        for (const ad of ['b', 'c', 'd']) g.enter('/vehicule/bail', A('/vehicule/bail', false, ad));
+        for (const ad of ['b', 'c', 'd']) g.enter('/market-store', A('/market-store', false, ad));
         expect(g.enter('/refresh', A('/refresh', false, 'a')).ok).toBe(true);
     });
 
@@ -85,8 +85,8 @@ describe('[MCP-RATE-LIMIT] routeRateLimit (pur)', () => {
         expect(adresseClient('', undefined)).toBe('inconnue');
     });
 
-    it('les plafonds par défaut couvrent les 6 routes et restent bornés', () => {
-        expect(Object.keys(ROUTE_LIMITS).sort()).toEqual(['/fintable-sync', '/hub/summary', '/market-store', '/mcp', '/refresh', '/vehicule/bail']);
+    it('les plafonds par défaut couvrent les 4 routes et restent bornés', () => {
+        expect(Object.keys(ROUTE_LIMITS).sort()).toEqual(['/fintable-sync', '/market-store', '/mcp', '/refresh']);
         for (const l of Object.values(ROUTE_LIMITS)) { expect(l.max).toBeGreaterThan(0); expect(l.max).toBeLessThanOrEqual(600); }
         expect(AUTH_FAILURE_MAX_PAR_ADRESSE).toBeGreaterThanOrEqual(50);
     });
@@ -98,69 +98,71 @@ function fixtureState(): ResolvedState {
     const source: StateSource = { description: 'fixture http', loadRaw: async () => JSON.stringify(state) };
     return { source, store: makeStateStore(source), isDrive: false, driveEmail: null, describe: () => 'fixture http' };
 }
-const HUB = 'jeton-hub-genere-0123456789';
 const AUTRE = 'refresh-genere-0123456789';
 
 describe('[MCP-RATE-LIMIT] câblage sur le vrai serveur HTTP', () => {
     let running: RunningHttpServer | null = null;
     afterEach(async () => { await running?.close(); running = null; });
-    const hub = (port: number, token: string, xff?: string): Promise<Response> =>
-        fetch(`http://127.0.0.1:${port}/hub/summary`, { headers: { 'x-hub-token': token, ...(xff ? { 'x-forwarded-for': xff } : {}) } });
+    const refresh = (port: number, token: string, xff?: string): Promise<Response> =>
+        fetch(`http://127.0.0.1:${port}/refresh`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, ...(xff ? { 'x-forwarded-for': xff } : {}) },
+        });
 
-    it('/hub/summary : échecs répétés → 429 + Retry-After pour l\'adresse fautive, mais le jeton VALIDE passe toujours', async () => {
+    it('/refresh : échecs répétés → 429 + Retry-After pour l\'adresse fautive, mais le jeton VALIDE passe toujours', async () => {
         running = await startHttpServer({
-            port: 0, host: '127.0.0.1', state: fixtureState(), hubToken: HUB,
+            port: 0, host: '127.0.0.1', state: fixtureState(), refreshSecret: AUTRE,
             rateGuard: makeRouteGuard({ failureMax: 3 }),
         });
-        for (let i = 0; i < 3; i++) expect((await hub(running.port, 'mauvais-jeton')).status).toBe(401);
-        const bloque = await hub(running.port, 'mauvais-jeton');
+        for (let i = 0; i < 3; i++) expect((await refresh(running.port, 'mauvais-jeton')).status).toBe(401);
+        const bloque = await refresh(running.port, 'mauvais-jeton');
         expect(bloque.status).toBe(429);
         expect(Number(bloque.headers.get('retry-after'))).toBeGreaterThanOrEqual(1);
-        expect((await hub(running.port, HUB)).status).toBe(200); // vérifier d'abord, refuser après
+        expect((await refresh(running.port, AUTRE)).status).not.toBe(401); // vérifier d'abord, refuser après
+        expect((await refresh(running.port, AUTRE)).status).not.toBe(429);
     });
 
     it('un flot d\'échecs d\'une adresse ne touche PAS une autre adresse (X-Forwarded-For : dernier élément, préfixe forgé ignoré)', async () => {
         running = await startHttpServer({
-            port: 0, host: '127.0.0.1', state: fixtureState(), hubToken: HUB,
+            port: 0, host: '127.0.0.1', state: fixtureState(), refreshSecret: AUTRE,
             rateGuard: makeRouteGuard({ failureMax: 2 }),
         });
-        for (let i = 0; i < 2; i++) expect((await hub(running.port, 'faux', '9.9.9.9, 6.6.6.6')).status).toBe(401);
-        expect((await hub(running.port, 'faux', 'autre, 6.6.6.6')).status).toBe(429); // même adresse réelle malgré un préfixe différent
-        expect((await hub(running.port, 'faux', '6.6.6.6, 7.7.7.7')).status).toBe(401); // autre adresse réelle : intacte
+        for (let i = 0; i < 2; i++) expect((await refresh(running.port, 'faux', '9.9.9.9, 6.6.6.6')).status).toBe(401);
+        expect((await refresh(running.port, 'faux', 'autre, 6.6.6.6')).status).toBe(429); // même adresse réelle malgré un préfixe différent
+        expect((await refresh(running.port, 'faux', '6.6.6.6, 7.7.7.7')).status).toBe(401); // autre adresse réelle : intacte
     });
 
-    it('/hub/summary : plafond de volume → 429 au (max+1)ᵉ appel authentifié', async () => {
+    it('/refresh : plafond de volume → 429 au (max+1)ᵉ appel authentifié', async () => {
         running = await startHttpServer({
-            port: 0, host: '127.0.0.1', state: fixtureState(), hubToken: HUB,
-            rateGuard: makeRouteGuard({ limits: { '/hub/summary': { max: 2, windowMs: 60_000 } } }),
+            port: 0, host: '127.0.0.1', state: fixtureState(), refreshSecret: AUTRE,
+            rateGuard: makeRouteGuard({ limits: { '/refresh': { max: 2, windowMs: 60_000 } } }),
         });
-        expect((await hub(running.port, HUB)).status).toBe(200);
-        expect((await hub(running.port, HUB)).status).toBe(200);
-        expect((await hub(running.port, HUB)).status).toBe(429);
+        expect((await refresh(running.port, AUTRE)).status).not.toBe(429);
+        expect((await refresh(running.port, AUTRE)).status).not.toBe(429);
+        expect((await refresh(running.port, AUTRE)).status).toBe(429);
     });
 
     it('un flot non authentifié n\'affame pas l\'appel légitime (le budget de volume reste intact)', async () => {
         running = await startHttpServer({
-            port: 0, host: '127.0.0.1', state: fixtureState(), hubToken: HUB,
-            rateGuard: makeRouteGuard({ limits: { '/hub/summary': { max: 2, windowMs: 60_000 } }, failureMax: 1000 }),
+            port: 0, host: '127.0.0.1', state: fixtureState(), refreshSecret: AUTRE,
+            rateGuard: makeRouteGuard({ limits: { '/refresh': { max: 2, windowMs: 60_000 } }, failureMax: 1000 }),
         });
-        for (let i = 0; i < 10; i++) expect((await hub(running.port, 'mauvais-jeton')).status).toBe(401);
-        expect((await hub(running.port, HUB)).status).toBe(200);
-        expect((await hub(running.port, HUB)).status).toBe(200);
+        for (let i = 0; i < 10; i++) expect((await refresh(running.port, 'mauvais-jeton')).status).toBe(401);
+        expect((await refresh(running.port, AUTRE)).status).not.toBe(429);
+        expect((await refresh(running.port, AUTRE)).status).not.toBe(429);
     });
 
     it.each([
         ['/refresh', 'POST'],
         ['/fintable-sync', 'POST'],
-        ['/vehicule/bail', 'GET'],
     ])('%s : échecs d\'authentification répétés → 429 pour cette adresse', async (route, method) => {
         running = await startHttpServer({
             port: 0, host: '127.0.0.1', state: fixtureState(),
-            refreshSecret: AUTRE, fintableSyncSecret: AUTRE + 'f', vehiculeSecret: AUTRE + 'v', hubToken: HUB,
+            refreshSecret: AUTRE, fintableSyncSecret: AUTRE + 'f',
             rateGuard: makeRouteGuard({ failureMax: 2 }),
         });
         const appel = (): Promise<Response> => fetch(`http://127.0.0.1:${running!.port}${route}`, {
-            method, headers: { Authorization: 'Bearer faux', 'x-hub-token': 'faux' },
+            method, headers: { Authorization: 'Bearer faux' },
         });
         const statuts: number[] = [];
         for (let i = 0; i < 4; i++) statuts.push((await appel()).status);
@@ -246,9 +248,9 @@ describe('[MCP-ACCESS-KEY-MIN] FINANCEAI_ACCESS_KEY', () => {
         afterEach(async () => { await srv?.close(); srv = null; });
         const s256 = (v: string): string => createHash('sha256').update(v, 'utf8').digest('base64url');
 
-        it('/oauth/authorize (GET et POST) → 503 sans la clé ; .well-known, register, hub et /health continuent', async () => {
+        it('/oauth/authorize (GET et POST) → 503 sans la clé ; .well-known, register et /health continuent', async () => {
             srv = await startHttpServer({
-                port: 0, host: '127.0.0.1', state: fixtureState(), hubToken: HUB, autorisationBloquee: true,
+                port: 0, host: '127.0.0.1', state: fixtureState(), autorisationBloquee: true,
                 auth: makeOAuthProvider({ signingKey: 's'.repeat(48), accessKey: COURTE, issuer: 'http://127.0.0.1:0' }),
             });
             const base = `http://127.0.0.1:${srv.port}`;
@@ -267,7 +269,6 @@ describe('[MCP-ACCESS-KEY-MIN] FINANCEAI_ACCESS_KEY', () => {
                 body: JSON.stringify({ redirect_uris: ['http://127.0.0.1:9/callback'] }),
             })).status).toBe(201);
             expect((await fetch(`${base}/health`)).status).toBe(200);
-            expect((await fetch(`${base}/hub/summary`, { headers: { 'x-hub-token': HUB } })).status).toBe(200);
             // /mcp reste gardé par l'OAuth (401 sans jeton), pas coupé : la porte d'autorisation seule est fermée.
             const mcp = await fetch(`${base}/mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }, body: '{}' });
             expect(mcp.status).toBe(401);

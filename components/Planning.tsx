@@ -9,8 +9,8 @@ import { Card } from './ui/Card';
 import { Icon, type IconName } from './ui/Icon';
 import { ProjectionRequired } from './ui/ProjectionRequired';
 import { PrivateAmount } from './ui/PrivateAmount';
-// Phase 4 A5: bascule sur services/claude.ts (Haiku 4.5)
-import { detectSubscriptionsAI } from '../services/claude';
+// Phase 4 A5: bascule sur services/gemini.ts (Gemini 2.5 Flash-Lite)
+import { detectSubscriptionsAI } from '../services/gemini';
 // [TX-SUBSCRIPTIONS] Abonnements fantômes : hausse de prix silencieuse, service qui a cessé d'être
 // débité. Modules PURS et légers (aucune dépendance) — dérivés des profils de récurrence.
 import { buildMerchantProfiles, merchantKey } from '../services/transactions/merchantProfile';

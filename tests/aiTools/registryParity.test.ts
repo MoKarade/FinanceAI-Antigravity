@@ -75,11 +75,11 @@ describe('[AITOOLS-B] parité de payloads MCP ↔ app (même état → même JSO
         // Discriminant : l'ancien pick copiait store.apiKeys tel quel — un futur spec (ou un
         // jsonContent(state) accidentel) aurait pu envoyer la clé Anthropic RÉELLE dans un
         // tool_result vers l'API (finding security-privacy).
-        useFinanceStore.setState({ apiKeys: { anthropic: 'sk-ant-VRAIE-CLE', finnhub: 'fh-vraie' } } as never);
+        useFinanceStore.setState({ apiKeys: { gemini: 'sk-ant-VRAIE-CLE', anthropic: 'sk-ant-VRAIE-CLE', finnhub: 'fh-vraie' } } as never);
         const { snapshotAppState } = await import('../../services/aiTools/appStateProvider');
         const snap = snapshotAppState();
         expect(JSON.stringify(snap)).not.toContain('sk-ant-VRAIE-CLE');
-        expect(snap.apiKeys).toEqual({ anthropic: '', finnhub: '' }); // défauts vides via normalize
+        expect(snap.apiKeys).toEqual({ gemini: '', finnhub: '' }); // défauts vides via normalize
     });
 
     it('[ceinture panel] un champ store CORROMPU (transactions: null) → erreur CLAIRE, jamais des zéros plausibles', async () => {

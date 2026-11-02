@@ -10,7 +10,7 @@ const ROOT = resolve(__dirname, '../..');
 
 describe('[FUMEE-SANTE] api/sante.ts', () => {
     it('GET → 200, { ok: true }, no-store', async () => {
-        const r = repondreSante(new Request('https://finance.hubperso.com/api/sante'));
+        const r = repondreSante(new Request('https://financeai.local/api/sante'));
         expect(r.status).toBe(200);
         expect(r.headers.get('cache-control')).toBe('no-store');
         expect(r.headers.get('content-type')).toBe('application/json');
@@ -18,16 +18,16 @@ describe('[FUMEE-SANTE] api/sante.ts', () => {
     });
 
     it('HEAD → 200 sans corps ; POST → 405 avec Allow (la sonde ne fait rien d\'autre)', async () => {
-        const head = repondreSante(new Request('https://finance.hubperso.com/api/sante', { method: 'HEAD' }));
+        const head = repondreSante(new Request('https://financeai.local/api/sante', { method: 'HEAD' }));
         expect(head.status).toBe(200);
         expect(await head.text()).toBe('');
-        const post = repondreSante(new Request('https://finance.hubperso.com/api/sante', { method: 'POST', body: '{}' }));
+        const post = repondreSante(new Request('https://financeai.local/api/sante', { method: 'POST', body: '{}' }));
         expect(post.status).toBe(405);
         expect(post.headers.get('allow')).toBe('GET, HEAD');
     });
 
     it('l\'export par défaut est le gestionnaire que Vercel appelle', async () => {
-        const r = sante.fetch(new Request('https://finance.hubperso.com/api/sante'));
+        const r = sante.fetch(new Request('https://financeai.local/api/sante'));
         expect(await r.json()).toEqual({ ok: true });
     });
 
