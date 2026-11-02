@@ -1,10 +1,10 @@
 {
-  "projectId": "google-finance-app",
+  "projectId": "financeai-497112",
   "appId": "1:550313627083:web:2279e9dca75d6d76caba4e",
   "apiKey": "AIzaSyCpYgXXiW6jgy0EsyCN1RQ18PoLi0XKLug",
-  "authDomain": "google-finance-app.firebaseapp.com",
+  "authDomain": "financeai-497112.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-financeai-271f1ac8-f4c8-451a-bdd2-239805ec2d44",
-  "storageBucket": "google-finance-app.firebasestorage.app",
+  "storageBucket": "financeai-497112.firebasestorage.app",
   "messagingSenderId": "550313627083",
   "measurementId": "",
   "oAuthClientId": "550313627083-m89n90ekftb4s1br2k2ri27u7cp5btan.apps.googleusercontent.com",
