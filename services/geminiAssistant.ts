@@ -168,7 +168,7 @@ export function genererSyntheseLocaleGemini(
                 : `Bilan sain : aucune dette à court terme recensée.`,
         ],
         actionsSuggerees: [
-            { label: 'Voir mon plan d’Actions', tab: Tab.ACTIONS },
+            { label: 'Voir mes Placements', tab: Tab.INVESTMENTS },
             { label: 'Simuler dans Futur', tab: Tab.FUTURE },
             { label: 'Optimiser mes Impôts', tab: Tab.TAX },
         ],

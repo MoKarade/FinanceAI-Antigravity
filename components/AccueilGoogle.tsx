@@ -834,7 +834,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             ? `Interroger votre dossier : « ${requete.trim()} »`
                                             : 'Ouvrir l’analyse patrimoniale'}
                                     </span>
-                                    <Icon name="arrow-right" size={14} className="text-ink-300" aria-hidden="true" />
+                                    <Icon name="chevron-right" size={14} className="text-ink-300" aria-hidden="true" />
                                 </button>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y divide-bordure">
                                     {resultatsOmnibox.pages.map((p) => (

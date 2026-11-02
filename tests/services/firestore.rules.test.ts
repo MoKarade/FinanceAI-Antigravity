@@ -407,11 +407,10 @@ describe('Firestore Security Rules & Dirty Dozen Red Team Audit', () => {
 
     it('affiche le portail de connexion Google obligatoire lorsque aucun utilisateur Firebase n’est connecté', () => {
         render(
-            React.createElement(
-                FirebaseAuthGate,
-                { forceAuthGate: true },
-                React.createElement('div', { 'data-testid': 'protected-dashboard' }, 'Contenu protégé'),
-            ),
+            React.createElement(FirebaseAuthGate, {
+                forceAuthGate: true,
+                children: React.createElement('div', { 'data-testid': 'protected-dashboard' }, 'Contenu protégé'),
+            }),
         );
 
         expect(screen.getByTestId('firebase-auth-gate')).toBeInTheDocument();
@@ -485,7 +484,7 @@ describe('Firestore Security Rules & Dirty Dozen Red Team Audit', () => {
 
         const heavyPayload = extractSanitizedWorkspacePayload({
             ...starter,
-            assets: starter.assets.map((a) => ({
+            assets: (starter.assets ?? []).map((a) => ({
                 ...a,
                 history: hugeHistory,
                 priceHistory: hugeHistory,
@@ -587,7 +586,7 @@ describe('Firestore Security Rules & Dirty Dozen Red Team Audit', () => {
         const starter = buildStarterState();
         render(
             React.createElement(AccueilGoogle, {
-                state: starter,
+                state: starter as never,
                 setActiveTab: () => {},
                 isPrivacyMode: false,
                 globalNetWorth: 230_000,
