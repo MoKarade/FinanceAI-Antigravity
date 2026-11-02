@@ -1,0 +1,64 @@
+# Déploiement continu du front-end (Vite / React) sur Firebase Hosting (projet financeai-497112).
+# Se déclenche à chaque push sur `main` (hors documentation seule) ou manuellement (`workflow_dispatch`).
+# Authentification sans clé via Workload Identity Federation (OIDC) et variables de dépôt non secrètes :
+#   - vars.GCP_PROJECT_ID   (ex. financeai-497112)
+#   - vars.GCP_WIF_PROVIDER (projects/550313627083/locations/global/workloadIdentityPools/github/providers/github)
+#   - vars.GCP_DEPLOY_SA    (github-deployer@financeai-497112.iam.gserviceaccount.com)
+
+name: Deploy Hosting (Firebase)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-hosting-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-hosting:
+    timeout-minutes: 15
+    name: Build & deploy to Firebase Hosting
+    runs-on: ${{ github.event.repository.visibility == 'public' && 'ubuntu-latest' || fromJSON('["self-hosted","pc-marc"]') }}
+    if: ${{ vars.GCP_PROJECT_ID != '' && vars.GCP_WIF_PROVIDER != '' && vars.GCP_DEPLOY_SA != '' }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: '.nvmrc'
+          cache: ${{ (github.event.repository.private == false && 'npm') || '' }}
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund --ignore-scripts
+
+      - name: Build production bundle
+        run: npx --no-install vite build --mode production
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Deploy to Firebase Hosting
+        env:
+          GOOGLE_CLOUD_QUOTA_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          npx -y firebase-tools@latest deploy --only hosting --project "${{ vars.GCP_PROJECT_ID }}" --token "${TOKEN}"
