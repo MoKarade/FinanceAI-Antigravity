@@ -8,7 +8,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { Content } from '@google/genai';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { executerTour, type ClientGemini, type RequeteGemini } from '../../services/assistant/agentLoop';
+import { executerTour, executerTourLocal, instructionSysteme, type ClientGemini, type RequeteGemini } from '../../services/assistant/agentLoop';
+import { decouperAvisHonnete } from '../../services/geminiAssistant';
 import { MESSAGE_IA_MODE_DISCRET } from '../../services/messageErreurIa';
 import { _viderJournal } from '../../services/assistant/journalModifications';
 
@@ -127,5 +128,14 @@ describe('executerTour — boucle agentique', () => {
         const c = client.requetes[0].contenus;
         expect(c.map((x) => x.role)).toEqual(['user', 'model', 'user']);
         expect(c[1].parts?.[0].text).toContain('ANNULÉES');
+    });
+
+    it('avis honnête rapide : exigé dans l\'instruction système et extrait en tête avant le détail', async () => {
+        expect(instructionSysteme('2026-11-03')).toContain('AVIS HONNÊTE :');
+        const local = await executerTourLocal('Fais un bilan express', false);
+        const decoupe = decouperAvisHonnete(local.texte);
+        expect(decoupe.avis).toBeTruthy();
+        expect(decoupe.detail).toBeTruthy();
+        expect(decoupe.avis).not.toEqual(decoupe.detail);
     });
 });

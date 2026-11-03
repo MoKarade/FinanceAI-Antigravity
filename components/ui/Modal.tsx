@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 
@@ -36,7 +37,7 @@ const SIZE_CLASSES: Record<ModalSize, string> = {
     md: 'max-w-md',
     lg: 'max-w-lg',
     xl: 'max-w-2xl',
-    full: 'max-w-5xl max-h-[90vh]',
+    full: 'max-w-5xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]',
 };
 
 /**
@@ -103,10 +104,10 @@ export const Modal: React.FC<ModalProps> = ({
 
     if (!isOpen) return null;
 
-    return (
+    const contenuModal = (
         <div
             role="presentation"
-            className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in"
+            className="fixed inset-0 z-9999 flex items-center justify-center p-2 sm:p-4 overflow-y-auto bg-black/80 backdrop-blur-xs animate-fade-in"
             onClick={closeOnBackdrop ? onClose : undefined}
         >
             <div
@@ -117,18 +118,18 @@ export const Modal: React.FC<ModalProps> = ({
                 onClick={e => e.stopPropagation()}
                 className={[
                     'bg-surface border border-white/15 rounded-card shadow-2xl w-full overflow-hidden',
-                    'animate-slide-up flex flex-col max-h-[90vh]',
+                    'animate-slide-up flex flex-col my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]',
                     SIZE_CLASSES[size],
                     className,
                 ].filter(Boolean).join(' ')}
             >
                 {(title || headerActions) && (
-                    <div className="flex items-start justify-between gap-3 p-4 border-b border-white/10 shrink-0">
+                    <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-white/10 shrink-0">
                         <div className="flex items-center gap-3 min-w-0">
                             {icon && <span className="text-h1 shrink-0" aria-hidden="true">{icon}</span>}
                             <div className="min-w-0">
                                 {title && <h2 id={titleId} className="text-h2 text-ink-50 truncate">{title}</h2>}
-                                {subtitle && <p className="text-meta text-ink-400 mt-0.5">{subtitle}</p>}
+                                {subtitle && <p className="text-meta text-ink-400 mt-0.5 truncate">{subtitle}</p>}
                             </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -146,16 +147,21 @@ export const Modal: React.FC<ModalProps> = ({
                     </div>
                 )}
 
-                <div className="flex-1 overflow-y-auto p-4 min-h-0">
+                <div className="flex-1 overflow-y-auto p-3 sm:p-4 min-h-0">
                     {children}
                 </div>
 
                 {footer && (
-                    <div className="flex items-center justify-end gap-2 p-4 border-t border-white/10 shrink-0">
+                    <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-white/10 shrink-0">
                         {footer}
                     </div>
                 )}
             </div>
         </div>
     );
+
+    if (typeof document !== 'undefined' && document.body) {
+        return createPortal(contenuModal, document.body);
+    }
+    return contenuModal;
 };

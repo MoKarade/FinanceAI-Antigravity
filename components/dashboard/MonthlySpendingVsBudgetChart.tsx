@@ -15,7 +15,7 @@ import { useFinanceStore } from '../../store/useFinanceStore';
 import { useTodayIsoLocal } from '../../hooks/useSimulationParams';
 import { computeBudgetParity, isSavingsNature } from '../../utils/budget';
 import { lastMonths } from '../../utils/budgetSync';
-import { isSpend, spendAmountOf, isHorsComparaisonBudget } from '../../utils/spendRules';
+import { isSpend, spendAmountOf, isHorsComparaisonBudget, isTransferOrVirement, effectiveTransferCategory } from '../../utils/spendRules';
 import { monthlyConsumptionExpenses, monthlyTargetOf, computeBudgetParityScore } from '../../utils/healthRatios';
 import { formatCAD, formatCompactCAD } from '../../utils/format';
 import { maskedTick } from '../../utils/chartPrivacy';
@@ -103,7 +103,7 @@ export const MonthlySpendingVsBudgetChart: React.FC<MonthlySpendingVsBudgetChart
         const totauxParMois = new Map<string, number>(cles.map((c) => [c, 0]));
 
         for (const t of transactions) {
-            if (!isSpend(t) || isHorsComparaisonBudget(t)) continue;
+            if (!isSpend(t, true) || isHorsComparaisonBudget(t)) continue;
             const m = t.date?.slice(0, 7) ?? '';
             if (!totauxParMois.has(m)) continue;
             const montant = spendAmountOf(t);
@@ -124,20 +124,20 @@ export const MonthlySpendingVsBudgetChart: React.FC<MonthlySpendingVsBudgetChart
         });
     }, [transactions, dateRef, budgetMensuel, moisCourantCle]);
 
-    // Parité et score d'adhérence sur le mois courant
+    // Parité et score d'adhérence sur le mois courant (incluant les transferts/virements)
     const { donneesPostes, depenseMoisCourant, scoreAdherence } = useMemo(() => {
-        const txMois = transactions.filter(
-            (t) => (t.date?.slice(0, 7) ?? '') === moisCourantCle && isSpend(t),
-        );
+        const txMois = transactions
+            .filter((t) => (t.date?.slice(0, 7) ?? '') === moisCourantCle && isSpend(t, true))
+            .map((t) => (isTransferOrVirement(t) ? { ...t, category: effectiveTransferCategory(t) } : t));
         const parity = computeBudgetParity(txMois, budgetItems);
         const score = computeBudgetParityScore(parity.actualsMap, budgetItems);
 
         const postes: PointPoste[] = [];
         for (const item of budgetItems) {
-            if (isSavingsNature(item.nature)) continue;
+            const reel = Math.max(0, Math.round(parity.actualsMap[item.name] ?? 0));
+            if (isSavingsNature(item.nature) && reel === 0) continue;
             const cible = monthlyTargetOf(item);
             if (!Number.isFinite(cible)) continue;
-            const reel = Math.max(0, Math.round(parity.actualsMap[item.name] ?? 0));
             const budgetArrondi = Math.max(0, Math.round(cible));
             if (budgetArrondi === 0 && reel === 0) continue;
             postes.push({

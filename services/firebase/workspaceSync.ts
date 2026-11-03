@@ -456,6 +456,7 @@ export async function pullWorkspaceFromFirestoreNow(user: FirebaseUser): Promise
         try {
             if (typeof data.revisionId === 'string') {
                 lastKnownRevisionId = data.revisionId;
+                saveLastSyncedRevisionId(uid, data.revisionId);
             }
             lastSerializedPayload = JSON.stringify(sanitizedRemote);
             useFinanceStore.getState().setAppState({
@@ -467,7 +468,10 @@ export async function pullWorkspaceFromFirestoreNow(user: FirebaseUser): Promise
                 activeTestPersonaId: null,
                 realDataSnapshot: null,
             });
-            saveProtectedDossierSnapshot(sanitizedRemote);
+            saveProtectedDossierSnapshot({
+                ...sanitizedRemote,
+                lastUpdate: remoteUpdatedAtMs ?? Date.now(),
+            });
         } finally {
             applyingRemoteSnapshot = false;
         }
@@ -494,15 +498,11 @@ export async function pullWorkspaceFromFirestoreNow(user: FirebaseUser): Promise
 export async function recoverOrEnsureInitialWorkspace(
     forceEvenIfNotEmpty = false,
 ): Promise<'kept' | 'restored-snapshot' | 'restored-idb' | 'restored-starter'> {
-    // 0. Priorité absolue à Cloud Firestore si l'utilisateur est connecté et que Firestore détient un dossier plus riche
+    // 0. Priorité absolue à Cloud Firestore si l'utilisateur est connecté : PC et mobile partagent exactement le même dossier
     if (auth.currentUser) {
-        const currentBeforeFirestore = useFinanceStore.getState();
-        const localRichness = computeDossierRichness(currentBeforeFirestore);
-        if (forceEvenIfNotEmpty || localRichness === 0 || isStarterTemplateState(currentBeforeFirestore)) {
-            const firestoreRestored = await pullWorkspaceFromFirestoreNow(auth.currentUser);
-            if (firestoreRestored.restored) {
-                return 'restored-snapshot';
-            }
+        const firestoreRestored = await pullWorkspaceFromFirestoreNow(auth.currentUser);
+        if (firestoreRestored.restored) {
+            return 'restored-snapshot';
         }
     }
 
@@ -522,7 +522,7 @@ export async function recoverOrEnsureInitialWorkspace(
         const cleaned = cleanCandidateState(current.realDataSnapshot);
         useFinanceStore.getState().setAppState({
             ...cleaned,
-            lastUpdate: Date.now(),
+            lastUpdate: typeof cleaned.lastUpdate === 'number' ? cleaned.lastUpdate : 0,
         });
         return 'restored-snapshot';
     }
@@ -556,7 +556,7 @@ export async function recoverOrEnsureInitialWorkspace(
                         const cleaned = cleanCandidateState(candidate);
                         useFinanceStore.getState().setAppState({
                             ...cleaned,
-                            lastUpdate: Date.now(),
+                            lastUpdate: entry.timestamp || 0,
                         });
                         if (auth.currentUser) {
                             void pushWorkspaceToFirestore(auth.currentUser).catch(() => {});
@@ -645,6 +645,25 @@ let remoteMonthsState: { uid: string; fingerprints: Map<string, string> } | null
 
 /** Taille maximale acceptée pour le document principal (limite Firestore : 1 048 576 octets). */
 const FIRESTORE_MAIN_DOC_MAX_UTF8_BYTES = 1_000_000;
+const LAST_SYNCED_REV_PREFIX = 'financeai:last_synced_revision:v1:';
+
+function saveLastSyncedRevisionId(uid: string, revisionId: string): void {
+    if (!revisionId || typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(`${LAST_SYNCED_REV_PREFIX}${uid}`, revisionId);
+    } catch {
+        // Ignorer si quota atteint
+    }
+}
+
+function loadLastSyncedRevisionId(uid: string): string {
+    if (typeof localStorage === 'undefined') return '';
+    try {
+        return localStorage.getItem(`${LAST_SYNCED_REV_PREFIX}${uid}`) ?? '';
+    } catch {
+        return '';
+    }
+}
 
 function rememberRemoteMonths(uid: string, remote: { months: RemoteTransactionMonth[]; monthsKnown: boolean }): void {
     remoteMonthsState = remote.monthsKnown
@@ -748,6 +767,7 @@ export async function pushWorkspaceToFirestore(user: FirebaseUser): Promise<void
         });
         activeWorkspaceDocExists = true;
         remoteMonthsState = { uid, fingerprints: plan.nextFingerprints };
+        saveLastSyncedRevisionId(uid, revisionId);
         notifySyncStatus({ state: 'synced', lastSyncedAt: Date.now(), errorMessage: null });
     } catch (error) {
         remoteMonthsState = null;
@@ -771,6 +791,7 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
 
     activeWorkspaceDocExists = false;
     remoteMonthsState = null;
+    lastKnownRevisionId = loadLastSyncedRevisionId(uid);
     let initialSnapshotHandled = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let snapshotSequence = 0;
@@ -801,8 +822,14 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                 ? currentLocalState.lastUpdate
                 : 0;
         const remoteUpdatedAtMs = extractRemoteTimestampMs(data, remotePayload);
+        const lastSyncedOnThisDevice = loadLastSyncedRevisionId(uid);
+        // Si un autre appareil (PC ↔ téléphone) a poussé une révision différente, le Cloud l'emporte
+        // sauf si cet appareil a explicitement modifié son état APRÈS l'horodatage Cloud ET est plus riche.
+        const remoteChangedByOtherDevice =
+            remoteRevision !== '' && remoteRevision !== lastSyncedOnThisDevice;
         const isRemoteOlderThanLocal =
             !isRemoteRicherThanLocal &&
+            !remoteChangedByOtherDevice &&
             localHasMeaningfulData &&
             localRichness >= remoteRichness &&
             remoteUpdatedAtMs !== null &&
@@ -813,13 +840,14 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
             remotePayload &&
             remoteHasData &&
             !remoteIsStarter &&
-            (remoteRevision !== lastKnownRevisionId || isRemoteRicherThanLocal) &&
+            (remoteRevision !== lastKnownRevisionId || !initialSnapshotHandled || isRemoteRicherThanLocal) &&
             !isRemoteOlderThanLocal
         ) {
             applyingRemoteSnapshot = true;
             try {
                 const sanitizedRemote = cleanCandidateState(remotePayload);
                 lastKnownRevisionId = remoteRevision;
+                saveLastSyncedRevisionId(uid, remoteRevision);
                 lastSerializedPayload = JSON.stringify(sanitizedRemote);
                 useFinanceStore.getState().setAppState({
                     ...sanitizedRemote,
@@ -830,7 +858,10 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                     activeTestPersonaId: null,
                     realDataSnapshot: null,
                 });
-                saveProtectedDossierSnapshot(sanitizedRemote);
+                saveProtectedDossierSnapshot({
+                    ...sanitizedRemote,
+                    lastUpdate: remoteUpdatedAtMs ?? Date.now(),
+                });
             } finally {
                 applyingRemoteSnapshot = false;
             }
@@ -940,12 +971,39 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
         lastSerializedPayload = serialized;
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
+            debounceTimer = null;
             void pushWorkspaceToFirestore(user).catch(() => {});
-        }, 700);
+        }, 350);
     });
+
+    // Réconciliation automatique multi-appareils (PC ↔ Téléphone) au réveil de l'écran, retour sur l'onglet ou reconnexion réseau
+    const handleVisibilityOrFocus = () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+                debounceTimer = null;
+                void pushWorkspaceToFirestore(user).catch(() => {});
+            }
+            return;
+        }
+        if (!applyingRemoteSnapshot) {
+            void pullWorkspaceFromFirestoreNow(user).catch(() => {});
+        }
+    };
+
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+        window.addEventListener('focus', handleVisibilityOrFocus);
+        window.addEventListener('online', handleVisibilityOrFocus);
+    }
 
     return () => {
         if (debounceTimer) clearTimeout(debounceTimer);
+        if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+            document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+            window.removeEventListener('focus', handleVisibilityOrFocus);
+            window.removeEventListener('online', handleVisibilityOrFocus);
+        }
         unsubscribeSnapshot();
         unsubscribeStore();
         notifySyncStatus({ state: 'idle', errorMessage: null });

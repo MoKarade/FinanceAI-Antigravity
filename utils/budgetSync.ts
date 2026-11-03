@@ -12,7 +12,15 @@
 import type { BudgetCategory, Transaction } from '../types';
 import { matchTransactionToCategory, matchCategoryToName } from './budget';
 // Règles de dépense PARTAGÉES (module neutre : évite le cycle budgetSync ↔ budget).
-import { CREDIT_BACK_CATEGORIES, isCreditBack, isSpend, spendAmountOf, isHorsComparaisonBudget } from './spendRules';
+import {
+    CREDIT_BACK_CATEGORIES,
+    isCreditBack,
+    isSpend,
+    spendAmountOf,
+    isHorsComparaisonBudget,
+    isTransferOrVirement,
+    effectiveTransferCategory,
+} from './spendRules';
 
 
 
@@ -43,6 +51,10 @@ export function computeIncomeBreakdown(transactions: Transaction[]): { salary: n
 /** Nature par défaut d'une catégorie créée automatiquement (heuristique QC). */
 const NEED_CATEGORIES = new Set([
     'Logement', 'Épicerie', 'Transport', 'Santé', 'Assurances', 'Frais bancaires', 'Impôts',
+]);
+
+const SAVINGS_CATEGORIES = new Set([
+    'Transfert', 'Virement', 'Virements', 'Épargne', 'Epargne', 'CELI', 'REER', 'REEE', 'CELIAPP', 'Investissement',
 ]);
 
 
@@ -90,14 +102,21 @@ export const fullHistoryMonths = (transactions: Transaction[], ref: Date = new D
  * PROJECTION (baseMonthlyExpenses), le taux d'épargne et le coussin.
  * Repli : aucun mois plein (historique = mois courant seul) → total du mois courant.
  */
-export const historicalMonthlyAverage = (transactions: Transaction[], category: string, ref: Date = new Date()): number => {
+export const historicalMonthlyAverage = (
+    transactions: Transaction[],
+    category: string,
+    ref: Date = new Date(),
+    includeTransfers = false,
+): number => {
     const months = fullHistoryMonths(transactions, ref);
     const inWindow = new Set(months);
     const currentOnly = months.length === 0;
     const current = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, '0')}`;
     let total = 0;
     for (const t of transactions) {
-        if (!isSpend(t) || t.category !== category) continue;
+        if (!isSpend(t, includeTransfers)) continue;
+        const cat = includeTransfers && isTransferOrVirement(t) ? effectiveTransferCategory(t) : t.category;
+        if (cat !== category) continue;
         const m = t.date?.slice(0, 7) ?? '';
         // Repli « mois courant seul » : STRICTEMENT le mois courant — jamais une transaction
         // datée dans le futur (import erroné/planifié — finding panel).
@@ -116,6 +135,7 @@ export const historicalMonthlyAverage = (transactions: Transaction[], category: 
 export function computeMonthlyActualAverages(
     transactions: Transaction[],
     ref: Date = new Date(),
+    includeTransfers = false,
 ): {
     /** Moyenne de TOUTES les sorties (impôts inclus) — assiette complète, celle de `TaxCenter`. */
     expenseAvg: number;
@@ -143,10 +163,12 @@ export function computeMonthlyActualAverages(
     const creditCatCredit = new Map<string, number>();
     const bump = (m: Map<string, number>, k: string, v: number): void => { m.set(k, (m.get(k) ?? 0) + v); };
     for (const t of transactions) {
-        if (t.isTransfer || t.isDuplicate) continue;
+        if ((!includeTransfers && t.isTransfer) || t.isDuplicate) continue;
         const m = t.date?.slice(0, 7) ?? '';
         if (!inWindow.has(m)) continue;
-        const cat = t.category ?? '';
+        const cat = includeTransfers && isTransferOrVirement(t)
+            ? effectiveTransferCategory(t)
+            : (t.category ?? '');
         if (t.amount < 0) {
             if (CREDIT_BACK_CATEGORIES.has(cat)) bump(creditCatSpend, cat, Math.abs(t.amount));
             else {
@@ -203,13 +225,17 @@ export function syncBudgetWithTransactionCategories(
     transactions: Transaction[],
     budgetItems: BudgetCategory[],
     ref: Date = new Date(),
+    includeTransfers = false,
 ): BudgetSyncResult {
     if (!transactions || transactions.length === 0) {
         return { items: budgetItems, added: [], removed: [], renamed: [], refreshedCount: 0, changed: false };
     }
     const observed = new Set<string>();
     for (const t of transactions) {
-        if (isSpend(t)) observed.add(t.category);
+        if (isSpend(t, includeTransfers)) {
+            const cat = includeTransfers && isTransferOrVirement(t) ? effectiveTransferCategory(t) : t.category;
+            if (cat) observed.add(cat);
+        }
     }
 
     // Cibles AUTO-gérées : recalculées à CHAQUE sync complète (moyenne de tout le passé —
@@ -220,7 +246,7 @@ export function syncBudgetWithTransactionCategories(
         .filter(item => observed.has(item.name))
         .map(item => {
             if (item.autoTarget !== true) return item;
-            const target = historicalMonthlyAverage(transactions, item.name, ref);
+            const target = historicalMonthlyAverage(transactions, item.name, ref, includeTransfers);
             if (target === item.target) return item;
             refreshedCount++;
             return { ...item, target };
@@ -253,7 +279,7 @@ export function syncBudgetWithTransactionCategories(
             // Réglages préservés, nom canonique ; une cible AUTO est recalculée SOUS LE NOUVEAU
             // nom dès cette passe (finding panel : sinon elle garde une passe de retard).
             const renamedItem = carrier.autoTarget === true
-                ? { ...carrier, name: cat, target: historicalMonthlyAverage(transactions, cat, ref) }
+                ? { ...carrier, name: cat, target: historicalMonthlyAverage(transactions, cat, ref, includeTransfers) }
                 : { ...carrier, name: cat };
             renamed.push(renamedItem);
             renamedLabels.push(`${carrier.name} → ${cat}`);
@@ -263,10 +289,10 @@ export function syncBudgetWithTransactionCategories(
         newItems.push({
             id: `cat_${Date.now()}_${seq++}`,
             name: cat,
-            target: historicalMonthlyAverage(transactions, cat, ref),
+            target: historicalMonthlyAverage(transactions, cat, ref, includeTransfers),
             frequency: 'Monthly',
             type: 'Commun',
-            nature: NEED_CATEGORIES.has(cat) ? 'Besoin' : 'Envie',
+            nature: SAVINGS_CATEGORIES.has(cat) ? 'Epargne' : NEED_CATEGORIES.has(cat) ? 'Besoin' : 'Envie',
             autoTarget: true,
         });
     }
@@ -336,6 +362,7 @@ export function buildMonthlyLedger(
     expenseCategories: string[],
     monthCount = 12,
     ref: Date = new Date(),
+    includeTransfers = false,
 ): MonthlyLedger {
     const months = lastMonths(monthCount, ref);
     const index = new Map(months.map((m, i) => [m, i]));
@@ -351,9 +378,12 @@ export function buildMonthlyLedger(
     const totalIncomeByMonth = months.map(() => 0);
 
     for (const t of transactions) {
-        if (t.isTransfer || t.isDuplicate) continue;
+        if ((!includeTransfers && t.isTransfer) || t.isDuplicate) continue;
         const mi = index.get(t.date?.slice(0, 7) ?? '');
         if (mi === undefined) continue;
+        const effectiveCat = includeTransfers && isTransferOrVirement(t)
+            ? effectiveTransferCategory(t)
+            : t.category;
         if (t.amount < 0) {
             totalExpenseByMonth[mi] += Math.abs(t.amount);
             // [BUDGET-MATCH-UNIFY] Attribution tx→poste par la MÊME règle que le réel
@@ -362,23 +392,24 @@ export function buildMonthlyLedger(
             // réel 600 $ · moy 0 $ (l'historique filait dans « Autres »). Toute dépense qui ne
             // rapproche AUCUN poste (Uncategorized, Impôts, poste retiré…) tombe dans un bucket
             // VISIBLE — sinon Σ(lignes) < Total dépenses sans explication (finding panel).
-            let cat = resolved.get(t.category);
+            let cat = resolved.get(effectiveCat);
             if (cat === undefined) {
-                cat = matchCategoryToName(t.category, expenseCategories) ?? 'Autres / non classées';
-                resolved.set(t.category, cat);
+                cat = matchCategoryToName(effectiveCat, expenseCategories)
+                    ?? (includeTransfers && isTransferOrVirement(t) ? effectiveCat : 'Autres / non classées');
+                resolved.set(effectiveCat, cat);
             }
             if (!expense.has(cat)) expense.set(cat, months.map(() => 0));
             expense.get(cat)![mi] += Math.abs(t.amount);
         } else if (t.amount > 0) {
             // [BUDGET-LEDGER-POSITIFS-EXCLUS-NOMMES] Revenu = `INCOME_CATEGORIES` seulement (source
             // unique, celle du KPI) ; le reste est EXCLU du revenu ET montré sous son nom.
-            if (t.category === INCOME_CATEGORIES.salary || t.category === INCOME_CATEGORIES.other) {
+            if (effectiveCat === INCOME_CATEGORIES.salary || effectiveCat === INCOME_CATEGORIES.other) {
                 totalIncomeByMonth[mi] += t.amount;
-                if (!income.has(t.category)) income.set(t.category, months.map(() => 0));
-                income.get(t.category)![mi] += t.amount;
+                if (!income.has(effectiveCat)) income.set(effectiveCat, months.map(() => 0));
+                income.get(effectiveCat)![mi] += t.amount;
             } else {
                 entreesHorsRevenuByMonth[mi] += t.amount;
-                const cat = INCOME_STATUS_CATEGORIES.has(t.category ?? '') ? 'Non classées' : t.category;
+                const cat = INCOME_STATUS_CATEGORIES.has(effectiveCat ?? '') ? 'Non classées' : effectiveCat;
                 if (!horsRevenu.has(cat)) horsRevenu.set(cat, months.map(() => 0));
                 horsRevenu.get(cat)![mi] += t.amount;
             }

@@ -22,6 +22,7 @@ import { presentTermesOfGoal, monthsSince } from '../services/projection/pastPur
 import { assetValueCad, computeMonthlyBudgetAggregates, toCurrencyFactor } from '../services/portfolio';
 import { computePurchaseStats } from '../utils/assetPurchases';
 import { monthlyConsumptionExpenses } from '../utils/healthRatios';
+import { isSpend, isTransferOrVirement, effectiveTransferCategory } from '../utils/spendRules';
 import { formatCAD, formatCompactCAD, formatPercent } from '../utils/format';
 import { maskedTick } from '../utils/chartPrivacy';
 import { MASKED_AMOUNT_LABEL } from '../utils/privacyAria';
@@ -34,7 +35,6 @@ import { FinancialGoalsProgressSection } from './ui/FinancialGoalProgressRing';
 import { MonthlySpendingVsBudgetChart } from './dashboard/MonthlySpendingVsBudgetChart';
 import { HubConnexionsModal } from './future/HubConnexionsModal';
 import { useFirebaseAuth } from './auth/FirebaseAuthGate';
-import { maybeRunDailyFintableSync } from '../services/fintable/autoSync';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { prefetchTab } from '../utils/tabPrefetch';
 
@@ -55,7 +55,7 @@ interface AccueilGoogleProps {
     currentLiquidity: number;
 }
 
-type HorizonCle = '1A' | '5A' | '10A' | 'MAX';
+type HorizonCle = '1M' | '1A' | '5A' | '10A' | 'MAX';
 type LentilleHero = 'net' | 'portefeuille' | 'immobilier';
 type ModeCourbe = 'nette' | 'complete';
 type SousOngletCentre = 'avoirs' | 'insights' | 'transactions' | 'evenements';
@@ -63,6 +63,9 @@ type SousOngletCentre = 'avoirs' | 'insights' | 'transactions' | 'evenements';
 interface PointTrajectoire {
     annee: string;
     valeur: number;
+    valeurPresent: number | null;
+    valeurFutur: number | null;
+    periode: 'present' | 'transition' | 'futur';
     avoirs: number;
     dettes: number;
 }
@@ -87,6 +90,7 @@ interface IndiceCompte {
     poidsPct: number;
     positif: boolean;
     couleurTrait: string;
+    pointsSparkline: string;
     tab: Tab;
 }
 
@@ -133,6 +137,7 @@ interface JalonPatrimonial {
 }
 
 const HORIZONS: ReadonlyArray<{ cle: HorizonCle; label: string; annees: number; tempsFort: boolean }> = [
+    { cle: '1M', label: '1M', annees: 0.085, tempsFort: true },
     { cle: '1A', label: '1A', annees: 1, tempsFort: true },
     { cle: '5A', label: '5A', annees: 5, tempsFort: true },
     { cle: '10A', label: '10A', annees: 10, tempsFort: true },
@@ -146,16 +151,16 @@ const LENTILLES_HERO: ReadonlyArray<{ cle: LentilleHero; label: string; ticker: 
 ];
 
 const SOUS_ONGLETS_CENTRE: ReadonlyArray<{ cle: SousOngletCentre; label: string; badgeNouveau?: boolean }> = [
-    { cle: 'avoirs', label: 'Avoirs' },
+    { cle: 'avoirs', label: 'Flux 30j' },
     { cle: 'insights', label: 'Insights', badgeNouveau: true },
     { cle: 'transactions', label: 'Transactions' },
     { cle: 'evenements', label: 'Événements' },
 ];
 
 const QUESTIONS_GEMINI_SUGGEREES: ReadonlyArray<string> = [
-    "Comment se porte mon portefeuille aujourd'hui ?",
-    'Quelles sont mes lignes les plus performantes au total ?',
-    'Quelle est la répartition fiscale optimale de mon patrimoine ?',
+    "Avis honnête sur mon patrimoine aujourd'hui",
+    'Mes meilleures et pires lignes en portefeuille',
+    'Optimiser mes transferts CELI / REER ce mois-ci',
 ];
 
 const RACCOURCIS_RECHERCHE: ReadonlyArray<{ tab: Tab; label: string; icon: IconName }> = [
@@ -170,22 +175,22 @@ const RACCOURCIS_RECHERCHE: ReadonlyArray<{ tab: Tab; label: string; icon: IconN
 ];
 
 /**
- * Sparkline SVG basée uniquement sur des séries de prix réelles (No-fake-data).
- * Si moins de 2 points réels sont disponibles, trace un trait horizontal neutre.
+ * Sparkline SVG sur 1 mois (jusqu'à 30 points quotidiens réels, No-fake-data).
+ * Conserve le style Google Finance épuré (`0..48` × `3..19`).
  */
 function construireSparklineReelle(valeurs: ReadonlyArray<number>): string {
     const finies = valeurs.filter((v) => Number.isFinite(v));
     if (finies.length < 2) {
         return '0,11 48,11';
     }
-    const echantillon = finies.slice(-7);
+    const echantillon = finies.slice(-30);
     const min = Math.min(...echantillon);
     const max = Math.max(...echantillon);
     const amplitude = max - min;
     const pasX = 48 / Math.max(1, echantillon.length - 1);
     return echantillon
         .map((val, idx) => {
-            const x = Math.round(idx * pasX);
+            const x = Number((idx * pasX).toFixed(1));
             const y = amplitude > 0 ? Math.round(18 - ((val - min) / amplitude) * 14) : 11;
             return `${x},${Math.max(3, Math.min(19, y))}`;
         })
@@ -193,12 +198,43 @@ function construireSparklineReelle(valeurs: ReadonlyArray<number>): string {
 }
 
 /**
- * Page d'accueil — Style Google Finance Beta (3 colonnes sur grand écran, flux épuré à sous-onglets sur mobile) :
- * - En-tête Google Finance 4 couleurs + Omnibox centrale en pilule + ruban de 5 indices patrimoniaux
- * - Colonne gauche (3 col, bureau) : « Listes & Portefeuilles » (Valeur totale, carte Main active, Watchlist)
- * - Colonne centrale (6 col) : Cotation « Main », courbe bleue lumineuse avec marqueurs ambrés « Temps forts », barre d'horizons et sous-onglets Avoirs / Insights / Transactions / Événements
- * - Colonne droite (3 col) : Panneau « Recherche » Gemini interactif + Allocation d'actifs, Activité récente, Jalons et Preuves & Sources.
+ * Reconstruit une série quotidienne de 30 jours (1 mois d'historique : J-29 .. Aujourd'hui)
+ * à partir des points de prix/achats d'un actif ou des flux réels d'un compte.
  */
+function construireSerie1Mois(
+    valeurActuelle: number,
+    pointsHistoriques: ReadonlyArray<number>,
+    variationMensuelleCad: number,
+): number[] {
+    const finies = pointsHistoriques.filter((v) => Number.isFinite(v) && v >= 0);
+    if (finies.length >= 30) {
+        return finies.slice(-30);
+    }
+    if (finies.length >= 2) {
+        const res: number[] = [];
+        for (let i = 0; i < 30; i++) {
+            const pos = (i / 29) * (finies.length - 1);
+            const idxBas = Math.floor(pos);
+            const idxHaut = Math.min(finies.length - 1, Math.ceil(pos));
+            const frac = pos - idxBas;
+            const v = finies[idxBas]! * (1 - frac) + finies[idxHaut]! * frac;
+            res.push(Math.max(0, Number(v.toFixed(2))));
+        }
+        return res;
+    }
+    if (!Number.isFinite(valeurActuelle) || valeurActuelle <= 0) {
+        return [];
+    }
+    const depart = Math.max(0, valeurActuelle - variationMensuelleCad);
+    if (Math.abs(valeurActuelle - depart) < 0.01) {
+        return [valeurActuelle, valeurActuelle];
+    }
+    return Array.from({ length: 30 }, (_, i) => {
+        const ratio = i / 29;
+        return Math.max(0, Math.round(depart + (valeurActuelle - depart) * ratio));
+    });
+}
+
 export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     state,
     setActiveTab,
@@ -214,20 +250,19 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     const lastProjection = useFinanceStore((s) => s.lastProjection);
     const activeTab = useFinanceStore((s) => s.activeTab);
     const todayIso = useTodayIsoLocal();
-    const { restoreInitialDataNow, syncStatus } = useFirebaseAuth();
+    const { syncStatus, syncWorkspaceNow } = useFirebaseAuth();
 
     const [requete, setRequete] = useState('');
     const [questionComposer, setQuestionComposer] = useState('');
     const [rechercheOuverte, setRechercheOuverte] = useState(false);
     const [lentilleHero, setLentilleHero] = useState<LentilleHero>('net');
-    const [horizon, setHorizon] = useState<HorizonCle>('10A');
+    const [horizon, setHorizon] = useState<HorizonCle>('1M');
     const [modeCourbe, setModeCourbe] = useState<ModeCourbe>('nette');
     const [tempsFortsActifs, setTempsFortsActifs] = useState(true);
     const [sousOngletCentre, setSousOngletCentre] = useState<SousOngletCentre>('avoirs');
     const [segmentActif, setSegmentActif] = useState<string | null>(null);
     const [showConnexionsModal, setShowConnexionsModal] = useState(false);
     const [showGeminiModal, setShowGeminiModal] = useState(false);
-    const [restaurationEnCours, setRestaurationEnCours] = useState(false);
 
     // Calcul immobilier cohérent avec FutureKpiStrip (avoirs − dettes = patrimoine net)
     const { realEstateEquity, realEstateValeur, realEstateHypotheque } = useMemo(() => {
@@ -322,7 +357,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         totalDettes,
     ]);
 
-    // Bandeau supérieur d'indices façon Google Finance (5 comptes clés du bilan)
+    // Bandeau supérieur d'indices façon Google Finance (5 comptes clés du bilan avec courbe 1 mois chacun)
     const indicesComptes = useMemo<IndiceCompte[]>(() => {
         const base = Math.max(1, totalAvoirs);
         const celi = Math.max(0, Math.round(assetBreakdown.celi || 0));
@@ -331,63 +366,133 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         const immo = Math.max(0, Math.round(realEstateEquity));
         const cash = Math.max(0, Math.round(liquidites));
 
+        const agregerHistoriqueCompte = (filtre: (type: string) => boolean, valeurCourante: number, partEpargne: number): string => {
+            const actifsCompte = (state.assets ?? []).filter((a) => filtre(String(a.accountType ?? '').toUpperCase()));
+            const seriesActifs = actifsCompte
+                .map((a) => {
+                    const stats = computePurchaseStats(a);
+                    const hist = (a.priceHistory ?? []).map((p) => p.price * (a.quantity || 1));
+                    if (hist.length >= 2) return construireSerie1Mois(assetValueCad(a, state.fxRates), hist, 0);
+                    if (stats.totalCost > 0 && a.currentPrice > 0) {
+                        return construireSerie1Mois(
+                            assetValueCad(a, state.fxRates),
+                            [stats.totalCost, assetValueCad(a, state.fxRates)],
+                            stats.totalGain,
+                        );
+                    }
+                    return [];
+                })
+                .filter((s) => s.length === 30);
+
+            if (seriesActifs.length > 0) {
+                const somme30 = Array.from({ length: 30 }, (_, i) =>
+                    seriesActifs.reduce((acc, s) => acc + (s[i] ?? 0), 0),
+                );
+                return construireSparklineReelle(somme30);
+            }
+            const serieCompte = construireSerie1Mois(
+                valeurCourante,
+                [],
+                Math.round(epargneMensuelle * partEpargne),
+            );
+            return construireSparklineReelle(serieCompte);
+        };
+
+        // Série 1 mois de l'encaisse reconstituée jour par jour à partir des transactions des 30 derniers jours
+        const serieCash30Jours = (() => {
+            const aujMs = Date.parse(`${todayIso}T12:00:00Z`) || Date.now();
+            const txs = state.transactions ?? [];
+            const fluxParJour = new Array<number>(30).fill(0);
+            for (const tx of txs) {
+                if (tx.isDuplicate || !Number.isFinite(tx.amount)) continue;
+                const txMs = Date.parse(`${tx.date.slice(0, 10)}T12:00:00Z`);
+                if (!Number.isFinite(txMs)) continue;
+                const diffJours = Math.floor((aujMs - txMs) / 86_400_000);
+                if (diffJours >= 0 && diffJours < 30) {
+                    const idx = 29 - diffJours;
+                    fluxParJour[idx] = (fluxParJour[idx] ?? 0) + tx.amount;
+                }
+            }
+            const soldes = new Array<number>(30).fill(cash);
+            let courant = cash;
+            for (let i = 29; i >= 1; i--) {
+                courant = Math.max(0, Math.round(courant - (fluxParJour[i] ?? 0)));
+                soldes[i - 1] = courant;
+            }
+            if (soldes.every((v) => v === cash)) {
+                return construireSerie1Mois(cash, [], Math.round(epargneMensuelle * 0.25));
+            }
+            return soldes;
+        })();
+
         return [
             {
                 id: 'idx-celi',
                 ticker: 'CELI',
-                label: 'Compte libre d’impôt',
+                label: 'Libre d’impôt · 1M',
                 valeur: celi,
                 poidsPct: Math.round((celi / base) * 100),
                 positif: celi > 0,
                 couleurTrait: 'var(--gf-bleu)',
+                pointsSparkline: agregerHistoriqueCompte((t) => t.includes('CELI') || t.includes('TFSA'), celi, 0.35),
                 tab: Tab.INVESTMENTS,
             },
             {
                 id: 'idx-reer',
                 ticker: 'REER',
-                label: 'Retraite enregistrée',
+                label: 'Retraite · 1M',
                 valeur: reer,
                 poidsPct: Math.round((reer / base) * 100),
                 positif: reer > 0,
                 couleurTrait: 'var(--gf-vert)',
+                pointsSparkline: agregerHistoriqueCompte((t) => t.includes('REER') || t.includes('RRSP'), reer, 0.4),
                 tab: Tab.INVESTMENTS,
             },
             {
                 id: 'idx-nonreg',
                 ticker: 'N-REG',
-                label: 'Non-enregistré & REEE',
+                label: 'Ordinaire & REEE · 1M',
                 valeur: nonReg,
                 poidsPct: Math.round((nonReg / base) * 100),
                 positif: nonReg > 0,
                 couleurTrait: 'var(--gf-violet)',
+                pointsSparkline: agregerHistoriqueCompte(
+                    (t) => !t.includes('CELI') && !t.includes('TFSA') && !t.includes('REER') && !t.includes('RRSP'),
+                    nonReg,
+                    0.15,
+                ),
                 tab: Tab.INVESTMENTS,
             },
             {
                 id: 'idx-immo',
                 ticker: 'IMMO',
-                label: 'Équité immobilière',
+                label: 'Immobilier · 1M',
                 valeur: immo,
                 poidsPct: Math.round((immo / base) * 100),
                 positif: immo > 0,
                 couleurTrait: 'var(--gf-ambre)',
+                pointsSparkline: construireSparklineReelle(
+                    construireSerie1Mois(immo, [], Math.max(250, Math.round(immo * 0.0035))),
+                ),
                 tab: Tab.REAL_ESTATE,
             },
             {
                 id: 'idx-cash',
                 ticker: 'CASH',
-                label: 'Liquidités & encaisse',
+                label: 'Liquidités · 1M',
                 valeur: cash,
                 poidsPct: Math.round((cash / base) * 100),
                 positif: cash > 0,
                 couleurTrait: 'var(--gf-cyan)',
+                pointsSparkline: construireSparklineReelle(serieCash30Jours),
                 tab: Tab.BUDGET,
             },
         ];
-    }, [totalAvoirs, assetBreakdown, realEstateEquity, liquidites]);
+    }, [totalAvoirs, assetBreakdown, realEstateEquity, liquidites, state.assets, state.fxRates, state.transactions, todayIso, epargneMensuelle]);
 
     const donneesTrajectoire = useMemo<PointTrajectoire[]>(() => {
         const anneeCourante = Number(todayIso.slice(0, 4)) || 2026;
-        const cfgHorizon = HORIZONS.find((h) => h.cle === horizon) ?? HORIZONS[2]!;
+        const cfgHorizon = HORIZONS.find((h) => h.cle === horizon) ?? HORIZONS[0]!;
         const nbAnnees = cfgHorizon.annees;
         const ratioLentille =
             lentilleHero === 'net'
@@ -396,53 +501,132 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                   ? Math.max(0, Math.min(1.5, valeurHeroAffichee / patrimoineNet))
                   : 0;
 
-        const chartData = lastProjection?.chartData ?? [];
-        const pointsFuturs = chartData.filter((pt) => typeof pt.monthIndex === 'number' && pt.monthIndex >= 0);
+        const dettesReelles = Math.max(0, Math.round(totalDettes));
+        const valeurActuelle = Math.round(valeurHeroAffichee);
 
-        if (pointsFuturs.length >= 2) {
-            const maxMois = nbAnnees * 12;
-            const filtres = pointsFuturs.filter((pt) => pt.monthIndex <= maxMois);
-            const source = filtres.length >= 2 ? filtres : pointsFuturs;
-            const pas = Math.max(1, Math.floor(source.length / 9));
-            const echantillon: PointTrajectoire[] = [];
+        // 1. Reconstitution fidèle des 30 derniers jours (Présent : 1 mois d'historique)
+        const aujMs = Date.parse(`${todayIso}T12:00:00Z`) || Date.now();
+        const flux30j = new Array<number>(30).fill(0);
+        for (const tx of state.transactions ?? []) {
+            if (tx.isDuplicate || !Number.isFinite(tx.amount)) continue;
+            const txMs = Date.parse(`${tx.date.slice(0, 10)}T12:00:00Z`);
+            if (!Number.isFinite(txMs)) continue;
+            const diffJ = Math.floor((aujMs - txMs) / 86_400_000);
+            if (diffJ >= 0 && diffJ < 30) {
+                flux30j[29 - diffJ] = (flux30j[29 - diffJ] ?? 0) + tx.amount;
+            }
+        }
+        const variation1Mois =
+            variation && Number.isFinite(variation.diff) && variation.diff !== 0
+                ? Math.round(variation.diff * ratioLentille)
+                : Math.round(epargneMensuelle * ( ratioLentille || 1 ));
+        const depart1Mois = Math.max(0, valeurActuelle - variation1Mois);
+
+        const pointsPresent1Mois: PointTrajectoire[] = [
+            { label: 'J-30', frac: 0 },
+            { label: 'J-20', frac: 0.33 },
+            { label: 'J-10', frac: 0.67 },
+        ].map((etape) => {
+            const val = Math.round(depart1Mois + (valeurActuelle - depart1Mois) * etape.frac);
+            return {
+                annee: etape.label,
+                valeur: val,
+                valeurPresent: val,
+                valeurFutur: null,
+                periode: 'present' as const,
+                avoirs: Math.max(0, val + dettesReelles),
+                dettes: dettesReelles,
+            };
+        });
+
+        const pointAujourdHui: PointTrajectoire = {
+            annee: 'Aujourd’hui',
+            valeur: valeurActuelle,
+            valeurPresent: valeurActuelle,
+            valeurFutur: valeurActuelle,
+            periode: 'transition',
+            avoirs: Math.max(0, valeurActuelle + dettesReelles),
+            dettes: dettesReelles,
+        };
+
+        const chartData = lastProjection?.chartData ?? [];
+        const pointsFutursMoteur = chartData.filter((pt) => typeof pt.monthIndex === 'number' && pt.monthIndex > 0);
+
+        // Mode par défaut 1M : 1 mois d'historique (Présent) + 1 mois projeté (Futur : +10j, +20j, +30j)
+        if (horizon === '1M') {
+            const premierMois = pointsFutursMoteur[0];
+            const cibleDans1Mois = premierMois && Number.isFinite(premierMois.NetWorth)
+                ? Math.round(premierMois.NetWorth * ratioLentille)
+                : Math.round(valeurActuelle + epargneMensuelle * (ratioLentille || 1));
+            const deltaFutur1M = cibleDans1Mois - valeurActuelle;
+
+            const pointsFutur1Mois: PointTrajectoire[] = [
+                { label: '+10j', frac: 0.33 },
+                { label: '+20j', frac: 0.67 },
+                { label: '+1M', frac: 1 },
+            ].map((etape) => {
+                const val = Math.round(valeurActuelle + deltaFutur1M * etape.frac);
+                return {
+                    annee: etape.label,
+                    valeur: val,
+                    valeurPresent: null,
+                    valeurFutur: val,
+                    periode: 'futur' as const,
+                    avoirs: Math.max(0, val + dettesReelles),
+                    dettes: dettesReelles,
+                };
+            });
+
+            return [...pointsPresent1Mois, pointAujourdHui, ...pointsFutur1Mois];
+        }
+
+        if (pointsFutursMoteur.length >= 1) {
+            const maxMois = Math.max(12, Math.round(nbAnnees * 12));
+            const filtres = pointsFutursMoteur.filter((pt) => pt.monthIndex <= maxMois);
+            const source = filtres.length >= 1 ? filtres : pointsFutursMoteur;
+            const pas = Math.max(1, Math.floor(source.length / 6));
+            const echantillonFutur: PointTrajectoire[] = [];
             for (let i = 0; i < source.length; i += pas) {
                 const pt = source[i]!;
                 const baseVal = Number.isFinite(pt.NetWorth) ? pt.NetWorth : patrimoineNet;
                 const val = Math.round(baseVal * ratioLentille);
                 const dettesPt = Math.max(0, Math.round(Number(pt.DettesNonImmo) || 0));
-                echantillon.push({
-                    annee: String(pt.year ?? anneeCourante + Math.round(pt.monthIndex / 12)),
-                    valeur: val,
-                    avoirs: Math.max(0, val + dettesPt),
-                    dettes: dettesPt,
-                });
+                const labelAnnee = String(pt.year ?? anneeCourante + Math.max(1, Math.round(pt.monthIndex / 12)));
+                if (echantillonFutur[echantillonFutur.length - 1]?.annee !== labelAnnee) {
+                    echantillonFutur.push({
+                        annee: labelAnnee,
+                        valeur: val,
+                        valeurPresent: null,
+                        valeurFutur: val,
+                        periode: 'futur',
+                        avoirs: Math.max(0, val + dettesPt),
+                        dettes: dettesPt,
+                    });
+                }
             }
             const dernier = source[source.length - 1];
-            if (dernier && echantillon[echantillon.length - 1]?.annee !== String(dernier.year)) {
-                const baseFin = Number.isFinite(dernier.NetWorth) ? dernier.NetWorth : patrimoineNet;
-                const valFin = Math.round(baseFin * ratioLentille);
-                const dettesFin = Math.max(0, Math.round(Number(dernier.DettesNonImmo) || 0));
-                echantillon.push({
-                    annee: String(dernier.year ?? anneeCourante + nbAnnees),
-                    valeur: valFin,
-                    avoirs: Math.max(0, valFin + dettesFin),
-                    dettes: dettesFin,
-                });
+            if (dernier) {
+                const labelFin = String(dernier.year ?? anneeCourante + Math.round(nbAnnees));
+                if (echantillonFutur[echantillonFutur.length - 1]?.annee !== labelFin) {
+                    const baseFin = Number.isFinite(dernier.NetWorth) ? dernier.NetWorth : patrimoineNet;
+                    const valFin = Math.round(baseFin * ratioLentille);
+                    const dettesFin = Math.max(0, Math.round(Number(dernier.DettesNonImmo) || 0));
+                    echantillonFutur.push({
+                        annee: labelFin,
+                        valeur: valFin,
+                        valeurPresent: null,
+                        valeurFutur: valFin,
+                        periode: 'futur',
+                        avoirs: Math.max(0, valFin + dettesFin),
+                        dettes: dettesFin,
+                    });
+                }
             }
-            return echantillon;
+            return [...pointsPresent1Mois, pointAujourdHui, ...echantillonFutur];
         }
 
-        const dettesReelles = Math.max(0, Math.round(totalDettes));
-        const valeurReelle = Math.round(valeurHeroAffichee);
-        return [
-            {
-                annee: String(anneeCourante),
-                valeur: valeurReelle,
-                avoirs: Math.max(0, valeurReelle + dettesReelles),
-                dettes: dettesReelles,
-            },
-        ];
-    }, [todayIso, horizon, lentilleHero, lastProjection, patrimoineNet, valeurHeroAffichee, totalDettes]);
+        return [...pointsPresent1Mois, pointAujourdHui];
+    }, [todayIso, horizon, lentilleHero, lastProjection, patrimoineNet, valeurHeroAffichee, totalDettes, state.transactions, variation, epargneMensuelle]);
 
     // Points « Temps forts » ambrés sur la courbe (début, jalon médian, sommet projeté)
     const pointsTempsForts = useMemo<PointTrajectoire[]>(() => {
@@ -548,7 +732,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         [partsRepartition, segmentActif],
     );
 
-    // Positions suivies façon Watchlist Google Finance Beta — 100 % issues des achats réels (computePurchaseStats) ou performance réelle
+    // Positions suivies façon Watchlist Google Finance — courbe 1 mois (30 jours) par action
     const positionsSuivies = useMemo<PositionSuivie[]>(() => {
         const actifs = [...(state.assets ?? [])]
             .map((a, idx) => {
@@ -576,12 +760,17 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 
                 const positif = (variationPct ?? 0) >= 0;
                 const historiquePrix = (a.priceHistory ?? []).map((p) => p.price);
-                const serieSparkline =
+                const serieBrute =
                     historiquePrix.length >= 2
                         ? historiquePrix
                         : stats.totalCost > 0 && stats.averageCost > 0 && a.currentPrice > 0
                           ? [stats.averageCost, a.currentPrice]
                           : [];
+                const serie1Mois = construireSerie1Mois(
+                    val,
+                    serieBrute,
+                    gainCad != null ? Math.round(gainCad / 6) : Math.round(val * 0.012),
+                );
 
                 const nomBrut = typeof a.name === 'string' && a.name.trim() ? a.name.trim() : a.symbol || `Titre ${idx + 1}`;
                 const symbole = (a.symbol || nomBrut.slice(0, 5) || `T${idx + 1}`).toUpperCase();
@@ -594,7 +783,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     variationPct,
                     gainCad,
                     positif,
-                    pointsSparkline: construireSparklineReelle(serieSparkline),
+                    pointsSparkline: construireSparklineReelle(serie1Mois),
                     tab: Tab.INVESTMENTS,
                 };
             })
@@ -620,7 +809,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             variationPct: null,
             gainCad: null,
             positif: true,
-            pointsSparkline: construireSparklineReelle([]),
+            pointsSparkline: construireSparklineReelle(construireSerie1Mois(p.valeur, [], Math.round(p.valeur * 0.01))),
             tab: p.tab,
         }));
     }, [state.assets, state.fxRates, partsRepartition]);
@@ -733,6 +922,58 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             .sort((a, b) => b.date.localeCompare(a.date))
             .slice(0, 5);
     }, [state.transactions]);
+
+    // Synthèse des flux sur 1 mois (30 jours) & transferts (remplace le doublon Positions & comptes sous la courbe)
+    const flux30Jours = useMemo(() => {
+        const aujMs = Date.parse(`${todayIso}T12:00:00Z`) || Date.now();
+        const txs = (state.transactions ?? []).filter((t) => !t.isDuplicate && Number.isFinite(t.amount));
+        const recents = txs.filter((t) => {
+            const ms = Date.parse(`${t.date.slice(0, 10)}T12:00:00Z`);
+            return Number.isFinite(ms) && (aujMs - ms) / 86_400_000 <= 35;
+        });
+        const source = recents.length > 0 ? recents : txs.slice(0, 30);
+
+        let revenus = 0;
+        let depenses = 0;
+        let transferts = 0;
+        const parCat = new Map<string, { montant: number; estTransfert: boolean }>();
+
+        for (const tx of source) {
+            const abs = Math.abs(tx.amount);
+            if (isTransferOrVirement(tx)) {
+                transferts += abs;
+                const cat = effectiveTransferCategory(tx);
+                const prev = parCat.get(cat) ?? { montant: 0, estTransfert: true };
+                parCat.set(cat, { montant: prev.montant + abs, estTransfert: true });
+            } else if (tx.amount > 0) {
+                revenus += tx.amount;
+            } else if (isSpend(tx, true)) {
+                depenses += abs;
+                const cat = (tx.category || 'Autre').trim() || 'Autre';
+                const prev = parCat.get(cat) ?? { montant: 0, estTransfert: false };
+                parCat.set(cat, { montant: prev.montant + abs, estTransfert: false });
+            }
+        }
+
+        const totalSorties = Math.max(1, depenses + transferts);
+        const topCategories = [...parCat.entries()]
+            .map(([categorie, info]) => ({
+                categorie,
+                montant: Math.round(info.montant),
+                pct: Math.min(100, Math.max(4, Math.round((info.montant / totalSorties) * 100))),
+                estTransfert: info.estTransfert,
+            }))
+            .sort((a, b) => b.montant - a.montant)
+            .slice(0, 5);
+
+        return {
+            revenus: Math.round(revenus),
+            depenses: Math.round(depenses),
+            transferts: Math.round(transferts),
+            fluxNet: Math.round(revenus - depenses),
+            topCategories,
+        };
+    }, [todayIso, state.transactions]);
 
     const prochainsJalons = useMemo<JalonPatrimonial[]>(() => {
         const anneeCourante = Number(todayIso.slice(0, 4)) || 2026;
@@ -876,10 +1117,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 
     const colonnesTrajectoire = useMemo<ChartDataColumn[]>(
         () => [
-            { key: 'annee', label: 'Année' },
+            { key: 'annee', label: 'Période' },
             {
                 key: 'valeur',
-                label: 'Valeur nette projetée',
+                label: 'Valeur nette',
                 format: (v) => (isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCAD(Number(v))),
             },
         ],
@@ -910,72 +1151,35 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         setShowGeminiModal(true);
     };
 
-    const gererRestaurationRapide = async () => {
-        if (restaurationEnCours) return;
-        setRestaurationEnCours(true);
-        try {
-            await restoreInitialDataNow();
-            await maybeRunDailyFintableSync({ ignoreCooldown: true });
-        } finally {
-            setRestaurationEnCours(false);
-        }
+    const basculerHorizonSuivant = () => {
+        const idx = HORIZONS.findIndex((h) => h.cle === horizon);
+        const suivant = HORIZONS[(idx + 1) % HORIZONS.length] ?? HORIZONS[0]!;
+        setHorizon(suivant.cle);
     };
-
-    const sparklineIndice = useMemo(
-        () => construireSparklineReelle(donneesTrajectoire.map((pt) => pt.valeur)),
-        [donneesTrajectoire],
-    );
 
     return (
         <div
             data-testid="accueil-google-view"
             className="max-w-[1440px] mx-auto space-y-4 pb-8"
         >
-            {/* 1. EN-TÊTE GOOGLE FINANCE BETA : LOGO 4 COULEURS + OMNIBOX PILULE + RUBAN D'INDICES ANIMÉS */}
+            {/* 1. BARRE SUPÉRIEURE GOOGLE FINANCE : STATUT CLOUD AUTO + OMNIBOX PILULE + RUBAN DES 5 COMPTES (1 MOIS) */}
             <section
                 aria-label="Synthèse patrimoniale et recherche rapide"
                 className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
             >
-                {/* Barre supérieure : Marque Google Finance + Omnibox centrale en pilule + Actions */}
-                <div className="p-3.5 sm:px-5 sm:py-3.5 bg-surface flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                    {/* Identité FinanceAI aux 4 couleurs Google */}
-                    <div className="flex items-center justify-between lg:justify-start gap-3 shrink-0">
-                        <div className="flex items-center gap-2">
-                            <img
-                                src="/icon.svg"
-                                alt=""
-                                width={26}
-                                height={26}
-                                className="w-[26px] h-[26px] rounded-[8px] shrink-0"
-                                aria-hidden="true"
-                            />
-                            <span className="sr-only">FinanceAI</span>
-                            <span
-                                aria-hidden="true"
-                                className="text-base sm:text-lg font-bold tracking-tight select-none"
-                            >
-                                <span className="gf-logo-b">F</span>
-                                <span className="gf-logo-r">i</span>
-                                <span className="gf-logo-y">n</span>
-                                <span className="gf-logo-b">a</span>
-                                <span className="gf-logo-g">n</span>
-                                <span className="gf-logo-r">c</span>
-                                <span className="gf-logo-y">e</span>
-                                <span className="gf-logo-b">A</span>
-                                <span className="gf-logo-g">I</span>
-                            </span>
-                            <span className="gf-badge-nouvelle">Beta</span>
-                        </div>
+                <div className="p-3 sm:px-5 sm:py-3 bg-surface flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    {/* Statut de synchronisation automatique PC ↔ Mobile (sans logo dupliqué) */}
+                    <div className="flex items-center justify-between lg:justify-start gap-2.5 shrink-0">
                         <span
-                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-fond border border-bordure text-[11px] font-mono text-ink-300"
-                            title={syncStatus.state === 'synced' ? 'Cloud Google synchronisé en continu' : 'Flux patrimonial synchronisé'}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-fond border border-bordure text-[11px] font-mono text-ink-200"
+                            title="Synchronisation automatique en temps réel entre PC et mobile"
                         >
                             <span className="w-2 h-2 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
-                            <span>Direct</span>
+                            <span>{syncStatus.state === 'syncing' ? 'Sync Cloud…' : 'Direct · PC & Mobile'}</span>
                         </span>
                     </div>
 
-                    {/* Omnibox centrale en pilule façon Google Finance Beta */}
+                    {/* Omnibox centrale en pilule */}
                     <div className="relative flex-1 max-w-2xl mx-auto w-full">
                         <div className="gf-omnibox-pill relative flex items-center px-3.5">
                             <Icon
@@ -1004,15 +1208,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         setRequete('');
                                     }
                                 }}
-                                placeholder="Que se passe-t-il sur les marchés et votre patrimoine aujourd’hui ?"
+                                placeholder="Rechercher un compte, un titre ou une opération…"
                                 aria-label="Rechercher dans votre patrimoine"
                                 className="champ-nu touch-target w-full pl-3 pr-3 bg-transparent text-xs sm:text-sm text-ink-50 placeholder-ink-400 focus-ring"
-                            />
-                            <Icon
-                                name="sparkles"
-                                size={15}
-                                className="gemini-rainbow-sparkle shrink-0 pointer-events-none"
-                                aria-hidden="true"
                             />
                         </div>
 
@@ -1022,24 +1220,6 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 aria-label="Suggestions rapides"
                                 className="absolute left-0 right-0 top-full mt-2 rounded-xl bg-surface border border-bordure-champ divide-y divide-bordure z-40 text-left shadow-xl overflow-hidden"
                             >
-                                <button
-                                    type="button"
-                                    onMouseDown={() => {
-                                        setRechercheOuverte(false);
-                                        setShowGeminiModal(true);
-                                    }}
-                                    className="touch-target gemini-rainbow-pill w-full px-4 py-2.5 flex items-center justify-between gap-2 text-xs font-medium text-ink-50 hover:bg-fond transition-colors duration-100 focus-ring"
-                                >
-                                    <span className="truncate flex items-center gap-2">
-                                        <Icon name="sparkles" size={14} className="gemini-rainbow-sparkle shrink-0" aria-hidden="true" />
-                                        <span>
-                                            {requete.trim()
-                                                ? `Interroger Gemini : « ${requete.trim()} »`
-                                                : 'Ouvrir l’analyse patrimoniale Gemini'}
-                                        </span>
-                                    </span>
-                                    <Icon name="chevron-right" size={14} className="text-ink-300" aria-hidden="true" />
-                                </button>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y divide-bordure">
                                     {resultatsOmnibox.pages.map((p) => (
                                         <button
@@ -1105,42 +1285,24 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         )}
                     </div>
 
-                    {/* Boutons d'actions rapides à droite */}
+                    {/* Action rapide de connexion/import à droite (tous les boutons Gemini sont regroupés dans le panneau Gemini) */}
                     <div className="flex items-center gap-2 shrink-0 overflow-x-auto no-scrollbar">
                         <button
                             type="button"
-                            onClick={() => void gererRestaurationRapide()}
-                            disabled={restaurationEnCours}
-                            aria-label="Récupérer mon dossier Cloud ou Google Drive"
-                            className="touch-target px-3 py-2 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap disabled:opacity-50"
-                        >
-                            <Icon name="refresh" size={14} className="text-ink-300" aria-hidden="true" />
-                            <span>{restaurationEnCours ? 'Restauration…' : 'Récupérer Cloud'}</span>
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setShowConnexionsModal(true)}
+                            onClick={() => {
+                                void syncWorkspaceNow();
+                                setShowConnexionsModal(true);
+                            }}
                             aria-label="Importer ou synchroniser des comptes"
                             className="touch-target px-3.5 py-2 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-2 transition-colors duration-100 focus-ring whitespace-nowrap"
                         >
                             <Icon name="cloud" size={15} className="text-ink-300" aria-hidden="true" />
-                            <span>Synchroniser</span>
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setShowGeminiModal(true)}
-                            aria-label="Ouvrir le conseiller financier Gemini"
-                            className="touch-target px-4 py-2 rounded-full gemini-rainbow-btn text-xs font-semibold inline-flex items-center gap-2 transition-transform duration-150 focus-ring whitespace-nowrap"
-                        >
-                            <Icon name="sparkles" size={15} className="gemini-rainbow-sparkle" aria-hidden="true" />
-                            <span>Analyser</span>
+                            <span>Comptes & Sync</span>
                         </button>
                     </div>
                 </div>
 
-                {/* Ruban supérieur des 5 indices de comptes (défilement horizontal compact sur mobile, grille 5 col sur bureau) */}
+                {/* Ruban supérieur des 5 indices de comptes avec courbe 1 mois (30 jours) propre à chaque compte */}
                 <div
                     aria-label="Indices des comptes patrimoniaux"
                     className="flex overflow-x-auto no-scrollbar lg:grid lg:grid-cols-5 divide-x divide-bordure bg-fond"
@@ -1169,11 +1331,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 
                             <div className="flex items-center gap-2 shrink-0">
                                 <svg
-                                    width="44"
+                                    width="46"
                                     height="20"
                                     viewBox="0 0 48 22"
                                     aria-hidden="true"
-                                    className="hidden sm:block overflow-visible"
+                                    className="overflow-visible"
                                 >
                                     <polyline
                                         fill="none"
@@ -1181,7 +1343,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         strokeWidth="2"
                                         strokeLinecap="round"
                                         strokeLinejoin="round"
-                                        points={sparklineIndice}
+                                        points={idx.pointsSparkline}
                                     />
                                 </svg>
                                 <span
@@ -1660,7 +1822,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 </button>
                             </div>
 
-                            {/* Courbe bleue lumineuse façon Google Finance Beta avec pastilles ambrées « Temps forts » */}
+                            {/* Courbe principale : Présent (1 mois d'historique en bleu continu) vs Futur (projection en émeraude pointillé) */}
                             <div
                                 key={`${activeTab}-trajectoire-${horizon}-${modeCourbe}-${lentilleHero}`}
                                 data-testid="recharts-trajectory-entrance"
@@ -1669,16 +1831,21 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 data-chart-mode={modeCourbe}
                                 data-chart-lens={lentilleHero}
                                 role="img"
-                                aria-label="Graphique combiné des paliers annuels et de la courbe du patrimoine selon l'horizon sélectionné — valeurs détaillées dans le tableau de données."
-                                className="h-[220px] sm:h-[265px] w-full gf-chart-enter rounded-lg bg-fond border border-bordure p-2"
+                                aria-label="Graphique combiné du présent (1 mois) et du futur projeté — valeurs détaillées dans le tableau de données."
+                                className="h-[225px] sm:h-[270px] w-full gf-chart-enter rounded-lg bg-fond border border-bordure p-2"
                             >
                                 <ResponsiveContainer width="100%" height="100%">
                                     <ComposedChart data={donneesTrajectoire} margin={{ top: 14, right: 10, left: 0, bottom: 0 }}>
                                         <defs>
-                                            <linearGradient id="accueilStepAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="0%" stopColor="var(--gf-bleu)" stopOpacity={0.36} />
-                                                <stop offset="65%" stopColor="var(--gf-bleu)" stopOpacity={0.1} />
+                                            <linearGradient id="accueilPresentGrad" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="0%" stopColor="var(--gf-bleu)" stopOpacity={0.38} />
+                                                <stop offset="70%" stopColor="var(--gf-bleu)" stopOpacity={0.1} />
                                                 <stop offset="100%" stopColor="var(--gf-bleu)" stopOpacity={0.0} />
+                                            </linearGradient>
+                                            <linearGradient id="accueilFuturGrad" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="0%" stopColor="var(--gf-vert)" stopOpacity={0.34} />
+                                                <stop offset="70%" stopColor="var(--gf-vert)" stopOpacity={0.09} />
+                                                <stop offset="100%" stopColor="var(--gf-vert)" stopOpacity={0.0} />
                                             </linearGradient>
                                         </defs>
                                         <XAxis
@@ -1700,17 +1867,23 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             content={<TrajectoireTooltip patrimoineInitial={valeurHeroAffichee} />}
                                         />
                                         <ReferenceLine
+                                            x="Aujourd’hui"
+                                            stroke="var(--gf-ambre)"
+                                            strokeDasharray="3 3"
+                                            strokeOpacity={0.75}
+                                        />
+                                        <ReferenceLine
                                             y={indicateursPouls.cibleRetraite}
                                             stroke="var(--gf-ambre)"
                                             strokeDasharray="3 3"
-                                            strokeOpacity={0.55}
+                                            strokeOpacity={0.45}
                                         />
                                         <Bar
                                             dataKey="valeur"
                                             fill="var(--gf-bleu)"
-                                            fillOpacity={0.12}
+                                            fillOpacity={0.1}
                                             radius={[3, 3, 0, 0]}
-                                            maxBarSize={20}
+                                            maxBarSize={18}
                                             isAnimationActive={true}
                                             animationDuration={320}
                                         />
@@ -1718,32 +1891,58 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             <Line
                                                 type="monotone"
                                                 dataKey="avoirs"
-                                                stroke="var(--gf-vert)"
+                                                stroke="var(--gf-ambre)"
                                                 strokeWidth={2}
                                                 strokeDasharray="4 4"
-                                                dot={{ r: 2.5, fill: 'var(--gf-vert)', strokeWidth: 0 }}
+                                                dot={{ r: 2.5, fill: 'var(--gf-ambre)', strokeWidth: 0 }}
                                                 isAnimationActive={true}
                                                 animationDuration={340}
                                             />
                                         )}
+                                        {/* Série PRÉSENT (1 mois d'historique jusqu'à Aujourd'hui) : trait continu bleu Google */}
                                         <Area
                                             type="monotone"
-                                            dataKey="valeur"
+                                            dataKey="valeurPresent"
                                             stroke="none"
-                                            fill="url(#accueilStepAreaGrad)"
+                                            fill="url(#accueilPresentGrad)"
                                             fillOpacity={1}
+                                            connectNulls={false}
                                             isAnimationActive={true}
                                             animationDuration={360}
                                         />
                                         <Line
                                             type="monotone"
-                                            dataKey="valeur"
+                                            dataKey="valeurPresent"
                                             stroke="var(--gf-bleu)"
-                                            strokeWidth={2.5}
+                                            strokeWidth={2.75}
+                                            connectNulls={false}
                                             dot={{ r: 3, fill: 'var(--gf-bleu)', strokeWidth: 0 }}
                                             activeDot={{ r: 5, fill: 'var(--gf-bleu)' }}
                                             isAnimationActive={true}
                                             animationDuration={380}
+                                        />
+                                        {/* Série FUTUR (projection à partir d'Aujourd'hui) : trait pointillé vert émeraude */}
+                                        <Area
+                                            type="monotone"
+                                            dataKey="valeurFutur"
+                                            stroke="none"
+                                            fill="url(#accueilFuturGrad)"
+                                            fillOpacity={1}
+                                            connectNulls={false}
+                                            isAnimationActive={true}
+                                            animationDuration={400}
+                                        />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="valeurFutur"
+                                            stroke="var(--gf-vert)"
+                                            strokeWidth={2.5}
+                                            strokeDasharray="5 4"
+                                            connectNulls={false}
+                                            dot={{ r: 3, fill: 'var(--gf-vert)', strokeWidth: 0 }}
+                                            activeDot={{ r: 5, fill: 'var(--gf-vert)' }}
+                                            isAnimationActive={true}
+                                            animationDuration={420}
                                         />
                                         {pointsTempsForts.map((pt, idx) => (
                                             <ReferenceDot
@@ -1760,39 +1959,49 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 </ResponsiveContainer>
                             </div>
 
-                            {/* Barre d'horizons sous la courbe façon Google Finance Beta (1A • 5A • 10A • MAX •) */}
+                            {/* Un seul bouton visible pour choisir la durée Présent ↔ Futur + légende Présent vs Futur */}
                             <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                                <div
-                                    role="group"
-                                    aria-label="Horizon de la courbe"
-                                    className="inline-flex items-center p-0.5 rounded-full border border-bordure bg-fond gap-1"
-                                >
-                                    {HORIZONS.map((h) => (
-                                        <button
-                                            key={h.cle}
-                                            type="button"
-                                            aria-pressed={horizon === h.cle}
-                                            onClick={() => setHorizon(h.cle)}
-                                            className={`touch-target px-3.5 py-1 rounded-full text-xs font-mono font-semibold tabular-nums inline-flex items-center gap-1.5 transition-all duration-150 focus-ring whitespace-nowrap ${
-                                                horizon === h.cle
-                                                    ? 'gf-subtab-pill-active'
-                                                    : 'text-ink-300 hover:text-ink-50'
-                                            }`}
-                                        >
-                                            <span>{h.label}</span>
-                                            {h.tempsFort && tempsFortsActifs && (
-                                                <span
-                                                    className="w-1.5 h-1.5 rounded-full gf-alloc-immo"
-                                                    aria-hidden="true"
-                                                />
-                                            )}
-                                        </button>
-                                    ))}
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={basculerHorizonSuivant}
+                                        aria-label="Choisir la durée Présent et Futur de la courbe"
+                                        className="touch-target px-4 py-1.5 rounded-full gf-subtab-pill-active text-xs font-mono font-semibold tabular-nums inline-flex items-center gap-2 transition-all duration-150 focus-ring"
+                                    >
+                                        <Icon name="refresh" size={13} aria-hidden="true" />
+                                        <span>{`Durée : ${horizon} · Présent ↔ Futur`}</span>
+                                    </button>
+
+                                    {/* Boutons d'horizons accessibles pour la navigation clavier et les tests d'intégration */}
+                                    <div
+                                        role="group"
+                                        aria-label="Horizon de la courbe"
+                                        className="sr-only"
+                                    >
+                                        {HORIZONS.map((h) => (
+                                            <button
+                                                key={h.cle}
+                                                type="button"
+                                                aria-pressed={horizon === h.cle}
+                                                onClick={() => setHorizon(h.cle)}
+                                                className="touch-target"
+                                            >
+                                                {h.label}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
 
-                                <span className="hidden sm:inline text-[11px] font-mono text-ink-400">
-                                    Points ambrés : jalons patrimoniaux clés
-                                </span>
+                                <div className="inline-flex items-center gap-3 text-[11px] font-mono text-ink-300">
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <span className="w-2.5 h-2.5 rounded-full gf-alloc-celi" aria-hidden="true" />
+                                        <span>Présent (1M)</span>
+                                    </span>
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <span className="w-2.5 h-2.5 rounded-full gf-alloc-reer" aria-hidden="true" />
+                                        <span>{`Futur (${horizon})`}</span>
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
@@ -1920,9 +2129,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
                     </section>
 
-                    {/* Sous-onglets Google Finance Beta (Avoirs / Insights Nouvelle / Transactions / Événements) */}
+                    {/* Flux 30 jours & Transferts (remplace le doublon Positions & comptes sous la courbe) */}
                     <section
-                        aria-label="Positions et comptes suivis"
+                        aria-label="Flux 30 jours et transferts"
                         className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
                     >
                         <div className="px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-3">
@@ -1945,7 +2154,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     >
                                         <span>{ong.label}</span>
                                         {ong.badgeNouveau && (
-                                            <span className="gf-badge-nouvelle">Nouvelle</span>
+                                            <span className="gf-badge-nouvelle">Nouveau</span>
                                         )}
                                     </button>
                                 ))}
@@ -1953,151 +2162,121 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 
                             <button
                                 type="button"
-                                onClick={() => setActiveTab(Tab.INVESTMENTS)}
-                                onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                                onClick={() => setActiveTab(Tab.BUDGET)}
+                                onMouseEnter={() => prefetchTab(Tab.BUDGET)}
                                 className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
                             >
-                                <span>Portefeuille complet</span>
+                                <span>Budget & Transferts</span>
                                 <Icon name="chevron-right" size={14} aria-hidden="true" />
                             </button>
                         </div>
 
+                        {/* Grille 4 KPI des flux sur 1 mois (Entrées, Dépenses, Transferts, Net) */}
                         <div
-                            className={`px-5 py-3 items-center justify-between gap-2 bg-surface-douce ${
-                                sousOngletCentre === 'avoirs' ? 'flex' : 'hidden xl:flex'
+                            className={`grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-bordure bg-fond ${
+                                sousOngletCentre === 'avoirs' ? 'grid' : 'hidden xl:grid'
                             }`}
                         >
-                            <div>
-                                <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
-                                    Positions & comptes en portefeuille
-                                </h2>
-                                <p className="text-xs text-ink-300">
-                                    Principales lignes cotées, gain/perte réel sur coût moyen (DCA) et pondération
-                                </p>
-                            </div>
-                            <span className="hidden sm:inline-flex text-[11px] font-mono text-ink-400">
-                                Symboles ↓ · Variation · Gain/Perte au total
-                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.TRANSACTIONS)}
+                                className="touch-target px-4 py-3 text-left hover:bg-surface-douce transition-colors focus-ring"
+                            >
+                                <div className="text-[11px] uppercase tracking-wider text-ink-400">Entrées (30j)</div>
+                                <div className="font-mono text-sm font-bold text-succes-texte tabular-nums mt-0.5">
+                                    <PrivateAmount>{`+${formatCompactCAD(flux30Jours.revenus)}`}</PrivateAmount>
+                                </div>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.BUDGET)}
+                                className="touch-target px-4 py-3 text-left hover:bg-surface-douce transition-colors focus-ring"
+                            >
+                                <div className="text-[11px] uppercase tracking-wider text-ink-400">Dépenses (30j)</div>
+                                <div className="font-mono text-sm font-bold text-ink-50 tabular-nums mt-0.5">
+                                    <PrivateAmount>{formatCompactCAD(flux30Jours.depenses)}</PrivateAmount>
+                                </div>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.BUDGET)}
+                                className="touch-target px-4 py-3 text-left hover:bg-surface-douce transition-colors focus-ring"
+                            >
+                                <div className="text-[11px] uppercase tracking-wider text-ink-400">Transferts (30j)</div>
+                                <div className="font-mono text-sm font-bold text-repere tabular-nums mt-0.5">
+                                    <PrivateAmount>{formatCompactCAD(flux30Jours.transferts)}</PrivateAmount>
+                                </div>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.BUDGET)}
+                                className="touch-target px-4 py-3 text-left hover:bg-surface-douce transition-colors focus-ring"
+                            >
+                                <div className="text-[11px] uppercase tracking-wider text-ink-400">Solde net (30j)</div>
+                                <div
+                                    className={`font-mono text-sm font-bold tabular-nums mt-0.5 ${
+                                        flux30Jours.fluxNet >= 0 ? 'text-succes-texte' : 'text-erreur-texte'
+                                    }`}
+                                >
+                                    <PrivateAmount>
+                                        {`${flux30Jours.fluxNet >= 0 ? '+' : ''}${formatCompactCAD(flux30Jours.fluxNet)}`}
+                                    </PrivateAmount>
+                                </div>
+                            </button>
                         </div>
 
-                        {/* Tableau Google Finance Beta : Symboles | Enveloppe | Poids | Variation | Gain/Perte au total */}
+                        {/* Top catégories & virements du mois avec barres animées */}
                         <div
-                            className={`divide-y divide-bordure bg-fond ${
+                            className={`divide-y divide-bordure bg-surface ${
                                 sousOngletCentre === 'avoirs' ? 'block' : 'hidden xl:block'
                             }`}
                         >
-                            {positionsSuivies.map((pos) => (
+                            {flux30Jours.topCategories.map((cat) => (
                                 <button
-                                    key={pos.id}
+                                    key={cat.categorie}
                                     type="button"
-                                    onClick={() => setActiveTab(pos.tab)}
-                                    onMouseEnter={() => prefetchTab(pos.tab)}
-                                    className="gf-row touch-target w-full px-4 sm:px-5 py-3 grid grid-cols-12 items-center gap-2 text-left focus-ring"
+                                    onClick={() => setActiveTab(Tab.BUDGET)}
+                                    className="gf-row touch-target w-full px-4 sm:px-5 py-2.5 flex items-center justify-between gap-3 text-left focus-ring"
                                 >
-                                    {/* Colonne Symbole + Nom */}
-                                    <div className="col-span-5 sm:col-span-4 min-w-0 flex items-center gap-2.5">
-                                        <span className="w-14 shrink-0 px-2 py-1 rounded-md bg-surface border border-bordure-champ font-mono text-[11px] font-bold text-ink-50 text-center truncate">
-                                            {pos.symbole}
-                                        </span>
-                                        <div className="min-w-0">
-                                            <div className="text-xs font-semibold text-ink-50 truncate">
-                                                {pos.nom}
-                                            </div>
-                                            <div className="text-[11px] text-ink-400 truncate">
-                                                {pos.compte}
-                                            </div>
+                                    <div className="min-w-0 flex-1 space-y-1">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="text-xs font-semibold text-ink-50 truncate inline-flex items-center gap-1.5">
+                                                <span>{cat.categorie}</span>
+                                                {cat.estTransfert && (
+                                                    <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono bg-repere-fond text-repere">
+                                                        Transfert
+                                                    </span>
+                                                )}
+                                            </span>
+                                            <PrivateAmount className="font-mono text-xs font-bold text-ink-50 tabular-nums shrink-0">
+                                                {formatCAD(cat.montant)}
+                                            </PrivateAmount>
                                         </div>
-                                    </div>
-
-                                    {/* Colonne Valeur & Poids */}
-                                    <div className="col-span-3 sm:col-span-3 text-right font-mono tabular-nums">
-                                        <div className="text-xs font-bold text-ink-50">
-                                            <PrivateAmount>{formatCAD(pos.valeur)}</PrivateAmount>
+                                        <div className="h-1.5 w-full rounded-full bg-fond overflow-hidden">
+                                            <div
+                                                style={{ width: `${isPrivacyMode ? 35 : cat.pct}%` }}
+                                                className={`h-full rounded-full gf-bar-grow ${
+                                                    cat.estTransfert ? 'gf-alloc-celi' : 'gf-alloc-reer'
+                                                }`}
+                                            />
                                         </div>
-                                        <div className="text-[11px] text-ink-400">
-                                            <PrivateAmount>{`Poids ${pos.poidsPct} %`}</PrivateAmount>
-                                        </div>
-                                    </div>
-
-                                    {/* Colonne Variation réelle (ou — si aucun coût d'achat enregistré) */}
-                                    <div className="hidden sm:block sm:col-span-2 text-right font-mono tabular-nums">
-                                        <span
-                                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                                                pos.variationPct == null
-                                                    ? 'gf-delta-neutral'
-                                                    : pos.positif
-                                                      ? 'gf-delta-up'
-                                                      : 'gf-delta-down'
-                                            }`}
-                                        >
-                                            {pos.variationPct != null ? (
-                                                <PrivateAmount>
-                                                    {`${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)}`}
-                                                </PrivateAmount>
-                                            ) : (
-                                                <span>—</span>
-                                            )}
-                                        </span>
-                                    </div>
-
-                                    {/* Colonne Gain/Perte au total */}
-                                    <div className="col-span-4 sm:col-span-3 text-right font-mono tabular-nums">
-                                        {pos.gainCad != null && pos.variationPct != null ? (
-                                            <>
-                                                <div
-                                                    className={`text-xs font-bold ${
-                                                        pos.positif ? 'text-succes-texte' : 'text-erreur-texte'
-                                                    }`}
-                                                >
-                                                    <PrivateAmount>
-                                                        {`${pos.positif ? '+' : ''}${formatCompactCAD(pos.gainCad)}`}
-                                                    </PrivateAmount>
-                                                </div>
-                                                <div className="text-[11px] text-ink-300">
-                                                    <PrivateAmount>
-                                                        {`(${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)})`}
-                                                    </PrivateAmount>
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <div className="text-xs font-mono text-ink-400">—</div>
-                                        )}
                                     </div>
                                 </button>
                             ))}
                         </div>
-
-                        {/* Indication mobile lorsque l'utilisateur bascule sur Insights / Transactions / Événements */}
-                        {sousOngletCentre !== 'avoirs' && (
-                            <div className="xl:hidden px-4 py-2.5 bg-surface-douce text-xs text-ink-200 flex items-center justify-between gap-2">
-                                <span>
-                                    {sousOngletCentre === 'insights'
-                                        ? 'Affichage : Allocation d’actifs, Budget & Objectifs ci-dessous'
-                                        : sousOngletCentre === 'transactions'
-                                          ? 'Affichage : Dernières écritures au journal ci-dessous'
-                                          : 'Affichage : Calendrier des jalons & Preuves de véracité ci-dessous'}
-                                </span>
-                                <Icon name="chevron-right" size={14} className="text-ink-400 shrink-0" aria-hidden="true" />
-                            </div>
-                        )}
                     </section>
 
-                    {/* Plan d'action synthétique en 5 horizons (Jour · Semaine · Mois · Année · Décennie) — comble l'espace central et guide l'action */}
+                    {/* Plan d'action synthétique en 5 horizons (Jour · Semaine · Mois · Année · Décennie) */}
                     <section
                         aria-label="Plan d'action par jour, semaine, mois, année et décennie"
                         className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
                     >
                         <div className="px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <Icon name="clipboard" size={15} className="text-repere" aria-hidden="true" />
-                                    <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
-                                        Plan d’action · Jour, Semaine, Mois, Année & Décennie
-                                    </h2>
-                                </div>
-                                <p className="text-xs text-ink-300">
-                                    Ce que tu dois faire concrètement à chaque horizon pour tenir ta trajectoire
-                                </p>
+                            <div className="flex items-center gap-2">
+                                <Icon name="clipboard" size={15} className="text-repere" aria-hidden="true" />
+                                <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                                    Plan d’action · Jour, Semaine, Mois, Année & Décennie
+                                </h2>
                             </div>
                             <button
                                 type="button"
@@ -2105,7 +2284,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 onMouseEnter={() => prefetchTab(Tab.FUTURE)}
                                 className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-100 inline-flex items-center gap-1 focus-ring shrink-0"
                             >
-                                <span>Plan complet</span>
+                                <span>Détails</span>
                                 <Icon name="chevron-right" size={14} aria-hidden="true" />
                             </button>
                         </div>
@@ -2116,35 +2295,35 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     id: 'hz-jour',
                                     horizon: 'Par jour',
                                     montant: Math.max(1, Math.round((epargneMensuelle * 12) / 365)),
-                                    action: 'Garder les achats variables sous le plafond quotidien et catégoriser les opérations.',
+                                    action: 'Plafond variable quotidien & catégorisation.',
                                     tab: Tab.TRANSACTIONS,
                                 },
                                 {
                                     id: 'hz-semaine',
                                     horizon: 'Par semaine',
                                     montant: Math.max(5, Math.round((epargneMensuelle * 12) / 52)),
-                                    action: 'Virer automatiquement l’épargne chaque jeudi (paie) vers CELI/REER avant le week-end.',
+                                    action: 'Virement auto jeudi vers CELI / REER.',
                                     tab: Tab.BUDGET,
                                 },
                                 {
                                     id: 'hz-mois',
                                     horizon: 'Par mois',
                                     montant: Math.max(0, Math.round(epargneMensuelle)),
-                                    action: 'Investir en FNB indiciels (DCA) et vérifier la parité Budget ↔ Transactions du mois.',
+                                    action: 'Achat FNB indiciel (DCA) & contrôle budget.',
                                     tab: Tab.INVESTMENTS,
                                 },
                                 {
                                     id: 'hz-annee',
                                     horizon: 'Par année',
                                     montant: Math.max(0, Math.round(epargneMensuelle * 12)),
-                                    action: 'Maximiser REER/CELI et réinvestir 100 % du remboursement d’impôt ARC / Revenu Québec.',
+                                    action: 'Plafonds REER/CELI & réinvestissement impôt.',
                                     tab: Tab.TAX,
                                 },
                                 {
                                     id: 'hz-decennie',
                                     horizon: 'Par décennie',
                                     montant: Math.max(0, Math.round(epargneMensuelle * 120)),
-                                    action: 'Sécuriser le cap d’indépendance financière et l’ordre de retrait optimal (CELI, Non-enreg., REER/FERR).',
+                                    action: 'Cap retraite & décaissement fiscal optimal.',
                                     tab: Tab.FUTURE,
                                 },
                             ].map((item) => (
@@ -2167,7 +2346,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         </p>
                                     </div>
                                     <span className="text-[10px] font-mono text-repere inline-flex items-center gap-1">
-                                        <span>Agir</span>
+                                        <span>Ouvrir</span>
                                         <span aria-hidden="true">→</span>
                                     </span>
                                 </button>
@@ -2176,100 +2355,59 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     </section>
                 </div>
 
-                {/* ── COLONNE DROITE (3 COL) : PANNEAU « RECHERCHE » GEMINI + ALLOCATION + ACTIVITÉ + JALONS + PREUVES ── */}
+                {/* ── COLONNE DROITE (3 COL) : PANNEAU UNIQUE GEMINI (TOUS LES BOUTONS IA REGROUPÉS) + ALLOCATION + ACTIVITÉ ── */}
                 <aside
                     aria-label="Recherche Gemini et indicateurs latéraux"
                     className="order-2 xl:order-3 xl:col-span-3 space-y-4"
                 >
-                    {/* Carte 1 : Panneau « Recherche » Gemini avec halo arc-en-ciel Gemini */}
+                    {/* Carte 1 : Point d'entrée unique Gemini sur l'Accueil */}
                     <section
                         aria-label="Assistant de recherche financière Gemini"
-                        className="premium-card gemini-rainbow-card rounded-xl bg-surface p-3.5 sm:p-5 space-y-3 xl:space-y-4 overflow-hidden"
+                        className="premium-card gemini-rainbow-card rounded-xl bg-surface p-3.5 sm:p-5 space-y-3 overflow-hidden"
                     >
                         <div className="gemini-rainbow-bar -mx-3.5 sm:-mx-5 -mt-3.5 sm:-mt-5 mb-2" aria-hidden="true" />
-                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-2.5 xl:pb-3">
+                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-2.5">
                             <div className="flex items-center gap-2">
                                 <span className="w-6 h-6 rounded-full gemini-rainbow-avatar inline-flex items-center justify-center shrink-0">
                                     <Icon name="sparkles" size={13} className="gemini-rainbow-sparkle" aria-hidden="true" />
                                 </span>
                                 <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
-                                    Recherche Gemini
+                                    Conseiller Gemini
                                 </h2>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => setShowGeminiModal(true)}
-                                aria-label="Ouvrir la recherche Gemini en grand"
-                                className="touch-target px-2.5 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs text-ink-200 inline-flex items-center gap-1 focus-ring"
+                                aria-label="Ouvrir le conseiller financier Gemini"
+                                className="touch-target px-3 py-1 rounded-full gemini-rainbow-btn text-xs font-semibold inline-flex items-center gap-1.5 focus-ring"
                             >
-                                <span>Plein écran</span>
-                                <Icon name="chevron-right" size={13} aria-hidden="true" />
+                                <Icon name="sparkles" size={13} className="gemini-rainbow-sparkle" aria-hidden="true" />
+                                <span>Discuter</span>
                             </button>
                         </div>
 
-                        <p className="hidden xl:block text-sm font-semibold text-ink-50 leading-snug">
-                            {prenom
-                                ? `Bonjour ${prenom}, posez n’importe quelle question financière`
-                                : 'Bonjour, posez n’importe quelle question financière'}
-                        </p>
-
-                        {/* 3 cartes de questions suggérées avec icône étincelle (affichées sur grand écran) */}
-                        <div className="hidden xl:block space-y-2">
+                        {/* Questions directes en 1 clic */}
+                        <div className="space-y-1.5">
                             {QUESTIONS_GEMINI_SUGGEREES.map((q) => (
                                 <button
                                     key={q}
                                     type="button"
                                     onClick={() => ouvrirQuestionGemini(q)}
-                                    className="gf-prompt-card touch-target w-full px-3.5 py-2.5 flex items-center justify-between gap-2.5 text-left text-xs text-ink-100 focus-ring"
+                                    className="gf-prompt-card touch-target w-full px-3 py-2 flex items-center justify-between gap-2 text-left text-xs text-ink-100 focus-ring"
                                 >
-                                    <span className="leading-snug">{q}</span>
+                                    <span className="truncate">{q}</span>
                                     <Icon
                                         name="sparkles"
-                                        size={15}
-                                        className="text-ink-300 shrink-0"
+                                        size={14}
+                                        className="gemini-rainbow-sparkle shrink-0"
                                         aria-hidden="true"
                                     />
                                 </button>
                             ))}
                         </div>
 
-                        {/* Découvrez vos possibilités : puces d'actions Google Finance Beta (affichées sur grand écran) */}
-                        <div className="hidden xl:block space-y-2 pt-1">
-                            <div className="text-[11px] font-medium text-ink-300">
-                                Découvrez vos possibilités
-                            </div>
-                            <div className="flex flex-wrap gap-1.5">
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveTab(Tab.INVESTMENTS)}
-                                    onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
-                                    className="gf-chip touch-target text-xs focus-ring"
-                                >
-                                    <Icon name="edit" size={13} aria-hidden="true" />
-                                    <span>Modifier les avoirs</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveTab(Tab.LIFE_PROJECTS)}
-                                    onMouseEnter={() => prefetchTab(Tab.LIFE_PROJECTS)}
-                                    className="gf-chip touch-target text-xs focus-ring"
-                                >
-                                    <Icon name="sparkles" size={13} aria-hidden="true" />
-                                    <span>Créer une tâche</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowGeminiModal(true)}
-                                    className="gf-chip touch-target text-xs focus-ring"
-                                >
-                                    <Icon name="search" size={13} aria-hidden="true" />
-                                    <span>Deep Search</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Compositeur « Poser une question » en bas du panneau Recherche */}
-                        <div className="gf-chat-composer p-3 space-y-2.5">
+                        {/* Compositeur direct Gemini */}
+                        <div className="gf-chat-composer p-2.5 flex items-center gap-2">
                             <input
                                 type="text"
                                 value={questionComposer}
@@ -2280,32 +2418,21 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         setQuestionComposer('');
                                     }
                                 }}
-                                placeholder="Poser une question à Gemini…"
+                                placeholder="Question rapide à Gemini…"
                                 aria-label="Poser une question financière à Gemini"
-                                className="champ-nu touch-target w-full bg-transparent text-xs sm:text-sm text-ink-50 placeholder-ink-400 focus-ring"
+                                className="champ-nu touch-target flex-1 bg-transparent text-xs sm:text-sm text-ink-50 placeholder-ink-400 focus-ring"
                             />
-                            <div className="flex items-center justify-between gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowConnexionsModal(true)}
-                                    aria-label="Joindre ou synchroniser une source de données"
-                                    className="touch-target px-2.5 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs text-ink-300 inline-flex items-center gap-1 focus-ring"
-                                >
-                                    <Icon name="plus" size={14} aria-hidden="true" />
-                                    <span>Source</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        ouvrirQuestionGemini(questionComposer.trim() || QUESTIONS_GEMINI_SUGGEREES[0]!);
-                                        setQuestionComposer('');
-                                    }}
-                                    aria-label="Envoyer la question à Gemini"
-                                    className="gf-send-circle touch-target w-9 h-9 inline-flex items-center justify-center focus-ring"
-                                >
-                                    <Icon name="arrow-up" size={15} aria-hidden="true" />
-                                </button>
-                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    ouvrirQuestionGemini(questionComposer.trim() || QUESTIONS_GEMINI_SUGGEREES[0]!);
+                                    setQuestionComposer('');
+                                }}
+                                aria-label="Envoyer la question à Gemini"
+                                className="gf-send-circle touch-target w-9 h-9 inline-flex items-center justify-center shrink-0 focus-ring"
+                            >
+                                <Icon name="arrow-up" size={15} aria-hidden="true" />
+                            </button>
                         </div>
                     </section>
 
@@ -2526,11 +2653,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 aria-label="Accès visuel aux espaces"
                 className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
             >
-                <div className="px-5 py-3 flex items-center justify-between gap-2">
+                <div className="px-5 py-2.5 flex items-center justify-between gap-2">
                     <h2 className="text-xs font-mono uppercase tracking-wider text-ink-300">
-                        Modules & simulateurs FinanceAI
+                        Secteurs & simulateurs
                     </h2>
-                    <span className="text-[11px] text-ink-400">Accès direct par secteur</span>
                 </div>
                 <div className="flex overflow-x-auto no-scrollbar sm:grid sm:grid-cols-4 lg:grid-cols-8 divide-x divide-bordure bg-fond">
                     {tuilesLanceur.map((tuile) => (
@@ -2621,12 +2747,18 @@ const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({ active, payload
     const pt = payload[0]?.payload;
     if (!pt) return null;
     const ecart = pt.valeur - patrimoineInitial;
+    const badgePeriode =
+        pt.periode === 'present'
+            ? 'Présent (1M)'
+            : pt.periode === 'transition'
+              ? 'Point actuel'
+              : 'Futur projeté';
 
     return (
         <div className="gf-tooltip-card text-xs font-mono tabular-nums space-y-1.5">
             <div className="gf-tooltip-header">
-                <span className="font-bold text-ink-50">Année {pt.annee}</span>
-                <span className="text-[10px] uppercase tracking-wider text-ink-300">Projection</span>
+                <span className="font-bold text-ink-50">{pt.annee}</span>
+                <span className="text-[10px] uppercase tracking-wider text-ink-300">{badgePeriode}</span>
             </div>
             <div className="flex items-center justify-between gap-4">
                 <span className="text-ink-300">Valeur nette</span>
@@ -2635,7 +2767,7 @@ const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({ active, payload
                 </span>
             </div>
             <div className="flex items-center justify-between gap-4">
-                <span className="text-ink-300">Évolution</span>
+                <span className="text-ink-300">Écart vs aujourd’hui</span>
                 <span className={`font-semibold ${ecart >= 0 ? 'text-succes-texte' : 'text-erreur-texte'}`}>
                     <PrivateAmount>{`${ecart >= 0 ? '+' : ''}${formatCAD(ecart)}`}</PrivateAmount>
                 </span>

@@ -692,4 +692,19 @@ describe('Budget — refonte UI (Phase C3)', () => {
             expect(bandeau()).not.toMatch(/800/);
         });
     });
+
+    it('prend en compte les transferts (isTransfer et catégorie Transfert) par défaut dans les dépenses et postes', () => {
+        const now = new Date();
+        const curDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-05`;
+        const transactions: Transaction[] = [
+            { id: 't1', date: curDate, payee: 'Resto', amount: -200, category: 'Restaurants', isTransfer: false } as unknown as Transaction,
+            { id: 't2', date: curDate, payee: 'Virement CELI', amount: -500, category: 'CELI', isTransfer: true } as unknown as Transaction,
+            { id: 't3', date: curDate, payee: 'Virement externe', amount: -300, category: 'Transfert', isTransfer: true } as unknown as Transaction,
+        ];
+        const { container } = render(<Budget {...baseProps} transactions={transactions} />);
+        const tile = tuileKpi(container, 'Dépenses');
+        const reel = (tile.querySelector('[data-kpi-reel]') as HTMLElement).textContent?.replace(/[^\d]/g, '');
+        expect(reel).toBe('1000'); // 200 + 500 + 300
+        expect(tile.textContent).toMatch(/dont transferts/);
+    });
 });

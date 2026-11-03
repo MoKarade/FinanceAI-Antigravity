@@ -16,6 +16,7 @@ import { Badge } from './ui/Badge';
 import { formatCAD, formatSigned, formatNumber } from '../utils/format';
 import { computeBudgetParity, matchTransactionToCategory, computeActualByOwner, isSavingsNature, type OrphanCategory } from '../utils/budget';
 import { syncBudgetWithTransactionCategories, buildMonthlyLedger, computeMonthlyActualAverages, computeIncomeBreakdown, computeAvgByItem } from '../utils/budgetSync';
+import { isTransferOrVirement, effectiveTransferCategory } from '../utils/spendRules';
 import { DualKPIStat } from './budget/DualKPIStat';
 import { useBudgetPilotage, ChoixPeriode, NavigateurPeriode, ChoixPersonne, toLocalDateStr, type BudgetPilotage } from './budget/pilotage';
 import { CollapsibleSection } from './ui/CollapsibleSection';
@@ -92,6 +93,7 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
     const p = pilotage ?? pilotageInterne;
     const { timeView, periodOffset, customStart, customEnd } = p;
     const [inflationSim, setInflationSim] = useState(0);
+    const [inclureTransferts, setInclureTransferts] = useState(true);
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null); // Pour le modal
 
@@ -150,7 +152,7 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
     // Idempotent ; no-op sur transactions vides (état pas encore hydraté).
     useEffect(() => {
         if (transactions.length === 0) return;
-        const sync = syncBudgetWithTransactionCategories(transactions, budgetItems);
+        const sync = syncBudgetWithTransactionCategories(transactions, budgetItems, undefined, inclureTransferts);
         if (!sync.changed) { _budgetFullSyncDoneThisLoad = true; return; }
         const removalAllowed = !_budgetFullSyncDoneThisLoad;
         // Mode ajouts-seulement (après la 1re sync du chargement) : retraits/renommages GELÉS,
@@ -310,19 +312,38 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
         });
     }, [config.users]);
 
-    const { actualsMap, totalSpent, totalHorsComparaison, trendMap, monthlyDataMap, orphanCategories, itemsWithoutTransactions, actualByOwner } = useMemo(() => {
+    const { actualsMap, totalSpent, totalHorsComparaison, trendMap, monthlyDataMap, orphanCategories, itemsWithoutTransactions, actualByOwner, transfertsStats } = useMemo(() => {
         // [BUDGET-INCOME-WINDOW-UTC-OFFBYONE] `getDateRangeStrings()` (jour LOCAL, jamais un
         // aller-retour UTC) — l'ancien `.toISOString().split('T')[0]` ici même décalait `endStr`
         // d'un jour sous un fuseau négatif (mesuré, `TZ=America/Toronto`).
         const { startStr, endStr } = getDateRangeStrings();
 
-        const filtered = transactions.filter(t => {
-            return t.date >= startStr && t.date <= endStr && t.amount < 0 && !t.isTransfer && !t.isDuplicate;
-        });
+        const normaliserTx = (t: Transaction): Transaction =>
+            inclureTransferts && isTransferOrVirement(t)
+                ? { ...t, category: effectiveTransferCategory(t) }
+                : t;
+
+        let sortantsTransfert = 0;
+        let entrantsTransfert = 0;
+        let nbTransferts = 0;
+        for (const t of transactions) {
+            if (t.date < startStr || t.date > endStr || t.isDuplicate) continue;
+            if (isTransferOrVirement(t)) {
+                nbTransferts++;
+                if (t.amount < 0) sortantsTransfert += Math.abs(t.amount);
+                else if (t.amount > 0) entrantsTransfert += t.amount;
+            }
+        }
+
+        const filtered = transactions
+            .filter(t => t.date >= startStr && t.date <= endStr && t.amount < 0 && (inclureTransferts || !t.isTransfer) && !t.isDuplicate)
+            .map(normaliserTx);
 
         // [PH4-A] Réels + catégories orphelines (fenêtre) + postes sans dépense (TOUT
         // l'historique → un poste annuel rapproché une fois n'est pas « sans dépense »).
-        const allSpend = transactions.filter(t => t.amount < 0 && !t.isTransfer && !t.isDuplicate);
+        const allSpend = transactions
+            .filter(t => t.amount < 0 && (inclureTransferts || !t.isTransfer) && !t.isDuplicate)
+            .map(normaliserTx);
         const parity = computeBudgetParity(filtered, budgetItems, allSpend);
 
         // [PH4-E] Dépense RÉELLE par conjoint sur la fenêtre (auto par type de poste, override par ownerId).
@@ -352,8 +373,9 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
             trends[item.name] = months.map(() => 0);
             detailedMonthly[item.name] = months.map(m => ({ name: m.monthName, value: 0 }));
         });
-        for (const t of transactions) {
-            if (t.amount >= 0 || t.isTransfer || t.isDuplicate) continue;
+        for (const rawTx of transactions) {
+            if (rawTx.amount >= 0 || (!inclureTransferts && rawTx.isTransfer) || rawTx.isDuplicate) continue;
+            const t = normaliserTx(rawTx);
             const mi = months.findIndex(m => t.date.startsWith(m.mStr));
             if (mi < 0) continue;
             const name = matchedName(t.category);
@@ -372,6 +394,12 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
             orphanCategories: parity.orphanCategories,
             itemsWithoutTransactions: parity.itemsWithoutTransactions,
             actualByOwner,
+            transfertsStats: {
+                sortants: sortantsTransfert,
+                entrants: entrantsTransfert,
+                net: entrantsTransfert - sortantsTransfert,
+                nbOperations: nbTransferts,
+            },
         };
     // getDateRange et now sont recréés à chaque render (fonctions locales) ; ses VRAIS paramètres sont
     // listés explicitement : timeView + customStart/customEnd ET `periodOffset` (le navigateur de mois —
@@ -379,18 +407,21 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
     // manquait ici (mais présent dans les memos voisins revenus/alertes) → naviguer vers un autre mois NE
     // recalculait PAS les dépenses réelles par poste (memo figé sur le mois courant → « ça s'actualise pas »).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [transactions, timeView, budgetItems, customStart, customEnd, periodOffset]);
+    }, [transactions, timeView, budgetItems, customStart, customEnd, periodOffset, inclureTransferts]);
 
     // [BUDGET-MONTHLY-LEDGER] Grand livre mensuel (12 mois) : RÉEL des dépenses ET des revenus
     // par mois + solde (demande Marc). Lignes dépenses = exactement les postes du budget.
     const ledger = useMemo(
-        () => buildMonthlyLedger(transactions, budgetItems.map(i => i.name)),
-        [transactions, budgetItems],
+        () => buildMonthlyLedger(transactions, budgetItems.map(i => i.name), 12, undefined, inclureTransferts),
+        [transactions, budgetItems, inclureTransferts],
     );
 
     // [BUDGET-PAST-AVG] « Budget du mois en cours = moyenne de tout le passé » (demande Marc) :
     // moyennes mensuelles GLOBALES (dépenses/revenus) sur tous les mois PLEINS d'historique.
-    const pastAverages = useMemo(() => computeMonthlyActualAverages(transactions), [transactions]);
+    const pastAverages = useMemo(
+        () => computeMonthlyActualAverages(transactions, undefined, inclureTransferts),
+        [transactions, inclureTransferts],
+    );
 
     // [BUDGET-3-VUES] Moyenne MENSUELLE par poste sur la fenêtre du ledger 12 mois — mois courant
     // (partiel) EXCLU, donc au plus 11 mois pleins (demande Marc : « réel actuel, moyenne des
@@ -843,10 +874,49 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
             {/* [PH2-c-2] — signal inter-onglets : dernier recalcul de projection échoué. */}
             <ProjectionStaleBanner />
             {!pilotage && (
-                <div className="gf-terminal-card px-3.5 py-2.5 flex flex-wrap items-center gap-2 bg-surface border border-bordure">
-                    <ChoixPeriode p={p} />
-                    <NavigateurPeriode p={p} />
-                    {nomsCouple && <ChoixPersonne p={p} noms={nomsCouple} />}
+                <div className="gf-terminal-card px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 bg-surface border border-bordure">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <ChoixPeriode p={p} />
+                        <NavigateurPeriode p={p} />
+                        {nomsCouple && <ChoixPersonne p={p} noms={nomsCouple} />}
+                    </div>
+                    <button
+                        type="button"
+                        aria-pressed={inclureTransferts}
+                        onClick={() => setInclureTransferts(prev => !prev)}
+                        className={`touch-target gf-chip text-xs font-semibold ${inclureTransferts ? 'gf-chip-active' : ''}`}
+                    >
+                        <Icon name="refresh" size={14} aria-hidden="true" />
+                        <span>{inclureTransferts ? 'Transferts inclus' : 'Hors transferts'}</span>
+                        {transfertsStats.nbOperations > 0 && (
+                            <span className="font-mono text-[11px] opacity-90">
+                                · <PrivateAmount>{formatCAD(transfertsStats.sortants + transfertsStats.entrants)}</PrivateAmount>
+                            </span>
+                        )}
+                    </button>
+                </div>
+            )}
+            {pilotage && (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-ink-300">
+                        {transfertsStats.nbOperations > 0 && (
+                            <span className="gf-quote-badge font-mono">
+                                Transferts période : sortants <PrivateAmount className="text-ink-100 font-semibold">{formatCAD(transfertsStats.sortants)}</PrivateAmount>
+                                {transfertsStats.entrants > 0 && (
+                                    <> · entrants <PrivateAmount className="text-succes-texte font-semibold">{formatCAD(transfertsStats.entrants)}</PrivateAmount></>
+                                )}
+                            </span>
+                        )}
+                    </div>
+                    <button
+                        type="button"
+                        aria-pressed={inclureTransferts}
+                        onClick={() => setInclureTransferts(prev => !prev)}
+                        className={`touch-target gf-chip text-xs font-semibold ${inclureTransferts ? 'gf-chip-active' : ''}`}
+                    >
+                        <Icon name="refresh" size={14} aria-hidden="true" />
+                        <span>{inclureTransferts ? 'Transferts inclus' : 'Hors transferts'}</span>
+                    </button>
                 </div>
             )}
 
@@ -883,7 +953,13 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                     titrePrevu={`Budget = moyenne des ${pastAverages.fullMonths} mois complets passés, hors impôts`}
                     // [BUDGET-IMPOTS-HORS-COMPARAISON] (décision Marc 2026-09-05, 3a) : les impôts sortent
                     // du réel ET la tuile le dit, montant à l'appui, dès qu'il y en a.
-                    note={horsComparaisonDisplay > 0 ? <>hors impôts (exclus : <PrivateAmount>{formatCAD(horsComparaisonDisplay)}</PrivateAmount>)</> : undefined}
+                    note={
+                        horsComparaisonDisplay > 0
+                            ? <>hors impôts (exclus : <PrivateAmount>{formatCAD(horsComparaisonDisplay)}</PrivateAmount>)</>
+                            : (inclureTransferts && transfertsStats.sortants > 0
+                                ? <>dont transferts <PrivateAmount>{formatCAD(transfertsStats.sortants)}</PrivateAmount></>
+                                : undefined)
+                    }
                     invertGoodBad
                 />
                 {/* Vue MOIS + mois EN COURS seulement : hors MONTH ou sur un mois passé,
@@ -1307,7 +1383,9 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                             </tbody>
                         </table>
                     </div>
-                    <p className="text-tiny text-ink-400 mt-2">Réel par mois, hors transferts et doublons. Le dernier mois est EN COURS (partiel) — il est exclu des moyennes. Un revenu à « — » sur le mois courant veut souvent dire que le relevé de compte du mois n'est pas encore importé.</p>
+                    <p className="text-tiny text-ink-400 mt-2">
+                        {inclureTransferts ? 'Réel par mois, transferts inclus (hors doublons).' : 'Réel par mois, hors transferts et doublons.'} Dernier mois en cours exclu des moyennes.
+                    </p>
                 </CollapsibleSection>
             )}
 

@@ -8,13 +8,19 @@
 // Mode discret : aucun appel au modèle, et le fil (qui contient des montants en texte libre) n'est
 // pas rendu — même règle que l'ancienne carte de réponse.
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Icon } from '../ui/Icon';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { saveApiKeys } from '../../services/secureKeyStore';
 import { MESSAGE_IA_MODE_DISCRET, causeErreurIa, messageErreurIa } from '../../services/messageErreurIa';
-import { cleGemini } from '../../services/geminiAssistant';
+import {
+    cleGemini,
+    decouperAvisHonnete,
+    extraireContextePatrimonial,
+    genererAvisHonneteDossier,
+    type ContextePatrimonialGemini,
+} from '../../services/geminiAssistant';
 import { MODEL_IDS, resolveChatModelKey } from '../../services/aiChat/models';
 import { executerTour, executerTourLocal } from '../../services/assistant/agentLoop';
 import { creerClientGemini } from '../../services/assistant/clientGemini';
@@ -91,6 +97,12 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
 
     const modeleCle = resolveChatModelKey(aiChatModel) === 'opus' ? 'opus' : 'sonnet';
     const cleConfiguree = apiKeyGemini.length > 0;
+    const ctxDossier = useMemo(
+        () => extraireContextePatrimonial(useFinanceStore.getState()),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [isOpen, conversation.messages.length, isTestMode],
+    );
+    const avisDossierInitial = useMemo(() => genererAvisHonneteDossier(ctxDossier), [ctxDossier]);
 
     const enregistrerCleDirecte = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -303,8 +315,8 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
             title="Gemini · Assistant connecté à ton dossier"
             subtitle="Lit et modifie tes données sur demande · chaque modification est annulable"
         >
-            <div className="gemini-rainbow-bar mb-2.5 shrink-0" aria-hidden="true" />
-            <div data-testid="assistant-panneau" className="flex flex-col md:flex-row gap-3 md:gap-4 h-[min(70vh,580px)] max-h-[calc(100dvh-7.5rem)] overflow-hidden">
+            <div className="gemini-rainbow-bar mb-2 shrink-0" aria-hidden="true" />
+            <div data-testid="assistant-panneau" className="flex flex-col md:flex-row gap-3 md:gap-4 h-[min(60vh,480px)] max-h-[calc(100dvh-9.5rem)] min-h-[260px] overflow-hidden">
                 {/* Barre latérale : historique des conversations */}
                 <aside data-testid="assistant-historique" aria-label="Historique des conversations" className="md:w-56 shrink-0 flex flex-col gap-1.5 max-h-28 md:max-h-full overflow-hidden">
                     <button
@@ -491,6 +503,18 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
                         <div ref={filRef} data-testid="assistant-fil" aria-live="polite" className="flex-1 min-h-0 rounded-2xl bg-fond border border-bordure p-3 sm:p-4 space-y-3 overflow-y-auto">
                             {conversation.messages.length === 0 && (
                                 <div className="space-y-3">
+                                    <div
+                                        data-testid="assistant-avis-honnete-dossier"
+                                        className="gemini-rainbow-card rounded-xl px-3.5 py-2.5 space-y-1"
+                                    >
+                                        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-200">
+                                            <Icon name="sparkles" size={13} className="gemini-rainbow-sparkle shrink-0" aria-hidden="true" />
+                                            <span>Avis honnête &amp; rapide sur ton dossier</span>
+                                        </div>
+                                        <p className="text-xs sm:text-sm font-medium text-ink-50 leading-relaxed">
+                                            {avisDossierInitial}
+                                        </p>
+                                    </div>
                                     <p className="text-xs text-ink-300">
                                         Pose une question, demande ton plan d’action (jour, semaine, mois, année, décennie) ou une modification (« ajoute une dette », « monte mon budget épicerie »). Tout changement est annulable d’un clic.
                                     </p>
@@ -510,7 +534,7 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
                                 </div>
                             )}
                             {conversation.messages.map((m) => (
-                                <MessageVue key={m.id} message={m} onAnnuler={annuler} onOuvrirOnglet={ouvrirOnglet} />
+                                <MessageVue key={m.id} message={m} ctxDossier={ctxDossier} onAnnuler={annuler} onOuvrirOnglet={ouvrirOnglet} />
                             ))}
                             {enCours && (
                                 <div className="gemini-rainbow-thinking rounded-xl px-3.5 py-2.5 text-xs text-ink-50 flex items-center gap-2.5" data-testid="assistant-en-cours">
@@ -569,9 +593,10 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
 
 const MessageVue: React.FC<{
     message: MessageConversation;
+    ctxDossier: ContextePatrimonialGemini;
     onAnnuler: (m: MessageConversation) => void;
     onOuvrirOnglet: (t: Tab) => void;
-}> = ({ message, onAnnuler, onOuvrirOnglet }) => {
+}> = ({ message, ctxDossier, onAnnuler, onOuvrirOnglet }) => {
     if (message.role === 'utilisateur') {
         return (
             <div className="flex justify-end">
@@ -584,13 +609,41 @@ const MessageVue: React.FC<{
     const mods = message.modifications ?? [];
     const ids = mods.map((m) => m.id);
     const annulable = !message.annulee && annulationDisponible(ids);
+    const { avis, detail } = message.erreur
+        ? { avis: null, detail: message.texte }
+        : decouperAvisHonnete(message.texte, ctxDossier);
     return (
         <div className="flex items-start gap-2.5" data-testid="assistant-message">
             <span className="mt-0.5 w-6 h-6 rounded-full gemini-rainbow-avatar inline-flex items-center justify-center shrink-0">
                 <Icon name="sparkles" size={13} className="gemini-rainbow-sparkle" aria-hidden="true" />
             </span>
-            <div className="flex-1 min-w-0 space-y-2">
-                <p className={`text-sm leading-relaxed whitespace-pre-wrap ${message.erreur ? 'text-alerte-texte' : 'text-ink-100'}`}>{message.texte}</p>
+            <div className="flex-1 min-w-0 space-y-2.5">
+                {avis && (
+                    <div
+                        data-testid="assistant-avis-honnete"
+                        className="gemini-rainbow-card rounded-xl px-3.5 py-2.5 space-y-1"
+                    >
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-200">
+                            <Icon name="sparkles" size={12} className="gemini-rainbow-sparkle shrink-0" aria-hidden="true" />
+                            <span>Avis honnête · En bref</span>
+                        </div>
+                        <p className="text-xs sm:text-sm font-semibold text-ink-50 leading-relaxed whitespace-pre-wrap">
+                            {avis}
+                        </p>
+                    </div>
+                )}
+                {detail && (
+                    <div className="space-y-1">
+                        {avis && (
+                            <span className="block text-[11px] font-semibold uppercase tracking-wider text-ink-400">
+                                Détail &amp; analyse
+                            </span>
+                        )}
+                        <p className={`text-sm leading-relaxed whitespace-pre-wrap ${message.erreur ? 'text-alerte-texte' : 'text-ink-100'}`}>
+                            {detail}
+                        </p>
+                    </div>
+                )}
                 {(message.blocs ?? []).map((b, i) => (
                     <div key={i} className="rounded-xl border border-bordure bg-surface p-3">
                         <BlocRicheVue bloc={b} />

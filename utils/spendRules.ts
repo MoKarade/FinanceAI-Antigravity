@@ -50,10 +50,34 @@ const HORS_COMPARAISON_BUDGET = new Set<string>(['Impôts']);
 export const isHorsComparaisonBudget = (t: Transaction): boolean =>
     HORS_COMPARAISON_BUDGET.has(t.category ?? '');
 
+/** Indique si une transaction est un transfert ou un virement (flag `isTransfer` ou catégorie dédiée). */
+export const isTransferOrVirement = (t: Transaction): boolean =>
+    !t.isDuplicate
+    && Number.isFinite(t.amount)
+    && t.amount !== 0
+    && (Boolean(t.isTransfer) || t.category === 'Transfert' || t.category === 'Virement' || t.category === 'Virements');
+
+/** Catégorie effective d'un transfert (repli sur « Transfert » si non renseignée ou statut brut). */
+export const effectiveTransferCategory = (t: Transaction): string => {
+    const c = (t.category ?? '').trim();
+    if (!c || c === 'Uncategorized' || c === 'Inconnu' || c === 'Unknown' || c === 'Non catégorisé') {
+        return 'Transfert';
+    }
+    return c;
+};
+
 /** Une ligne compte-t-elle dans les DÉPENSES d'un poste (sortie, ou crédit qui les réduit) ? */
-export const isSpend = (t: Transaction): boolean =>
-    !t.isTransfer && !t.isDuplicate && !NON_BUDGET_CATEGORIES.has(t.category ?? '')
-    && (t.amount < 0 || isCreditBack(t));
+export const isSpend = (t: Transaction, includeTransfers = false): boolean => {
+    if (t.isDuplicate) return false;
+    if (!includeTransfers && t.isTransfer) return false;
+    const cat = includeTransfers && isTransferOrVirement(t)
+        ? effectiveTransferCategory(t)
+        : (t.category ?? '');
+    if (NON_BUDGET_CATEGORIES.has(cat) && !(includeTransfers && (cat === 'Transfert' || cat === 'Virement' || cat === 'Virements'))) {
+        return false;
+    }
+    return t.amount < 0 || isCreditBack(t);
+};
 
 /**
  * Contribution SIGNÉE d'une ligne au total de dépenses : `-amount`. Une sortie (−250) apporte +250,

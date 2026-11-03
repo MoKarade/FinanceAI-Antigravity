@@ -138,13 +138,11 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                 </div>
 
                 {step === 'welcome' && (
-                    <div className="text-center space-y-6 animate-fade-in">
-                        <img src="/icon.svg" alt="" width={80} height={80} className="w-20 h-20 mx-auto rounded-2xl" aria-hidden="true" />
+                    <div className="text-center space-y-5 animate-fade-in">
                         <div>
-                            <h1 className="text-display text-ink-50 mb-3">Bienvenue !<br />Voici FinanceAI</h1>
+                            <h1 className="text-display text-ink-50 mb-2">Bienvenue</h1>
                             <p className="text-body text-ink-300">
-                                Ton tableau de bord financier personnel. Il rassemble tes comptes,
-                                ton budget et tes objectifs, puis te montre à quoi ressemble ton avenir.
+                                Comptes, budget et projection patrimoniale réunis au même endroit.
                             </p>
                         </div>
                         <div className="grid grid-cols-1 gap-3 text-left">

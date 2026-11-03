@@ -193,24 +193,8 @@ export const Layout: React.FC<LayoutProps> = ({
       <aside className={`hidden lg:flex fixed top-0 left-0 bottom-0 z-40 ${largeurSidebar} flex-col gap-2.5 bg-fond border-r border-bordure px-3 pb-3 transition-all duration-200 ${isTestMode ? 'pt-14' : 'pt-3.5'}`}>
         <div className="flex items-center justify-between px-1.5" title={`v${__APP_VERSION__} • ${__GIT_SHA__} — build ${__BUILD_DATE__}`}>
           <div className="flex items-center gap-2 min-w-0">
-            <img src="/icon.svg" alt="" width={30} height={30} className="w-[30px] h-[30px] rounded-[9px] shrink-0" aria-hidden="true" />
-            {!isSidebarCollapsed && (
-              <div className="flex items-baseline gap-1.5 min-w-0">
-                <p className="sr-only">FinanceAI</p>
-                <span className="text-[15px] font-bold tracking-tight select-none truncate" aria-hidden="true">
-                  <span className="gf-logo-b">F</span>
-                  <span className="gf-logo-r">i</span>
-                  <span className="gf-logo-y">n</span>
-                  <span className="gf-logo-b">a</span>
-                  <span className="gf-logo-g">n</span>
-                  <span className="gf-logo-r">c</span>
-                  <span className="gf-logo-y">e</span>
-                  <span className="gf-logo-b">A</span>
-                  <span className="gf-logo-g">I</span>
-                </span>
-                <span className="gf-badge-nouvelle shrink-0">Beta</span>
-              </div>
-            )}
+            <img src="/icon.svg" alt="" width={32} height={32} className="w-[32px] h-[32px] rounded-[9px] shrink-0" aria-hidden="true" />
+            <p className="sr-only">FinanceAI</p>
           </div>
           <button
             type="button"
@@ -345,18 +329,8 @@ export const Layout: React.FC<LayoutProps> = ({
                   ‹ Plus
                 </button>
               )}
-              <div className="hidden sm:inline-flex items-baseline gap-1 select-none shrink-0 pr-1.5 border-r border-bordure" aria-hidden="true">
-                <span className="text-xs font-bold tracking-tight">
-                  <span className="gf-logo-b">F</span>
-                  <span className="gf-logo-r">i</span>
-                  <span className="gf-logo-y">n</span>
-                  <span className="gf-logo-b">a</span>
-                  <span className="gf-logo-g">n</span>
-                  <span className="gf-logo-r">c</span>
-                  <span className="gf-logo-y">e</span>
-                  <span className="gf-logo-b">A</span>
-                  <span className="gf-logo-g">I</span>
-                </span>
+              <div className="hidden sm:inline-flex items-center select-none shrink-0 pr-1.5 border-r border-bordure" aria-hidden="true">
+                <img src="/icon.svg" alt="" width={22} height={22} className="w-[22px] h-[22px] rounded-[6px] shrink-0" />
               </div>
               <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-ink-400 truncate">
                 <span className="font-semibold uppercase tracking-wider text-repere">
@@ -364,7 +338,6 @@ export const Layout: React.FC<LayoutProps> = ({
                 </span>
                 <span aria-hidden="true">/</span>
                 <span className="font-semibold text-ink-100 truncate">{TAB_LABELS[activeTab]}</span>
-                <span className="gf-badge-nouvelle hidden md:inline-flex">Beta</span>
               </div>
             </div>
 

@@ -399,6 +399,12 @@ export async function listRecoverableSnapshots(): Promise<RecoverableSnapshotInf
 /** Applique un état restauré dans le store Zustand, met à jour localStorage et désactive tout mode test. */
 function applyRecoveredState(candidate: Partial<AppState>): void {
     const cleaned = cleanCandidateState(candidate);
+    const preservedLastUpdate =
+        typeof candidate.lastUpdate === 'number' && Number.isFinite(candidate.lastUpdate)
+            ? candidate.lastUpdate
+            : typeof cleaned.lastUpdate === 'number' && Number.isFinite(cleaned.lastUpdate)
+              ? cleaned.lastUpdate
+              : 0;
     useFinanceStore.setState((prev) => ({
         ...prev,
         ...cleaned,
@@ -406,10 +412,10 @@ function applyRecoveredState(candidate: Partial<AppState>): void {
         isTestMode: false,
         activeTestPersonaId: null,
         realDataSnapshot: null,
-        lastUpdate: Date.now(),
+        lastUpdate: preservedLastUpdate,
     }));
     if (!isStarterTemplateState(cleaned)) {
-        saveProtectedDossierSnapshot(cleaned);
+        saveProtectedDossierSnapshot({ ...cleaned, lastUpdate: preservedLastUpdate });
     }
 }
 

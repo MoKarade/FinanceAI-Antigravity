@@ -3,6 +3,8 @@ import {
     GoogleAuthProvider,
     onAuthStateChanged,
     signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult,
     signOut,
     type User as FirebaseUser,
 } from 'firebase/auth';
@@ -95,9 +97,23 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
 
     useEffect(() => {
         if (isTestEnv) return;
-        void recoverOrEnsureInitialWorkspace(false);
-        void chercherEtRestaurerDepuisGoogleDrive();
         void testFirestoreConnection();
+
+        if (typeof getRedirectResult === 'function') {
+            void getRedirectResult(auth)
+                .then((result) => {
+                    if (result?.user) {
+                        const oauthCred = GoogleAuthProvider.credentialFromResult(result);
+                        if (oauthCred?.accessToken) {
+                            cacheExternalGoogleToken(oauthCred.accessToken);
+                        }
+                        void pullWorkspaceFromFirestoreNow(result.user);
+                    }
+                })
+                .catch(() => {
+                    // Ignorer si aucun redirect en cours
+                });
+        }
 
         const unsubscribeAuth = onAuthStateChanged(
             auth,
@@ -112,6 +128,16 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                         resumeSettled: true,
                         error: null,
                     });
+                    void pullWorkspaceFromFirestoreNow(nextUser);
+                } else {
+                    void recoverOrEnsureInitialWorkspace(false);
+                    void chercherEtRestaurerDepuisGoogleDrive();
+                    const bypassOffline =
+                        typeof sessionStorage !== 'undefined' &&
+                        sessionStorage.getItem('financeai:offline_bypass') === '1';
+                    if (!bypassOffline) {
+                        setRequireGateScreen(true);
+                    }
                 }
                 setAuthReady(true);
                 setAuthError(null);
@@ -166,7 +192,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
             const firestoreRestored = await pullWorkspaceFromFirestoreNow(credential.user);
             if (firestoreRestored.restored) {
                 showToast(
-                    `Dossier Cloud Google restauré (${firestoreRestored.assetsCount} actifs · ${firestoreRestored.transactionsCount} transactions).`,
+                    `Dossier Cloud Google synchronisé (${firestoreRestored.assetsCount} actifs · ${firestoreRestored.transactionsCount} transactions).`,
                     'success',
                 );
                 return;
@@ -183,10 +209,18 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                 }
             }
             showToast(
-                'Compte Google connecté de façon permanente · Cloud Firestore synchronisé.',
+                'Compte Google connecté · Synchronisation automatique PC & mobile active.',
                 'success',
             );
         } catch (err: unknown) {
+            const code = (err as { code?: string })?.code ?? '';
+            if (
+                (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') &&
+                typeof signInWithRedirect === 'function'
+            ) {
+                await signInWithRedirect(auth, googleProvider);
+                return;
+            }
             const msg =
                 err instanceof Error
                     ? err.message
@@ -279,17 +313,9 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                     >
                         <div className="flex items-center justify-between gap-4">
                             <div className="flex items-center gap-3">
-                                <img
-                                    src="/icon.svg"
-                                    alt=""
-                                    width={36}
-                                    height={36}
-                                    className="w-9 h-9 rounded-xl shrink-0"
-                                    aria-hidden="true"
-                                />
                                 <div>
                                     <p className="text-base font-bold text-ink-50 tracking-tight">
-                                        FinanceAI
+                                        Espace patrimonial sécurisé
                                     </p>
                                     <p className="text-xs text-ink-400">
                                         Firebase Authentication · Cloud Firestore
@@ -382,6 +408,9 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => {
+                                        if (typeof sessionStorage !== 'undefined') {
+                                            sessionStorage.setItem('financeai:offline_bypass', '1');
+                                        }
                                         void recoverOrEnsureInitialWorkspace(false);
                                         setRequireGateScreen(false);
                                     }}
