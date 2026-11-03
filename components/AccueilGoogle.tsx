@@ -938,22 +938,31 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             >
                 {/* Barre supérieure : Marque Google Finance + Omnibox centrale en pilule + Actions */}
                 <div className="p-3.5 sm:px-5 sm:py-3.5 bg-surface flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                    {/* Identité Google Finance 4 couleurs */}
+                    {/* Identité FinanceAI aux 4 couleurs Google */}
                     <div className="flex items-center justify-between lg:justify-start gap-3 shrink-0">
                         <div className="flex items-center gap-2">
+                            <img
+                                src="/icon.svg"
+                                alt=""
+                                width={26}
+                                height={26}
+                                className="w-[26px] h-[26px] rounded-[8px] shrink-0"
+                                aria-hidden="true"
+                            />
+                            <span className="sr-only">FinanceAI</span>
                             <span
                                 aria-hidden="true"
                                 className="text-base sm:text-lg font-bold tracking-tight select-none"
                             >
-                                <span className="gf-logo-b">G</span>
-                                <span className="gf-logo-r">o</span>
-                                <span className="gf-logo-y">o</span>
-                                <span className="gf-logo-b">g</span>
-                                <span className="gf-logo-g">l</span>
-                                <span className="gf-logo-r">e</span>
-                            </span>
-                            <span className="text-base sm:text-lg font-medium text-ink-200 tracking-tight">
-                                Finance
+                                <span className="gf-logo-b">F</span>
+                                <span className="gf-logo-r">i</span>
+                                <span className="gf-logo-y">n</span>
+                                <span className="gf-logo-b">a</span>
+                                <span className="gf-logo-g">n</span>
+                                <span className="gf-logo-r">c</span>
+                                <span className="gf-logo-y">e</span>
+                                <span className="gf-logo-b">A</span>
+                                <span className="gf-logo-g">I</span>
                             </span>
                             <span className="gf-badge-nouvelle">Beta</span>
                         </div>
@@ -1002,7 +1011,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             <Icon
                                 name="sparkles"
                                 size={15}
-                                className="text-ink-300 shrink-0 pointer-events-none"
+                                className="gemini-rainbow-sparkle shrink-0 pointer-events-none"
                                 aria-hidden="true"
                             />
                         </div>
@@ -1019,10 +1028,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         setRechercheOuverte(false);
                                         setShowGeminiModal(true);
                                     }}
-                                    className="touch-target w-full px-4 py-2.5 bg-surface-douce flex items-center justify-between gap-2 text-xs font-medium text-ink-50 hover:bg-fond transition-colors duration-100 focus-ring"
+                                    className="touch-target gemini-rainbow-pill w-full px-4 py-2.5 flex items-center justify-between gap-2 text-xs font-medium text-ink-50 hover:bg-fond transition-colors duration-100 focus-ring"
                                 >
                                     <span className="truncate flex items-center gap-2">
-                                        <Icon name="sparkles" size={14} className="text-ink-200 shrink-0" aria-hidden="true" />
+                                        <Icon name="sparkles" size={14} className="gemini-rainbow-sparkle shrink-0" aria-hidden="true" />
                                         <span>
                                             {requete.trim()
                                                 ? `Interroger Gemini : « ${requete.trim()} »`
@@ -1123,9 +1132,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             type="button"
                             onClick={() => setShowGeminiModal(true)}
                             aria-label="Ouvrir le conseiller financier Gemini"
-                            className="touch-target px-4 py-2 rounded-full gf-subtab-pill-active text-xs font-semibold inline-flex items-center gap-2 transition-transform duration-150 focus-ring whitespace-nowrap"
+                            className="touch-target px-4 py-2 rounded-full gemini-rainbow-btn text-xs font-semibold inline-flex items-center gap-2 transition-transform duration-150 focus-ring whitespace-nowrap"
                         >
-                            <Icon name="sparkles" size={15} aria-hidden="true" />
+                            <Icon name="sparkles" size={15} className="gemini-rainbow-sparkle" aria-hidden="true" />
                             <span>Analyser</span>
                         </button>
                     </div>
@@ -1188,14 +1197,14 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 </div>
             </section>
 
-            {/* 2. ARCHITECTURE 3 COLONNES GOOGLE FINANCE BETA : LISTES (3, BUREAU) · COURBE & AVOIRS (6, PREMIER SUR MOBILE) · RECHERCHE GEMINI (3) */}
+            {/* 2. ARCHITECTURE 3 COLONNES GOOGLE FINANCE BETA : LISTES & JALONS (3, BUREAU) · COURBE, AVOIRS & PLAN D'ACTION (6) · RECHERCHE GEMINI, ALLOCATION & ACTIVITÉ (3) */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start gf-spring-grid">
-                {/* ── COLONNE GAUCHE (3 COL, MASQUÉE SUR MOBILE CAR DOUBLON DES AVOIRS CENTRAUX) ── */}
+                {/* ── COLONNE GAUCHE (3 COL) : LISTES & PORTEFEUILLES + CALENDRIER & JALONS + PREUVES & SOURCES ── */}
                 <aside
                     aria-label="Listes et portefeuilles suivis"
-                    className="hidden xl:block xl:order-1 xl:col-span-3 space-y-4"
+                    className="order-3 xl:order-1 xl:col-span-3 space-y-4"
                 >
-                    <section className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure">
+                    <section className="hidden xl:block premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure">
                         {/* En-tête « Listes » */}
                         <div className="px-4 py-3 flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
@@ -1346,6 +1355,129 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                 <span>—</span>
                                             )}
                                         </span>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </section>
+
+                    {/* Prochains jalons & calendrier patrimonial (équilibré dans la colonne gauche sur bureau, sous Événements sur mobile) */}
+                    <section
+                        aria-label="Prochains jalons patrimoniaux"
+                        className={`premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-3.5 ${
+                            sousOngletCentre === 'evenements' ? 'block' : 'hidden xl:block'
+                        }`}
+                    >
+                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
+                            <div>
+                                <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                                    Calendrier & jalons
+                                </h2>
+                                <p className="text-xs text-ink-300">
+                                    Échéances planifiées
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.LIFE_PROJECTS)}
+                                onMouseEnter={() => prefetchTab(Tab.LIFE_PROJECTS)}
+                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                            >
+                                <span>Projets</span>
+                                <Icon name="chevron-right" size={14} aria-hidden="true" />
+                            </button>
+                        </div>
+
+                        <div className="rounded-lg border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
+                            {prochainsJalons.map((jalon) => {
+                                const ecartAnnees = jalon.annee - anneeActuelle;
+                                const delaiTexte = isPrivacyMode ? '••' : ecartAnnees <= 0 ? 'Actif' : `Dans ${ecartAnnees} an${ecartAnnees > 1 ? 's' : ''}`;
+                                return (
+                                    <button
+                                        key={jalon.id}
+                                        type="button"
+                                        onClick={() => setActiveTab(jalon.tab)}
+                                        className="gf-row touch-target w-full px-3 py-2 flex items-center justify-between gap-2.5 text-left focus-ring"
+                                    >
+                                        <div className="min-w-0 flex items-center gap-2.5">
+                                            <span className="px-2 py-0.5 rounded-md gf-delta-amber font-mono tabular-nums text-[11px] font-bold shrink-0">
+                                                {jalon.annee}
+                                            </span>
+                                            <div className="min-w-0">
+                                                <div className="text-xs font-medium text-ink-50 truncate">
+                                                    {jalon.titre}
+                                                </div>
+                                                <div className="text-[11px] text-ink-400 truncate">
+                                                    {jalon.categorie} · {delaiTexte}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <PrivateAmount className="font-mono tabular-nums text-xs font-semibold text-ink-50 shrink-0">
+                                            {formatCompactCAD(jalon.montant)}
+                                        </PrivateAmount>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </section>
+
+                    {/* Preuves & Sources de véracité (100 % traçable vers le moteur et FISCAL_REFERENCE.md) */}
+                    <section
+                        data-testid="preuves-sources-panel"
+                        aria-label="Preuves et sources de véracité des calculs"
+                        className={`premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-3.5 ${
+                            sousOngletCentre === 'evenements' ? 'block' : 'hidden xl:block'
+                        }`}
+                    >
+                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
+                            <div>
+                                <div className="flex items-center gap-1.5">
+                                    <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                                        Preuves & Sources
+                                    </h2>
+                                    <span className="gf-badge-nouvelle">Vérifié</span>
+                                </div>
+                                <p className="text-xs text-ink-300">
+                                    Traçabilité mathématique & fiscale ARC / Revenu Québec
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.TAX)}
+                                onMouseEnter={() => prefetchTab(Tab.TAX)}
+                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-100 inline-flex items-center gap-1 focus-ring whitespace-nowrap shrink-0"
+                            >
+                                <span>Audit</span>
+                                <Icon name="chevron-right" size={14} aria-hidden="true" />
+                            </button>
+                        </div>
+
+                        <div className="rounded-lg border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
+                            {preuvesVeracite.map((preuve) => (
+                                <button
+                                    key={preuve.id}
+                                    type="button"
+                                    onClick={() => setActiveTab(preuve.tab)}
+                                    className="gf-row touch-target w-full p-3 text-left space-y-1 focus-ring"
+                                >
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-xs font-semibold text-ink-50 truncate">
+                                            {preuve.titre}
+                                        </span>
+                                        <span className="px-1.5 py-0.5 rounded-full gf-delta-up font-mono text-[10px] font-semibold shrink-0">
+                                            {preuve.montantNumeric != null ? (
+                                                <PrivateAmount>{formatCompactCAD(preuve.montantNumeric)}</PrivateAmount>
+                                            ) : (
+                                                <span>{preuve.badgeTexte}</span>
+                                            )}
+                                        </span>
+                                    </div>
+                                    <div className="text-[11px] font-mono text-ink-200 truncate">
+                                        {preuve.formule}
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2 text-[10px] font-mono text-ink-400">
+                                        <span className="truncate">{preuve.sourceCode}</span>
+                                        <span className="truncate text-right">{preuve.referenceOfficielle}</span>
                                     </div>
                                 </button>
                             ))}
@@ -1949,6 +2081,99 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             </div>
                         )}
                     </section>
+
+                    {/* Plan d'action synthétique en 5 horizons (Jour · Semaine · Mois · Année · Décennie) — comble l'espace central et guide l'action */}
+                    <section
+                        aria-label="Plan d'action par jour, semaine, mois, année et décennie"
+                        className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
+                    >
+                        <div className="px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <Icon name="clipboard" size={15} className="text-repere" aria-hidden="true" />
+                                    <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                                        Plan d’action · Jour, Semaine, Mois, Année & Décennie
+                                    </h2>
+                                </div>
+                                <p className="text-xs text-ink-300">
+                                    Ce que tu dois faire concrètement à chaque horizon pour tenir ta trajectoire
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.FUTURE)}
+                                onMouseEnter={() => prefetchTab(Tab.FUTURE)}
+                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-100 inline-flex items-center gap-1 focus-ring shrink-0"
+                            >
+                                <span>Plan complet</span>
+                                <Icon name="chevron-right" size={14} aria-hidden="true" />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-bordure bg-fond">
+                            {[
+                                {
+                                    id: 'hz-jour',
+                                    horizon: 'Par jour',
+                                    montant: Math.max(1, Math.round((epargneMensuelle * 12) / 365)),
+                                    action: 'Garder les achats variables sous le plafond quotidien et catégoriser les opérations.',
+                                    tab: Tab.TRANSACTIONS,
+                                },
+                                {
+                                    id: 'hz-semaine',
+                                    horizon: 'Par semaine',
+                                    montant: Math.max(5, Math.round((epargneMensuelle * 12) / 52)),
+                                    action: 'Virer automatiquement l’épargne chaque jeudi (paie) vers CELI/REER avant le week-end.',
+                                    tab: Tab.BUDGET,
+                                },
+                                {
+                                    id: 'hz-mois',
+                                    horizon: 'Par mois',
+                                    montant: Math.max(0, Math.round(epargneMensuelle)),
+                                    action: 'Investir en FNB indiciels (DCA) et vérifier la parité Budget ↔ Transactions du mois.',
+                                    tab: Tab.INVESTMENTS,
+                                },
+                                {
+                                    id: 'hz-annee',
+                                    horizon: 'Par année',
+                                    montant: Math.max(0, Math.round(epargneMensuelle * 12)),
+                                    action: 'Maximiser REER/CELI et réinvestir 100 % du remboursement d’impôt ARC / Revenu Québec.',
+                                    tab: Tab.TAX,
+                                },
+                                {
+                                    id: 'hz-decennie',
+                                    horizon: 'Par décennie',
+                                    montant: Math.max(0, Math.round(epargneMensuelle * 120)),
+                                    action: 'Sécuriser le cap d’indépendance financière et l’ordre de retrait optimal (CELI, Non-enreg., REER/FERR).',
+                                    tab: Tab.FUTURE,
+                                },
+                            ].map((item) => (
+                                <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => setActiveTab(item.tab)}
+                                    onMouseEnter={() => prefetchTab(item.tab)}
+                                    className="touch-target p-3.5 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
+                                >
+                                    <div className="space-y-1">
+                                        <div className="flex items-center justify-between gap-1">
+                                            <span className="text-xs font-bold text-ink-50">{item.horizon}</span>
+                                            <PrivateAmount className="font-mono text-xs font-bold text-succes-texte tabular-nums">
+                                                {`+${formatCompactCAD(item.montant)}`}
+                                            </PrivateAmount>
+                                        </div>
+                                        <p className="text-[11px] text-ink-300 leading-snug">
+                                            {item.action}
+                                        </p>
+                                    </div>
+                                    <span className="text-[10px] font-mono text-repere inline-flex items-center gap-1">
+                                        <span>Agir</span>
+                                        <span aria-hidden="true">→</span>
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </section>
                 </div>
 
                 {/* ── COLONNE DROITE (3 COL) : PANNEAU « RECHERCHE » GEMINI + ALLOCATION + ACTIVITÉ + JALONS + PREUVES ── */}
@@ -1956,16 +2181,19 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     aria-label="Recherche Gemini et indicateurs latéraux"
                     className="order-2 xl:order-3 xl:col-span-3 space-y-4"
                 >
-                    {/* Carte 1 : Panneau « Recherche » Gemini façon Google Finance Beta (barre compacte sur mobile, complet sur bureau) */}
+                    {/* Carte 1 : Panneau « Recherche » Gemini avec halo arc-en-ciel Gemini */}
                     <section
                         aria-label="Assistant de recherche financière Gemini"
-                        className="premium-card rounded-xl bg-surface border border-bordure p-3.5 sm:p-5 space-y-3 xl:space-y-4"
+                        className="premium-card gemini-rainbow-card rounded-xl bg-surface p-3.5 sm:p-5 space-y-3 xl:space-y-4 overflow-hidden"
                     >
+                        <div className="gemini-rainbow-bar -mx-3.5 sm:-mx-5 -mt-3.5 sm:-mt-5 mb-2" aria-hidden="true" />
                         <div className="flex items-center justify-between gap-2 border-b border-bordure pb-2.5 xl:pb-3">
                             <div className="flex items-center gap-2">
-                                <Icon name="sparkles" size={16} className="text-ink-100" aria-hidden="true" />
+                                <span className="w-6 h-6 rounded-full gemini-rainbow-avatar inline-flex items-center justify-center shrink-0">
+                                    <Icon name="sparkles" size={13} className="gemini-rainbow-sparkle" aria-hidden="true" />
+                                </span>
                                 <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
-                                    Recherche
+                                    Recherche Gemini
                                 </h2>
                             </div>
                             <button
@@ -2290,129 +2518,6 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             </div>
                         )}
                     </section>
-
-                    {/* Carte 4 : Prochains jalons & calendrier patrimonial (visible sous Événements sur mobile, toujours sur bureau) */}
-                    <section
-                        aria-label="Prochains jalons patrimoniaux"
-                        className={`premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-3.5 ${
-                            sousOngletCentre === 'evenements' ? 'block' : 'hidden xl:block'
-                        }`}
-                    >
-                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
-                            <div>
-                                <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
-                                    Calendrier & jalons
-                                </h2>
-                                <p className="text-xs text-ink-300">
-                                    Échéances planifiées
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.LIFE_PROJECTS)}
-                                onMouseEnter={() => prefetchTab(Tab.LIFE_PROJECTS)}
-                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
-                            >
-                                <span>Projets</span>
-                                <Icon name="chevron-right" size={14} aria-hidden="true" />
-                            </button>
-                        </div>
-
-                        <div className="rounded-lg border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
-                            {prochainsJalons.map((jalon) => {
-                                const ecartAnnees = jalon.annee - anneeActuelle;
-                                const delaiTexte = isPrivacyMode ? '••' : ecartAnnees <= 0 ? 'Actif' : `Dans ${ecartAnnees} an${ecartAnnees > 1 ? 's' : ''}`;
-                                return (
-                                    <button
-                                        key={jalon.id}
-                                        type="button"
-                                        onClick={() => setActiveTab(jalon.tab)}
-                                        className="gf-row touch-target w-full px-3 py-2 flex items-center justify-between gap-2.5 text-left focus-ring"
-                                    >
-                                        <div className="min-w-0 flex items-center gap-2.5">
-                                            <span className="px-2 py-0.5 rounded-md gf-delta-amber font-mono tabular-nums text-[11px] font-bold shrink-0">
-                                                {jalon.annee}
-                                            </span>
-                                            <div className="min-w-0">
-                                                <div className="text-xs font-medium text-ink-50 truncate">
-                                                    {jalon.titre}
-                                                </div>
-                                                <div className="text-[11px] text-ink-400 truncate">
-                                                    {jalon.categorie} · {delaiTexte}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <PrivateAmount className="font-mono tabular-nums text-xs font-semibold text-ink-50 shrink-0">
-                                            {formatCompactCAD(jalon.montant)}
-                                        </PrivateAmount>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </section>
-
-                    {/* Carte 5 : Preuves & Sources de véracité (100 % traçable vers le moteur et FISCAL_REFERENCE.md) */}
-                    <section
-                        data-testid="preuves-sources-panel"
-                        aria-label="Preuves et sources de véracité des calculs"
-                        className={`premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-3.5 ${
-                            sousOngletCentre === 'evenements' ? 'block' : 'hidden xl:block'
-                        }`}
-                    >
-                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
-                            <div>
-                                <div className="flex items-center gap-1.5">
-                                    <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
-                                        Preuves & Sources
-                                    </h2>
-                                    <span className="gf-badge-nouvelle">Vérifié</span>
-                                </div>
-                                <p className="text-xs text-ink-300">
-                                    Traçabilité mathématique & fiscale ARC / Revenu Québec
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.TAX)}
-                                onMouseEnter={() => prefetchTab(Tab.TAX)}
-                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-100 inline-flex items-center gap-1 focus-ring whitespace-nowrap shrink-0"
-                            >
-                                <span>Audit</span>
-                                <Icon name="chevron-right" size={14} aria-hidden="true" />
-                            </button>
-                        </div>
-
-                        <div className="rounded-lg border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
-                            {preuvesVeracite.map((preuve) => (
-                                <button
-                                    key={preuve.id}
-                                    type="button"
-                                    onClick={() => setActiveTab(preuve.tab)}
-                                    className="gf-row touch-target w-full p-3 text-left space-y-1 focus-ring"
-                                >
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="text-xs font-semibold text-ink-50 truncate">
-                                            {preuve.titre}
-                                        </span>
-                                        <span className="px-1.5 py-0.5 rounded-full gf-delta-up font-mono text-[10px] font-semibold shrink-0">
-                                            {preuve.montantNumeric != null ? (
-                                                <PrivateAmount>{formatCompactCAD(preuve.montantNumeric)}</PrivateAmount>
-                                            ) : (
-                                                <span>{preuve.badgeTexte}</span>
-                                            )}
-                                        </span>
-                                    </div>
-                                    <div className="text-[11px] font-mono text-ink-200 truncate">
-                                        {preuve.formule}
-                                    </div>
-                                    <div className="flex items-center justify-between gap-2 text-[10px] font-mono text-ink-400">
-                                        <span className="truncate">{preuve.sourceCode}</span>
-                                        <span className="truncate text-right">{preuve.referenceOfficielle}</span>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    </section>
                 </aside>
             </div>
 
@@ -2493,7 +2598,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 <Suspense fallback={null}>
                     <GeminiAssistantModal
                         isOpen={showGeminiModal}
-                        onClose={() => setShowGeminiModal(false)}
+                        onClose={() => {
+                            setShowGeminiModal(false);
+                            setRequete('');
+                        }}
                         initialQuery={requete}
                     />
                 </Suspense>

@@ -15,9 +15,10 @@ const COMPTEURS_MAX = 2_000;
 /** Origines autorisées (navigateur). Un appel sans en-tête `Origin` (GET same-origin, curl) reste accepté. */
 export const ORIGINES_AUTORISEES = new Set([
     'https://finance.hubperso.com',
-    'https://financeai-497112.web.app',
-    'https://financeai-497112.firebaseapp.com',
+    'https://financeai-f5382.web.app',
+    'https://financeai-f5382.firebaseapp.com',
 ]);
+const ORIGINE_FIREBASE = /^https:\/\/financeai-[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/;
 const ORIGINE_LOCALE = /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/;
 
 // ─── Débit : fenêtre fixe, mémoire bornée, éviction par ancienneté (cf. api/_lib/garde.ts) ──────────────
@@ -75,7 +76,7 @@ export function origineAutorisee(headers) {
     if (headers.get('sec-fetch-site') === 'cross-site') return false;
     const origine = headers.get('origin');
     if (origine === null) return true;
-    return ORIGINES_AUTORISEES.has(origine) || ORIGINE_LOCALE.test(origine);
+    return ORIGINES_AUTORISEES.has(origine) || ORIGINE_FIREBASE.test(origine) || ORIGINE_LOCALE.test(origine);
 }
 
 /** Garde commune : origine, méthode GET et débit par IP. `null` = tout va bien. */

@@ -17,7 +17,7 @@
 | Styling | Tailwind CSS + index.css | Design System **Google Finance** (Material 3, couleurs sémantiques, Google Sans / Roboto Mono) |
 | State | Zustand 5 + `persist` middleware | Schema versionné (v1 → v7), migrations en code |
 | Charts | Recharts 3 | Bundle dédié `recharts-*.js`, lazy-chargé |
-| IA | `@google/genai` (`services/gemini.ts`) | **Google Gemini** (`gemini-2.5-flash` et `gemini-2.5-pro`) |
+| IA | `@google/genai` (`services/gemini.ts`) | **Google Gemini** (`gemini-3.8-flash`, `gemini-4-argon`, `gemini-3.5-flash-lite`) |
 | Storage sécurisé | AES-256-GCM IndexedDB | services/secureKeyStore.ts (clé device non-extractible) |
 | Import données | CSV universel + Finnhub + CoinGecko | parseBankCsv.ts (100% local) |
 | Crypto pricing | CoinGecko REST | Gratuit, sans clé, CORS-friendly |

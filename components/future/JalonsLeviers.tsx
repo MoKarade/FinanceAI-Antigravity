@@ -37,8 +37,15 @@ export const TableJalons: React.FC<{ jalons: JalonProjection[]; etroit: boolean 
     const lignes = etroit ? jalons.filter((j) => !j.bureauSeulement) : jalons;
     const th = 'text-[10px] font-semibold tracking-wider uppercase text-ink-400';
     return (
-        <section aria-label="Jalons de la projection" className="rounded-2xl bg-surface border border-white/6 overflow-hidden min-w-0 p-3">
-            <table className="w-full text-body">
+        <section aria-label="Jalons de la projection" className="rounded-2xl bg-surface border border-white/6 overflow-hidden min-w-0 p-3.5 h-full flex flex-col justify-between gap-3">
+            <div className="flex items-center justify-between gap-2 min-w-0">
+                <span className="text-sm font-bold text-ink-50">Jalons clés de la trajectoire</span>
+                <span className="px-2 py-0.5 rounded-full bg-surfaceHighlight/40 text-ink-300 text-[11px] font-mono">
+                    {/* NOMBRE-NON-MONETAIRE : nombre de jalons */}
+                    {lignes.length} étapes
+                </span>
+            </div>
+            <table className="w-full text-body flex-1">
                 <caption className="sr-only">Jalons de la projection : année, âge et montant</caption>
                 <thead className="sr-only">
                     <tr className="text-left">
@@ -118,7 +125,7 @@ export const CarteLeviers: React.FC<{
     etroit: boolean;
     onOptimiser: () => void;
 }> = ({ leviers, strategie, resume, nbLeviers, etroit, onOptimiser }) => (
-    <section aria-labelledby="leviers-titre" className="rounded-2xl bg-surface border border-white/6 p-3.5 flex flex-col gap-3">
+    <section aria-labelledby="leviers-titre" className="rounded-2xl bg-surface border border-white/6 p-3.5 h-full flex flex-col justify-between gap-3">
         <div className="flex items-center justify-between gap-2 min-w-0">
             <h2 id="leviers-titre" className="text-sm font-bold text-ink-50">Leviers actifs</h2>
             {strategie && (

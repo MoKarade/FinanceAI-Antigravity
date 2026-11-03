@@ -12,7 +12,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Icon } from '../ui/Icon';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { MESSAGE_IA_MODE_DISCRET, messageErreurIa } from '../../services/messageErreurIa';
+import { saveApiKeys } from '../../services/secureKeyStore';
+import { MESSAGE_IA_MODE_DISCRET, causeErreurIa, messageErreurIa } from '../../services/messageErreurIa';
 import { cleGemini } from '../../services/geminiAssistant';
 import { MODEL_IDS, resolveChatModelKey } from '../../services/aiChat/models';
 import { executerTour, executerTourLocal } from '../../services/assistant/agentLoop';
@@ -39,8 +40,9 @@ interface GeminiAssistantModalProps {
 
 const QUESTIONS_RAPIDES = [
     { id: 'bilan', label: 'Bilan express', question: 'Fais un bilan express de mon patrimoine et de mes priorités financières.' },
+    { id: 'plan', label: 'Plan Jour → Décennie', question: 'Donne-moi mon plan d’action clair par jour, semaine, mois, année et décennie.' },
     { id: 'fiscalite', label: 'Optimiser CELI & REER', question: 'Comment optimiser mon CELI, mon REER et réduire mes impôts cette année ?' },
-    { id: 'budget', label: 'Budget & épargne', question: 'Analyse mon budget mensuel, mes liquidités et mon taux d’épargne.' },
+    { id: 'budget', label: 'Transactions & Budget', question: 'Analyse mon budget mensuel, mes transactions d’octobre et novembre et mon épargne.' },
     { id: 'retraite', label: 'Trajectoire retraite', question: 'Suis-je sur la bonne voie pour atteindre mon objectif de retraite ?' },
 ] as const;
 
@@ -65,16 +67,22 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
     const isTestMode = useFinanceStore((s) => s.isTestMode);
     const aiChatModel = useFinanceStore((s) => s.aiChatModel);
     const apiKeyGemini = useFinanceStore((s) => cleGemini(s));
+    const updateApiKeys = useFinanceStore((s) => s.updateApiKeys);
     const setAppState = useFinanceStore((s) => s.setAppState);
     const setActiveTab = useFinanceStore((s) => s.setActiveTab);
     const navigateWithFocus = useFinanceStore((s) => s.navigateWithFocus);
 
     const inputRef = useRef<HTMLTextAreaElement>(null);
+    const filRef = useRef<HTMLDivElement>(null);
     const controllerRef = useRef<AbortController | null>(null);
+    const derniereRequeteAutoRef = useRef<string>('');
     const [depot, setDepot] = useState<DepotConversations | null>(depotInjecte ?? null);
     const [resumes, setResumes] = useState<ResumeConversation[]>([]);
     const [conversation, setConversation] = useState<Conversation>(() => nouvelleConversation());
     const [saisie, setSaisie] = useState(initialQuery);
+    const [saisieCle, setSaisieCle] = useState('');
+    const [panneauCleOuvert, setPanneauCleOuvert] = useState(false);
+    const [cleSauvegardeeMsg, setCleSauvegardeeMsg] = useState<string | null>(null);
     const [enCours, setEnCours] = useState(false);
     const [etape, setEtape] = useState<string | null>(null);
     const [alerte, setAlerte] = useState<string | null>(null);
@@ -84,7 +92,21 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
     const modeleCle = resolveChatModelKey(aiChatModel) === 'opus' ? 'opus' : 'sonnet';
     const cleConfiguree = apiKeyGemini.length > 0;
 
-    useEffect(() => { if (isOpen && initialQuery) setSaisie(initialQuery); }, [isOpen, initialQuery]);
+    const enregistrerCleDirecte = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const propre = saisieCle.replace(/^["'\s]+|["'\s]+$/g, '');
+        if (!propre) return;
+        updateApiKeys({ gemini: propre });
+        try {
+            await saveApiKeys(useFinanceStore.getState().apiKeys);
+        } catch {
+            // La clé reste active en mémoire pour la session courante.
+        }
+        setSaisieCle('');
+        setPanneauCleOuvert(false);
+        setAlerte(null);
+        setCleSauvegardeeMsg('Clé API Gemini enregistrée et activée (Gemini 3.8 Flash / 4 Argon prêt).');
+    };
 
     const rafraichirListe = useCallback(async (d: DepotConversations | null) => {
         if (!d) return;
@@ -171,10 +193,26 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
                 ...(tour.etapes.length ? { etapes: tour.etapes } : {}),
             };
         } catch (err) {
-            const texteErreur = estAnnulation(err) || controller.signal.aborted
-                ? 'Réponse interrompue.'
-                : messageErreurIa(err) ?? `Erreur inattendue : ${err instanceof Error ? err.message : String(err)}`;
-            reponse = { id: nouvelId(), role: 'assistant', texte: texteErreur, erreur: true, horodatage: new Date().toISOString() };
+            if (estAnnulation(err) || controller.signal.aborted) {
+                reponse = { id: nouvelId(), role: 'assistant', texte: 'Réponse interrompue.', erreur: true, horodatage: new Date().toISOString() };
+            } else {
+                const cause = causeErreurIa(err);
+                const msgDiag = messageErreurIa(err) ?? `Service distant indisponible (${err instanceof Error ? err.message : String(err)})`;
+                if (cause === 'cle-refusee') {
+                    setPanneauCleOuvert(true);
+                }
+                setAlerte(msgDiag);
+                const tourSecours = await executerTourLocal(question, isPrivacyMode);
+                reponse = {
+                    id: nouvelId(),
+                    role: 'assistant',
+                    texte: `${tourSecours.texte}\n\n(Synthèse locale immédiate — ${msgDiag})`,
+                    horodatage: new Date().toISOString(),
+                    ...(tourSecours.blocs.length ? { blocs: tourSecours.blocs } : {}),
+                    ...(tourSecours.navigation.length ? { navigation: tourSecours.navigation } : {}),
+                    ...(tourSecours.etapes.length ? { etapes: tourSecours.etapes } : {}),
+                };
+            }
         } finally {
             setEnCours(false);
             setEtape(null);
@@ -184,6 +222,26 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
         setConversation(finale);
         setConversation(await enregistrer(finale));
     };
+
+    useEffect(() => {
+        if (!isOpen) {
+            derniereRequeteAutoRef.current = '';
+            return;
+        }
+        const q = initialQuery.trim();
+        if (q && derniereRequeteAutoRef.current !== q) {
+            derniereRequeteAutoRef.current = q;
+            void envoyer(q);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, initialQuery]);
+
+    useEffect(() => {
+        const el = filRef.current;
+        if (el) {
+            el.scrollTop = el.scrollHeight;
+        }
+    }, [conversation.messages.length, enCours]);
 
     const annuler = async (message: MessageConversation) => {
         const ids = (message.modifications ?? []).map((m) => m.id);
@@ -237,27 +295,32 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
             onClose={onClose}
             size="full"
             initialFocusRef={inputRef}
-            icon={<Icon name="sparkles" size={22} className="text-repere shrink-0" />}
+            icon={
+                <span className="w-8 h-8 rounded-full gemini-rainbow-avatar inline-flex items-center justify-center shrink-0">
+                    <Icon name="sparkles" size={18} className="gemini-rainbow-sparkle shrink-0" />
+                </span>
+            }
             title="Gemini · Assistant connecté à ton dossier"
             subtitle="Lit et modifie tes données sur demande · chaque modification est annulable"
         >
-            <div data-testid="assistant-panneau" className="flex flex-col md:flex-row gap-4 min-h-[60vh]">
+            <div className="gemini-rainbow-bar mb-2.5 shrink-0" aria-hidden="true" />
+            <div data-testid="assistant-panneau" className="flex flex-col md:flex-row gap-3 md:gap-4 h-[min(70vh,580px)] max-h-[calc(100dvh-7.5rem)] overflow-hidden">
                 {/* Barre latérale : historique des conversations */}
-                <aside data-testid="assistant-historique" aria-label="Historique des conversations" className="md:w-60 shrink-0 space-y-2">
+                <aside data-testid="assistant-historique" aria-label="Historique des conversations" className="md:w-56 shrink-0 flex flex-col gap-1.5 max-h-28 md:max-h-full overflow-hidden">
                     <button
                         type="button"
                         data-testid="assistant-nouvelle-conversation"
                         onClick={() => { if (!enCours) { setConversation(nouvelleConversation()); setAlerte(null); } }}
                         disabled={enCours}
-                        className="touch-target w-full px-3 rounded-full bg-repere-fond text-repere border border-bordure-lien text-xs font-semibold inline-flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 focus-ring"
+                        className="touch-target gemini-rainbow-btn w-full px-3 rounded-full text-xs font-semibold inline-flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 focus-ring shrink-0"
                     >
                         <Icon name="plus" size={14} aria-hidden="true" />
                         <span>Nouvelle conversation</span>
                     </button>
-                    <p className="text-[11px] text-ink-400 px-1">
+                    <p className="text-[11px] text-ink-400 px-1 shrink-0">
                         {depot?.genre === 'firestore' ? 'Historique synchronisé (Cloud Firestore)' : 'Historique sur cet appareil'}
                     </p>
-                    <ul className="space-y-1 max-h-[50vh] overflow-y-auto">
+                    <ul className="space-y-1 flex-1 min-h-0 overflow-y-auto">
                         {resumes.map((r) => {
                             const actif = r.id === conversation.id;
                             return (
@@ -322,50 +385,114 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
                 </aside>
 
                 {/* Fil + composeur */}
-                <section className="flex-1 min-w-0 flex flex-col gap-3" aria-label="Conversation avec Gemini">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
+                <section className="flex-1 min-w-0 flex flex-col gap-2.5 h-full min-h-0 overflow-hidden" aria-label="Conversation avec Gemini">
+                    <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
                         <h3 className="text-sm font-semibold text-ink-50 truncate">{conversation.titre}</h3>
-                        <div role="group" aria-label="Modèle Gemini" className="inline-flex items-center gap-1">
-                            {(['sonnet', 'opus'] as const).map((cle) => (
-                                <button
-                                    key={cle}
-                                    type="button"
-                                    aria-pressed={modeleCle === cle}
-                                    onClick={() => setAppState({ aiChatModel: cle })}
-                                    className={`touch-target px-3 rounded-full text-[11px] font-semibold border focus-ring ${modeleCle === cle ? 'bg-repere-fond text-repere border-bordure-lien' : 'bg-surface-douce text-ink-200 border-bordure'}`}
-                                >
-                                    {cle === 'sonnet' ? '2.5 Flash' : '2.5 Pro'}
-                                </button>
-                            ))}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <button
+                                type="button"
+                                aria-pressed={panneauCleOuvert}
+                                onClick={() => { setPanneauCleOuvert((v) => !v); setCleSauvegardeeMsg(null); }}
+                                className={`touch-target px-2.5 rounded-full text-[11px] font-semibold border focus-ring inline-flex items-center gap-1 ${
+                                    cleConfiguree ? 'bg-surface-douce text-ink-200 border-bordure' : 'bg-repere-fond text-repere border-bordure-lien'
+                                }`}
+                            >
+                                <Icon name="link" size={12} aria-hidden="true" />
+                                <span>{cleConfiguree ? 'Clé API active' : 'Entrer ma clé API'}</span>
+                            </button>
+                            <div role="group" aria-label="Modèle Gemini" className="inline-flex items-center gap-1">
+                                {(['sonnet', 'opus'] as const).map((cle) => (
+                                    <button
+                                        key={cle}
+                                        type="button"
+                                        aria-pressed={modeleCle === cle}
+                                        onClick={() => setAppState({ aiChatModel: cle })}
+                                        className={`touch-target px-3 rounded-full text-[11px] font-semibold border focus-ring ${modeleCle === cle ? 'bg-repere-fond text-repere border-bordure-lien' : 'bg-surface-douce text-ink-200 border-bordure'}`}
+                                    >
+                                        {cle === 'sonnet' ? '3.8 Flash' : '4 Argon'}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
 
-                    {!cleConfiguree && (
-                        <div className="rounded-xl bg-surface-douce border border-bordure p-3 text-xs text-ink-200 flex flex-wrap items-center justify-between gap-2">
-                            <span>L’assistant a besoin de ta clé Google Gemini (stockée chiffrée sur cet appareil).</span>
+                    {(!cleConfiguree || panneauCleOuvert) && (
+                        <form
+                            onSubmit={(e) => { void enregistrerCleDirecte(e); }}
+                            className="rounded-xl bg-surface-douce border border-bordure p-2.5 text-xs text-ink-200 space-y-2 shrink-0"
+                        >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span>
+                                    {cleConfiguree
+                                        ? 'Remplacer ta clé Google AI Studio (chiffrée AES-256-GCM sur cet appareil) :'
+                                        : 'Colle ta clé Google AI Studio (AIza…) ici pour activer Gemini 3.8 Flash / 4 Argon en direct :'}
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                    <a
+                                        href="https://aistudio.google.com/apikey"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="touch-target px-2.5 rounded-full bg-fond border border-bordure text-[11px] text-repere hover:underline inline-flex items-center gap-1 focus-ring"
+                                    >
+                                        <span>Obtenir une clé AI Studio</span>
+                                        <span aria-hidden="true">↗</span>
+                                    </a>
+                                    <button
+                                        type="button"
+                                        onClick={() => { onClose(); navigateWithFocus(Tab.SETTINGS, 'apiKeys-gemini'); }}
+                                        className="touch-target px-2.5 rounded-full bg-fond text-ink-200 border border-bordure text-[11px] font-medium hover:text-ink-50 focus-ring"
+                                    >
+                                        Réglages →
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="password"
+                                    value={saisieCle}
+                                    onChange={(e) => setSaisieCle(e.target.value)}
+                                    placeholder="AIzaSy..."
+                                    aria-label="Clé API Google Gemini"
+                                    className="touch-target flex-1 min-w-0 rounded-lg bg-fond border border-bordure px-3 text-xs text-ink-50 placeholder-ink-400 focus-ring font-mono"
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={!saisieCle.trim()}
+                                    className="touch-target px-3.5 rounded-full bg-repere-fond text-repere border border-bordure-lien text-xs font-semibold hover:opacity-90 disabled:opacity-50 focus-ring shrink-0"
+                                >
+                                    Enregistrer la clé
+                                </button>
+                            </div>
+                        </form>
+                    )}
+
+                    {cleSauvegardeeMsg && (
+                        <div role="status" className="rounded-xl bg-surface-douce border border-bordure px-3 py-2 text-xs text-succes-texte flex items-center justify-between gap-2 shrink-0">
+                            <span>{cleSauvegardeeMsg}</span>
                             <button
                                 type="button"
-                                onClick={() => { onClose(); navigateWithFocus(Tab.SETTINGS, 'apiKeys-gemini'); }}
-                                className="touch-target px-3 rounded-full bg-repere-fond text-repere border border-bordure-lien font-semibold hover:opacity-90 focus-ring"
+                                onClick={() => setCleSauvegardeeMsg(null)}
+                                aria-label="Fermer la confirmation"
+                                className="touch-target px-2 text-ink-300 hover:text-ink-50 focus-ring rounded-lg"
                             >
-                                Connecter ma clé Gemini →
+                                ×
                             </button>
                         </div>
                     )}
 
                     {(alerte || isPrivacyMode) && (
-                        <div role="alert" className="rounded-xl bg-surface-douce border border-bordure p-3 text-xs text-alerte-texte flex items-center gap-2">
+                        <div role="alert" className="rounded-xl bg-surface-douce border border-bordure px-3 py-2 text-xs text-alerte-texte flex items-center gap-2 shrink-0">
                             <Icon name={isPrivacyMode ? 'eye-off' : 'alert'} size={15} className="shrink-0" aria-hidden="true" />
                             <span>{isPrivacyMode ? MESSAGE_IA_MODE_DISCRET : alerte}</span>
                         </div>
                     )}
 
                     {!isPrivacyMode && (
-                        <div data-testid="assistant-fil" aria-live="polite" className="flex-1 rounded-2xl bg-fond border border-bordure p-3 sm:p-4 space-y-4 overflow-y-auto max-h-[55vh]">
+                        <div ref={filRef} data-testid="assistant-fil" aria-live="polite" className="flex-1 min-h-0 rounded-2xl bg-fond border border-bordure p-3 sm:p-4 space-y-3 overflow-y-auto">
                             {conversation.messages.length === 0 && (
                                 <div className="space-y-3">
                                     <p className="text-xs text-ink-300">
-                                        Pose une question, ou demande une modification (« ajoute une dette de carte de crédit », « monte mon budget épicerie »). Tout changement est appliqué puis annulable d’un clic.
+                                        Pose une question, demande ton plan d’action (jour, semaine, mois, année, décennie) ou une modification (« ajoute une dette », « monte mon budget épicerie »). Tout changement est annulable d’un clic.
                                     </p>
                                     <div role="group" aria-label="Questions rapides" className="flex flex-wrap gap-1.5">
                                         {QUESTIONS_RAPIDES.map((q) => (
@@ -386,10 +513,10 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
                                 <MessageVue key={m.id} message={m} onAnnuler={annuler} onOuvrirOnglet={ouvrirOnglet} />
                             ))}
                             {enCours && (
-                                <p className="text-xs text-ink-300 flex items-center gap-2" data-testid="assistant-en-cours">
-                                    <Icon name="sparkles" size={13} className="text-repere animate-pulse" aria-hidden="true" />
-                                    <span>{etape ? `Gemini utilise : ${etape.replace(/_/g, ' ')}…` : 'Gemini réfléchit…'}</span>
-                                </p>
+                                <div className="gemini-rainbow-thinking rounded-xl px-3.5 py-2.5 text-xs text-ink-50 flex items-center gap-2.5" data-testid="assistant-en-cours">
+                                    <Icon name="sparkles" size={15} className="gemini-rainbow-sparkle animate-spin shrink-0" aria-hidden="true" />
+                                    <span className="font-medium">{etape ? `Gemini utilise : ${etape.replace(/_/g, ' ')}…` : 'Gemini réfléchit…'}</span>
+                                </div>
                             )}
                         </div>
                     )}
@@ -397,17 +524,17 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
                     <form
                         data-testid="assistant-composeur"
                         onSubmit={(e) => { e.preventDefault(); void envoyer(saisie); }}
-                        className="gf-chat-composer p-2.5 flex items-end gap-2"
+                        className={`gf-chat-composer p-2 flex items-end gap-2 shrink-0 ${enCours ? 'gemini-rainbow-active' : ''}`}
                     >
                         <textarea
                             ref={inputRef}
                             value={saisie}
-                            rows={2}
+                            rows={1}
                             onChange={(e) => setSaisie(e.target.value)}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void envoyer(saisie); }
                             }}
-                            placeholder="Demande à Gemini : analyse, graphique, ou modification de tes données…"
+                            placeholder="Demande à Gemini : plan d’action, graphique, transactions d’octobre/novembre ou modification…"
                             aria-label="Message pour Gemini"
                             className="touch-target flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-ink-50 placeholder-ink-400 focus-ring rounded-lg"
                         />
@@ -459,8 +586,8 @@ const MessageVue: React.FC<{
     const annulable = !message.annulee && annulationDisponible(ids);
     return (
         <div className="flex items-start gap-2.5" data-testid="assistant-message">
-            <span className="mt-0.5 w-6 h-6 rounded-full bg-repere-fond border border-bordure-lien inline-flex items-center justify-center shrink-0">
-                <Icon name="sparkles" size={13} className="text-repere" aria-hidden="true" />
+            <span className="mt-0.5 w-6 h-6 rounded-full gemini-rainbow-avatar inline-flex items-center justify-center shrink-0">
+                <Icon name="sparkles" size={13} className="gemini-rainbow-sparkle" aria-hidden="true" />
             </span>
             <div className="flex-1 min-w-0 space-y-2">
                 <p className={`text-sm leading-relaxed whitespace-pre-wrap ${message.erreur ? 'text-alerte-texte' : 'text-ink-100'}`}>{message.texte}</p>

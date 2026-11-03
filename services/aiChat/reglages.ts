@@ -20,13 +20,25 @@ export interface ReglagesAppel {
  * (documents financiers : la qualité prime sur le coût). Pro : effort bas.
  */
 export function reglagesLecture(modelId: string): ReglagesAppel {
-    if (modelId.startsWith('gemini-2.5-flash-lite') || modelId.startsWith('claude-haiku-5-5')) {
+    if (
+        modelId.startsWith('gemini-3.5-flash-lite')
+        || modelId.startsWith('gemini-2.5-flash-lite')
+        || modelId.startsWith('claude-haiku-5-5')
+    ) {
         return { thinking: { type: 'disabled' }, output_config: { effort: 'low' } };
     }
-    if (modelId.startsWith('gemini-2.5-flash') || modelId.startsWith('claude-sonnet-5-5')) {
+    if (
+        modelId.startsWith('gemini-3.8-flash')
+        || modelId.startsWith('gemini-2.5-flash')
+        || modelId.startsWith('claude-sonnet-5-5')
+    ) {
         return { thinking: { type: 'between_tools' }, output_config: { effort: 'medium' } };
     }
-    if (modelId.startsWith('gemini-2.5-pro') || modelId.startsWith('claude-opus-5-5')) {
+    if (
+        modelId.startsWith('gemini-4-argon')
+        || modelId.startsWith('gemini-2.5-pro')
+        || modelId.startsWith('claude-opus-5-5')
+    ) {
         return { output_config: { effort: 'low' } };
     }
     return {};
@@ -34,7 +46,10 @@ export function reglagesLecture(modelId: string): ReglagesAppel {
 
 /** Conversation (une seule réponse, sans outils) : pensée adaptative conservée, effort moyen. */
 export function reglagesConversation(modelId: string): ReglagesAppel {
-    if (/^gemini-2\.5-(flash-lite|flash|pro)/.test(modelId) || /^claude-(haiku|sonnet|opus)-5-5/.test(modelId)) {
+    if (
+        /^gemini-(3\.5-flash-lite|3\.8-flash|4-argon|2\.5-(flash-lite|flash|pro))/.test(modelId)
+        || /^claude-(haiku|sonnet|opus)-5-5/.test(modelId)
+    ) {
         return { output_config: { effort: 'medium' } };
     }
     return {};

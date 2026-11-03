@@ -152,12 +152,13 @@ export const BudgetAiModal: React.FC<BudgetAiModalProps> = ({ apiKey, payload, o
             isOpen
             onClose={onClose}
             title="Diagnostic IA du Budget"
-            icon={<Icon name="sparkles" size={22} />}
+            icon={<Icon name="sparkles" size={22} className="gemini-rainbow-sparkle" />}
             size="lg"
         >
+            <div className="gemini-rainbow-bar mb-3" aria-hidden="true" />
             {isStreaming && diagnostic === null ? (
                 <div className="space-y-3">
-                    <div className="flex items-center gap-3">
+                    <div className="gemini-rainbow-thinking rounded-xl px-3.5 py-2.5 flex items-center gap-3">
                         <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
                         <p className="text-body text-ink-300 animate-pulse">L'IA analyse vos lignes de budget…</p>
                     </div>

@@ -72,8 +72,8 @@ describe('relais Cloud Run', () => {
 
     it.each([
         'https://finance.hubperso.com',
-        'https://financeai-497112.web.app',
-        'https://financeai-497112.firebaseapp.com',
+        'https://financeai-f5382.web.app',
+        'https://financeai-f5382.firebaseapp.com',
         'http://localhost:5173',
     ])('accepte l\'origine %s', async (origin) => {
         const r = await traiter(get('/api/yahoo/search?q=a', { origin }), { fetchImpl: faux() });

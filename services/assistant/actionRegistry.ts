@@ -160,7 +160,7 @@ function actionsCollection(t: TrancheCollection): ActionAssistant[] {
         Object.entries(t.champs).map(([k, s]) => [k, s.nullable().optional()]),
     )).catchall(jsonSur);
     const cible = z.object({
-        id: t.identifiant ? libelleId.optional().describe('Identifiant (`id`) de l\'élément.') : z.never().optional(),
+        ...(t.identifiant ? { id: libelleId.optional().describe('Identifiant (`id`) de l\'élément.') } : {}),
         index: z.number().int().min(0).optional().describe('Position donnée par `_index` dans lister.'),
     });
 
@@ -482,16 +482,20 @@ export function trouverAction(nom: string): ActionAssistant | undefined {
     return PAR_NOM.get(nom);
 }
 
-/** JSON Schema accepté par Gemini (`parametersJsonSchema`) : objet inline, sans $ref ni méta. */
+/** JSON Schema accepté par Gemini (`parametersJsonSchema`) : objet inline, sans $ref ni méta ni `not`. */
 export function versSchemaGemini(schema: z.ZodType): Record<string, unknown> {
     const brut = z.toJSONSchema(schema, { target: 'draft-7', io: 'input', unrepresentable: 'any' }) as Record<string, unknown>;
     const nettoyer = (n: unknown): unknown => {
         if (Array.isArray(n)) return n.map(nettoyer);
         if (!estObjet(n)) return n;
-        if ('$ref' in n) return {};
+        if ('$ref' in n || 'not' in n) return {};
         const out: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(n)) {
-            if (k === '$schema' || k === '$defs' || k === 'definitions' || k === 'propertyNames' || k === '$id') continue;
+            if (k === '$schema' || k === '$defs' || k === 'definitions' || k === 'propertyNames' || k === '$id' || k === 'additionalProperties') continue;
+            if (k === 'const') {
+                out.enum = [v];
+                continue;
+            }
             out[k] = nettoyer(v);
         }
         return out;

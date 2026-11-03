@@ -667,14 +667,16 @@ export const Investments: React.FC<InvestmentsProps> = ({
                             </span>
                             <span className="inline-flex items-center gap-1 font-semibold text-ink-200">
                                 <span aria-hidden="true" className="font-bold tracking-tight select-none">
-                                    <span className="gf-logo-b">G</span>
-                                    <span className="gf-logo-r">o</span>
-                                    <span className="gf-logo-y">o</span>
-                                    <span className="gf-logo-b">g</span>
-                                    <span className="gf-logo-g">l</span>
-                                    <span className="gf-logo-r">e</span>
+                                    <span className="gf-logo-b">F</span>
+                                    <span className="gf-logo-r">i</span>
+                                    <span className="gf-logo-y">n</span>
+                                    <span className="gf-logo-b">a</span>
+                                    <span className="gf-logo-g">n</span>
+                                    <span className="gf-logo-r">c</span>
+                                    <span className="gf-logo-y">e</span>
+                                    <span className="gf-logo-b">A</span>
+                                    <span className="gf-logo-g">I</span>
                                 </span>
-                                <span>Finance</span>
                                 <span className="gf-badge-nouvelle">Beta</span>
                             </span>
                         </span>
@@ -800,14 +802,16 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         </span>
                         <span className="inline-flex items-center gap-1 font-semibold text-ink-200">
                             <span aria-hidden="true" className="font-bold tracking-tight select-none">
-                                <span className="gf-logo-b">G</span>
-                                <span className="gf-logo-r">o</span>
-                                <span className="gf-logo-y">o</span>
-                                <span className="gf-logo-b">g</span>
-                                <span className="gf-logo-g">l</span>
-                                <span className="gf-logo-r">e</span>
+                                <span className="gf-logo-b">F</span>
+                                <span className="gf-logo-r">i</span>
+                                <span className="gf-logo-y">n</span>
+                                <span className="gf-logo-b">a</span>
+                                <span className="gf-logo-g">n</span>
+                                <span className="gf-logo-r">c</span>
+                                <span className="gf-logo-y">e</span>
+                                <span className="gf-logo-b">A</span>
+                                <span className="gf-logo-g">I</span>
                             </span>
-                            <span>Finance</span>
                             <span className="gf-badge-nouvelle">Beta</span>
                         </span>
                     </span>

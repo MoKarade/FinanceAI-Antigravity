@@ -86,22 +86,22 @@ describe('models (B3)', () => {
 });
 
 describe('chatCostUsd (B4)', () => {
-    it('1M tokens input Gemini 2.5 Flash = 0,30 $ US ; 1M output = 2,50 $ US (tarif public relevé le 2026-10-28)', () => {
-        expect(chatCostUsd(usage({ inputTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(0.3, 10);
-        expect(chatCostUsd(usage({ outputTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(2.5, 10);
+    it('1M tokens input Gemini 3.8 Flash = 0,75 $ US ; 1M output = 3,75 $ US (tarif public relevé le 2026-11-03)', () => {
+        expect(chatCostUsd(usage({ inputTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(0.75, 10);
+        expect(chatCostUsd(usage({ outputTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(3.75, 10);
     });
 
-    it('cache : write = 1,25× l\'input ; read = 0,05× (Gemini 2.5 Flash, Gemini 2.5 Pro) ou 0,1× (Gemini 2.5 Flash-Lite)', () => {
-        expect(chatCostUsd(usage({ cacheReadTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(0.015, 10);
-        expect(chatCostUsd(usage({ cacheReadTokens: 1_000_000 }), MODEL_IDS.opus)).toBeCloseTo(0.0625, 10);
-        expect(chatCostUsd(usage({ cacheReadTokens: 1_000_000 }), MODEL_IDS.haiku)).toBeCloseTo(0.01, 10);
-        expect(chatCostUsd(usage({ cacheWriteTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(0.375, 10);
+    it('cache : write = 1,25× l\'input ; read = 0,1× (Gemini 3.8 Flash, Gemini 3.5 Flash-Lite) ou 0,05× (Gemini 4 Argon)', () => {
+        expect(chatCostUsd(usage({ cacheReadTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(0.075, 10);
+        expect(chatCostUsd(usage({ cacheReadTokens: 1_000_000 }), MODEL_IDS.opus)).toBeCloseTo(0.1, 10);
+        expect(chatCostUsd(usage({ cacheReadTokens: 1_000_000 }), MODEL_IDS.haiku)).toBeCloseTo(0.03, 10);
+        expect(chatCostUsd(usage({ cacheWriteTokens: 1_000_000 }), MODEL_IDS.sonnet)).toBeCloseTo(0.9375, 10);
     });
 
-    it('Gemini 2.5 Pro = 1,25 $ / Gemini 2.5 Flash-Lite = 0,10 $ par 1M input (ordre de grandeur verrouillé)', () => {
+    it('Gemini 4 Argon = 2,00 $ / Gemini 3.5 Flash-Lite = 0,30 $ par 1M input (ordre de grandeur verrouillé)', () => {
         const oneM = usage({ inputTokens: 1_000_000 });
-        expect(chatCostUsd(oneM, MODEL_IDS.opus)).toBeCloseTo(1.25, 10);
-        expect(chatCostUsd(oneM, MODEL_IDS.haiku)).toBeCloseTo(0.1, 10);
+        expect(chatCostUsd(oneM, MODEL_IDS.opus)).toBeCloseTo(2.0, 10);
+        expect(chatCostUsd(oneM, MODEL_IDS.haiku)).toBeCloseTo(0.3, 10);
     });
 
     it('modèle sans tarif → null HONNÊTE (jamais un 0 plausible)', () => {

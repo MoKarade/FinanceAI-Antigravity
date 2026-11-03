@@ -107,6 +107,6 @@ describe('[LOGO-A] le logo série A est celui que le navigateur et l’iPhone re
     it('le service worker a changé de cache : v4 gardait l’ancien /icon.svg (cache d’abord)', () => {
         const sw = readFileSync(resolve(racine, 'public/sw.js'), 'utf-8');
         expect(sw).not.toContain("CACHE_NAME = 'financeai-v4'");
-        expect(sw).toMatch(/CACHE_NAME = 'financeai-v[5-9]/);
+        expect(sw).toMatch(/CACHE_NAME = 'financeai-v([5-9]|\d{2,})'/);
     });
 });

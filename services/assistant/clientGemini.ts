@@ -10,9 +10,37 @@
 import type { Content } from '@google/genai';
 import { signalerUsageIa } from '../aiChat/coutIa';
 import type { ClientGemini, RequeteGemini, ReponseGemini } from './agentLoop';
+import type { DeclarationOutil } from './actionRegistry';
+
+const NOMS_OUTILS_ESSENTIELS = new Set<string>([
+    'afficher_bloc',
+    'naviguer_vers_onglet',
+    'lancer_projection',
+    'get_financial_summary',
+    'get_projection',
+    'list_assets',
+    'list_transactions',
+    'list_debts',
+    'get_budget',
+    'lister_transactions',
+    'lister_placements',
+    'lister_postes_budget',
+    'lister_dettes',
+    'ajouter_transaction',
+    'ajouter_dette',
+    'modifier_poste_budget',
+    'modifier_objectif_retraite',
+    'modifier_configuration_menage',
+]);
+
+const estErreurCleInvalide = (err: unknown): boolean => {
+    const status = (err as { status?: unknown } | null)?.status;
+    const msg = String((err as { message?: unknown } | null)?.message ?? '');
+    return status === 401 || /API_KEY_INVALID|API key not valid/i.test(msg);
+};
 
 export function creerClientGemini(apiKey: string): ClientGemini {
-    const cle = apiKey.trim();
+    const cle = apiKey.replace(/^["'\s]+|["'\s]+$/g, '');
     if (!cle) throw new Error('Clé API Google Gemini manquante.');
     let sdk: Promise<typeof import('@google/genai')> | null = null;
     return {
@@ -20,23 +48,40 @@ export function creerClientGemini(apiKey: string): ClientGemini {
             sdk ??= import('@google/genai');
             const { GoogleGenAI } = await sdk;
             const ai = new GoogleGenAI({ apiKey: cle });
-            const rep = await ai.models.generateContent({
-                model: req.modele,
-                contents: req.contenus as Content[],
-                config: {
-                    systemInstruction: req.instructionSysteme,
-                    tools: req.outils.length > 0 ? [{ functionDeclarations: req.outils }] : undefined,
-                    automaticFunctionCalling: { disable: true },
-                    maxOutputTokens: 8192,
-                    abortSignal: req.signal,
-                },
-            });
-            const usage = rep.usageMetadata;
-            signalerUsageIa(req.modele, usage
-                ? { input_tokens: usage.promptTokenCount ?? null, output_tokens: usage.candidatesTokenCount ?? null }
-                : null);
-            const candidat = rep.candidates?.[0];
-            return { contenu: (candidat?.content as ReponseGemini['contenu']) ?? null, raisonFin: candidat?.finishReason ?? null };
+
+            const appeler = async (modele: string, outils: DeclarationOutil[]): Promise<ReponseGemini> => {
+                const rep = await ai.models.generateContent({
+                    model: modele,
+                    contents: req.contenus as Content[],
+                    config: {
+                        systemInstruction: req.instructionSysteme,
+                        tools: outils.length > 0 ? [{ functionDeclarations: outils }] : undefined,
+                        automaticFunctionCalling: { disable: true },
+                        maxOutputTokens: 8192,
+                        abortSignal: req.signal,
+                    },
+                });
+                const usage = rep.usageMetadata;
+                signalerUsageIa(modele, usage
+                    ? { input_tokens: usage.promptTokenCount ?? null, output_tokens: usage.candidatesTokenCount ?? null }
+                    : null);
+                const candidat = rep.candidates?.[0];
+                return { contenu: (candidat?.content as ReponseGemini['contenu']) ?? null, raisonFin: candidat?.finishReason ?? null };
+            };
+
+            try {
+                return await appeler(req.modele, req.outils);
+            } catch (err) {
+                if (req.signal?.aborted || estErreurCleInvalide(err)) throw err;
+                const outilsEssentiels = req.outils.filter((o) => NOMS_OUTILS_ESSENTIELS.has(o.name));
+                const modeleRepli = req.modele === 'gemini-4-argon' ? 'gemini-3.8-flash' : 'gemini-2.5-flash';
+                try {
+                    return await appeler(modeleRepli, outilsEssentiels);
+                } catch (err2) {
+                    if (req.signal?.aborted || estErreurCleInvalide(err2)) throw err2;
+                    return await appeler('gemini-2.5-flash', []);
+                }
+            }
         },
     };
 }

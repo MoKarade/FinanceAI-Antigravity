@@ -89,20 +89,20 @@ export interface GeminiCompatibleClient {
     };
 }
 
-const GEMINI_DEFAULT_MODEL = MODEL_IDS.sonnet; // 'gemini-2.5-flash'
+const GEMINI_DEFAULT_MODEL = MODEL_IDS.sonnet; // 'gemini-3.8-flash'
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_MAX_RETRIES = 2;
 
-/** Résout un identifiant de modèle (ou alias historique) vers un modèle officiel Google Gemini 2.5. */
+/** Résout un identifiant de modèle (ou alias historique) vers le dernier modèle officiel Google Gemini. */
 function resoudreModeleGemini(model: string | undefined): string {
     if (!model) return GEMINI_DEFAULT_MODEL;
-    if (model === 'gemini-2.5-flash-lite' || model === 'claude-haiku-5-5' || model === 'haiku') {
+    if (model === 'gemini-3.5-flash-lite' || model === 'gemini-2.5-flash-lite' || model === 'claude-haiku-5-5' || model === 'haiku') {
         return MODEL_IDS.haiku;
     }
-    if (model === 'gemini-2.5-flash' || model === 'claude-sonnet-5-5' || model === 'sonnet' || model === 'gemini-3.8-flash') {
+    if (model === 'gemini-3.8-flash' || model === 'gemini-2.5-flash' || model === 'claude-sonnet-5-5' || model === 'sonnet') {
         return MODEL_IDS.sonnet;
     }
-    if (model === 'gemini-2.5-pro' || model === 'claude-opus-5-5' || model === 'opus') {
+    if (model === 'gemini-4-argon' || model === 'gemini-2.5-pro' || model === 'claude-opus-5-5' || model === 'opus') {
         return MODEL_IDS.opus;
     }
     if (model.startsWith('gemini-')) return model;

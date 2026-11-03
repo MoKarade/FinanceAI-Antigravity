@@ -62,6 +62,7 @@ export const RealEstateAdviceCard: React.FC<RealEstateAdviceCardProps> = ({ cont
 
     const corps = (
         <div className="space-y-3">
+            <div className="gemini-rainbow-bar" aria-hidden="true" />
             {!advice && (
                 <div className="text-center py-4 space-y-2">
                     <p className="text-tiny text-ink-300">
@@ -71,7 +72,7 @@ export const RealEstateAdviceCard: React.FC<RealEstateAdviceCardProps> = ({ cont
                         type="button"
                         onClick={handleGenerate}
                         disabled={isLoading || !apiKey}
-                        className="px-4 py-2 bg-primary hover:bg-white text-dark rounded-lg font-bold text-body transition-colors disabled:opacity-50"
+                        className="gemini-rainbow-btn px-4 py-2 bg-primary hover:bg-white text-dark rounded-lg font-bold text-body transition-colors disabled:opacity-50"
                     >
                         {isLoading ? 'Analyse…' : 'Conseiller le projet'}
                     </button>

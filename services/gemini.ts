@@ -211,7 +211,12 @@ function makeTimeoutSignal(externalSignal: AbortSignal | undefined, timeoutMs: n
  * one-shot rapides (catégorisation, analyses JSON) → pensée coupée ; les autres à la conversation.
  */
 function reglagesPourChat(modelId: string): ReturnType<typeof reglagesLecture> {
-    return (modelId === MODEL_HAIKU || modelId.startsWith('gemini-2.5-flash-lite') || modelId.startsWith('claude-haiku'))
+    return (
+        modelId === MODEL_HAIKU
+        || modelId.startsWith('gemini-3.5-flash-lite')
+        || modelId.startsWith('gemini-2.5-flash-lite')
+        || modelId.startsWith('claude-haiku')
+    )
         ? reglagesLecture(modelId)
         : reglagesConversation(modelId);
 }

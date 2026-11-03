@@ -32,7 +32,7 @@ const configTailwind = readFileSync(resolve(racine, 'tailwind.config.js'), 'utf8
  * écran migré. Restent en dur : les palettes des graphiques (courbes, légendes, jalons).
  */
 const PLAFOND_PALETTE = 219;
-const PLAFOND_BLANC_NOIR = 651;
+const PLAFOND_BLANC_NOIR = 648;
 const PLAFOND_HEX = 196;
 
 const VARIABLES = [

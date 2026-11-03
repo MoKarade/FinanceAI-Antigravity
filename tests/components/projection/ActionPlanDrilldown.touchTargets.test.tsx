@@ -73,4 +73,21 @@ describe('[FUTUR-MOBILE-PR5] ActionPlanDrilldown — cibles tactiles mobile', ()
         fireEvent.click(wrapper); // le <label> lui-même, PAS l'input — c'est la marge des 44 px.
         expect(checkbox.checked).toBe(true);
     });
+
+    it('affiche le guide opérationnel par jour, semaine, mois, année et décennie et permet de basculer entre les horizons', () => {
+        render(<ActionPlanDrilldown chartData={chartData} />);
+        expect(screen.getByTestId('action-plan-horizon-jour')).toBeTruthy();
+        expect(screen.getByTestId('action-plan-horizon-semaine')).toBeTruthy();
+        expect(screen.getByTestId('action-plan-horizon-mois')).toBeTruthy();
+        expect(screen.getByTestId('action-plan-horizon-annee')).toBeTruthy();
+        expect(screen.getByTestId('action-plan-horizon-decennie')).toBeTruthy();
+
+        fireEvent.click(screen.getByTestId('action-plan-horizon-jour'));
+        expect(screen.getByTestId('action-plan-horizon-jour').getAttribute('aria-pressed')).toBe('true');
+        expect(screen.getByText(/Respecter le budget de vie quotidien/i)).toBeTruthy();
+
+        fireEvent.click(screen.getByTestId('action-plan-horizon-decennie'));
+        expect(screen.getByTestId('action-plan-horizon-decennie').getAttribute('aria-pressed')).toBe('true');
+        expect(screen.getByText(/Décennie d’accumulation/i)).toBeTruthy();
+    });
 });

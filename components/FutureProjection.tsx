@@ -2333,14 +2333,13 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
 
             <FinancialGoalsProgressSection goals={financialGoals} todayIso={todayIso} />
 
-            {/* [S5-REFONTE-FUTUR] Jalons + Leviers (maquettes) ; la carte Outils porte les tiroirs. */}
-            <div className="grid gap-4 lg:gap-6 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
+            {/* [S5-REFONTE-FUTUR] Jalons + Leviers équilibrés côte à côte (h-full), Outils pleine largeur et Plan d'action complet intégré. */}
+            <div className="grid gap-4 lg:gap-6 lg:grid-cols-2 items-stretch">
                 <TableJalons jalons={jalons} etroit={etroit} />
-                <div className="space-y-4 lg:space-y-6">
-                    <CarteLeviers leviers={leviers} strategie={allResults[0]?.strategyName} resume={resumeLeviers} nbLeviers={LEVER_LIBRARY.length} etroit={etroit} onOptimiser={regateToLevers} />
-                    {outils}
-                </div>
+                <CarteLeviers leviers={leviers} strategie={allResults[0]?.strategyName} resume={resumeLeviers} nbLeviers={LEVER_LIBRARY.length} etroit={etroit} onOptimiser={regateToLevers} />
             </div>
+            {outils}
+            <ActionPlanDrilldown chartData={chartData} strategyName={allResults[0]?.strategyName} />
             </div>
             )}
 

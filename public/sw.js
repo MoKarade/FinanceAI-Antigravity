@@ -10,7 +10,7 @@
 //
 // Note : ce SW est uniquement chargé en PROD (vite import.meta.env.PROD).
 
-const CACHE_NAME = 'financeai-v9'; // v9 : relais Cloud Run (/api/fintable/* & /api/yahoo/*) + transactions Firestore par mois sans plafond + assistant Gemini agentique connecté à toutes les tranches ; v8 : refonte visuelle Google Finance Beta de toutes les pages ; v7 : simplification mobile + restauration Cloud + Preuves & Sources ; v6 : migration Firebase Hosting + fix fetch navigation RequestInit ; v5 : logo série A — purge de v4 qui gardait l'ancien /icon.svg (cache d'abord) ; v4 : Cloudflare Access — plus aucune réponse redirigée/opaque en cache (purge des caches v3)
+const CACHE_NAME = 'financeai-v11'; // v11 : logo FinanceAI aux 4 couleurs Google (/icon.svg + en-têtes sans logo Google) + effets arc-en-ciel Gemini sur toutes les surfaces IA ; v10 : Gemini 3.8 Flash & 4 Argon + saisie clé API inline + Plan d'action 5 horizons (jour/semaine/mois/année/décennie) + grille équilibrée sans trous ; v9 : relais Cloud Run (/api/fintable/* & /api/yahoo/*) + transactions Firestore par mois sans plafond + assistant Gemini agentique connecté à toutes les tranches ; v8 : refonte visuelle Google Finance Beta de toutes les pages ; v7 : simplification mobile + restauration Cloud + Preuves & Sources ; v6 : migration Firebase Hosting + fix fetch navigation RequestInit ; v5 : logo série A — purge de v4 qui gardait l'ancien /icon.svg (cache d'abord) ; v4 : Cloudflare Access — plus aucune réponse redirigée/opaque en cache (purge des caches v3)
 const PRECACHE_URLS = ['/manifest.json', '/icon.svg'];
 
 // [CF-ACCESS] Une réponse mettable en cache doit être une réponse DIRECTE de notre origine : ni redirigée (session

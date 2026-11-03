@@ -2,7 +2,7 @@
 
 Application personnelle de planification financière québécoise et canadienne : fiscalité ARC + Revenu Québec, Monte Carlo retraite, assistant **Google Gemini**, synchronisation **Cloud Firestore** & **Google Drive**, authentification **Firebase Auth / Google Sign-In**, interface **Google Finance**.
 100 % navigateur : React 19 + Vite 8 + TS 5.9 (`strict: true`) + Tailwind 4 (Design System Google Finance / Material 3), Zustand 5 (persist), Zod, Recharts, Vitest 5.
-Écosystème Google : `@google/genai` (`services/gemini.ts`, `gemini-2.5-flash` / `gemini-2.5-pro`), Firebase Web SDK v12 (`Auth`, `Firestore`), Google Identity Services (`Google Drive appDataFolder`). Tout en français.
+Écosystème Google : `@google/genai` (`services/gemini.ts`, `gemini-3.8-flash` / `gemini-4-argon` / `gemini-3.5-flash-lite`), Firebase Web SDK v12 (`Auth`, `Firestore`), Google Identity Services (`Google Drive appDataFolder`). Tout en français.
 Structure plate (pas de `src/`) : `components/ hooks/ services/ store/ utils/ mcp/ api/ tests/ docs/`. Moteur : `services/projection/`.
 Compte de tests (source unique, MESURÉ 2026-11-02) : voir la sortie de la gate CI (`npm run test`).
 

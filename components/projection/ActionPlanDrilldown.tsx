@@ -6,7 +6,10 @@ import {
     type PlanBucket,
 } from '../../services/projection/actionPlanHierarchy';
 import { ACTION_ACCOUNTS } from '../../services/projection/yearlyActions';
-import { Icon } from '../ui/Icon';
+import { useFinanceStore } from '../../store/useFinanceStore';
+import { computeMonthlyBudgetAggregates } from '../../services/portfolio';
+import { monthlyConsumptionExpenses } from '../../utils/healthRatios';
+import { Icon, type IconName } from '../ui/Icon';
 import { PrivateAmount } from '../ui/PrivateAmount';
 import { formatCAD } from '../../utils/format';
 import { useViewportBelowSm } from '../../hooks/useViewportBelowSm';
@@ -14,6 +17,21 @@ import { useViewportBelowSm } from '../../hooks/useViewportBelowSm';
 interface ActionPlanDrilldownProps {
     chartData: Array<Record<string, unknown>>;
     strategyName?: string;
+}
+
+type HorizonActionCle = 'jour' | 'semaine' | 'mois' | 'annee' | 'decennie';
+
+interface FicheHorizonAction {
+    cle: HorizonActionCle;
+    label: string;
+    periode: string;
+    icone: IconName;
+    cibleMontant: number;
+    cibleSuffixe: string;
+    plafondOuRevenuLabel: string;
+    plafondOuRevenuMontant: number;
+    resumeAction: string;
+    etapesConcretes: Array<{ titre: string; explication: string; impact: string }>;
 }
 
 const cad = (v: number): string => formatCAD(v);
@@ -59,8 +77,14 @@ export const ActionPlanDrilldown: React.FC<ActionPlanDrilldownProps> = ({ chartD
     // une checklist de revue, pas un suivi de tâches durable.
     const [done, setDone] = useState<Set<string>>(new Set());
     const [openWhy, setOpenWhy] = useState<Set<string>>(new Set());
+    const [horizonActif, setHorizonActif] = useState<HorizonActionCle>('mois');
     const toggle = (set: React.Dispatch<React.SetStateAction<Set<string>>>, key: string) =>
         set((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+
+    const config = useFinanceStore((s) => s.config);
+    const budgetItems = useFinanceStore((s) => s.budgetItems);
+    const debts = useFinanceStore((s) => s.debts);
+    const retirementGoal = useFinanceStore((s) => s.retirementGoal);
 
     const { trail, children } = useMemo(() => {
         if (!root) return { trail: [] as PlanBucket[], children: [] as PlanBucket[] };
@@ -75,23 +99,319 @@ export const ActionPlanDrilldown: React.FC<ActionPlanDrilldownProps> = ({ chartD
         return { trail: t, children: getChildBuckets(chartData, cur) };
     }, [root, chartData, pathIds]);
 
+    const fichesHorizons = useMemo<FicheHorizonAction[]>(() => {
+        const aggs = computeMonthlyBudgetAggregates(
+            config ?? { users: [] },
+            budgetItems ?? [],
+        );
+        const consoMensuelle = monthlyConsumptionExpenses(budgetItems ?? []);
+        const brutMensuel = (config?.users ?? []).reduce(
+            (acc, u) => acc + (Number(u?.grossSalary) || 0),
+            0,
+        );
+        const revenuNetMensuel =
+            aggs.income > 0
+                ? aggs.income
+                : brutMensuel > 0
+                  ? Math.round(brutMensuel * 0.72)
+                  : 4500;
+
+        const nbMoisRoot = Math.max(1, chartData.filter((pt) => typeof pt.monthIndex === 'number' && Number(pt.monthIndex) >= 0).length);
+        const epargneMoteurMensuelle = root ? Math.max(0, Math.round((root.deposited - root.withdrawn) / nbMoisRoot)) : 0;
+        const epargneBudgetMensuelle = Math.max(0, Math.round(revenuNetMensuel - aggs.expenses));
+        const epargneMensuelle = epargneBudgetMensuelle > 0 ? epargneBudgetMensuelle : epargneMoteurMensuelle > 0 ? epargneMoteurMensuelle : Math.round(revenuNetMensuel * 0.2);
+        const depensesCourantesMensuelles =
+            Number.isFinite(consoMensuelle) && consoMensuelle > 0
+                ? Math.round(consoMensuelle)
+                : Math.max(1200, Math.round(revenuNetMensuel - epargneMensuelle));
+
+        const epargneJour = Math.max(1, Math.round((epargneMensuelle * 12) / 365));
+        const depensesJour = Math.max(10, Math.round((depensesCourantesMensuelles * 12) / 365));
+        const epargneSemaine = Math.max(5, Math.round((epargneMensuelle * 12) / 52));
+        const depensesSemaine = Math.max(50, Math.round((depensesCourantesMensuelles * 12) / 52));
+        const epargneAnnee = Math.round(epargneMensuelle * 12);
+        const epargneDecennie = Math.round(epargneAnnee * 10);
+
+        const soldeDettes = (debts ?? []).reduce((acc, d) => acc + Math.max(0, Number(d?.balance) || 0), 0);
+        const renteRetraite = Number(retirementGoal?.targetMonthlyIncome) || 4000;
+
+        return [
+            {
+                cle: 'jour',
+                label: 'Par jour',
+                periode: 'Discipline quotidienne',
+                icone: 'cash',
+                cibleMontant: epargneJour,
+                cibleSuffixe: '/jour mis de côté',
+                plafondOuRevenuLabel: 'Plafond dépenses courantes',
+                plafondOuRevenuMontant: depensesJour,
+                resumeAction: 'Protéger ta marge quotidienne en gardant tes dépenses variables sous ton plafond journalier.',
+                etapesConcretes: [
+                    {
+                        titre: 'Respecter le budget de vie quotidien',
+                        explication: 'Maintiens tes achats courants du jour (repas, cafés, transport, achats spontanés) sous ton plafond journalier calculé à partir de ton budget.',
+                        impact: 'Chaque journée sous le plafond préserve intégralement ton flux d’épargne automatique.',
+                    },
+                    {
+                        titre: 'Rapprocher les opérations du jour en 30 secondes',
+                        explication: 'Vérifie que les opérations récentes (octobre / novembre et mois en cours) sont bien catégorisées dans l’onglet Transactions.',
+                        impact: 'Zéro dépense oubliée et parité exacte entre ton Budget et ton compte bancaire.',
+                    },
+                    {
+                        titre: 'Appliquer la règle des 24 heures sur les envies',
+                        explication: 'Tout achat non essentiel supérieur à une journée d’épargne est reporté au lendemain avant décision.',
+                        impact: 'Élimine les achats impulsifs qui grugent la capacité de cotisation CELI/REER.',
+                    },
+                ],
+            },
+            {
+                cle: 'semaine',
+                label: 'Par semaine',
+                periode: 'Rituel du jeudi (paie)',
+                icone: 'refresh',
+                cibleMontant: epargneSemaine,
+                cibleSuffixe: '/semaine virés auto',
+                plafondOuRevenuLabel: 'Enveloppe hebdomadaire',
+                plafondOuRevenuMontant: depensesSemaine,
+                resumeAction: 'Automatiser le virement d’épargne dès le jeudi matin (jour de paie) avant toute dépense de fin de semaine.',
+                etapesConcretes: [
+                    {
+                        titre: 'Virement automatique du jeudi (« Se payer en premier »)',
+                        explication: 'Programme un virement récurrent chaque jeudi de paie directement vers ton CELI ou ton REER.',
+                        impact: 'Ton épargne est investie automatiquement sans effort de volonté.',
+                    },
+                    {
+                        titre: soldeDettes > 0 ? 'Accélérer le remboursement des dettes actives' : 'Zéro solde reporté sur les cartes de crédit',
+                        explication: soldeDettes > 0
+                            ? 'Affecte tout surplus hebdomadaire au paiement de la dette au taux d’intérêt le plus élevé (méthode avalanche).'
+                            : 'Acquitte le solde courant de ta carte chaque semaine pour maintenir un taux d’utilisation bas et zéro intérêt.',
+                        impact: 'Réduit immédiatement le coût d’intérêt et libère du flux mensuel.',
+                    },
+                    {
+                        titre: 'Bilan rapide de 5 minutes le dimanche',
+                        explication: 'Compare tes dépenses de la semaine (épicerie, sorties, essence) à ton enveloppe hebdomadaire.',
+                        impact: 'Permet de corriger un écart dès la semaine suivante plutôt qu’en fin d’année.',
+                    },
+                ],
+            },
+            {
+                cle: 'mois',
+                label: 'Par mois',
+                periode: 'Allocation mensuelle',
+                icone: 'budget',
+                cibleMontant: epargneMensuelle,
+                cibleSuffixe: '/mois investis',
+                plafondOuRevenuLabel: 'Revenu net mensuel',
+                plafondOuRevenuMontant: revenuNetMensuel,
+                resumeAction: 'Investir méthodiquement chaque mois (DCA) dans tes enveloppes fiscales et contrôler la parité Budget ↔ Transactions.',
+                etapesConcretes: [
+                    {
+                        titre: 'Investissement mensuel programmé (CELI / REER / Non-enreg.)',
+                        explication: 'Dès que tes virements mensuels arrivent chez le courtier, achète tes FNB indiciels selon ta répartition cible.',
+                        impact: 'Lisse le prix d’achat moyen (DCA) et fait travailler chaque dollar sans délai.',
+                    },
+                    {
+                        titre: 'Clôture mensuelle du journal des transactions',
+                        explication: 'Le 1er du mois, passe en revue le graphique Dépenses réelles vs Budget (6 mois) pour valider tes postes Besoins / Envies / Épargne.',
+                        impact: 'Garantit que le taux d’épargne réel correspond à la trajectoire simulée dans Futur.',
+                    },
+                    {
+                        titre: 'Vérification du coussin de sécurité liquide',
+                        explication: 'Assure-toi que ton encaisse couvre tes mois d’autonomie cibles ; tout excédent au-delà du coussin est basculé vers les placements.',
+                        impact: 'Évite de laisser dormir trop de liquidités sous le taux de l’inflation.',
+                    },
+                ],
+            },
+            {
+                cle: 'annee',
+                label: 'Par année',
+                periode: 'Calendrier fiscal QC / Canada',
+                icone: 'tax',
+                cibleMontant: epargneAnnee,
+                cibleSuffixe: '/an capitalisés',
+                plafondOuRevenuLabel: 'Revenu net annuel',
+                plafondOuRevenuMontant: revenuNetMensuel * 12,
+                resumeAction: 'Orchestrer tes cotisations REER/CELI avec la fiscalité ARC & Revenu Québec et réinvestir ton remboursement d’impôt.',
+                etapesConcretes: [
+                    {
+                        titre: 'Janvier – Février : Cotisation REER (60 premiers jours)',
+                        explication: 'Optimise ta déduction REER selon ton taux marginal combiné Québec + Fédéral dans l’onglet Impôts.',
+                        impact: 'Génère un remboursement d’impôt significatif au printemps.',
+                    },
+                    {
+                        titre: 'Mars – Mai : Réinvestissement intégral du remboursement d’impôt',
+                        explication: 'Dès réception de l’avis de cotisation ARC et Revenu Québec, injecte 100 % du remboursement d’impôt dans ton CELI.',
+                        impact: 'Crée un effet de levier fiscal sans effort budgétaire supplémentaire.',
+                    },
+                    {
+                        titre: 'Octobre – Décembre : Rééquilibrage annuel & droits CELI',
+                        explication: 'Rééquilibre tes classes d’actifs qui ont dévié de leur cible et prépare l’utilisation des nouveaux droits CELI du 1er janvier.',
+                        impact: 'Maintient le niveau de risque exact choisi dans ta stratégie.',
+                    },
+                ],
+            },
+            {
+                cle: 'decennie',
+                label: 'Par décennie',
+                periode: 'Cap retraite & indépendance',
+                icone: 'future',
+                cibleMontant: epargneDecennie,
+                cibleSuffixe: '/décennie d’apports',
+                plafondOuRevenuLabel: 'Rente annuelle visée',
+                plafondOuRevenuMontant: renteRetraite * 12,
+                resumeAction: 'Structurer les grandes phases de ta vie patrimoniale jusqu’à l’indépendance financière puis le décaissement optimal.',
+                etapesConcretes: [
+                    {
+                        titre: 'Décennie d’accumulation : Croissance & élimination des passifs',
+                        explication: 'Maximise le plein potentiel des intérêts composés en CELI et REER tout en amortissant l’hypothèque et les dettes.',
+                        impact: 'La croissance du portefeuille finit par dépasser l’effort d’épargne salarial.',
+                    },
+                    {
+                        titre: 'Décennie de transition (5 à 10 ans avant la retraite)',
+                        explication: 'Constitue une réserve de sécurité (2 à 3 ans de dépenses) pour neutraliser le risque de séquence de rendements au départ en retraite.',
+                        impact: 'Protège ton capital contre un repli boursier juste au moment d’arrêter de travailler.',
+                    },
+                    {
+                        titre: `Décennie de décaissement (${strategyName || 'Ordre fiscal optimal'})`,
+                        explication: 'Coordonne les retraits entre CELI, Non-enregistré et REER/FERR avec l’âge de demande des rentes RRQ et PSV (bonifiées jusqu’à 70/72 ans).',
+                        impact: 'Minimise l’impôt à vie et évite la récupération de la Pension de la Sécurité de la vieillesse (PSV).',
+                    },
+                ],
+            },
+        ];
+    }, [config, budgetItems, debts, retirementGoal, chartData, root, strategyName]);
+
     if (!root) return null;
 
     const current = trail[trail.length - 1];
     const net = current.deposited - current.withdrawn;
     const idsBelowRoot = trail.slice(1).map((b) => b.id);
+    const ficheActive = fichesHorizons.find((f) => f.cle === horizonActif) ?? fichesHorizons[2]!;
 
     const drillTo = (b: PlanBucket) => setPathIds([...idsBelowRoot, b.id]);
     const jumpTo = (trailIdx: number) => setPathIds(trail.slice(1, trailIdx + 1).map((b) => b.id));
 
     return (
-        <div className="mt-6 bg-black/20 p-4 rounded-xl border border-white/5">
-            <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
-                <span className="text-meta font-black text-white flex items-center gap-1.5">
-                    <Icon name="clipboard" size={14} className="text-ink-300" /> Plan d'action
-                </span>
-                {strategyName && <span className="text-tiny text-ink-400">selon {strategyName}</span>}
+        <div data-testid="action-plan-complet" className="mt-4 rounded-2xl bg-surface border border-bordure p-4 sm:p-5 space-y-5">
+            {/* En-tête principal du Plan d'action */}
+            <div className="flex items-center justify-between gap-2 flex-wrap border-b border-bordure pb-3">
+                <div>
+                    <span className="text-sm sm:text-base font-bold text-ink-50 flex items-center gap-2">
+                        <Icon name="clipboard" size={16} className="text-repere" />
+                        <span>Plan d'action complet · Jour, Semaine, Mois, Année & Décennie</span>
+                    </span>
+                    <p className="text-xs text-ink-300 mt-0.5">
+                        Explications claires et gestes concrets à poser à chaque échelle de temps selon tes chiffres réels
+                    </p>
+                </div>
+                {strategyName && (
+                    <span className="px-2.5 py-1 rounded-full bg-repere-fond text-repere border border-bordure-lien text-xs font-mono font-semibold">
+                        selon {strategyName}
+                    </span>
+                )}
             </div>
+
+            {/* 1. Sélecteur des 5 horizons (Jour · Semaine · Mois · Année · Décennie) */}
+            <div className="space-y-3">
+                <div
+                    role="group"
+                    aria-label="Échelle de temps du plan d'action"
+                    className="grid grid-cols-2 sm:grid-cols-5 gap-2"
+                >
+                    {fichesHorizons.map((h) => {
+                        const actif = h.cle === ficheActive.cle;
+                        return (
+                            <button
+                                key={h.cle}
+                                type="button"
+                                data-testid={`action-plan-horizon-${h.cle}`}
+                                aria-pressed={actif}
+                                onClick={() => setHorizonActif(h.cle)}
+                                className={`touch-target rounded-xl p-3 text-left border transition-all focus-ring flex flex-col justify-between gap-1.5 ${
+                                    actif
+                                        ? 'bg-repere-fond border-bordure-lien text-ink-50'
+                                        : 'bg-fond border-bordure text-ink-200 hover:bg-surface-douce'
+                                }`}
+                            >
+                                <div className="flex items-center justify-between gap-1.5">
+                                    <span className="text-xs font-bold text-ink-50">{h.label}</span>
+                                    <Icon name={h.icone} size={14} className={actif ? 'text-repere' : 'text-ink-400'} aria-hidden="true" />
+                                </div>
+                                <div className="text-[11px] text-ink-400 truncate">{h.periode}</div>
+                                <PrivateAmount className="font-mono text-xs sm:text-sm font-bold text-succes-texte tabular-nums">
+                                    +{cad(h.cibleMontant)}
+                                </PrivateAmount>
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {/* Fiche explicative détaillée de l'horizon actif */}
+                <div className="rounded-xl bg-fond border border-bordure p-4 space-y-3.5">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-bordure pb-3">
+                        <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded-full bg-repere-fond text-repere text-[11px] font-mono font-bold">
+                                    {ficheActive.label}
+                                </span>
+                                <span className="text-xs sm:text-sm font-bold text-ink-50">
+                                    {ficheActive.periode}
+                                </span>
+                            </div>
+                            <p className="text-xs text-ink-200 leading-relaxed">
+                                {ficheActive.resumeAction}
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 font-mono tabular-nums">
+                            <div className="rounded-lg bg-surface px-3 py-1.5 border border-bordure">
+                                <div className="text-[10px] uppercase tracking-wider text-ink-400">Cible d’épargne</div>
+                                <PrivateAmount className="text-xs sm:text-sm font-bold text-succes-texte">
+                                    +{cad(ficheActive.cibleMontant)} {ficheActive.cibleSuffixe}
+                                </PrivateAmount>
+                            </div>
+                            <div className="rounded-lg bg-surface px-3 py-1.5 border border-bordure">
+                                <div className="text-[10px] uppercase tracking-wider text-ink-400">{ficheActive.plafondOuRevenuLabel}</div>
+                                <PrivateAmount className="text-xs sm:text-sm font-bold text-ink-50">
+                                    {cad(ficheActive.plafondOuRevenuMontant)}
+                                </PrivateAmount>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {ficheActive.etapesConcretes.map((etape, idx) => (
+                            <div
+                                key={etape.titre}
+                                className="rounded-xl bg-surface border border-bordure p-3 flex flex-col justify-between gap-2"
+                            >
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-5 h-5 rounded-full bg-repere-fond text-repere font-mono text-[11px] font-bold inline-flex items-center justify-center shrink-0">
+                                            {/* NOMBRE-NON-MONETAIRE : numéro d'étape 1, 2, 3 */}
+                                            {idx + 1}
+                                        </span>
+                                        <span className="text-xs font-bold text-ink-50 leading-snug">
+                                            {etape.titre}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-ink-200 leading-relaxed">
+                                        {etape.explication}
+                                    </p>
+                                </div>
+                                <div className="pt-2 border-t border-bordure text-[11px] text-repere font-medium">
+                                    Impact : {etape.impact}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* 2. Explorateur chronologique de la projection (Décennie → 3 ans → Année → Trimestre → Mois) */}
+            <div className="pt-2 border-t border-bordure">
+                <div className="text-xs font-bold text-ink-200 mb-2">
+                    Explorer les flux projetés par période (Décennie → Année → Mois)
+                </div>
 
             {/* Fil d'Ariane : clique pour remonter d'un niveau. */}
             <nav aria-label="Niveau du plan" className="flex items-center flex-wrap gap-1 text-tiny mb-3">
@@ -240,6 +560,7 @@ export const ActionPlanDrilldown: React.FC<ActionPlanDrilldownProps> = ({ chartD
                     </div>
                 </div>
             )}
+            </div>
         </div>
     );
 };

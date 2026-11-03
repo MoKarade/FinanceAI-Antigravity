@@ -36,7 +36,7 @@ describe('gemini.ts — transport Google Gemini', () => {
         expect(fetchSpy).toHaveBeenCalled();
         const call = fetchSpy.mock.calls[0] as unknown[];
         const url = targetOf(call);
-        expect(url).toContain('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent');
+        expect(url).toContain('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent');
         expect(url).not.toContain('key=');
         expect(url).not.toContain('AIzaSy-test-perso');
         const h = headersOf(call);

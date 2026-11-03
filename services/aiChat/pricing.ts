@@ -59,10 +59,13 @@ export interface TarifModele {
 /** USD par MILLION de tokens, par id de modèle COMPLET (ai.google.dev/gemini-api/docs/pricing).
  *  ⚠️ Doit couvrir TOUS les ids de MODEL_IDS (services/aiChat/models) — parité verrouillée par test. */
 export const PRICING_USD_PER_MTOK: Record<string, TarifModele> = {
+    'gemini-3.5-flash-lite': { input: 0.3, output: 2.5, releveLe: '2026-11-03', aliasFlottant: true },
+    'gemini-3.8-flash': { input: 0.75, output: 3.75, releveLe: '2026-11-03', aliasFlottant: true, lectureCache: 0.1 },
+    'gemini-4-argon': { input: 2.0, output: 10.0, releveLe: '2026-11-03', aliasFlottant: true, lectureCache: 0.05 },
+    // Entrées de rétrocompatibilité pour les historiques de conversation antérieurs :
     'gemini-2.5-flash-lite': { input: 0.1, output: 0.4, releveLe: '2026-10-28', aliasFlottant: true },
     'gemini-2.5-flash': { input: 0.3, output: 2.5, releveLe: '2026-10-28', aliasFlottant: true, lectureCache: 0.05 },
     'gemini-2.5-pro': { input: 1.25, output: 10, releveLe: '2026-10-28', aliasFlottant: true, lectureCache: 0.05 },
-    // Entrées de rétrocompatibilité pour les historiques de conversation antérieurs à la migration Gemini :
     'claude-haiku-5-5': { input: 0.1, output: 0.5, releveLe: '2026-10-28', aliasFlottant: true },
     'claude-sonnet-5-5': { input: 2, output: 10, releveLe: '2026-10-28', aliasFlottant: true, lectureCache: 0.05 },
     'claude-opus-5-5': { input: 4, output: 20, releveLe: '2026-10-28', aliasFlottant: true, lectureCache: 0.05 },
@@ -76,6 +79,21 @@ export const PRICING_USD_PER_MTOK: Record<string, TarifModele> = {
  * alias (sinon l'inventaire affirme au présent un défaut déjà réglé, et se lit comme un fait).
  */
 export const ALIAS_A_EPINGLER: ReadonlyArray<{ id: string; raison: string }> = [
+    {
+        id: 'gemini-3.5-flash-lite',
+        raison: "identifiant canonique stable sans suffixe AAAAMMJJ publié par Google Gemini ; "
+            + "traité comme alias flottant pour que toute révision tarifaire soit re-vérifiée.",
+    },
+    {
+        id: 'gemini-3.8-flash',
+        raison: "identifiant canonique stable sans suffixe AAAAMMJJ publié par Google Gemini ; "
+            + "traité comme alias flottant pour que toute révision tarifaire soit re-vérifiée.",
+    },
+    {
+        id: 'gemini-4-argon',
+        raison: "identifiant canonique stable sans suffixe AAAAMMJJ publié par Google Gemini ; "
+            + "traité comme alias flottant pour que toute révision tarifaire soit re-vérifiée.",
+    },
     {
         id: 'gemini-2.5-flash-lite',
         raison: "identifiant canonique stable sans suffixe AAAAMMJJ publié par Google Gemini ; "

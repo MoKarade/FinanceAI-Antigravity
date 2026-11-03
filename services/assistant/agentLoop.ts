@@ -224,7 +224,7 @@ export async function executerTourLocal(
             .filter((_, idx) => idx % pas === 0 || idx === chartData.length - 1)
             .slice(0, 10)
             .map((pt) => {
-                const total = Number(pt.Total);
+                const total = Number(pt.NetWorth ?? pt.Total);
                 return {
                     etiquette: pt.age != null ? `${String(pt.age)} ans` : String(pt.year ?? ''),
                     valeurs: { net: Number.isFinite(total) ? Math.round(total) : null },
@@ -237,6 +237,28 @@ export async function executerTourLocal(
             unite: 'cad',
             series: [{ cle: 'net', libelle: 'Patrimoine net' }],
             points,
+        });
+    } else if (q.includes('plan') || q.includes('action') || q.includes('jour') || q.includes('semaine') || q.includes('décennie') || q.includes('decennie') || q.includes('quoi faire')) {
+        const epMensuelle = Math.max(0, Math.round(ctx.epargneMensuelle));
+        const epJour = Math.round(epMensuelle / 30);
+        const epSemaine = Math.round((epMensuelle * 12) / 52);
+        const epAn = Math.round(epMensuelle * 12);
+        const epDecennie = Math.round(epAn * 10);
+        blocs.push({
+            type: 'tableau',
+            titre: 'Plan d’action par horizon (Jour · Semaine · Mois · Année · Décennie)',
+            colonnes: [
+                { cle: 'horizon', libelle: 'Horizon', unite: 'texte' },
+                { cle: 'cible', libelle: 'Épargne cible', unite: 'cad' },
+                { cle: 'geste', libelle: 'Action prioritaire à poser', unite: 'texte' },
+            ],
+            lignes: [
+                { horizon: 'Par jour', cible: epJour, geste: 'Respecter le plafond quotidien de dépenses courantes hors factures fixes' },
+                { horizon: 'Par semaine', cible: epSemaine, geste: 'Virement automatique du jeudi (jour de paie) vers CELI / REER' },
+                { horizon: 'Par mois', cible: epMensuelle, geste: 'Investir en FNB indiciels (CELI/REER) et vérifier la parité Budget ↔ Transactions' },
+                { horizon: 'Par année', cible: epAn, geste: 'Maximiser les droits CELI/REER et réinvestir le remboursement d’impôt ARC/RQ' },
+                { horizon: 'Par décennie', cible: epDecennie, geste: 'Rééquilibrer le portefeuille et préparer le décaissement retraite optimal' },
+            ],
         });
     } else if (q.includes('budget') || q.includes('dépense') || q.includes('depense') || q.includes('épargne') || q.includes('epargne')) {
         const depenses = Math.max(0, ctx.revenuNetMensuel - ctx.epargneMensuelle);
@@ -290,6 +312,30 @@ export async function executerTourLocal(
             ],
             lignes: actifs.map((a) => ({ nom: a.nom, enveloppe: a.enveloppe, valeur: Math.round(a.valeur) })),
         });
+    }
+
+    const txs = [...(state.transactions ?? [])].sort((a, b) => b.date.localeCompare(a.date));
+    if (txs.length > 0 && (q.includes('transaction') || q.includes('octobre') || q.includes('novembre') || q.includes('dépense') || q.includes('depense') || q.includes('opération'))) {
+        const filtreMois = q.includes('octobre') ? '-10-' : q.includes('novembre') ? '-11-' : null;
+        const txsCibles = (filtreMois ? txs.filter((t) => t.date.includes(filtreMois)) : txs).slice(0, 8);
+        if (txsCibles.length > 0) {
+            blocs.push({
+                type: 'tableau',
+                titre: filtreMois === '-10-' ? 'Transactions d’octobre' : filtreMois === '-11-' ? 'Transactions de novembre' : 'Dernières transactions enregistrées',
+                colonnes: [
+                    { cle: 'date', libelle: 'Date', unite: 'texte' },
+                    { cle: 'marchand', libelle: 'Marchand', unite: 'texte' },
+                    { cle: 'categorie', libelle: 'Catégorie', unite: 'texte' },
+                    { cle: 'montant', libelle: 'Montant', unite: 'cad' },
+                ],
+                lignes: txsCibles.map((t) => ({
+                    date: t.date,
+                    marchand: t.payee,
+                    categorie: t.category,
+                    montant: Number.isFinite(t.amount) ? Math.round(t.amount * 100) / 100 : null,
+                })),
+            });
+        }
     }
 
     if (synthese.pointsCles.length > 0) {

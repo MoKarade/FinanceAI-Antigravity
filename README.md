@@ -4,7 +4,7 @@
 
 # FinanceAI
 
-Application personnelle de planification financière complète (architecture 100 % Google) : suivi en temps réel, projections fiscales canadiennes et québécoises (ARC + Revenu Québec), simulation Monte Carlo de la retraite, assistant IA **Google Gemini**, synchronisation **Cloud Firestore** & **Google Drive**, authentification **Firebase Auth / Google Sign-In**, interface **Google Finance Beta** (3 colonnes : Listes & Portefeuilles, Courbe & Avoirs, Recherche Gemini).
+Application personnelle de planification financière complète (architecture 100 % Google) : suivi en temps réel, projections fiscales canadiennes et québécoises (ARC + Revenu Québec), simulation Monte Carlo de la retraite, plan d'action opérationnel en 5 horizons (jour, semaine, mois, année, décennie), assistant IA **Google Gemini** (`gemini-3.8-flash` & `gemini-4-argon`), synchronisation **Cloud Firestore** & **Google Drive**, authentification **Firebase Auth / Google Sign-In**, interface **Google Finance Beta** (3 colonnes équilibrées : Listes & Portefeuilles, Courbe & Avoirs, Recherche Gemini).
 
 ## 🚀 Lancer localement
 

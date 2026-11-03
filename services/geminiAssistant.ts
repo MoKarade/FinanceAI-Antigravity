@@ -141,7 +141,8 @@ export function extraireContextePatrimonial(state: AppState): ContextePatrimonia
     const pointRetraite =
         chartData.find((p: Record<string, unknown>) => Number(p.age) === ageRetraiteCible) ??
         chartData[chartData.length - 1];
-    const totalProjete = pointRetraite ? Number((pointRetraite as unknown as Record<string, unknown>).Total) : NaN;
+    const recRetraite = pointRetraite as unknown as Record<string, unknown> | undefined;
+    const totalProjete = recRetraite ? Number(recRetraite.NetWorth ?? recRetraite.Total) : NaN;
     const patrimoineProjeteRetraite = Number.isFinite(totalProjete) ? totalProjete : null;
 
     return {
@@ -184,13 +185,32 @@ export function genererSyntheseLocaleGemini(
               ? Math.round((ctx.epargneMensuelle / ctx.salaireBrutMensuel) * 100)
               : 0;
 
+    if (q.includes('plan') || q.includes('action') || q.includes('jour') || q.includes('semaine') || q.includes('mois') || q.includes('décennie') || q.includes('decennie') || q.includes('quoi faire')) {
+        const epargneJour = Math.round(ctx.epargneMensuelle / 30);
+        const epargneSemaine = Math.round((ctx.epargneMensuelle * 12) / 52);
+        const epargneAn = Math.round(ctx.epargneMensuelle * 12);
+        return {
+            texte: `Plan d’action Gemini 3.8 Flash pour ${ctx.prenom} : ta feuille de route décline ton épargne de ${promptCad(ctx.epargneMensuelle)}/mois en gestes concrets par jour (${promptCad(epargneJour)}/j), par semaine (${promptCad(epargneSemaine)}/sem) et par année (${promptCad(epargneAn)}/an).`,
+            pointsCles: [
+                `Par jour & semaine : plafonne les dépenses variables courantes et vire automatiquement ${promptCad(epargneSemaine)} chaque jeudi de paie vers tes comptes enregistrés.`,
+                `Par mois & année : répartis ${promptCad(ctx.epargneMensuelle)}/mois entre CELI (${promptCad(ctx.celi)} accumulé) et REER (${promptCad(ctx.reer)} accumulé, taux marginal ${ctx.tauxMarginalPct.toFixed(1)} %).`,
+                `Par décennie : vise le cap de retraite à ${ctx.ageRetraiteCible} ans (${promptCad(cibleRetraite)}) avec décaissement fiscalement optimal (CELI → Non-enregistré → REER/FERR + RRQ/PSV).`,
+            ],
+            actionsSuggerees: [
+                { label: 'Ouvrir le Plan d’action (Futur)', tab: Tab.FUTURE },
+                { label: 'Ajuster mon Budget', tab: Tab.BUDGET },
+            ],
+            source: 'moteur-local',
+        };
+    }
+
     if (q.includes('impôt') || q.includes('impot') || q.includes('celi') || q.includes('reer') || q.includes('fiscal')) {
         const priorite =
             ctx.salaireBrutMensuel * 12 > 75_000
                 ? `Cotiser en priorité au REER pour réduire ton revenu imposable au taux marginal combiné de ${ctx.tauxMarginalPct.toFixed(1)} % (Québec + Fédéral), puis réinvestir le remboursement d’impôt en CELI.`
                 : 'Prioriser le CELI pour conserver une flexibilité totale à l’abri de l’impôt, tout en accumulant tes droits REER pour les années à plus haut revenu.';
         return {
-            texte: `Analyse Gemini 2.5 Flash (Fiscalité & Comptes enregistrés) : ton portefeuille enregistré cumule ${promptCad(ctx.celi)} en CELI et ${promptCad(ctx.reer)} en REER.`,
+            texte: `Analyse Gemini 3.8 Flash (Fiscalité & Comptes enregistrés) : ton portefeuille enregistré cumule ${promptCad(ctx.celi)} en CELI et ${promptCad(ctx.reer)} en REER.`,
             pointsCles: [
                 priorite,
                 `Revenu brut annuel du ménage : ${promptCad(ctx.salaireBrutMensuel * 12)}/an (impôt estimé ARC + Revenu Québec : ${promptCad(ctx.impotAnnuelEstime)}/an).`,
@@ -204,9 +224,9 @@ export function genererSyntheseLocaleGemini(
         };
     }
 
-    if (q.includes('budget') || q.includes('dépense') || q.includes('depense') || q.includes('épargne') || q.includes('epargne')) {
+    if (q.includes('budget') || q.includes('dépense') || q.includes('depense') || q.includes('épargne') || q.includes('epargne') || q.includes('transaction') || q.includes('octobre') || q.includes('novembre')) {
         return {
-            texte: `Analyse Gemini 2.5 Flash (Trésorerie & Budget) : ta capacité d’épargne mensuelle est estimée à ${promptCad(ctx.epargneMensuelle)}/mois (taux d’épargne d’environ ${tauxEpargne} %).`,
+            texte: `Analyse Gemini 3.8 Flash (Trésorerie, Transactions & Budget) : ta capacité d’épargne mensuelle est estimée à ${promptCad(ctx.epargneMensuelle)}/mois (taux d’épargne d’environ ${tauxEpargne} %).`,
             pointsCles: [
                 `Liquidités disponibles : ${promptCad(ctx.liquidites)} pour ton coussin de sécurité.`,
                 ctx.dettesTotales > 0
@@ -228,7 +248,7 @@ export function genererSyntheseLocaleGemini(
                 ? `Patrimoine projeté par le moteur à ${ctx.ageRetraiteCible} ans : ${promptCad(ctx.patrimoineProjeteRetraite)}.`
                 : `Ouvre l’onglet Futur pour lancer la simulation Monte Carlo complète jusqu’à ${ctx.ageRetraiteCible} ans.`;
         return {
-            texte: `Analyse Gemini 2.5 Flash (Trajectoire Retraite à ${ctx.ageRetraiteCible} ans) : tu as atteint ${progressionRetraite} % de ton capital cible (${promptCad(cibleRetraite)}) à ${anneesAvantRetraite} ans de l’échéance.`,
+            texte: `Analyse Gemini 3.8 Flash (Trajectoire Retraite à ${ctx.ageRetraiteCible} ans) : tu as atteint ${progressionRetraite} % de ton capital cible (${promptCad(cibleRetraite)}) à ${anneesAvantRetraite} ans de l’échéance.`,
             pointsCles: [
                 `Valeur nette actuelle : ${promptCad(ctx.patrimoineNet)} pour une rente cible de ${promptCad(ctx.revenuRetraiteCible)}/mois.`,
                 ligneProjection,
@@ -243,7 +263,7 @@ export function genererSyntheseLocaleGemini(
     }
 
     return {
-        texte: `Synthèse Gemini 2.5 Flash pour ${ctx.prenom} : ta valeur nette s’établit à ${promptCad(ctx.patrimoineNet)}, soutenue par ${promptCad(ctx.celi + ctx.reer + ctx.nonEnregistre)} de placements et ${promptCad(ctx.immobilierNet)} d’équité immobilière.`,
+        texte: `Synthèse Gemini 3.8 Flash pour ${ctx.prenom} : ta valeur nette s’établit à ${promptCad(ctx.patrimoineNet)}, soutenue par ${promptCad(ctx.celi + ctx.reer + ctx.nonEnregistre)} de placements et ${promptCad(ctx.immobilierNet)} d’équité immobilière.`,
         pointsCles: [
             `Progression vers l’indépendance financière (${ctx.ageRetraiteCible} ans) : ${progressionRetraite} % de la cible (${promptCad(cibleRetraite)}).`,
             `Répartition : CELI ${promptCad(ctx.celi)} · REER ${promptCad(ctx.reer)} · Liquidités ${promptCad(ctx.liquidites)}.`,
@@ -266,7 +286,7 @@ export function genererSyntheseLocaleGemini(
  * une variable d'environnement `VITE_*` (elle serait inlinée dans le bundle public).
  */
 export function cleGemini(state: Pick<AppState, 'apiKeys'>): string {
-    return state.apiKeys?.gemini?.trim() ?? '';
+    return (state.apiKeys?.gemini ?? '').replace(/^["'\s]+|["'\s]+$/g, '');
 }
 
 /**

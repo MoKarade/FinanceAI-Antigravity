@@ -80,8 +80,9 @@ export function causeErreurIa(err: unknown, opts: { cleAbsente?: boolean } = {})
     // ⚠️ `undefined` veut dire « pas de réponse HTTP du tout » — donc réseau. Le confondre avec un
     // 4xx enverrait vérifier une clé alors que rien n'a quitté la machine.
     if (status === undefined) return 'reseau';
-    if (status === 401 && String((err as { message?: unknown } | null)?.message ?? '').includes(MARQUEUR_SESSION_ACCESS)) return 'session-access';
-    if (status === 401 || status === 403) return 'cle-refusee';
+    const msg = String((err as { message?: unknown } | null)?.message ?? '');
+    if (status === 401 && msg.includes(MARQUEUR_SESSION_ACCESS)) return 'session-access';
+    if (status === 401 || status === 403 || (status === 400 && /API_KEY_INVALID|API key not valid/i.test(msg))) return 'cle-refusee';
     if (status === 429) return 'quota';
     if (status === 408) return 'reseau';
     if (status >= 500 && status < 600) return 'service';

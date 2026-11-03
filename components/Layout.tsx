@@ -196,15 +196,18 @@ export const Layout: React.FC<LayoutProps> = ({
             <img src="/icon.svg" alt="" width={30} height={30} className="w-[30px] h-[30px] rounded-[9px] shrink-0" aria-hidden="true" />
             {!isSidebarCollapsed && (
               <div className="flex items-baseline gap-1.5 min-w-0">
-                <span className="text-[15px] font-bold tracking-tight select-none shrink-0" aria-hidden="true">
-                  <span className="gf-logo-b">G</span>
-                  <span className="gf-logo-r">o</span>
-                  <span className="gf-logo-y">o</span>
-                  <span className="gf-logo-b">g</span>
-                  <span className="gf-logo-g">l</span>
-                  <span className="gf-logo-r">e</span>
+                <p className="sr-only">FinanceAI</p>
+                <span className="text-[15px] font-bold tracking-tight select-none truncate" aria-hidden="true">
+                  <span className="gf-logo-b">F</span>
+                  <span className="gf-logo-r">i</span>
+                  <span className="gf-logo-y">n</span>
+                  <span className="gf-logo-b">a</span>
+                  <span className="gf-logo-g">n</span>
+                  <span className="gf-logo-r">c</span>
+                  <span className="gf-logo-y">e</span>
+                  <span className="gf-logo-b">A</span>
+                  <span className="gf-logo-g">I</span>
                 </span>
-                <p className="text-[15px] font-bold text-ink-50 tracking-tight truncate">FinanceAI</p>
                 <span className="gf-badge-nouvelle shrink-0">Beta</span>
               </div>
             )}
@@ -266,9 +269,9 @@ export const Layout: React.FC<LayoutProps> = ({
             onClick={() => setShowGeminiModal(true)}
             title={isSidebarCollapsed ? 'Conseiller Gemini' : undefined}
             aria-label="Ouvrir le conseiller financier Gemini"
-            className="touch-target h-10 px-2.5 rounded-xl flex items-center justify-center gap-2 text-meta font-semibold bg-repere-doux text-repere border border-bordure hover:opacity-90 transition-opacity focus-ring"
+            className="touch-target gemini-rainbow-btn h-10 px-2.5 rounded-xl flex items-center justify-center gap-2 text-meta font-semibold hover:opacity-95 transition-opacity focus-ring"
           >
-            <Icon name="sparkles" size={16} className="shrink-0" aria-hidden="true" />
+            <Icon name="sparkles" size={16} className="gemini-rainbow-sparkle shrink-0" aria-hidden="true" />
             <span className={isSidebarCollapsed ? 'sr-only' : 'truncate'}>Conseiller Gemini</span>
           </button>
           <button
@@ -344,14 +347,16 @@ export const Layout: React.FC<LayoutProps> = ({
               )}
               <div className="hidden sm:inline-flex items-baseline gap-1 select-none shrink-0 pr-1.5 border-r border-bordure" aria-hidden="true">
                 <span className="text-xs font-bold tracking-tight">
-                  <span className="gf-logo-b">G</span>
-                  <span className="gf-logo-r">o</span>
-                  <span className="gf-logo-y">o</span>
-                  <span className="gf-logo-b">g</span>
-                  <span className="gf-logo-g">l</span>
-                  <span className="gf-logo-r">e</span>
+                  <span className="gf-logo-b">F</span>
+                  <span className="gf-logo-r">i</span>
+                  <span className="gf-logo-y">n</span>
+                  <span className="gf-logo-b">a</span>
+                  <span className="gf-logo-g">n</span>
+                  <span className="gf-logo-r">c</span>
+                  <span className="gf-logo-y">e</span>
+                  <span className="gf-logo-b">A</span>
+                  <span className="gf-logo-g">I</span>
                 </span>
-                <span className="text-xs font-medium text-ink-200">Finance</span>
               </div>
               <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-ink-400 truncate">
                 <span className="font-semibold uppercase tracking-wider text-repere">
