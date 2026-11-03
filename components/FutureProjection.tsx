@@ -1656,7 +1656,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
                         <span className="gf-ticker-symbol">FUTUR:CAD · MONTE CARLO</span>
-                        <span className="gf-badge-nouvelle">Google Finance Beta</span>
+                        <span className="gf-badge-nouvelle">FinanceAI</span>
                     </div>
                     <div className="gf-subtab-bar overflow-x-auto no-scrollbar max-w-full">
                         <button

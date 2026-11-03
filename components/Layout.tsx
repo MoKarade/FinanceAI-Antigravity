@@ -503,7 +503,7 @@ export const Layout: React.FC<LayoutProps> = ({
         <div ref={panneauPlusRef} className={`lg:hidden fixed inset-x-0 bottom-[64px] ${isTestMode ? 'top-10' : 'top-0'} z-90 bg-fond overflow-y-auto px-4 pt-4 pb-6 flex flex-col gap-3.5 animate-fade-in`}>
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-ink-50">Plus</h2>
-            <span className="gf-badge-nouvelle">Google Finance Beta</span>
+            <span className="gf-badge-nouvelle">FinanceAI</span>
           </div>
           <button
             type="button"
