@@ -15,13 +15,14 @@ import { join } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { applyDocument, type CashBalancePayload } from '../../mcp/ingest/applyDocument';
 import { computeStartingCash } from '../../services/projection/buildSimulationParams';
-import { FileStateSource, buildDefaultAppState, loadAppStateFromSource } from '../../mcp/state/loadAppState';
+import { FileStateSource, loadAppStateFromSource } from '../../mcp/state/loadAppState';
+import { etatFictif } from '../helpers/etatFictif';
 import { makeStateStore, type StateStore } from '../../mcp/state/stateStore';
 import { registerSetCash } from '../../mcp/tools/setCash.tool';
 import { confirmer } from './_ecritureMcp';
 import type { AppState, Transaction } from '../../types';
 
-const baseState = (): AppState => buildDefaultAppState();
+const baseState = (): AppState => etatFictif();
 const setCash = (targetCad: number): CashBalancePayload => ({ kind: 'cash_balance', targetCad });
 
 // État avec d'AUTRES soldes de départ + des transactions (dont un doublon et un transfert à EXCLURE).

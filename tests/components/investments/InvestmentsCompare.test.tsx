@@ -9,16 +9,7 @@ import { Investments } from '../../../components/Investments';
 import { useFinanceStore } from '../../../store/useFinanceStore';
 import type { Asset, ProjectionConfig, BudgetConfig, User } from '../../../types';
 
-vi.mock('recharts', async () => {
-    const React = await import('react');
-    const P = ({ children }: { children?: React.ReactNode }) => React.createElement('div', null, children);
-    return {
-        ResponsiveContainer: P, PieChart: P, BarChart: P, LineChart: P, AreaChart: P, ComposedChart: P,
-        Pie: () => null, Bar: () => null, Area: () => null, Line: () => null, Cell: () => null,
-        Legend: () => null, ReferenceLine: () => null,
-        XAxis: () => null, YAxis: () => null, Tooltip: () => null, CartesianGrid: () => null,
-    };
-});
+vi.mock('recharts', async () => (await import('../../helpers/fauxRecharts')).fauxRecharts());
 // Sonde de la modale : rend les symbols reçus quand isOpen — le contrat testé est le câblage.
 vi.mock('../../../components/investments/StockComparisonModal', async () => {
     const React = await import('react');

@@ -12,10 +12,16 @@ import base from './vitest.config';
 // Pour la régénérer : grep -rlE "utils/tax['\"]|services/tax['\"]|taxEstimate|taxResidual|projection/(taxApril|taxDecember|taxJanuary|latentTax|lifetimeTax)" tests --include=*.ts
 // ⚠️ PAS de mergeConfig : il CONCATÈNE les tableaux, et `include` redeviendrait « tous les tests »
 // (mesuré : 6 440 tests au lieu du sous-ensemble). On remplace donc `include`, le reste est hérité.
+// Depuis la refonte du 2026-11-03, `vitest.config.ts` déclare deux `projects` (node / jsdom) : on les
+// RETIRE ici, sinon Vitest exécuterait les projets (toute la suite) au lieu de ce sous-ensemble.
+const { projects: _projets, ...testDeBase } = base.test ?? {};
+void _projets;
+
 export default defineConfig({
   ...base,
   test: {
-    ...base.test,
+    ...testDeBase,
+    setupFiles: ['./tests/setup.ts'],
     // Environnement `node`, pas jsdom : le moteur fiscal est du calcul pur, et jsdom coûtait 92 %
     // du temps (mesuré : 766 tests = 3,7 s de tests pour 47 s de mise en place). Décisif pour
     // les mutants « statiques » (constantes de module : taux, paliers), qui rejouent TOUS les tests.
@@ -27,7 +33,6 @@ export default defineConfig({
       "tests/services/cashflowAllocation.test.ts",
       "tests/services/celiappRoomEtRamq.test.ts",
       "tests/services/childrenReee.test.ts",
-      "tests/services/claude.promptPaliers.test.ts",
       "tests/services/coupleTaxation.test.ts",
       "tests/services/divDerivedBases.test.ts",
       "tests/services/dividendeReputeStepUpAcb.test.ts",

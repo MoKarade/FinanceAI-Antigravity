@@ -34,6 +34,7 @@ import { FinancialGoalsProgressSection } from './ui/FinancialGoalProgressRing';
 import { MonthlySpendingVsBudgetChart } from './dashboard/MonthlySpendingVsBudgetChart';
 import { HubConnexionsModal } from './future/HubConnexionsModal';
 import { useFirebaseAuth } from './auth/FirebaseAuthGate';
+import { maybeRunDailyFintableSync } from '../services/fintable/autoSync';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { prefetchTab } from '../utils/tabPrefetch';
 
@@ -914,6 +915,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         setRestaurationEnCours(true);
         try {
             await restoreInitialDataNow();
+            await maybeRunDailyFintableSync({ ignoreCooldown: true });
         } finally {
             setRestaurationEnCours(false);
         }

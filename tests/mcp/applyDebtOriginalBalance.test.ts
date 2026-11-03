@@ -16,13 +16,13 @@ import { formatCAD } from '../../utils/format';
 const escRx = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 import { describe, it, expect } from 'vitest';
 import { applyDocument, type DebtPayload } from '../../mcp/ingest/applyDocument';
-import { buildDefaultAppState } from '../../mcp/state/loadAppState';
+import { etatFictif } from '../helpers/etatFictif';
 import { applyDebtSpec } from '../../mcp/tools/applyDebt.spec';
 import { amortirDettePassee, supplementAmortiAuMoisAbsolu } from '../../services/projection/debtAmortization';
 import { moisAbsolu } from '../../services/projection/debtSchedule';
 import type { AppState, Debt } from '../../types';
 
-const baseState = (): AppState => buildDefaultAppState();
+const baseState = (): AppState => etatFictif();
 
 /** Un contrat type, tel qu'une extraction PDF le rendrait : tous les champs que la courbe exige. */
 const pretAuto = (over: Partial<DebtPayload> = {}): DebtPayload => ({

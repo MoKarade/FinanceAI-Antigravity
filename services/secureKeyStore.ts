@@ -202,7 +202,7 @@ export const getOrCreateDeviceKey = async (): Promise<CryptoKey> => {
  * La préservation vit ICI, dans l'écriture elle-même, et non chez les appelants : le coffre est la
  * seule voie d'écriture, c'est donc le seul endroit qu'aucun appelant futur ne peut oublier.
  */
-const DEVICE_LOCAL_KEY_FIELDS = ['fintable'] as const;
+const DEVICE_LOCAL_KEY_FIELDS = ['fintable', 'gemini'] as const;
 
 /**
  * Chiffre et persiste les clés API. Génère la clé de device au premier appel.

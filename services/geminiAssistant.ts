@@ -261,6 +261,15 @@ export function genererSyntheseLocaleGemini(
 }
 
 /**
+ * Clé Google Gemini de l'utilisateur — `apiKeys.gemini` UNIQUEMENT (IndexedDB chiffré).
+ * Aucun repli : ni sur la clé héritée `apiKeys.anthropic` (migrée vers `gemini` par le store), ni sur
+ * une variable d'environnement `VITE_*` (elle serait inlinée dans le bundle public).
+ */
+export function cleGemini(state: Pick<AppState, 'apiKeys'>): string {
+    return state.apiKeys?.gemini?.trim() ?? '';
+}
+
+/**
  * Interroge Google Gemini 2.5 Flash avec le contexte patrimonial réel de l'utilisateur.
  * Respecte strictement le mode discret (`isPrivacyMode`).
  */
@@ -276,11 +285,7 @@ export async function interrogerAssistantGemini(
 
     const ctx = extraireContextePatrimonial(state);
     const syntheseLocale = genererSyntheseLocaleGemini(question, ctx);
-    const apiKey =
-        state.apiKeys?.gemini?.trim()
-        || state.apiKeys?.anthropic?.trim()
-        || (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim()
-        || '';
+    const apiKey = cleGemini(state);
 
     if (!apiKey) {
         return syntheseLocale;

@@ -2,15 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { useFinanceStore } from '../../../store/useFinanceStore';
 import { CoupleOptimizationCard } from '../../../components/tax/CoupleOptimizationCard';
+import { etatInitialStore, reinitialiserStore } from '../../helpers/storeFictif';
 
 vi.mock('../../../services/gemini', () => ({
     getCoupleOptimizationStrategies: vi.fn(),
 }));
 
-const initialState = useFinanceStore.getState();
+const initialState = etatInitialStore();
 
 beforeEach(() => {
-    useFinanceStore.setState(initialState, true);
+    reinitialiserStore();
     vi.clearAllMocks();
 });
 

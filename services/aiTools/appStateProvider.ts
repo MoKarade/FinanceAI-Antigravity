@@ -10,10 +10,12 @@
 // Le pick des clés vient de `buildDefaultAppState()` (la liste canonique des champs de données) —
 // jamais de liste maintenue à la main (drift garanti sinon).
 
-import type { AppState } from '../../types';
+import type { AppState, Tab } from '../../types';
 import { buildDefaultAppState, normalizeAppState } from '../../mcp/state/appStateDefaults';
 import { validateAppStateShape } from '../../mcp/state/appStateSchema';
 import { useFinanceStore } from '../../store/useFinanceStore';
+import { extrairePersistable } from '../../store/optionsPersistance';
+import { modeDonneesFictives } from '../../store/modeTestActif';
 
 /**
  * Snapshot PLAT, VALIDÉ et CLONÉ de l'état courant. Trois protections (findings panel 2026-07-21) :
@@ -44,3 +46,51 @@ export function snapshotAppState(): AppState {
 
 /** StateProvider (contrat des specs) — capturé UNE fois par appel (snapshot cohérent). */
 export const appStateProvider = async (): Promise<AppState> => snapshotAppState();
+
+/**
+ * [ASSISTANT-AGENT] Façade ÉTROITE du store pour l'assistant agentique (`services/assistant/`).
+ * Pourquoi ici : ce module est déjà inscrit à l'inventaire fermé des services qui lisent le store
+ * (`tests/services/storeCouplingBoundary.test.ts`) — l'assistant passe par lui plutôt que d'ajouter
+ * un nouvel importeur. Mêmes impératifs que le snapshot : `apiKeys` n'est JAMAIS lu ni écrit ici.
+ */
+export const facadeStoreAssistant = {
+    /** Copie profonde d'une tranche du store vivant (`undefined` si absente). */
+    lire(cle: keyof AppState): unknown {
+        if (cle === 'apiKeys') return undefined;
+        const valeur: unknown = useFinanceStore.getState()[cle];
+        return valeur === undefined ? undefined : structuredClone(valeur);
+    },
+    /** Données persistées (forme du blob local), sans fonctions ni clés API. */
+    persistables(): Record<string, unknown> {
+        const out: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(extrairePersistable(useFinanceStore.getState()))) {
+            if (typeof v !== 'function') out[k] = v;
+        }
+        return out;
+    },
+    /** Écrit des tranches (jamais `apiKeys`) avec un `lastUpdate` frais. */
+    ecrire(patch: Partial<AppState>): void {
+        const { apiKeys: _ak, ...sur } = patch;
+        void _ak;
+        useFinanceStore.getState().setAppState({ ...sur, lastUpdate: Date.now() });
+    },
+    ouvrirOnglet(onglet: Tab): void {
+        useFinanceStore.getState().setActiveTab(onglet);
+    },
+    activerMonteCarlo(actif: boolean): void {
+        useFinanceStore.getState().setProjectionRunMC(actif);
+    },
+    /** Source unique du futur (`lastProjection.chartData`) et statut du moteur. */
+    etatProjection(): { statut: string; refus: string | null; chartData: unknown[] | null } {
+        const s = useFinanceStore.getState();
+        const chart = s.lastProjection?.chartData;
+        return { statut: s.projectionStatus, refus: s.projectionRefus ?? null, chartData: Array.isArray(chart) ? chart : null };
+    },
+    tauxChange(): { taux: unknown; source: string | null; estime: boolean | null } {
+        const s = useFinanceStore.getState();
+        return { taux: structuredClone(s.fxRates), source: s.fxRatesSource ?? null, estime: s.fxRatesEstimated ?? null };
+    },
+    donneesFictives(): boolean {
+        return modeDonneesFictives();
+    },
+};

@@ -75,6 +75,68 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    // Identifiant de mois de transactions : AAAA-MM (mois 01 à 12)
+    function isValidMonthId(monthId) {
+      return monthId is string && monthId.matches('^[0-9]{4}-(0[1-9]|1[0-2])$');
+    }
+
+    // Bloc JSON d'un mois : chaîne de 900 000 caractères au plus
+    function isValidJsonChunk(chunk) {
+      return chunk is string && chunk.size() <= 900000;
+    }
+
+    // Validation stricte d'un mois de transactions
+    // (workspaces/{userId}/transactionMonths/{monthId})
+    // Champs : ownerId (== uid == userId), month (== monthId), count (int 0..5000),
+    // jsonChunks (liste de 1 à 20 blocs ; le premier et le dernier sont vérifiés,
+    // les règles n'ayant pas de boucle — le plafond Firestore de 1 Mio borne le reste),
+    // revisionId (1..64, ^[a-zA-Z0-9_-]+$), updatedAt (timestamp).
+    function isValidTransactionMonth(data, userId, monthId) {
+      return data.keys().hasAll(['ownerId', 'month', 'count', 'jsonChunks', 'revisionId', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'month', 'count', 'jsonChunks', 'revisionId', 'updatedAt'])
+        && data.ownerId is string
+        && data.ownerId == request.auth.uid
+        && data.ownerId == userId
+        && data.month is string
+        && data.month == monthId
+        && data.count is int
+        && data.count >= 0
+        && data.count <= 5000
+        && data.jsonChunks is list
+        && data.jsonChunks.size() >= 1
+        && data.jsonChunks.size() <= 20
+        && isValidJsonChunk(data.jsonChunks[0])
+        && isValidJsonChunk(data.jsonChunks[data.jsonChunks.size() - 1])
+        && data.revisionId is string
+        && data.revisionId.size() >= 1
+        && data.revisionId.size() <= 64
+        && data.revisionId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.updatedAt is timestamp;
+    }
+
+    // Validation stricte d'une conversation de l'assistant Gemini
+    // (workspaces/{userId}/conversations/{conversationId})
+    // Champs : ownerId (== uid == userId), title (1..200), messagesJson (≤ 900 000),
+    // messageCount (int 0..2000), createdAt et updatedAt (timestamp).
+    // hasOnly interdit toute clé hors liste (aucune clé API ni secret possible).
+    function isValidConversation(data, userId) {
+      return data.keys().hasAll(['ownerId', 'title', 'messagesJson', 'messageCount', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'title', 'messagesJson', 'messageCount', 'createdAt', 'updatedAt'])
+        && data.ownerId is string
+        && data.ownerId == request.auth.uid
+        && data.ownerId == userId
+        && data.title is string
+        && data.title.size() >= 1
+        && data.title.size() <= 200
+        && data.messagesJson is string
+        && data.messagesJson.size() <= 900000
+        && data.messageCount is int
+        && data.messageCount >= 0
+        && data.messageCount <= 2000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     // Collection des profils utilisateurs (isolation PII stricte par propriétaire)
     match /users/{userId} {
       allow get: if isOwner(userId) && isValidId(userId);
@@ -117,6 +179,50 @@ service cloud.firestore {
         && incoming().diff(existing()).affectedKeys().hasOnly(['schemaVersion', 'revisionId', 'statePayload', 'updatedAt']);
 
       allow delete: if isOwner(userId) && isValidId(userId);
+
+      // Sous-collection : un document par mois de transactions (AAAA-MM)
+      // list autorisé au propriétaire pour charger tous les mois de son dossier.
+      match /transactionMonths/{monthId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+
+        allow create: if isOwner(userId)
+          && isValidId(userId)
+          && isValidMonthId(monthId)
+          && isValidTransactionMonth(incoming(), userId, monthId)
+          && incoming().updatedAt == request.time;
+
+        allow update: if isOwner(userId)
+          && isValidId(userId)
+          && isValidMonthId(monthId)
+          && isValidTransactionMonth(incoming(), userId, monthId)
+          && incoming().ownerId == existing().ownerId
+          && incoming().month == existing().month
+          && incoming().updatedAt == request.time;
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidMonthId(monthId);
+      }
+
+      // Sous-collection : historique des conversations de l'assistant Gemini
+      match /conversations/{conversationId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+
+        allow create: if isOwner(userId)
+          && isValidId(userId)
+          && isValidId(conversationId)
+          && isValidConversation(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+
+        allow update: if isOwner(userId)
+          && isValidId(userId)
+          && isValidId(conversationId)
+          && isValidConversation(incoming(), userId)
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time;
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(conversationId);
+      }
     }
   }
 }

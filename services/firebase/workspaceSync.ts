@@ -20,6 +20,15 @@ import {
     saveProtectedDossierSnapshot,
 } from '../dataRecovery';
 import { listBackups, readStoredPayload } from '../backupAuto';
+import {
+    commitWorkspaceWithTransactionMonths,
+    fingerprintsOfRemoteMonths,
+    loadTransactionMonths,
+    mergeTransactionSources,
+    partitionTransactionsByMonth,
+    planTransactionMonthWrites,
+    type RemoteTransactionMonth,
+} from './transactionMonths';
 import { getOrCreateDeviceKey } from '../secureKeyStore';
 import type { AppState } from '../../types';
 
@@ -210,10 +219,10 @@ function buildCompactFirestoreClone(
         });
     }
 
+    // Les `transactions` ne sont JAMAIS coupées : elles vivent par mois dans la sous-collection
+    // `transactionMonths` (voir `transactionMonths.ts`). Seul le dernier recours sur les
+    // `investmentTransactions` subsiste, inchangé.
     if (maxTransactionsCount !== null) {
-        if (Array.isArray(out.transactions) && out.transactions.length > maxTransactionsCount) {
-            out.transactions = out.transactions.slice(0, maxTransactionsCount);
-        }
         if (
             Array.isArray(out.investmentTransactions) &&
             out.investmentTransactions.length > maxTransactionsCount
@@ -232,6 +241,7 @@ function buildCompactFirestoreClone(
  */
 export function packWorkspacePayloadForFirestore(
     statePayload: Record<string, unknown>,
+    options: { transactionsSharded?: boolean } = {},
 ): Record<string, unknown> {
     let compact = buildCompactFirestoreClone(statePayload, 30, null);
     let serialized = JSON.stringify(compact);
@@ -253,10 +263,26 @@ export function packWorkspacePayloadForFirestore(
         jsonChunks.push(serialized.slice(i, i + FIRESTORE_CHUNK_CHAR_SIZE));
     }
 
-    return {
+    const packed: Record<string, unknown> = {
         _packedFormat: 'json_v1',
         jsonChunks,
     };
+    if (options.transactionsSharded) {
+        packed[TRANSACTIONS_SHARDED_MARKER] = true;
+    }
+    return packed;
+}
+
+/** Marqueur posé dans `statePayload` : les transactions vivent dans `transactionMonths`. */
+export const TRANSACTIONS_SHARDED_MARKER = 'transactionsSharded';
+
+/** Vrai si le `statePayload` brut déclare des transactions rangées par mois. */
+export function isTransactionsShardedPayload(rawPayload: unknown): boolean {
+    return (
+        !!rawPayload &&
+        typeof rawPayload === 'object' &&
+        (rawPayload as Record<string, unknown>)[TRANSACTIONS_SHARDED_MARKER] === true
+    );
 }
 
 /**
@@ -335,6 +361,65 @@ export function extractRemoteTimestampMs(
     return null;
 }
 
+interface RemoteWorkspaceSnapshot {
+    /** Le document principal `workspaces/{uid}` existe. */
+    exists: boolean;
+    data: Record<string, unknown> | null;
+    /** Dossier Cloud complet : document principal + toutes les transactions des mois, fusionnées. */
+    payload: Partial<AppState> | null;
+    months: RemoteTransactionMonth[];
+    /** Faux si la sous-collection n'a pas pu être lue (ancien document seulement). */
+    monthsKnown: boolean;
+}
+
+/**
+ * Fusionne le `statePayload` du document principal avec les mois de `transactionMonths`.
+ * Un ancien document qui contient encore `transactions` (sans marqueur) est lu tel quel ;
+ * les mois éventuels s'y ajoutent sans doublon d'`id`.
+ */
+export function buildMergedRemotePayload(
+    rawStatePayload: unknown,
+    months: readonly RemoteTransactionMonth[],
+): Partial<AppState> | null {
+    const mainPayload = unpackWorkspacePayloadFromFirestore(rawStatePayload);
+    if (!mainPayload && months.length === 0) return null;
+    const base = (mainPayload ?? {}) as Partial<AppState>;
+    if (months.length === 0) return base;
+    const merged = mergeTransactionSources(base.transactions as unknown[] | undefined, months);
+    return { ...base, transactions: merged as AppState['transactions'] };
+}
+
+/**
+ * Lit le dossier Cloud complet : document principal + sous-collection des mois.
+ * Si les mois sont illisibles alors que le document les déclare (`transactionsSharded`),
+ * l'erreur remonte : un dossier partiel ne doit jamais passer pour le dossier Cloud.
+ */
+async function loadRemoteWorkspace(uid: string, user: FirebaseUser): Promise<RemoteWorkspaceSnapshot> {
+    const authOpts = { expectedUid: uid, authenticatedUser: user };
+    const snap = await getDocument('workspaces', uid, authOpts);
+    const data = snap.exists && snap.data ? (snap.data as Record<string, unknown>) : null;
+    let months: RemoteTransactionMonth[] = [];
+    let monthsKnown = true;
+    try {
+        months = await loadTransactionMonths(uid, user);
+    } catch (error) {
+        // Ancien document (transactions encore dans le document principal) : on le lit tel quel,
+        // mais l'état des mois reste inconnu et aucune écriture ne partira sans eux.
+        if (data && !isTransactionsShardedPayload(data.statePayload)) {
+            monthsKnown = false;
+        } else {
+            throw error;
+        }
+    }
+    return {
+        exists: !!data,
+        data,
+        payload: data ? buildMergedRemotePayload(data.statePayload, months) : null,
+        months,
+        monthsKnown,
+    };
+}
+
 /**
  * Télécharge et applique immédiatement le dossier patrimonial stocké dans Cloud Firestore (`/workspaces/{uid}`)
  * s'il contient des données réelles hors gabarit de départ.
@@ -349,15 +434,15 @@ export async function pullWorkspaceFromFirestoreNow(user: FirebaseUser): Promise
     if (!SAFE_ID_REGEX.test(uid)) {
         return { restored: false, netWorth: 0, assetsCount: 0, transactionsCount: 0 };
     }
-    const authOpts = { expectedUid: uid, authenticatedUser: user };
     try {
-        const snap = await getDocument('workspaces', uid, authOpts);
-        if (!snap.exists || !snap.data) {
+        const remote = await loadRemoteWorkspace(uid, user);
+        rememberRemoteMonths(uid, remote);
+        if (!remote.exists || !remote.data) {
             return { restored: false, netWorth: 0, assetsCount: 0, transactionsCount: 0 };
         }
         activeWorkspaceDocExists = true;
-        const data = snap.data as Record<string, unknown>;
-        const remotePayload = unpackWorkspacePayloadFromFirestore(data.statePayload);
+        const data = remote.data;
+        const remotePayload = remote.payload;
         if (
             !remotePayload ||
             !hasMeaningfulData(remotePayload) ||
@@ -552,10 +637,26 @@ let activeWorkspaceDocExists = false;
 let lastKnownRevisionId = '';
 let lastSerializedPayload = '';
 let applyingRemoteSnapshot = false;
+/**
+ * Empreintes Cloud des mois de `transactionMonths` (par uid). `null` = inconnues : la prochaine
+ * écriture relit la sous-collection avant de décider quels mois réécrire ou supprimer.
+ */
+let remoteMonthsState: { uid: string; fingerprints: Map<string, string> } | null = null;
+
+/** Taille maximale acceptée pour le document principal (limite Firestore : 1 048 576 octets). */
+const FIRESTORE_MAIN_DOC_MAX_UTF8_BYTES = 1_000_000;
+
+function rememberRemoteMonths(uid: string, remote: { months: RemoteTransactionMonth[]; monthsKnown: boolean }): void {
+    remoteMonthsState = remote.monthsKnown
+        ? { uid, fingerprints: fingerprintsOfRemoteMonths(remote.months) }
+        : null;
+}
 
 /**
  * Pousse immédiatement l'état courant du dossier patrimonial vers `/workspaces/{uid}` (Cloud Firestore),
  * en ignorant le mode test et le gabarit Alex.
+ * Les transactions partent par mois dans `workspaces/{uid}/transactionMonths/{AAAA-MM}` : seuls les
+ * mois modifiés sont réécrits, un mois devenu vide est supprimé, et rien n'est jamais coupé.
  */
 export async function pushWorkspaceToFirestore(user: FirebaseUser): Promise<void> {
     const uid = (user.uid || '').slice(0, MAX_UID_LENGTH);
@@ -564,28 +665,45 @@ export async function pushWorkspaceToFirestore(user: FirebaseUser): Promise<void
     if (currentState.isTestMode || isStarterTemplateState(currentState)) return;
 
     const statePayload = extractSanitizedWorkspacePayload(currentState);
-    const firestoreStatePayload = packWorkspacePayloadForFirestore(statePayload);
+    const localTransactions = Array.isArray(statePayload.transactions) ? statePayload.transactions : [];
+    const partition = partitionTransactionsByMonth(localTransactions);
+    const firestoreStatePayload = packWorkspacePayloadForFirestore(
+        { ...statePayload, transactions: partition.leftovers },
+        { transactionsSharded: true },
+    );
     const revisionId = makeSafeRevisionId();
-    const authOpts = { expectedUid: uid, authenticatedUser: user };
 
     lastKnownRevisionId = revisionId;
     lastSerializedPayload = JSON.stringify(statePayload);
     notifySyncStatus({ state: 'syncing', errorMessage: null });
 
-    if (!activeWorkspaceDocExists) {
+    if (measureUtf8Bytes(JSON.stringify(firestoreStatePayload)) > FIRESTORE_MAIN_DOC_MAX_UTF8_BYTES) {
+        notifySyncStatus({ state: 'error', errorMessage: 'Dossier Cloud trop volumineux : écriture annulée' });
+        throw new Error('Document principal Firestore trop volumineux : écriture annulée, aucune donnée coupée.');
+    }
+
+    if (!activeWorkspaceDocExists || !remoteMonthsState || remoteMonthsState.uid !== uid) {
         try {
-            const snap = await getDocument('workspaces', uid, authOpts);
-            activeWorkspaceDocExists = snap.exists;
-            if (snap.exists && snap.data) {
-                const remoteData = snap.data as Record<string, unknown>;
-                const remotePayload = unpackWorkspacePayloadFromFirestore(remoteData.statePayload);
-                if (
-                    remotePayload &&
-                    computeDossierRichness(remotePayload) > computeDossierRichness(currentState)
-                ) {
+            const remote = await loadRemoteWorkspace(uid, user);
+            activeWorkspaceDocExists = remote.exists;
+            rememberRemoteMonths(uid, remote);
+            // Jamais d'écrasement d'un historique Cloud plus riche par un local plus pauvre :
+            // la richesse Cloud compte les transactions de TOUTES les sources (document + mois).
+            const remoteCandidate: Partial<AppState> | null =
+                remote.payload ??
+                (remote.months.length > 0
+                    ? { transactions: mergeTransactionSources([], remote.months) as AppState['transactions'] }
+                    : null);
+            if (remoteCandidate && computeDossierRichness(remoteCandidate) > computeDossierRichness(currentState)) {
+                if (remote.exists) {
                     await pullWorkspaceFromFirestoreNow(user);
-                    return;
+                } else {
+                    notifySyncStatus({
+                        state: 'error',
+                        errorMessage: 'Historique Cloud plus riche que le local : écriture annulée',
+                    });
                 }
+                return;
             }
         } catch (error) {
             notifySyncStatus({ state: 'error', errorMessage: 'Erreur de lecture Firestore' });
@@ -593,45 +711,51 @@ export async function pushWorkspaceToFirestore(user: FirebaseUser): Promise<void
         }
     }
 
-    if (!activeWorkspaceDocExists) {
-        try {
-            await createDocument(
-                'workspaces',
-                uid,
-                {
-                    ownerId: uid,
-                    schemaVersion: 1,
-                    revisionId,
-                    statePayload: firestoreStatePayload,
-                    createdAt: serverTimestamp(),
-                    updatedAt: serverTimestamp(),
-                },
-                authOpts,
-            );
-            activeWorkspaceDocExists = true;
-            notifySyncStatus({ state: 'synced', lastSyncedAt: Date.now(), errorMessage: null });
-        } catch (error) {
-            notifySyncStatus({ state: 'error', errorMessage: 'Échec de création du dossier Cloud' });
-            throw error;
-        }
-    } else {
-        try {
-            await updateDocument(
-                'workspaces',
-                uid,
-                {
-                    schemaVersion: 1,
-                    revisionId,
-                    statePayload: firestoreStatePayload,
-                    updatedAt: serverTimestamp(),
-                },
-                authOpts,
-            );
-            notifySyncStatus({ state: 'synced', lastSyncedAt: Date.now(), errorMessage: null });
-        } catch (error) {
-            notifySyncStatus({ state: 'error', errorMessage: 'Échec de mise à jour Firestore' });
-            throw error;
-        }
+    if (!remoteMonthsState) {
+        notifySyncStatus({ state: 'error', errorMessage: 'Mois de transactions Cloud illisibles : écriture annulée' });
+        throw new Error('Sous-collection transactionMonths illisible : écriture annulée pour ne rien perdre.');
+    }
+
+    const plan = planTransactionMonthWrites(partition, remoteMonthsState.fingerprints);
+    const creating = !activeWorkspaceDocExists;
+    try {
+        await commitWorkspaceWithTransactionMonths({
+            uid,
+            user,
+            revisionId,
+            plan,
+            main: creating
+                ? {
+                      mode: 'create',
+                      data: {
+                          ownerId: uid,
+                          schemaVersion: 1,
+                          revisionId,
+                          statePayload: firestoreStatePayload,
+                          createdAt: serverTimestamp(),
+                          updatedAt: serverTimestamp(),
+                      },
+                  }
+                : {
+                      mode: 'update',
+                      data: {
+                          schemaVersion: 1,
+                          revisionId,
+                          statePayload: firestoreStatePayload,
+                          updatedAt: serverTimestamp(),
+                      },
+                  },
+        });
+        activeWorkspaceDocExists = true;
+        remoteMonthsState = { uid, fingerprints: plan.nextFingerprints };
+        notifySyncStatus({ state: 'synced', lastSyncedAt: Date.now(), errorMessage: null });
+    } catch (error) {
+        remoteMonthsState = null;
+        notifySyncStatus({
+            state: 'error',
+            errorMessage: creating ? 'Échec de création du dossier Cloud' : 'Échec de mise à jour Firestore',
+        });
+        throw error;
     }
 }
 
@@ -646,102 +770,139 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
     }
 
     activeWorkspaceDocExists = false;
+    remoteMonthsState = null;
     let initialSnapshotHandled = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let snapshotSequence = 0;
 
     notifySyncStatus({ state: 'connecting', errorMessage: null });
 
-    const unsubscribeSnapshot = subscribeToDocument<Record<string, unknown>>(
-        'workspaces',
-        uid,
-        (snapshot) => {
-            if (snapshot.exists && snapshot.data) {
-                activeWorkspaceDocExists = true;
-                const data = snapshot.data;
-                const remoteRevision = typeof data.revisionId === 'string' ? data.revisionId : '';
-                const remotePayload = unpackWorkspacePayloadFromFirestore(data.statePayload);
-                const remoteHasData = remotePayload ? hasMeaningfulData(remotePayload) : false;
-                const remoteIsStarter = remotePayload
-                    ? isStarterTemplateState(remotePayload)
-                    : false;
+    /** Décision d'application d'un dossier Cloud complet (document principal + mois fusionnés). */
+    const handleRemoteWorkspace = (
+        data: Record<string, unknown>,
+        remotePayload: Partial<AppState> | null,
+    ): void => {
+        const remoteRevision = typeof data.revisionId === 'string' ? data.revisionId : '';
+        const remoteHasData = remotePayload ? hasMeaningfulData(remotePayload) : false;
+        const remoteIsStarter = remotePayload
+            ? isStarterTemplateState(remotePayload)
+            : false;
 
-                const currentLocalState = useFinanceStore.getState();
-                const localHasMeaningfulData =
-                    hasMeaningfulData(currentLocalState) &&
-                    !isStarterTemplateState(currentLocalState);
-                const remoteRichness = computeDossierRichness(remotePayload);
-                const localRichness = computeDossierRichness(currentLocalState);
-                const isRemoteRicherThanLocal = remoteRichness > localRichness;
-                const localLastUpdate =
-                    typeof currentLocalState.lastUpdate === 'number' &&
-                    Number.isFinite(currentLocalState.lastUpdate)
-                        ? currentLocalState.lastUpdate
-                        : 0;
-                const remoteUpdatedAtMs = extractRemoteTimestampMs(data, remotePayload);
-                const isRemoteOlderThanLocal =
-                    !isRemoteRicherThanLocal &&
-                    localHasMeaningfulData &&
-                    localRichness >= remoteRichness &&
-                    remoteUpdatedAtMs !== null &&
-                    localLastUpdate > 0 &&
-                    remoteUpdatedAtMs < localLastUpdate;
+        const currentLocalState = useFinanceStore.getState();
+        const localHasMeaningfulData =
+            hasMeaningfulData(currentLocalState) &&
+            !isStarterTemplateState(currentLocalState);
+        const remoteRichness = computeDossierRichness(remotePayload);
+        const localRichness = computeDossierRichness(currentLocalState);
+        const isRemoteRicherThanLocal = remoteRichness > localRichness;
+        const localLastUpdate =
+            typeof currentLocalState.lastUpdate === 'number' &&
+            Number.isFinite(currentLocalState.lastUpdate)
+                ? currentLocalState.lastUpdate
+                : 0;
+        const remoteUpdatedAtMs = extractRemoteTimestampMs(data, remotePayload);
+        const isRemoteOlderThanLocal =
+            !isRemoteRicherThanLocal &&
+            localHasMeaningfulData &&
+            localRichness >= remoteRichness &&
+            remoteUpdatedAtMs !== null &&
+            localLastUpdate > 0 &&
+            remoteUpdatedAtMs < localLastUpdate;
 
-                if (
-                    remotePayload &&
-                    remoteHasData &&
-                    !remoteIsStarter &&
-                    (remoteRevision !== lastKnownRevisionId || isRemoteRicherThanLocal) &&
-                    !isRemoteOlderThanLocal
-                ) {
-                    applyingRemoteSnapshot = true;
-                    try {
-                        const sanitizedRemote = cleanCandidateState(remotePayload);
-                        lastKnownRevisionId = remoteRevision;
-                        lastSerializedPayload = JSON.stringify(sanitizedRemote);
-                        useFinanceStore.getState().setAppState({
-                            ...sanitizedRemote,
-                            lastUpdate: remoteUpdatedAtMs ?? Date.now(),
-                        });
-                        useFinanceStore.setState({
-                            isTestMode: false,
-                            activeTestPersonaId: null,
-                            realDataSnapshot: null,
-                        });
-                        saveProtectedDossierSnapshot(sanitizedRemote);
-                    } finally {
-                        applyingRemoteSnapshot = false;
-                    }
-                    initialSnapshotHandled = true;
-                    notifySyncStatus({
-                        state: 'synced',
-                        lastSyncedAt: Date.now(),
-                        errorMessage: null,
-                    });
-                } else if (isRemoteOlderThanLocal) {
-                    initialSnapshotHandled = true;
-                    void pushWorkspaceToFirestore(user).catch(() => {});
-                } else if (!remoteHasData || remoteIsStarter) {
-                    initialSnapshotHandled = true;
-                    void (async () => {
-                        await recoverOrEnsureInitialWorkspace(false);
-                        if (!isStarterTemplateState(useFinanceStore.getState()) && hasMeaningfulData(useFinanceStore.getState())) {
-                            await pushWorkspaceToFirestore(user).catch(() => {});
-                        } else {
-                            notifySyncStatus({
-                                state: 'synced',
-                                lastSyncedAt: Date.now(),
-                                errorMessage: null,
-                            });
-                        }
-                    })();
+        if (
+            remotePayload &&
+            remoteHasData &&
+            !remoteIsStarter &&
+            (remoteRevision !== lastKnownRevisionId || isRemoteRicherThanLocal) &&
+            !isRemoteOlderThanLocal
+        ) {
+            applyingRemoteSnapshot = true;
+            try {
+                const sanitizedRemote = cleanCandidateState(remotePayload);
+                lastKnownRevisionId = remoteRevision;
+                lastSerializedPayload = JSON.stringify(sanitizedRemote);
+                useFinanceStore.getState().setAppState({
+                    ...sanitizedRemote,
+                    lastUpdate: remoteUpdatedAtMs ?? Date.now(),
+                });
+                useFinanceStore.setState({
+                    isTestMode: false,
+                    activeTestPersonaId: null,
+                    realDataSnapshot: null,
+                });
+                saveProtectedDossierSnapshot(sanitizedRemote);
+            } finally {
+                applyingRemoteSnapshot = false;
+            }
+            initialSnapshotHandled = true;
+            notifySyncStatus({
+                state: 'synced',
+                lastSyncedAt: Date.now(),
+                errorMessage: null,
+            });
+        } else if (isRemoteOlderThanLocal) {
+            initialSnapshotHandled = true;
+            void pushWorkspaceToFirestore(user).catch(() => {});
+        } else if (!remoteHasData || remoteIsStarter) {
+            initialSnapshotHandled = true;
+            void (async () => {
+                await recoverOrEnsureInitialWorkspace(false);
+                if (!isStarterTemplateState(useFinanceStore.getState()) && hasMeaningfulData(useFinanceStore.getState())) {
+                    await pushWorkspaceToFirestore(user).catch(() => {});
                 } else {
-                    initialSnapshotHandled = true;
                     notifySyncStatus({
                         state: 'synced',
                         lastSyncedAt: Date.now(),
                         errorMessage: null,
                     });
                 }
+            })();
+        } else {
+            initialSnapshotHandled = true;
+            notifySyncStatus({
+                state: 'synced',
+                lastSyncedAt: Date.now(),
+                errorMessage: null,
+            });
+        }
+    };
+
+    const unsubscribeSnapshot = subscribeToDocument<Record<string, unknown>>(
+        'workspaces',
+        uid,
+        (snapshot) => {
+            const sequence = ++snapshotSequence;
+            if (snapshot.exists && snapshot.data) {
+                activeWorkspaceDocExists = true;
+                const data = snapshot.data;
+                const remoteRevision = typeof data.revisionId === 'string' ? data.revisionId : '';
+                // Écho de notre propre écriture : les mois viennent d'être écrits par ce client.
+                if (initialSnapshotHandled && remoteRevision !== '' && remoteRevision === lastKnownRevisionId) {
+                    notifySyncStatus({ state: 'synced', lastSyncedAt: Date.now(), errorMessage: null });
+                    return;
+                }
+                // Nouveau `revisionId` : on recharge les mois de `transactionMonths` avant de décider.
+                void (async () => {
+                    let months: RemoteTransactionMonth[] = [];
+                    let monthsKnown = true;
+                    try {
+                        months = await loadTransactionMonths(uid, user);
+                    } catch {
+                        if (isTransactionsShardedPayload(data.statePayload)) {
+                            if (sequence === snapshotSequence) {
+                                notifySyncStatus({
+                                    state: 'error',
+                                    errorMessage: 'Lecture des mois de transactions Cloud impossible',
+                                });
+                            }
+                            return;
+                        }
+                        monthsKnown = false;
+                    }
+                    if (sequence !== snapshotSequence) return;
+                    rememberRemoteMonths(uid, { months, monthsKnown });
+                    handleRemoteWorkspace(data, buildMergedRemotePayload(data.statePayload, months));
+                })();
             } else if (!initialSnapshotHandled) {
                 initialSnapshotHandled = true;
                 activeWorkspaceDocExists = false;

@@ -26,7 +26,8 @@ npm run preview
 ## Lancer les tests
 
 ```bash
-npm run test          # Vitest — le compte fait foi dans la CI, pas ici
+npm run test          # Vitest (projets node + jsdom en parallèle) — le compte fait foi dans la CI
+npm run test:rapide   # Vitest (projet node seul — moteur, services, gardes)
 npm run typecheck     # TypeScript strict mode (clean)
 npm run build         # Vite 8 (--mode production)
 ```

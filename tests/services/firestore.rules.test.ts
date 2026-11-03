@@ -139,6 +139,68 @@ function evaluateUserProfileWrite(
     );
 }
 
+const MONTH_ID_REGEX = /^[0-9]{4}-(0[1-9]|1[0-2])$/;
+
+function hasExactKeys(incoming: Record<string, unknown>, fields: string[]): boolean {
+    const keys = Object.keys(incoming);
+    return fields.every((k) => keys.includes(k)) && keys.every((k) => fields.includes(k));
+}
+
+function isIntInRange(value: unknown, min: number, max: number): boolean {
+    return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
+}
+
+function isOwnerCtx(ctx: EvalContext): boolean {
+    if (!ctx.authUid || !ctx.emailVerified) return false;
+    if (ctx.authUid !== ctx.pathUserId) return false;
+    return SAFE_ID_REGEX.test(ctx.pathUserId) && ctx.pathUserId.length <= 128;
+}
+
+/** Miroir de `isValidTransactionMonth` (workspaces/{userId}/transactionMonths/{monthId}). */
+function evaluateTransactionMonthWrite(
+    op: 'create' | 'update',
+    monthId: string,
+    incoming: Record<string, unknown>,
+    ctx: EvalContext,
+): boolean {
+    if (!isOwnerCtx(ctx)) return false;
+    if (!MONTH_ID_REGEX.test(monthId)) return false;
+    if (!hasExactKeys(incoming, ['ownerId', 'month', 'count', 'jsonChunks', 'revisionId', 'updatedAt'])) return false;
+    if (incoming.ownerId !== ctx.authUid || incoming.ownerId !== ctx.pathUserId) return false;
+    if (incoming.month !== monthId) return false;
+    if (!isIntInRange(incoming.count, 0, 5000)) return false;
+    const chunks = incoming.jsonChunks;
+    if (!Array.isArray(chunks) || chunks.length < 1 || chunks.length > 20) return false;
+    const isValidChunk = (c: unknown) => typeof c === 'string' && c.length <= 900_000;
+    if (!isValidChunk(chunks[0]) || !isValidChunk(chunks[chunks.length - 1])) return false;
+    const rev = incoming.revisionId;
+    if (typeof rev !== 'string' || rev.length < 1 || rev.length > 64 || !SAFE_ID_REGEX.test(rev)) return false;
+    if (incoming.updatedAt !== ctx.requestTimeMs) return false;
+    if (op === 'create') return true;
+    if (!ctx.existingDoc) return false;
+    return incoming.ownerId === ctx.existingDoc.ownerId && incoming.month === ctx.existingDoc.month;
+}
+
+/** Miroir de `isValidConversation` (workspaces/{userId}/conversations/{conversationId}). */
+function evaluateConversationWrite(
+    op: 'create' | 'update',
+    conversationId: string,
+    incoming: Record<string, unknown>,
+    ctx: EvalContext,
+): boolean {
+    if (!isOwnerCtx(ctx)) return false;
+    if (!SAFE_ID_REGEX.test(conversationId) || conversationId.length > 128) return false;
+    if (!hasExactKeys(incoming, ['ownerId', 'title', 'messagesJson', 'messageCount', 'createdAt', 'updatedAt'])) return false;
+    if (incoming.ownerId !== ctx.authUid || incoming.ownerId !== ctx.pathUserId) return false;
+    if (typeof incoming.title !== 'string' || incoming.title.length < 1 || incoming.title.length > 200) return false;
+    if (typeof incoming.messagesJson !== 'string' || incoming.messagesJson.length > 900_000) return false;
+    if (!isIntInRange(incoming.messageCount, 0, 2000)) return false;
+    if (incoming.updatedAt !== ctx.requestTimeMs) return false;
+    if (op === 'create') return incoming.createdAt === ctx.requestTimeMs;
+    if (!ctx.existingDoc) return false;
+    return incoming.ownerId === ctx.existingDoc.ownerId && incoming.createdAt === ctx.existingDoc.createdAt;
+}
+
 describe('Firestore Security Rules & Dirty Dozen Red Team Audit', () => {
     const SERVER_TIME = 1_762_000_000_000;
     const validCtx: EvalContext = {
@@ -610,6 +672,153 @@ describe('Firestore Security Rules & Dirty Dozen Red Team Audit', () => {
         };
         expect(computeDossierRichness(starter)).toBe(0);
         expect(computeDossierRichness(richDossier as never)).toBeGreaterThan(1_000);
+    });
+
+    it('déclare les sous-collections transactionMonths et conversations sous workspaces/{userId} avec validateurs stricts', () => {
+        expect(rulesSource).toContain('match /transactionMonths/{monthId}');
+        expect(rulesSource).toContain('match /conversations/{conversationId}');
+        expect(rulesSource).toContain("monthId.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')");
+        expect(rulesSource).toContain(
+            "data.keys().hasOnly(['ownerId', 'month', 'count', 'jsonChunks', 'revisionId', 'updatedAt'])",
+        );
+        expect(rulesSource).toContain(
+            "data.keys().hasOnly(['ownerId', 'title', 'messagesJson', 'messageCount', 'createdAt', 'updatedAt'])",
+        );
+        expect(rulesSource).toContain('data.jsonChunks is list');
+        expect(rulesSource).toContain('data.jsonChunks.size() <= 20');
+        expect(rulesSource).toContain('data.messagesJson.size() <= 900000');
+        expect(rulesSource).toContain('incoming().month == existing().month');
+        // Les deux sous-collections imbriquées sont bien dans le bloc workspaces/{userId}
+        const wsIndex = rulesSource.indexOf('match /workspaces/{userId}');
+        expect(rulesSource.indexOf('match /transactionMonths/{monthId}')).toBeGreaterThan(wsIndex);
+        expect(rulesSource.indexOf('match /conversations/{conversationId}')).toBeGreaterThan(wsIndex);
+        // Les validateurs sont appelés en create ET en update (pas de contournement par update)
+        expect(rulesSource.match(/isValidTransactionMonth\(incoming\(\), userId, monthId\)/g)?.length).toBe(2);
+        expect(rulesSource.match(/isValidConversation\(incoming\(\), userId\)/g)?.length).toBe(2);
+    });
+
+    it('transactionMonths : autorise les écritures légitimes et rejette les charges adverses', () => {
+        const monthCtx: EvalContext = {
+            ...validCtx,
+            existingDoc: {
+                ownerId: 'user_alpha_01',
+                month: '2026-05',
+                count: 10,
+                jsonChunks: ['[]'],
+                revisionId: 'rev_initial',
+                updatedAt: SERVER_TIME - 5000,
+            },
+        };
+        const valid = {
+            ownerId: 'user_alpha_01',
+            month: '2026-05',
+            count: 42,
+            jsonChunks: ['[{"id":"tx_1"}]', '[{"id":"tx_2"}]'],
+            revisionId: 'rev_mois_01',
+            updatedAt: SERVER_TIME,
+        };
+
+        expect(evaluateTransactionMonthWrite('create', '2026-05', valid, monthCtx)).toBe(true);
+        expect(evaluateTransactionMonthWrite('update', '2026-05', valid, monthCtx)).toBe(true);
+
+        // Identifiant de mois invalide (mois 13, format libre)
+        expect(evaluateTransactionMonthWrite('create', '2026-13', { ...valid, month: '2026-13' }, monthCtx)).toBe(false);
+        expect(evaluateTransactionMonthWrite('create', '2026-5', { ...valid, month: '2026-5' }, monthCtx)).toBe(false);
+        // month différent de l'identifiant du document
+        expect(evaluateTransactionMonthWrite('create', '2026-05', { ...valid, month: '2026-06' }, monthCtx)).toBe(false);
+        // Usurpation d'identité et chemin d'un autre utilisateur
+        expect(evaluateTransactionMonthWrite('create', '2026-05', { ...valid, ownerId: 'user_victim_99' }, monthCtx)).toBe(false);
+        expect(
+            evaluateTransactionMonthWrite('create', '2026-05', valid, { ...monthCtx, pathUserId: 'user_other_02' }),
+        ).toBe(false);
+        // Courriel non vérifié
+        expect(evaluateTransactionMonthWrite('create', '2026-05', valid, { ...monthCtx, emailVerified: false })).toBe(false);
+        // Champ fantôme et champ manquant
+        expect(evaluateTransactionMonthWrite('create', '2026-05', { ...valid, apiKeys: 'secret' }, monthCtx)).toBe(false);
+        const sansRevision: Record<string, unknown> = { ...valid };
+        delete sansRevision.revisionId;
+        expect(evaluateTransactionMonthWrite('create', '2026-05', sansRevision, monthCtx)).toBe(false);
+        // Bornes de count (négatif, > 5000, décimal)
+        expect(evaluateTransactionMonthWrite('create', '2026-05', { ...valid, count: -1 }, monthCtx)).toBe(false);
+        expect(evaluateTransactionMonthWrite('create', '2026-05', { ...valid, count: 5001 }, monthCtx)).toBe(false);
+        expect(evaluateTransactionMonthWrite('create', '2026-05', { ...valid, count: 1.5 }, monthCtx)).toBe(false);
+        // jsonChunks : type, liste vide, trop de blocs, bloc trop gros
+        expect(evaluateTransactionMonthWrite('create', '2026-05', { ...valid, jsonChunks: '[]' }, monthCtx)).toBe(false);
+        expect(evaluateTransactionMonthWrite('create', '2026-05', { ...valid, jsonChunks: [] }, monthCtx)).toBe(false);
+        expect(
+            evaluateTransactionMonthWrite('create', '2026-05', { ...valid, jsonChunks: Array(21).fill('[]') }, monthCtx),
+        ).toBe(false);
+        expect(
+            evaluateTransactionMonthWrite('create', '2026-05', { ...valid, jsonChunks: ['x'.repeat(900_001)] }, monthCtx),
+        ).toBe(false);
+        // revisionId empoisonné
+        expect(evaluateTransactionMonthWrite('create', '2026-05', { ...valid, revisionId: 'rev/../x' }, monthCtx)).toBe(false);
+        // updatedAt forgé par le client
+        expect(evaluateTransactionMonthWrite('update', '2026-05', { ...valid, updatedAt: SERVER_TIME + 1 }, monthCtx)).toBe(false);
+        // Update ne peut pas changer month (document existant d'un autre mois)
+        expect(
+            evaluateTransactionMonthWrite('update', '2026-05', valid, {
+                ...monthCtx,
+                existingDoc: { ...monthCtx.existingDoc, month: '2026-04' },
+            }),
+        ).toBe(false);
+    });
+
+    it('conversations : autorise les écritures légitimes et rejette les charges adverses', () => {
+        const convCtx: EvalContext = {
+            ...validCtx,
+            existingDoc: {
+                ownerId: 'user_alpha_01',
+                title: 'Question REER',
+                messagesJson: '[]',
+                messageCount: 0,
+                createdAt: SERVER_TIME - 5000,
+                updatedAt: SERVER_TIME - 5000,
+            },
+        };
+        const validCreate = {
+            ownerId: 'user_alpha_01',
+            title: 'Question REER',
+            messagesJson: '[{"role":"user","text":"Bonjour"}]',
+            messageCount: 1,
+            createdAt: SERVER_TIME,
+            updatedAt: SERVER_TIME,
+        };
+        const validUpdate = { ...validCreate, createdAt: SERVER_TIME - 5000, messageCount: 2 };
+
+        expect(evaluateConversationWrite('create', 'conv_01', validCreate, convCtx)).toBe(true);
+        expect(evaluateConversationWrite('update', 'conv_01', validUpdate, convCtx)).toBe(true);
+
+        // Identifiant de conversation invalide
+        expect(evaluateConversationWrite('create', 'conv/../01', validCreate, convCtx)).toBe(false);
+        // Usurpation d'identité, chemin tiers, courriel non vérifié
+        expect(evaluateConversationWrite('create', 'conv_01', { ...validCreate, ownerId: 'user_victim_99' }, convCtx)).toBe(false);
+        expect(
+            evaluateConversationWrite('create', 'conv_01', validCreate, { ...convCtx, pathUserId: 'user_other_02' }),
+        ).toBe(false);
+        expect(evaluateConversationWrite('create', 'conv_01', validCreate, { ...convCtx, emailVerified: false })).toBe(false);
+        // Clé secrète hors liste refusée
+        expect(
+            evaluateConversationWrite('create', 'conv_01', { ...validCreate, apiKeys: { gemini: 'secret' } }, convCtx),
+        ).toBe(false);
+        // Bornes title / messagesJson / messageCount
+        expect(evaluateConversationWrite('create', 'conv_01', { ...validCreate, title: '' }, convCtx)).toBe(false);
+        expect(evaluateConversationWrite('create', 'conv_01', { ...validCreate, title: 'T'.repeat(201) }, convCtx)).toBe(false);
+        expect(
+            evaluateConversationWrite('create', 'conv_01', { ...validCreate, messagesJson: 'x'.repeat(900_001) }, convCtx),
+        ).toBe(false);
+        expect(evaluateConversationWrite('create', 'conv_01', { ...validCreate, messagesJson: [] }, convCtx)).toBe(false);
+        expect(evaluateConversationWrite('create', 'conv_01', { ...validCreate, messageCount: 2001 }, convCtx)).toBe(false);
+        expect(evaluateConversationWrite('create', 'conv_01', { ...validCreate, messageCount: -1 }, convCtx)).toBe(false);
+        // createdAt forgé en create, modifié en update
+        expect(
+            evaluateConversationWrite('create', 'conv_01', { ...validCreate, createdAt: SERVER_TIME - 1 }, convCtx),
+        ).toBe(false);
+        expect(evaluateConversationWrite('update', 'conv_01', { ...validUpdate, createdAt: SERVER_TIME }, convCtx)).toBe(false);
+        // updatedAt forgé
+        expect(
+            evaluateConversationWrite('update', 'conv_01', { ...validUpdate, updatedAt: SERVER_TIME + 1 }, convCtx),
+        ).toBe(false);
     });
 });
 

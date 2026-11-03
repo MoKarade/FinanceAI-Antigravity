@@ -23,8 +23,8 @@
 | Crypto pricing | CoinGecko REST | Gratuit, sans clé, CORS-friendly |
 | Stock/ETF pricing | Finnhub REST | Clé gratuite optionnelle |
 | Tests | Vitest + React Testing Library | compte à jour dans `GEMINI.md` (source unique) |
-| Auth & Sync Cloud | **Firebase Auth** + **Cloud Firestore** + **Google Drive** | Google Sign-In, `users/{uid}/workspaces/main`, `appDataFolder` chiffré |
-| Hébergement | **Firebase Hosting** (`firebase.json`, `.github/workflows/deploy-hosting.yml`) | Déploiement continu OIDC sur chaque push vers `main` |
+| Auth & Sync Cloud | **Firebase Auth** + **Cloud Firestore** + **Google Drive** | Google Sign-In, `workspaces/{uid}` + sous-collections `transactionMonths/{AAAA-MM}` et `conversations/{id}`, `appDataFolder` chiffré |
+| Hébergement & Relais | **Firebase Hosting** + **Cloud Run** (`firebase.json`, `cloudrun/proxy/`) | SPA statique + réécriture `/api/**` vers le service Cloud Run `financeai-proxy` (`/api/fintable/*`, `/api/yahoo/*`) |
 
 L'application fonctionne à 100 % côté navigateur dans l'écosystème Google, persiste localement via `persist`
 (chiffré en AES-256-GCM dans IndexedDB pour les clés API `apiKeys.gemini` et `apiKeys.finnhub`), synchronise

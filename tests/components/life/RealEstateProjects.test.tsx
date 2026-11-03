@@ -10,16 +10,7 @@ import { TAB_LABELS } from '../../../constants';
 import { Tab } from '../../../types';
 import type { RealEstateGoal } from '../../../types';
 
-vi.mock('recharts', async () => {
-    const React = await import('react');
-    const P = ({ children }: { children?: React.ReactNode }) => React.createElement('div', null, children);
-    return {
-        ResponsiveContainer: P, BarChart: P, ComposedChart: P, PieChart: P, LineChart: P, AreaChart: P,
-        Bar: () => null, Area: () => null, Line: () => null, Pie: () => null, Cell: () => null,
-        Legend: () => null, ReferenceLine: () => null,
-        XAxis: () => null, YAxis: () => null, Tooltip: () => null, CartesianGrid: () => null,
-    };
-});
+vi.mock('recharts', async () => (await import('../../helpers/fauxRecharts')).fauxRecharts());
 
 const goal = (overrides: Partial<RealEstateGoal>): RealEstateGoal => ({
     id: 'g',

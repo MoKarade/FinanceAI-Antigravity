@@ -1,0 +1,14 @@
+{
+  "name": "financeai-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Relais same-origin /api/** de FinanceAI (Fintable, Yahoo) sur Cloud Run, sans dépendance.",
+  "type": "module",
+  "main": "server.mjs",
+  "engines": {
+    "node": ">=20.3"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

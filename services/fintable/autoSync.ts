@@ -154,7 +154,7 @@ export async function withCrossTabLock<T>(
  * Appelable sans crainte depuis un effet React qui re-tire.
  */
 export async function maybeRunDailyFintableSync(
-    opts: { now?: () => number } = {},
+    opts: { now?: () => number; ignoreCooldown?: boolean } = {},
 ): Promise<AutoSyncOutcome> {
     // ⚠️ Le verrou enveloppe TOUTES les gardes, cooldown compris : le protéger seulement autour du
     // réseau laisserait la course là où elle est — entre la LECTURE et l'ÉCRITURE du cooldown.
@@ -165,7 +165,7 @@ export async function maybeRunDailyFintableSync(
 }
 
 async function runDailyFintableSyncGuarded(
-    opts: { now?: () => number } = {},
+    opts: { now?: () => number; ignoreCooldown?: boolean } = {},
 ): Promise<AutoSyncOutcome> {
     const now = opts.now ?? (() => Date.now());
     // [SVC-STORE-COUPLING] Pas de cast : `FinanceState extends AppState`, `getState()` EST un
@@ -176,7 +176,10 @@ async function runDailyFintableSyncGuarded(
     if (typeof token !== 'string' || token.trim() === '') return { ran: false, reason: 'no-token' };
     if (isTestModeNow()) return { ran: false, reason: 'test-mode' };
     if (!isDailySyncDue(state.fintableSyncReport, now())) return { ran: false, reason: 'fresh' };
-    if (now() - readLastAttempt() < ATTEMPT_COOLDOWN_MS) return { ran: false, reason: 'cooldown' };
+    const erreurMalformedAncienProxy = Boolean(state.fintableSyncReport?.error?.includes('[MALFORMED]'));
+    if (!opts.ignoreCooldown && !erreurMalformedAncienProxy && now() - readLastAttempt() < ATTEMPT_COOLDOWN_MS) {
+        return { ran: false, reason: 'cooldown' };
+    }
     if (!acquireFintableSyncLock()) return { ran: false, reason: 'in-flight' };
 
     writeLastAttempt(now());

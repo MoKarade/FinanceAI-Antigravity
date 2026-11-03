@@ -251,18 +251,18 @@ export function useAppBootEffects(): void {
                     );
                     return;
                 }
-                // ⚠️ [Finding silent-failure #545, ÉLEVÉ] `fintable` DOIT compter dans la garde :
-                // un coffre qui ne contient QUE le jeton Fintable (ni Anthropic ni Finnhub) n'était
-                // JAMAIS restauré dans le store → jeton perdu à chaque reload, sync auto neutralisée
+                // ⚠️ [Finding silent-failure #545, ÉLEVÉ] `fintable` et `gemini` DOIVENT compter dans la garde :
+                // un coffre qui ne contient QUE le jeton Fintable ou la clé Gemini (ni Anthropic ni Finnhub) n'était
+                // JAMAIS restauré dans le store → jeton/clé perdu à chaque reload, sync auto ou assistant neutralisé
                 // en silence (reason 'no-token' en boucle, zéro trace).
-                if (result.status === 'ok' && (result.keys.anthropic || result.keys.finnhub || result.keys.fintable)) {
+                if (result.status === 'ok' && (result.keys.gemini || result.keys.anthropic || result.keys.finnhub || result.keys.fintable)) {
                     useFinanceStore.getState().updateApiKeys(result.keys);
                     return;
                 }
                 // Migration : clés legacy encore lues en clair au boot (avant C5)
                 // mais pas encore dans le coffre → on les chiffre maintenant.
                 const current = useFinanceStore.getState().apiKeys;
-                if (current.anthropic || current.finnhub) {
+                if (current.gemini || current.anthropic || current.finnhub || current.fintable) {
                     await saveApiKeys(current);
                 }
             } catch (e) {
