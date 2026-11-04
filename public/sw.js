@@ -10,7 +10,7 @@
 //
 // Note : ce SW est uniquement chargé en PROD (vite import.meta.env.PROD).
 
-const CACHE_NAME = 'financeai-v20'; // v20 : application complete de l'audit massif (MES-5..MES-9) ; v19 : purge cache IDB, resync automatique cours actions manquants, performance boursiere exacte ; v18 : projection moteur fidele sur accueil
+const CACHE_NAME = 'financeai-v21'; // v21 : remplacement automatique des courbes synthetiques par les clotures reelles ; v20 : application complete de l'audit massif (MES-5..MES-9)
 const PRECACHE_URLS = ['/manifest.json', '/icon.svg'];
 
 // [CF-ACCESS] Une réponse mettable en cache doit être une réponse DIRECTE de notre origine : ni redirigée (session

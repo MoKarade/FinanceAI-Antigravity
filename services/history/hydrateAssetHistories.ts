@@ -38,6 +38,7 @@ interface HydrateHistoryDeps {
      */
     getHistory: (symbol: string, from: Date, to: Date) => Promise<ResultatHistorique>;
     hasProvider?: (symbol: string) => boolean;
+    searchSymbols?: (query: string) => Promise<Array<{ symbol: string }>>;
     sleep?: (ms: number) => Promise<void>;
     delayMs?: number;
     now?: () => number;
@@ -65,6 +66,33 @@ const STALE_AFTER_MS = 24 * 60 * 60 * 1000; // au-delà : re-sync (aligné sur l
 const DEFAULT_DELAY_MS = 2_500;
 
 /**
+ * Détecte une rampe linéaire ou quasi-linéaire synthétique (>= 20 points avec moins de 25 %
+ * d'inversions de signe et aucune variation journalière >= 0,8 %). Une telle courbe provient
+ * d'une interpolation de secours et doit être intégralement remplacée par les clôtures réelles.
+ */
+export function isSyntheticPriceHistory(
+    hist: Array<{ date: string; price: number }> | undefined,
+): boolean {
+    if (!hist || hist.length < 20) return false;
+    let maxAbsDailyRet = 0;
+    let signChanges = 0;
+    let prevDiff = 0;
+    for (let i = 1; i < hist.length; i++) {
+        const pPrev = hist[i - 1]?.price ?? 0;
+        const pCur = hist[i]?.price ?? 0;
+        if (pPrev <= 0 || pCur <= 0) continue;
+        const diff = pCur - pPrev;
+        const ret = Math.abs(diff) / pPrev;
+        if (ret > maxAbsDailyRet) maxAbsDailyRet = ret;
+        if (i > 1 && ((diff > 0 && prevDiff < 0) || (diff < 0 && prevDiff > 0))) {
+            signChanges++;
+        }
+        if (diff !== 0) prevDiff = diff;
+    }
+    return signChanges / hist.length < 0.25 && maxAbsDailyRet < 0.008;
+}
+
+/**
  * L'actif a-t-il besoin d'une (re)synchronisation d'historique ? (exporté pour test)
  * Éligibilité ALIGNÉE sur buildMarketData (qty≠0 OU achats connus — un actif VENDU garde sa
  * courbe passée) : avant, un actif qty=0 à purchases non vides était attendu par le graphe mais
@@ -74,6 +102,7 @@ export function needsHistorySync(a: Asset, now: number): boolean {
     if (!a.symbol) return false;
     if ((a.quantity || 0) === 0 && getEffectivePurchases(a).length === 0) return false;
     if (!a.priceHistory || a.priceHistory.length === 0) return true;
+    if (isSyntheticPriceHistory(a.priceHistory)) return true;
     return !a.lastHistorySync || now - a.lastHistorySync > STALE_AFTER_MS;
 }
 
@@ -281,15 +310,48 @@ async function runHydrate(
             // transitoire sur le VRAI symbole partait à la pêche et pouvait PERSISTER
             // (`historySymbol`) un AUTRE titre dont le prix coïncidait dans la bande ×2.
             // Une panne → skip 'error' + retry du MÊME symbole au prochain cycle, point.
+            // Si un flux renvoie 1 seul point sur une fenêtre de plus de 14 jours (et que nous cherchons
+            // via searchSymbols en production), ce point unique est seulement la cotation du jour sans
+            // historique : chercher les variantes / équivalents de place.
+            const windowDays = (now() - from.getTime()) / DAY_MS;
+            if (deps.searchSymbols && fresh !== null && fresh.length === 1 && windowDays > 14) {
+                fresh = [];
+            }
             if (fresh !== null && fresh.length === 0) {
                 // Candidats de secours : le symbole SAISI d'abord si le primaire était une variante
                 // résolue devenue muette (self-heal d'un `historySymbol` mort — finding
                 // silent-failure #493 : sans ça, un symbole résolu délisté gelait l'actif à VIE),
                 // puis les variantes de suffixe restantes.
-                const fallbacks = [
-                    ...(a.historySymbol && a.historySymbol !== a.symbol ? [a.symbol] : []),
-                    ...historySymbolVariants(a.symbol, a.currency).filter((v) => v !== primarySymbol),
-                ];
+                const siblingSuffixes =
+                    deps.searchSymbols && /\.(PA|DE|AS|MI)$/i.test(a.symbol)
+                        ? historySymbolVariants(a.symbol.replace(/\.[A-Z]+$/i, ''), a.currency)
+                        : [];
+                let nameCandidates: string[] = [];
+                if (deps.searchSymbols && a.name && a.name.trim().length >= 3) {
+                    try {
+                        const cleanQuery = a.name
+                            .replace(/\b(INC|CORP|LTD|SA|UCITS|ETF|ACC|CDR|CL\s+[A-Z]|SP\s+ADR)\b/gi, ' ')
+                            .replace(/[-.,()]/g, ' ')
+                            .trim()
+                            .split(/\s+/)
+                            .slice(0, 4)
+                            .join(' ');
+                        if (cleanQuery) {
+                            const found = await deps.searchSymbols(cleanQuery);
+                            nameCandidates = (found || []).map((r) => r.symbol).filter(Boolean);
+                        }
+                    } catch {
+                        nameCandidates = [];
+                    }
+                }
+                const fallbacks = Array.from(
+                    new Set([
+                        ...(a.historySymbol && a.historySymbol !== a.symbol ? [a.symbol] : []),
+                        ...historySymbolVariants(a.symbol, a.currency),
+                        ...siblingSuffixes,
+                        ...nameCandidates,
+                    ]),
+                ).filter((v) => v !== primarySymbol);
                 for (const alt of fallbacks) {
                     await sleep(delayMs);
                     networkCalls++;
@@ -394,11 +456,14 @@ async function runHydrate(
                 }
                 continue;
             }
+            const existingForMerge = isSyntheticPriceHistory(a.priceHistory)
+                ? undefined
+                : a.priceHistory;
             patches.set(a.symbol, {
                 // [HIST-STORE-SIZE] fusion (aucune perte de fenêtre provider) PUIS downsample du
                 // stocké (> 365 j → hebdomadaire) — l'ordre compte : on ne downsample jamais AVANT
                 // d'avoir réinjecté les points anciens que le provider ne re-fournit pas.
-                priceHistory: downsamplePriceHistory(mergePriceHistories(a.priceHistory, fresh), now()),
+                priceHistory: downsamplePriceHistory(mergePriceHistories(existingForMerge, fresh), now()),
                 lastHistorySync: now(),
                 ...(resolvedSymbol ? { historySymbol: resolvedSymbol } : {}),
             });

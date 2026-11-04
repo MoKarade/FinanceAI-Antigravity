@@ -42,16 +42,34 @@ export function useAssetDataHydration(
             const current = s.assets ?? [];
             if (current.length === 0) return;
             try {
-                const { hydrateAssetHistories, applyHistoryPatches } = await import('../services/history/hydrateAssetHistories');
+                const { hydrateAssetHistories, applyHistoryPatches, isSyntheticPriceHistory } = await import('../services/history/hydrateAssetHistories');
                 const { getHistoryDetaille, hasHistoryProvider } = await loadMarketData();
+                const { searchYahooSymbols } = await import('../services/marketData/providers/yahooProxy');
                 const { clearMarketDataCache } = await import('../services/marketData/cache');
-                // Si des actifs détenus ont un historique squelettique (< 5 points), purger l'ancien cache IDB
-                // potentiellement vide et forcer l'hydratation pour récupérer les cours réels du proxy Cloud Run.
-                const needsRecovery = current.some((a) => a.symbol && (a.quantity || 0) > 0 && (!a.priceHistory || a.priceHistory.length < 5));
+                // Si des actifs détenus ont un historique squelettique (< 5 points) ou synthétique, purger l'ancien cache IDB
+                // potentiellement vide et cibler uniquement ces actifs en accéléré pour remplacer immédiatement leurs courbes.
+                const isBrokenHistory = (a: (typeof current)[0]) =>
+                    Boolean(
+                        a.symbol &&
+                            (a.quantity || 0) > 0 &&
+                            (!a.priceHistory || a.priceHistory.length < 5 || isSyntheticPriceHistory(a.priceHistory)),
+                    );
+                const needsRecovery = current.some(isBrokenHistory);
                 if (needsRecovery) {
                     clearMarketDataCache('history');
                 }
-                const res = await hydrateAssetHistories(current, { getHistory: getHistoryDetaille, hasProvider: hasHistoryProvider }, { force: needsRecovery });
+                const targetAssets = needsRecovery
+                    ? current.map((a) => (isBrokenHistory(a) ? { ...a, lastHistorySync: 0 } : a))
+                    : current;
+                const res = await hydrateAssetHistories(
+                    targetAssets,
+                    {
+                        getHistory: getHistoryDetaille,
+                        hasProvider: hasHistoryProvider,
+                        searchSymbols: async (q) => (await searchYahooSymbols(q)) ?? [],
+                        ...(needsRecovery ? { delayMs: 250 } : {}),
+                    },
+                );
                 if (cancelled) return;
                 // [HIST-MULTI-PROVIDER] Publier le rapport MÊME sans patch (c'est justement quand
                 // rien n'a pu être hydraté que le diagnostic par titre est utile à l'écran).

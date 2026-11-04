@@ -12,6 +12,7 @@ import { hasMeaningfulData } from '../utils/onboarding';
 import { buildStarterState, isStarterTemplateState } from '../utils/starterData';
 import { computePresentTermes } from './portfolio';
 import { presentTermesOfGoal, monthsSince } from './projection/pastPurchaseInit';
+import { isSyntheticPriceHistory } from './history/hydrateAssetHistories';
 import { initSync, pullNow } from './sync/syncOrchestrator';
 import { isGoogleAuthConfigured, getCachedToken } from './googleDrive/gisAuth';
 import {
@@ -68,12 +69,16 @@ export function computeDossierRichness(candidate: Partial<AppState> | null | und
     const authenticPurchaseBonus =
         assetsCount > 0 &&
         assets.every((a) => {
-            const firstHist = a?.priceHistory?.[0]?.price;
             const buyP = a?.purchases?.[0]?.price ?? a?.buyPrice;
-            return typeof firstHist === 'number' && typeof buyP === 'number' && Math.abs(firstHist - buyP) < 0.05;
+            return typeof buyP === 'number' && Number.isFinite(buyP) && buyP > 0;
         })
-            ? 350
+            ? 250
             : 0;
+    const realHistoryCurvesBonus = assets.reduce((acc, a) => {
+        const hist = a?.priceHistory;
+        if (!hist || hist.length < 10) return acc;
+        return acc + (isSyntheticPriceHistory(hist) ? 0 : 50);
+    }, 0);
     const txCount = (candidate.transactions ?? []).length;
     const budgetCount = (candidate.budgetItems ?? []).length;
     const immoCount = (candidate.realEstateGoals ?? []).length;
@@ -85,6 +90,7 @@ export function computeDossierRichness(candidate: Partial<AppState> | null | und
         assetsCount * 100 +
         avgHistoryPts +
         authenticPurchaseBonus +
+        realHistoryCurvesBonus +
         txCount +
         budgetCount * 20 +
         immoCount * 50 +
