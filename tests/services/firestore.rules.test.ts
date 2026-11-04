@@ -643,7 +643,7 @@ describe('Firestore Security Rules & Dirty Dozen Red Team Audit', () => {
 
         expect(screen.getByTestId('accueil-google-view')).toBeTruthy();
         expect(screen.getByTestId('preuves-sources-panel')).toBeTruthy();
-        expect(screen.getByText(/Positions & comptes en portefeuille/i)).toBeTruthy();
+        expect(screen.getByText(/Flux 30j/i)).toBeTruthy();
         expect(screen.getByText(/Preuves & Sources/i)).toBeTruthy();
     });
 

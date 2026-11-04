@@ -9,15 +9,23 @@ import {
 } from 'firebase/firestore';
 import firebaseConfigRaw from '../../firebase-applet-config.json';
 
+const isTestEnv = typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test';
 const envProjectId = (import.meta.env.VITE_FIREBASE_PROJECT_ID ?? '').trim();
-const firebaseConfig = envProjectId
-    ? {
-          ...firebaseConfigRaw,
-          projectId: envProjectId,
-          authDomain: `${envProjectId}.firebaseapp.com`,
-          storageBucket: `${envProjectId}.firebasestorage.app`,
-      }
-    : firebaseConfigRaw;
+const resolvedProjectId = isTestEnv
+    ? firebaseConfigRaw.projectId
+    : envProjectId ||
+      (firebaseConfigRaw.projectId === 'financeai-demo-public'
+          ? 'financeai-497112'
+          : firebaseConfigRaw.projectId);
+export const firebaseConfig =
+    resolvedProjectId && resolvedProjectId !== firebaseConfigRaw.projectId
+        ? {
+              ...firebaseConfigRaw,
+              projectId: resolvedProjectId,
+              authDomain: `${resolvedProjectId}.firebaseapp.com`,
+              storageBucket: `${resolvedProjectId}.firebasestorage.app`,
+          }
+        : firebaseConfigRaw;
 
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 

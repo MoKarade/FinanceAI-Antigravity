@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { Layout } from './components/Layout';
 import { recoverUser230kData, hasInflatedStarterProperty, saveProtectedDossierSnapshot } from './services/dataRecovery';
+import { hasFirestoreSyncedThisSession } from './services/firebase/workspaceSync';
+import { auth } from './services/firebase/firebaseClient';
 import { scheduleIdleTabPrefetch } from './utils/tabPrefetch';
 import { ToastContainer, showToast } from './components/ui/Toast';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
@@ -94,6 +96,10 @@ export const App: React.FC = () => {
     useEffect(() => {
         const current = useFinanceStore.getState();
         if (!bootRecoveryRan.current) {
+            if (hasFirestoreSyncedThisSession() || auth.currentUser) {
+                bootRecoveryRan.current = true;
+                return;
+            }
             if (hasInflatedStarterProperty(current) || current.realDataSnapshot) {
                 bootRecoveryRan.current = true;
                 void recoverUser230kData(false);

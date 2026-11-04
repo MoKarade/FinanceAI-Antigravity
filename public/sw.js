@@ -10,7 +10,7 @@
 //
 // Note : ce SW est uniquement chargé en PROD (vite import.meta.env.PROD).
 
-const CACHE_NAME = 'financeai-v13'; // v13 : Modal portalé sur document.body (fini le dépassement haut/bas de Gemini) + Avis honnête & rapide en haut du chat avant le détail ; v12 : nettoyage complet des badges Google Finance vers FinanceAI ; v11 : logo FinanceAI aux 4 couleurs Google (/icon.svg + en-têtes sans logo Google) + effets arc-en-ciel Gemini sur toutes les surfaces IA ; v10 : Gemini 3.8 Flash & 4 Argon + saisie clé API inline + Plan d'action 5 horizons (jour/semaine/mois/année/décennie) + grille équilibrée sans trous ; v9 : relais Cloud Run (/api/fintable/* & /api/yahoo/*) + transactions Firestore par mois sans plafond + assistant Gemini agentique connecté à toutes les tranches ; v8 : refonte visuelle Google Finance Beta de toutes les pages ; v7 : simplification mobile + restauration Cloud + Preuves & Sources ; v6 : migration Firebase Hosting + fix fetch navigation RequestInit ; v5 : logo série A — purge de v4 qui gardait l'ancien /icon.svg (cache d'abord) ; v4 : Cloudflare Access — plus aucune réponse redirigée/opaque en cache (purge des caches v3)
+const CACHE_NAME = 'financeai-v14'; // v14 : synchronisation Cloud Firestore automatique multi-appareils (PC, mobile, tablette) sur financeai-497112 + accueil épuré 1M + transferts inclus au budget ; v13 : Modal portalé sur document.body (fini le dépassement haut/bas de Gemini) + Avis honnête & rapide en haut du chat avant le détail ; v12 : nettoyage complet des badges Google Finance vers FinanceAI ; v11 : logo FinanceAI aux 4 couleurs Google (/icon.svg + en-têtes sans logo Google) + effets arc-en-ciel Gemini sur toutes les surfaces IA ; v10 : Gemini 3.8 Flash & 4 Argon + saisie clé API inline + Plan d'action 5 horizons (jour/semaine/mois/année/décennie) + grille équilibrée sans trous ; v9 : relais Cloud Run (/api/fintable/* & /api/yahoo/*) + transactions Firestore par mois sans plafond + assistant Gemini agentique connecté à toutes les tranches ; v8 : refonte visuelle Google Finance Beta de toutes les pages ; v7 : simplification mobile + restauration Cloud + Preuves & Sources ; v6 : migration Firebase Hosting + fix fetch navigation RequestInit ; v5 : logo série A — purge de v4 qui gardait l'ancien /icon.svg (cache d'abord) ; v4 : Cloudflare Access — plus aucune réponse redirigée/opaque en cache (purge des caches v3)
 const PRECACHE_URLS = ['/manifest.json', '/icon.svg'];
 
 // [CF-ACCESS] Une réponse mettable en cache doit être une réponse DIRECTE de notre origine : ni redirigée (session
@@ -66,8 +66,8 @@ self.addEventListener('fetch', (event) => {
     const url = new URL(req.url);
     if (url.origin !== self.location.origin) return; // pas de cache pour Era / Finnhub / Anthropic
 
-    // [CF-ACCESS] /api/* : jamais mis en cache ni servi par le SW (réponses du relais/proxys : données, 401 d'accès expiré).
-    if (url.pathname.startsWith('/api/')) return;
+    // [CF-ACCESS / FIREBASE-AUTH] /api/* et /__/* : jamais mis en cache ni servis par le SW.
+    if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/__/')) return;
 
     // Cache-first pour /assets/* (chunks Vite hashés, immutable)
     // + portfolio-history.csv (historique immuable côté serveur, peut être

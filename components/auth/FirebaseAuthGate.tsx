@@ -128,7 +128,6 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                         resumeSettled: true,
                         error: null,
                     });
-                    void pullWorkspaceFromFirestoreNow(nextUser);
                 } else {
                     void recoverOrEnsureInitialWorkspace(false);
                     void chercherEtRestaurerDepuisGoogleDrive();
@@ -215,7 +214,10 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
         } catch (err: unknown) {
             const code = (err as { code?: string })?.code ?? '';
             if (
-                (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') &&
+                (code === 'auth/popup-blocked' ||
+                    code === 'auth/operation-not-supported-in-this-environment' ||
+                    code === 'auth/cancelled-popup-request' ||
+                    code === 'auth/web-storage-unsupported') &&
                 typeof signInWithRedirect === 'function'
             ) {
                 await signInWithRedirect(auth, googleProvider);

@@ -329,9 +329,6 @@ export const Layout: React.FC<LayoutProps> = ({
                   ‹ Plus
                 </button>
               )}
-              <div className="hidden sm:inline-flex items-center select-none shrink-0 pr-1.5 border-r border-bordure" aria-hidden="true">
-                <img src="/icon.svg" alt="" width={22} height={22} className="w-[22px] h-[22px] rounded-[6px] shrink-0" />
-              </div>
               <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-ink-400 truncate">
                 <span className="font-semibold uppercase tracking-wider text-repere">
                   {groupeActif ? groupeActif.label : 'Dossier'}
@@ -476,7 +473,6 @@ export const Layout: React.FC<LayoutProps> = ({
         <div ref={panneauPlusRef} className={`lg:hidden fixed inset-x-0 bottom-[64px] ${isTestMode ? 'top-10' : 'top-0'} z-90 bg-fond overflow-y-auto px-4 pt-4 pb-6 flex flex-col gap-3.5 animate-fade-in`}>
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-ink-50">Plus</h2>
-            <span className="gf-badge-nouvelle">FinanceAI</span>
           </div>
           <button
             type="button"

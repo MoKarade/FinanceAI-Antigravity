@@ -358,17 +358,13 @@ export function renewTokenSilently(): Promise<string> {
  * jamais au boot.
  */
 async function acquireTokenViaFirebasePopup(): Promise<string> {
-    const [{ initializeApp, getApps, getApp }, { getAuth, GoogleAuthProvider, signInWithPopup }, cfgMod] = await Promise.all([
-        import('firebase/app'),
+    const [{ GoogleAuthProvider, signInWithPopup }, { auth, firebaseConfig }] = await Promise.all([
         import('firebase/auth'),
-        import('../../firebase-applet-config.json'),
+        import('../firebase/firebaseClient'),
     ]);
-    const firebaseConfig = cfgMod.default;
     if (!firebaseConfig?.apiKey || !firebaseConfig?.authDomain) {
         throw new Error('Configuration OAuth absente');
     }
-    const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-    const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/drive.appdata');
     provider.addScope('https://www.googleapis.com/auth/userinfo.email');
