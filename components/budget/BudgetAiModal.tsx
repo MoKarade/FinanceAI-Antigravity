@@ -152,21 +152,20 @@ export const BudgetAiModal: React.FC<BudgetAiModalProps> = ({ apiKey, payload, o
             isOpen
             onClose={onClose}
             title="Diagnostic IA du Budget"
-            icon={<Icon name="sparkles" size={22} className="gemini-rainbow-sparkle" />}
+            icon={<span className="text-cyan-300 inline-flex"><Icon name="sparkles" size={20} /></span>}
             size="lg"
         >
-            <div className="gemini-rainbow-bar mb-3" aria-hidden="true" />
             {isStreaming && diagnostic === null ? (
                 <div className="space-y-3">
-                    <div className="gemini-rainbow-thinking rounded-xl px-3.5 py-2.5 flex items-center gap-3">
-                        <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+                    <div className="bg-surface-douce border border-bordure rounded-xl px-3.5 py-2.5 flex items-center gap-3">
+                        <div className="w-5 h-5 border-2 border-repere border-t-transparent rounded-full animate-spin" aria-hidden="true" />
                         <p className="text-body text-ink-300 animate-pulse">L'IA analyse vos lignes de budget…</p>
                     </div>
                     {streamingText && (
-                        <div className="bg-white/5 border border-white/10 rounded-lg p-3 max-h-48 overflow-y-auto">
+                        <div className="bg-surface-douce border border-bordure rounded-lg p-3 max-h-48 overflow-y-auto">
                             <p className="text-tiny text-ink-400 font-mono whitespace-pre-wrap leading-relaxed">
                                 {streamingText}
-                                <span className="inline-block w-1 h-3 bg-indigo-400 ml-1 animate-pulse" aria-hidden="true" />
+                                <span className="inline-block w-1 h-3 bg-repere ml-1 animate-pulse" aria-hidden="true" />
                             </p>
                         </div>
                     )}
@@ -176,7 +175,7 @@ export const BudgetAiModal: React.FC<BudgetAiModalProps> = ({ apiKey, payload, o
                     <p className="text-danger-400 text-body">{erreur}</p>
                     <button
                         onClick={onClose}
-                        className="w-full py-2 bg-white/10 hover:bg-white/15 text-white rounded-lg font-bold transition-colors"
+                        className="w-full py-2 touch-target bg-surface-douce hover:bg-bordure text-texte rounded-lg font-bold transition-colors"
                     >
                         Fermer
                     </button>
@@ -184,7 +183,7 @@ export const BudgetAiModal: React.FC<BudgetAiModalProps> = ({ apiKey, payload, o
             ) : (
                 <div className="space-y-3">
                     {diagnostic?.forme === 'validee' && diagnostic.items.map((reco, idx) => (
-                        <div key={idx} className="bg-white/5 border border-white/10 rounded-lg p-4 flex gap-3 animate-slide-up" style={{ animationDelay: `${idx * 100}ms` }}>
+                        <div key={idx} className="bg-surface-douce border border-bordure rounded-lg p-4 flex gap-3 animate-slide-up" style={{ animationDelay: `${idx * 100}ms` }}>
                             <div className="text-indigo-400 mt-0.5 text-lg" aria-hidden="true">•</div>
                             <p className="text-body text-ink-100 leading-relaxed">{reco}</p>
                         </div>
@@ -193,7 +192,7 @@ export const BudgetAiModal: React.FC<BudgetAiModalProps> = ({ apiKey, payload, o
                         // ⚠️ Présentation DIFFÉRENTE, volontairement : ni puce ni carte de
                         // recommandation. Le texte est conservé (le jeter serait pire) mais il
                         // n'emprunte pas l'apparence de ce qui a été validé.
-                        <div className="bg-white/3 border border-dashed border-white/15 rounded-lg p-4 space-y-2">
+                        <div className="bg-surface-douce border border-dashed border-bordure-champ rounded-lg p-4 space-y-2">
                             <p className="text-tiny text-ink-400 italic">
                                 L'IA n'a pas répondu dans le format attendu. Voici sa réponse telle
                                 quelle — elle n'a été ni découpée ni vérifiée par l'app.
@@ -203,7 +202,7 @@ export const BudgetAiModal: React.FC<BudgetAiModalProps> = ({ apiKey, payload, o
                     )}
                     <button
                         onClick={onClose}
-                        className="w-full mt-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold transition-colors"
+                        className="w-full mt-4 py-2 touch-target bg-accent hover:bg-accent-fonce text-sur-accent rounded-lg font-bold transition-colors"
                     >
                         Fermer le diagnostic
                     </button>

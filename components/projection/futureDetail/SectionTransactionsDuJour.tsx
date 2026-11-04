@@ -19,7 +19,7 @@ export const SectionTransactionsDuJour: React.FC<{
 }> = ({ dayIso, txnsDuJour, userName1, userName2 }) => {
     const fmt = (n: number) => formatCAD(n);
     return (
-                            <div className="border-t border-white/10 pt-3">
+                            <div className="border-t border-bordure pt-3">
                         {(txnsDuJour.counted.length > 0 || txnsDuJour.excluded.length > 0) ? (
                             <>
                                 <div className="flex items-baseline justify-between gap-2 mb-2">
@@ -33,7 +33,7 @@ export const SectionTransactionsDuJour: React.FC<{
                                         {txnsDuJour.netCounted > 0 ? '+' : ''}{fmt(txnsDuJour.netCounted)}
                                     </PrivateAmount>
                                 </div>
-                                <div className="max-h-64 overflow-y-auto rounded-lg border border-white/10">
+                                <div className="max-h-64 overflow-y-auto rounded-lg border border-bordure">
                                     <table className="w-full text-meta">
                                         <caption className="sr-only">
                                             Transactions du {dayIso}. Les lignes marquées sont exclues du calcul de la courbe.
@@ -47,7 +47,7 @@ export const SectionTransactionsDuJour: React.FC<{
                                         </thead>
                                         <tbody>
                                             {txnsDuJour.counted.map((t) => (
-                                                <tr key={`c-${t.id}`} className="border-t border-white/5">
+                                                <tr key={`c-${t.id}`} className="border-t border-bordure">
                                                     <td className="px-2.5 py-1.5 text-ink-100 align-top">
                                                         <PrivateText>{t.payee}</PrivateText>
                                                         {t.accountName && <span className="text-tiny text-ink-400"> · {t.accountName}</span>}
@@ -61,7 +61,7 @@ export const SectionTransactionsDuJour: React.FC<{
                                                                             key={i}
                                                                             className={`text-tiny px-1.5 py-px rounded border ${x.ton === 'attention'
                                                                                 ? 'text-amber-300 border-amber-400/30 bg-amber-400/10'
-                                                                                : 'text-ink-300 border-white/10 bg-white/5'}`}
+                                                                                : 'text-ink-300 border-bordure bg-surface-douce'}`}
                                                                         >
                                                                             {x.texte}
                                                                         </span>
@@ -87,7 +87,7 @@ export const SectionTransactionsDuJour: React.FC<{
                                                 token-vs-token, aveugle aux classes `opacity-*`. Le `line-through` suffit
                                                 à dire « exclu » ; l'atténuation porte sur le FOND, qui n'a pas de texte. */}
                                             {txnsDuJour.excluded.map(({ txn, reason }) => (
-                                                <tr key={`e-${txn.id}`} className="border-t border-white/5 bg-white/2">
+                                                <tr key={`e-${txn.id}`} className="border-t border-bordure bg-surface-douce">
                                                     <td className="px-2.5 py-1.5 text-ink-300 align-top">
                                                         <span className="line-through"><PrivateText>{txn.payee}</PrivateText></span>
                                                         {txn.accountName && <span className="text-tiny text-ink-400"> · {txn.accountName}</span>}
@@ -102,7 +102,7 @@ export const SectionTransactionsDuJour: React.FC<{
                                                                             key={i}
                                                                             className={`text-tiny px-1.5 py-px rounded border ${x.ton === 'attention'
                                                                                 ? 'text-amber-300 border-amber-400/30 bg-amber-400/10'
-                                                                                : 'text-ink-300 border-white/10 bg-white/5'}`}
+                                                                                : 'text-ink-300 border-bordure bg-surface-douce'}`}
                                                                         >
                                                                             {x.texte}
                                                                         </span>

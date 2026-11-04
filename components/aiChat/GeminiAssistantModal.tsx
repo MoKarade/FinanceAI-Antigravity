@@ -308,14 +308,13 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
             size="full"
             initialFocusRef={inputRef}
             icon={
-                <span className="w-8 h-8 rounded-full gemini-rainbow-avatar inline-flex items-center justify-center shrink-0">
-                    <Icon name="sparkles" size={18} className="gemini-rainbow-sparkle shrink-0" />
+                <span className="w-8 h-8 rounded-full bg-surface-douce border border-bordure inline-flex items-center justify-center shrink-0">
+                    <Icon name="sparkles" size={16} className="text-repere shrink-0" />
                 </span>
             }
-            title="Gemini · Assistant connecté à ton dossier"
+            title="Assistant financier"
             subtitle="Lit et modifie tes données sur demande · chaque modification est annulable"
         >
-            <div className="gemini-rainbow-bar mb-2 shrink-0" aria-hidden="true" />
             <div data-testid="assistant-panneau" className="flex flex-col md:flex-row gap-3 md:gap-4 h-[min(60vh,480px)] max-h-[calc(100dvh-9.5rem)] min-h-[260px] overflow-hidden">
                 {/* Barre latérale : historique des conversations */}
                 <aside data-testid="assistant-historique" aria-label="Historique des conversations" className="md:w-56 shrink-0 flex flex-col gap-1.5 max-h-28 md:max-h-full overflow-hidden">
@@ -324,7 +323,7 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
                         data-testid="assistant-nouvelle-conversation"
                         onClick={() => { if (!enCours) { setConversation(nouvelleConversation()); setAlerte(null); } }}
                         disabled={enCours}
-                        className="touch-target gemini-rainbow-btn w-full px-3 rounded-full text-xs font-semibold inline-flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 focus-ring shrink-0"
+                        className="touch-target w-full px-3 rounded-xl bg-surface-douce hover:bg-bordure border border-bordure-champ text-ink-50 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 focus-ring shrink-0"
                     >
                         <Icon name="plus" size={14} aria-hidden="true" />
                         <span>Nouvelle conversation</span>
@@ -505,13 +504,13 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
                                 <div className="space-y-3">
                                     <div
                                         data-testid="assistant-avis-honnete-dossier"
-                                        className="gemini-rainbow-card rounded-xl px-3.5 py-2.5 space-y-1"
+                                        className="rounded-xl bg-surface-douce border border-bordure px-3.5 py-2.5 space-y-1"
                                     >
-                                        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-200">
-                                            <Icon name="sparkles" size={13} className="gemini-rainbow-sparkle shrink-0" aria-hidden="true" />
-                                            <span>Avis honnête &amp; rapide sur ton dossier</span>
+                                        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-300">
+                                            <Icon name="sparkles" size={13} className="text-repere shrink-0" aria-hidden="true" />
+                                            <span>Synthèse du dossier</span>
                                         </div>
-                                        <p className="text-xs sm:text-sm font-medium text-ink-50 leading-relaxed">
+                                        <p className="text-xs sm:text-sm text-ink-100 leading-relaxed">
                                             {avisDossierInitial}
                                         </p>
                                     </div>
@@ -537,8 +536,8 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
                                 <MessageVue key={m.id} message={m} ctxDossier={ctxDossier} onAnnuler={annuler} onOuvrirOnglet={ouvrirOnglet} />
                             ))}
                             {enCours && (
-                                <div className="gemini-rainbow-thinking rounded-xl px-3.5 py-2.5 text-xs text-ink-50 flex items-center gap-2.5" data-testid="assistant-en-cours">
-                                    <Icon name="sparkles" size={15} className="gemini-rainbow-sparkle animate-spin shrink-0" aria-hidden="true" />
+                                <div className="rounded-xl bg-surface-douce border border-bordure px-3.5 py-2.5 text-xs text-ink-200 flex items-center gap-2.5" data-testid="assistant-en-cours">
+                                    <Icon name="sparkles" size={14} className="text-repere animate-spin shrink-0" aria-hidden="true" />
                                     <span className="font-medium">{etape ? `Gemini utilise : ${etape.replace(/_/g, ' ')}…` : 'Gemini réfléchit…'}</span>
                                 </div>
                             )}
@@ -614,20 +613,20 @@ const MessageVue: React.FC<{
         : decouperAvisHonnete(message.texte, ctxDossier);
     return (
         <div className="flex items-start gap-2.5" data-testid="assistant-message">
-            <span className="mt-0.5 w-6 h-6 rounded-full gemini-rainbow-avatar inline-flex items-center justify-center shrink-0">
-                <Icon name="sparkles" size={13} className="gemini-rainbow-sparkle" aria-hidden="true" />
+            <span className="mt-0.5 w-6 h-6 rounded-full bg-surface-douce border border-bordure inline-flex items-center justify-center shrink-0">
+                <Icon name="sparkles" size={12} className="text-repere" aria-hidden="true" />
             </span>
             <div className="flex-1 min-w-0 space-y-2.5">
                 {avis && (
                     <div
                         data-testid="assistant-avis-honnete"
-                        className="gemini-rainbow-card rounded-xl px-3.5 py-2.5 space-y-1"
+                        className="rounded-xl bg-surface-douce border border-bordure px-3.5 py-2.5 space-y-1"
                     >
-                        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-200">
-                            <Icon name="sparkles" size={12} className="gemini-rainbow-sparkle shrink-0" aria-hidden="true" />
-                            <span>Avis honnête · En bref</span>
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-300">
+                            <Icon name="sparkles" size={12} className="text-repere shrink-0" aria-hidden="true" />
+                            <span>En bref</span>
                         </div>
-                        <p className="text-xs sm:text-sm font-semibold text-ink-50 leading-relaxed whitespace-pre-wrap">
+                        <p className="text-xs sm:text-sm font-medium text-ink-50 leading-relaxed whitespace-pre-wrap">
                             {avis}
                         </p>
                     </div>

@@ -89,13 +89,13 @@ export const ErrorLogViewer: React.FC = () => {
 
                 {/* Stats synthèse */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    <div className="bg-white/5 rounded-sm p-2 border border-white/10">
+                    <div className="bg-surface-douce rounded-sm p-2 border border-bordure">
                         <div className="text-tiny text-ink-400 uppercase">Total</div>
-                        <div className="text-base font-bold text-white">{stats.total}</div>
+                        <div className="text-base font-bold text-texte">{stats.total}</div>
                     </div>
-                    <div className="bg-white/5 rounded-sm p-2 border border-white/10">
+                    <div className="bg-surface-douce rounded-sm p-2 border border-bordure">
                         <div className="text-tiny text-ink-400 uppercase">24h</div>
-                        <div className="text-base font-bold text-white">{stats.last24h}</div>
+                        <div className="text-base font-bold text-texte">{stats.last24h}</div>
                     </div>
                     <div className="bg-danger-500/10 rounded-sm p-2 border border-danger-500/30">
                         <div className="text-tiny text-danger-400 uppercase">Errors</div>
@@ -114,7 +114,7 @@ export const ErrorLogViewer: React.FC = () => {
                         aria-label="Filtrer par source d'erreur"
                         value={sourceFilter}
                         onChange={e => setSourceFilter(e.target.value as ErrorSource | 'all')}
-                        className="bg-dark border border-white/10 rounded-sm px-2 py-1 text-meta text-white"
+                        className="bg-dark border border-bordure-champ rounded-sm px-2 py-1 touch-target text-meta text-texte"
                     >
                         {allSources.map(s => (
                             <option key={s} value={s}>{s === 'all' ? 'Toutes' : s}</option>
@@ -125,7 +125,7 @@ export const ErrorLogViewer: React.FC = () => {
                         aria-label="Filtrer par niveau de severity"
                         value={severityFilter}
                         onChange={e => setSeverityFilter(e.target.value as ErrorSeverity | 'all')}
-                        className="bg-dark border border-white/10 rounded-sm px-2 py-1 text-meta text-white"
+                        className="bg-dark border border-bordure-champ rounded-sm px-2 py-1 touch-target text-meta text-texte"
                     >
                         {allSeverities.map(s => (
                             <option key={s} value={s}>{s === 'all' ? 'Toutes' : s}</option>
@@ -135,7 +135,7 @@ export const ErrorLogViewer: React.FC = () => {
                         <button
                             type="button"
                             onClick={() => setRefreshKey(k => k + 1)}
-                            className="px-3 py-1 text-tiny bg-white/5 hover:bg-white/10 rounded-sm text-ink-300 transition-colors focus-ring"
+                            className="px-3 py-1 touch-target text-tiny bg-surface-douce hover:bg-bordure rounded-sm text-ink-300 transition-colors focus-ring"
                             title="Rafraîchir la liste"
                         >
                             ↻ Rafraîchir
@@ -144,7 +144,7 @@ export const ErrorLogViewer: React.FC = () => {
                             type="button"
                             onClick={handleExport}
                             disabled={errors.length === 0}
-                            className="px-3 py-1 text-tiny bg-info-500/15 hover:bg-info-500/25 border border-info-500/30 rounded-sm text-info-400 transition-colors focus-ring disabled:opacity-50"
+                            className="px-3 py-1 touch-target text-tiny bg-info-500/15 hover:bg-info-500/25 border border-info-500/30 rounded-sm text-info-400 transition-colors focus-ring disabled:opacity-50"
                         >
                             Exporter JSON
                         </button>
@@ -152,7 +152,7 @@ export const ErrorLogViewer: React.FC = () => {
                             type="button"
                             onClick={() => setConfirmClear(true)}
                             disabled={errors.length === 0}
-                            className="px-3 py-1 text-tiny bg-danger-500/15 hover:bg-danger-500/25 border border-danger-500/30 rounded-sm text-red-300 transition-colors focus-ring disabled:opacity-50"
+                            className="px-3 py-1 touch-target text-tiny bg-danger-500/15 hover:bg-danger-500/25 border border-danger-500/30 rounded-sm text-red-300 transition-colors focus-ring disabled:opacity-50"
                         >
                             Vider
                         </button>
@@ -188,7 +188,7 @@ const ErrorRow: React.FC<{ err: LoggedError }> = ({ err }) => {
                 type="button"
                 onClick={() => setExpanded(e => !e)}
                 aria-expanded={expanded}
-                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 transition-colors text-left"
+                className="w-full flex items-center gap-2 px-3 py-2 touch-target hover:bg-surface-douce transition-colors text-left"
             >
                 <Icon name={SOURCE_ICONS[err.source]} size={14} className="text-ink-400" />
                 <span className="font-mono uppercase text-tiny opacity-80 w-20 shrink-0">{err.severity}</span>
@@ -197,17 +197,17 @@ const ErrorRow: React.FC<{ err: LoggedError }> = ({ err }) => {
                 <span aria-hidden="true" className="opacity-50">{expanded ? '−' : '+'}</span>
             </button>
             {expanded && (
-                <div className="border-t border-white/10 px-3 py-2 space-y-2 font-mono">
+                <div className="border-t border-bordure px-3 py-2 space-y-2 font-mono">
                     {err.stack && (
                         <div>
                             <div className="text-tiny opacity-70 uppercase mb-1">Stack</div>
-                            <pre className="text-tiny whitespace-pre-wrap break-all max-h-32 overflow-y-auto bg-black/30 p-2 rounded-sm">{err.stack}</pre>
+                            <pre className="text-tiny whitespace-pre-wrap break-all max-h-32 overflow-y-auto bg-fond p-2 rounded-sm">{err.stack}</pre>
                         </div>
                     )}
                     {err.context && Object.keys(err.context).length > 0 && (
                         <div>
                             <div className="text-tiny opacity-70 uppercase mb-1">Context</div>
-                            <pre className="text-tiny whitespace-pre-wrap bg-black/30 p-2 rounded-sm">{JSON.stringify(err.context, null, 2)}</pre>
+                            <pre className="text-tiny whitespace-pre-wrap bg-fond p-2 rounded-sm">{JSON.stringify(err.context, null, 2)}</pre>
                         </div>
                     )}
                     {err.url && (

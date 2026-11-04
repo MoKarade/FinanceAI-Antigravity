@@ -67,7 +67,7 @@ export const ProjectionControls: React.FC<ProjectionControlsProps> = ({
     // 3 colonnes au bureau depuis le retrait de « Flux Mensuels » ([SANDBOX-CURSEURS-THEORIQUES-RETRAIT]).
     const gridHypotheses = isLateralDrawer ? 'grid grid-cols-1 gap-6' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6';
     const gridInflationCategories = isLateralDrawer ? 'grid grid-cols-2 gap-3 mt-3 p-3 rounded-card border border-warning-border bg-warning-bg' : 'grid grid-cols-2 md:grid-cols-3 gap-3 mt-3 p-3 rounded-card border border-warning-border bg-warning-bg';
-    const gridUsWithholding = isLateralDrawer ? 'grid grid-cols-1 gap-4 p-3 rounded-card border border-white/5 bg-black/30' : 'grid grid-cols-1 md:grid-cols-2 gap-4 p-3 rounded-card border border-white/5 bg-black/30';
+    const gridUsWithholding = isLateralDrawer ? 'grid grid-cols-1 gap-4 p-3 rounded-card border border-bordure bg-fond' : 'grid grid-cols-1 md:grid-cols-2 gap-4 p-3 rounded-card border border-bordure bg-fond';
     const gridStochastic = isLateralDrawer ? 'grid grid-cols-2 gap-2 mt-3' : 'grid grid-cols-1 md:grid-cols-3 gap-2 mt-3';
     // D6-SR-2 — masque la valeur des sliders monétaires (revenu/dépenses théoriques, plafond immo) au
     // lecteur d'écran en mode privé (parité avec le blur visuel ; les sliders de taux/% ne sont pas masqués).
@@ -103,7 +103,7 @@ export const ProjectionControls: React.FC<ProjectionControlsProps> = ({
                 (fix HIGH a11y review). */}
             <div className="flex flex-wrap items-center gap-3">
                 <fieldset
-                    className="flex items-center bg-black/50 border border-white/10 rounded-xl p-1 gap-0.5"
+                    className="flex items-center bg-fond border border-bordure rounded-xl p-1 gap-0.5"
                     disabled={isComputing}
                 >
                     <legend className="sr-only">Mode de simulation</legend>
@@ -200,7 +200,7 @@ export const ProjectionControls: React.FC<ProjectionControlsProps> = ({
                     {/* [SANDBOX-CURSEURS-THEORIQUES-RETRAIT] Colonne « Flux Mensuels » (curseurs Revenus /
                         Dépenses théoriques) retirée : `useTheoretical` est neutralisé dans le moteur. */}
                     <div className="space-y-4">
-                        <h4 className="text-tiny uppercase text-ink-400 border-b border-white/10 pb-1">Facteurs Macro</h4>
+                        <h4 className="text-tiny uppercase text-ink-400 border-b border-bordure pb-1">Facteurs Macro</h4>
                         {/* [HORIZON-ESPERANCE-DE-VIE] Plus de curseur : la projection va toujours jusqu'à
                             l'espérance de vie de la personne 1 (réglée dans Retraite). */}
                         <p className="text-meta text-ink-300">
@@ -224,7 +224,7 @@ export const ProjectionControls: React.FC<ProjectionControlsProps> = ({
                     </div>
 
                     <div className="space-y-4">
-                        <h4 className="text-tiny uppercase text-ink-400 border-b border-white/10 pb-1 flex justify-between items-center">
+                        <h4 className="text-tiny uppercase text-ink-400 border-b border-bordure pb-1 flex justify-between items-center">
                             <span>Rendements Estimés</span>
                             {liveCSVBalances.historicalRate > 0 && (
                                 <Button
@@ -255,7 +255,7 @@ export const ProjectionControls: React.FC<ProjectionControlsProps> = ({
                     </div>
 
                     <div className="space-y-4">
-                        <h4 className="text-tiny uppercase text-ink-400 border-b border-white/10 pb-1">Paramètres Spéciaux</h4>
+                        <h4 className="text-tiny uppercase text-ink-400 border-b border-bordure pb-1">Paramètres Spéciaux</h4>
                         <div>
                             <label className="flex justify-between text-meta text-ink-300 mb-1">
                                 <span>Coussin de Sécurité</span>
@@ -361,7 +361,7 @@ export const ProjectionControls: React.FC<ProjectionControlsProps> = ({
                     </div>
 
                     {/* [EP-1] Événements de vie aléatoires : 10 toggles cachés derrière un bouton. */}
-                    <div className="pt-2 border-t border-white/10">
+                    <div className="pt-2 border-t border-bordure">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                             <h4 className="text-tiny uppercase text-ink-400 flex items-center gap-1.5">
                                 <Icon name="wind" size={14} /> Événements de vie aléatoires

@@ -79,13 +79,13 @@ export const AuditLogViewer: React.FC = () => {
                 </p>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    <div className="bg-white/5 rounded-sm p-2 border border-white/10">
+                    <div className="bg-surface-douce rounded-sm p-2 border border-bordure">
                         <div className="text-tiny text-ink-400 uppercase">Total</div>
-                        <div className="text-base font-bold text-white">{stats.total}</div>
+                        <div className="text-base font-bold text-texte">{stats.total}</div>
                     </div>
-                    <div className="bg-white/5 rounded-sm p-2 border border-white/10">
+                    <div className="bg-surface-douce rounded-sm p-2 border border-bordure">
                         <div className="text-tiny text-ink-400 uppercase">24h</div>
-                        <div className="text-base font-bold text-white">{stats.last24h}</div>
+                        <div className="text-base font-bold text-texte">{stats.last24h}</div>
                     </div>
                     <div className="bg-success-500/10 rounded-sm p-2 border border-success-500/30">
                         <div className="text-tiny text-success-400 uppercase">Adds</div>
@@ -103,7 +103,7 @@ export const AuditLogViewer: React.FC = () => {
                         aria-label="Filtrer par champ modifié"
                         value={fieldFilter}
                         onChange={e => setFieldFilter(e.target.value)}
-                        className="bg-dark border border-white/10 rounded-sm px-2 py-1 text-meta text-white"
+                        className="bg-dark border border-bordure-champ rounded-sm px-2 py-1 touch-target text-meta text-texte"
                     >
                         <option value="all">Tous</option>
                         {allFields.map(f => <option key={f} value={f}>{f}</option>)}
@@ -113,7 +113,7 @@ export const AuditLogViewer: React.FC = () => {
                         aria-label="Filtrer par type d'opération"
                         value={opFilter}
                         onChange={e => setOpFilter(e.target.value as AuditEntry['operation'] | 'all')}
-                        className="bg-dark border border-white/10 rounded-sm px-2 py-1 text-meta text-white"
+                        className="bg-dark border border-bordure-champ rounded-sm px-2 py-1 touch-target text-meta text-texte"
                     >
                         <option value="all">Toutes</option>
                         <option value="add">add</option>
@@ -122,9 +122,9 @@ export const AuditLogViewer: React.FC = () => {
                         <option value="replace">replace</option>
                     </select>
                     <div className="ml-auto flex gap-2">
-                        <button type="button" onClick={() => setRefreshKey(k => k + 1)} className="px-3 py-1 text-tiny bg-white/5 hover:bg-white/10 rounded-sm text-ink-300 focus-ring">↻ Rafraîchir</button>
-                        <button type="button" onClick={handleExport} disabled={entries.length === 0} className="px-3 py-1 text-tiny bg-info-500/15 hover:bg-info-500/25 border border-info-500/30 rounded-sm text-info-400 focus-ring disabled:opacity-50">Exporter</button>
-                        <button type="button" onClick={() => setConfirmClear(true)} disabled={entries.length === 0} className="px-3 py-1 text-tiny bg-danger-500/15 hover:bg-danger-500/25 border border-danger-500/30 rounded-sm text-red-300 focus-ring disabled:opacity-50">Vider</button>
+                        <button type="button" onClick={() => setRefreshKey(k => k + 1)} className="px-3 py-1 touch-target text-tiny bg-surface-douce hover:bg-bordure rounded-sm text-ink-300 focus-ring">↻ Rafraîchir</button>
+                        <button type="button" onClick={handleExport} disabled={entries.length === 0} className="px-3 py-1 touch-target text-tiny bg-info-500/15 hover:bg-info-500/25 border border-info-500/30 rounded-sm text-info-400 focus-ring disabled:opacity-50">Exporter</button>
+                        <button type="button" onClick={() => setConfirmClear(true)} disabled={entries.length === 0} className="px-3 py-1 touch-target text-tiny bg-danger-500/15 hover:bg-danger-500/25 border border-danger-500/30 rounded-sm text-red-300 focus-ring disabled:opacity-50">Vider</button>
                     </div>
                 </div>
 

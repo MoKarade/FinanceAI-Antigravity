@@ -68,8 +68,8 @@ export const ImportBrokerPositions: React.FC<Props> = ({ isOpen, onClose, onImpo
                     Dépose un CSV de positions (Wealthsimple, Questrade, Disnat…) — 100 % local.
                 </p>
 
-                <label className="flex items-center gap-3 cursor-pointer">
-                    <span className="px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-body text-ink-100 transition-colors">
+                <label className="flex items-center gap-3 cursor-pointer min-h-11">
+                    <span className="px-3 py-2 bg-surface-douce hover:bg-bordure border border-bordure-champ rounded-lg text-body text-ink-100 transition-colors">
                         Choisir un fichier CSV…
                     </span>
                     <input
@@ -88,12 +88,12 @@ export const ImportBrokerPositions: React.FC<Props> = ({ isOpen, onClose, onImpo
                         rows={4}
                         onChange={(e) => { const v = e.target.value; if (v.trim()) parse(v); else reset(); }}
                         placeholder={'Symbol,Quantity,Average Cost,Currency,Account\nAAPL,10,150.25,USD,TFSA'}
-                        className="w-full bg-dark border border-white/10 rounded-sm px-3 py-2 text-white font-mono text-tiny outline-hidden focus:border-primary"
+                        className="w-full bg-dark border border-bordure-champ rounded-sm px-3 py-2 text-texte font-mono text-tiny outline-hidden focus:border-primary"
                     />
                 </div>
 
                 {error && (
-                    <div className="text-meta text-red-300 bg-red-900/20 border border-danger-500/20 rounded-lg p-2">{error}</div>
+                    <div className="text-meta text-red-300 bg-erreur-fond border border-danger-500/20 rounded-lg p-2">{error}</div>
                 )}
 
                 {preview && (
@@ -102,9 +102,9 @@ export const ImportBrokerPositions: React.FC<Props> = ({ isOpen, onClose, onImpo
                             <span><span className="text-ink-200 font-bold">{preview.imported}</span> position(s) prête(s)</span>
                             {preview.skipped > 0 && <span className="text-amber-300">{preview.skipped} ligne(s) ignorée(s)</span>}
                         </div>
-                        <div className="rounded-lg border border-white/5 max-h-48 overflow-y-auto">
+                        <div className="rounded-lg border border-bordure max-h-48 overflow-y-auto">
                             <table className="w-full text-tiny">
-                                <thead className="bg-black/30 text-ink-400 sticky top-0">
+                                <thead className="bg-fond text-ink-400 sticky top-0">
                                     <tr>
                                         <th className="text-left p-2">Symbole</th>
                                         <th className="text-right p-2">Qté</th>
@@ -112,7 +112,7 @@ export const ImportBrokerPositions: React.FC<Props> = ({ isOpen, onClose, onImpo
                                         <th className="text-left p-2">Compte</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-white/5">
+                                <tbody className="divide-y divide-bordure">
                                     {preview.holdings.slice(0, 8).map((h, i) => (
                                         <tr key={`${h.symbol}-${i}`}>
                                             <td className="p-2 font-mono text-ink-200">{h.symbol}</td>
@@ -136,14 +136,14 @@ export const ImportBrokerPositions: React.FC<Props> = ({ isOpen, onClose, onImpo
                 )}
 
                 <div className="flex justify-end gap-2 pt-2">
-                    <button type="button" onClick={handleClose} className="px-4 py-2 bg-white/5 hover:bg-white/10 text-ink-200 rounded-sm font-bold text-body transition-colors">
+                    <button type="button" onClick={handleClose} className="px-4 py-2 touch-target bg-surface-douce hover:bg-bordure text-ink-200 rounded-sm font-bold text-body transition-colors">
                         Annuler
                     </button>
                     <button
                         type="button"
                         onClick={confirm}
                         disabled={!preview}
-                        className="px-4 py-2 bg-primary hover:bg-primary/80 text-dark rounded-sm font-bold text-body transition-colors disabled:opacity-50"
+                        className="px-4 py-2 touch-target bg-primary hover:bg-primary/80 text-dark rounded-sm font-bold text-body transition-colors disabled:opacity-50"
                     >
                         Importer{preview ? ` ${preview.imported} position(s)` : ''}
                     </button>

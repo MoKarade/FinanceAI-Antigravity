@@ -192,8 +192,8 @@ function construireSparklineReelle(valeurs: ReadonlyArray<number>): string {
     return echantillon
         .map((val, idx) => {
             const x = Number((idx * pasX).toFixed(1));
-            const y = amplitude > 0 ? Math.round(18 - ((val - min) / amplitude) * 14) : 11;
-            return `${x},${Math.max(3, Math.min(19, y))}`;
+            const y = amplitude > 0 ? Number((18.5 - ((val - min) / amplitude) * 15).toFixed(1)) : 11;
+            return `${x},${Math.max(2.5, Math.min(19, y))}`;
         })
         .join(' ');
 }
@@ -595,6 +595,24 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     0,
                 );
             }
+            const seriesActifs30j = (state.assets ?? [])
+                .map((a) => {
+                    const fxFactor = toCurrencyFactor(state.fxRates, a.currency || 'CAD');
+                    const hist = (a.priceHistory ?? [])
+                        .map((p) => p.price * (a.quantity || 1) * fxFactor)
+                        .filter((v) => Number.isFinite(v) && v > 0);
+                    if (hist.length >= 2) {
+                        return construireSerie1Mois(assetValueCad(a, state.fxRates), hist, 0);
+                    }
+                    return [];
+                })
+                .filter((s) => s.length === 30);
+            if (seriesActifs30j.length > 0) {
+                const sommeBrute = Array.from({ length: 30 }, (_, idx) =>
+                    seriesActifs30j.reduce((acc, s) => acc + (s[idx] ?? 0), 0),
+                );
+                return construireSerie1Mois(valeurPlacementsActuelle, sommeBrute, 0);
+            }
             const deltaPlacements =
                 variation && Number.isFinite(variation.diff) && variation.diff !== 0
                     ? variation.diff - (serieCash30j[29]! - serieCash30j[0]!)
@@ -805,6 +823,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         portefeuilleMobilier,
         state.transactions,
         state.fintableBrokerHistory,
+        state.assets,
+        state.fxRates,
         variation,
         epargneMensuelle,
     ]);
@@ -826,11 +846,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         if (valeurs.length === 0) return [0, 100_000];
         const minVal = Math.min(...valeurs);
         const maxVal = Math.max(...valeurs);
-        const amplitude = Math.max(maxVal - minVal, Math.max(1_500, Math.round(maxVal * 0.02)));
-        const margeBasse = Math.round(amplitude * 0.28);
-        const margeHaute = Math.round(amplitude * 0.22);
-        const bas = Math.max(0, Math.floor((minVal - margeBasse) / 500) * 500);
-        const haut = Math.max(bas + 1_000, Math.ceil((maxVal + margeHaute) / 500) * 500);
+        const amplitude = Math.max(maxVal - minVal, Math.max(300, Math.round(maxVal * 0.005)));
+        const margeBasse = Math.round(amplitude * 0.14);
+        const margeHaute = Math.round(amplitude * 0.12);
+        const bas = Math.max(0, Math.floor((minVal - margeBasse) / 100) * 100);
+        const haut = Math.max(bas + 200, Math.ceil((maxVal + margeHaute) / 100) * 100);
         return [bas, haut];
     }, [donneesTrajectoire, modeCourbe]);
 
@@ -2587,13 +2607,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     {/* Carte 1 : Point d'entrée unique Gemini sur l'Accueil */}
                     <section
                         aria-label="Assistant de recherche financière Gemini"
-                        className="premium-card gemini-rainbow-card rounded-xl bg-surface p-3.5 sm:p-5 space-y-3 overflow-hidden"
+                        className="premium-card rounded-xl bg-surface border border-bordure p-3.5 sm:p-5 space-y-3"
                     >
-                        <div className="gemini-rainbow-bar -mx-3.5 sm:-mx-5 -mt-3.5 sm:-mt-5 mb-2" aria-hidden="true" />
                         <div className="flex items-center justify-between gap-2 border-b border-bordure pb-2.5">
                             <div className="flex items-center gap-2">
-                                <span className="w-6 h-6 rounded-full gemini-rainbow-avatar inline-flex items-center justify-center shrink-0">
-                                    <Icon name="sparkles" size={13} className="gemini-rainbow-sparkle" aria-hidden="true" />
+                                <span className="w-6 h-6 rounded-full bg-surface-douce border border-bordure inline-flex items-center justify-center shrink-0">
+                                    <Icon name="sparkles" size={13} className="text-ink-200" aria-hidden="true" />
                                 </span>
                                 <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
                                     Conseiller Gemini
@@ -2603,10 +2622,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setShowGeminiModal(true)}
                                 aria-label="Ouvrir le conseiller financier Gemini"
-                                className="touch-target px-3 py-1 rounded-full gemini-rainbow-btn text-xs font-semibold inline-flex items-center gap-1.5 focus-ring"
+                                className="touch-target px-3 py-1 rounded-lg bg-surface-douce hover:bg-surfaceHighlight border border-bordure text-ink-100 text-xs font-medium inline-flex items-center gap-1.5 transition-colors focus-ring"
                             >
-                                <Icon name="sparkles" size={13} className="gemini-rainbow-sparkle" aria-hidden="true" />
                                 <span>Discuter</span>
+                                <Icon name="chevron-right" size={12} className="text-ink-400" aria-hidden="true" />
                             </button>
                         </div>
 
@@ -2621,9 +2640,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 >
                                     <span className="truncate">{q}</span>
                                     <Icon
-                                        name="sparkles"
-                                        size={14}
-                                        className="gemini-rainbow-sparkle shrink-0"
+                                        name="chevron-right"
+                                        size={13}
+                                        className="text-ink-400 shrink-0"
                                         aria-hidden="true"
                                     />
                                 </button>

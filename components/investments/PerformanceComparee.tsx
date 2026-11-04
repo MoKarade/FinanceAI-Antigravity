@@ -6,7 +6,7 @@
 // individuels (absents des maquettes) restent disponibles, repliés derrière « Titres (N) ».
 // Le mode Prix ($) et la superposition de titres vivent dans Détail → Comparer (StockComparisonModal).
 import React, { useMemo, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, ReferenceLine } from 'recharts';
 import type { MarketDataPoint } from '../../services/finance';
 import { GF_CROSSHAIR_CURSOR, GF_ACTIVE_DOT } from '../../utils/chartTooltip';
 import { formatDate, formatVariationPct, formatCompactCAD } from '../../utils/format';
@@ -149,7 +149,8 @@ const PerfCompareeTooltip: React.FC<PerfCompareeTooltipProps> = ({
 };
 
 export const PerformanceComparee: React.FC<Props> = ({ donnees, series, selection, onSelection, periode, onPeriode, estSynthetique, chargement, etroit, children }) => {
-    const [titresOuverts, setTitresOuverts] = useState(false);
+    const [titresOuverts, setTitresOuverts] = useState(true);
+    const [modeFocus, setModeFocus] = useState<'focus' | 'superposer'>('focus');
     // [PRIVACY-RATIOS-DUREES-UNIFORMES] La variation du TOTAL et de chaque COMPTE est un ratio perso : masquée en
     // mode discret. Celle d'un TITRE est une variation de prix de marché (décision de Marc : laissée visible).
     const isPrivacyMode = useFinanceStore((s) => s.isPrivacyMode);
@@ -202,21 +203,51 @@ export const PerformanceComparee: React.FC<Props> = ({ donnees, series, selectio
     const visibles = series.filter((s) => selection.has(s.id));
     const estPerso = (id: string) => decor.get(id)?.total === true;
     const pctSerie = (id: string, v: unknown, decimales: 0 | 1 | 2 = 1) => (isPrivacyMode && estPerso(id) ? MASKED_AMOUNT_LABEL : formatVariationPct(v, decimales));
+    const domaineY = useMemo<[number, number]>(() => {
+        const vals = lignesVisibles
+            .flatMap((l) => visibles.map((s) => l[s.id]))
+            .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+        if (vals.length === 0) return [-5, 5];
+        const minV = Math.min(...vals);
+        const maxV = Math.max(...vals);
+        const span = Math.max(maxV - minV, 0.4);
+        const pad = span * 0.08;
+        return [Number((minV - pad).toFixed(2)), Number((maxV + pad).toFixed(2))];
+    }, [lignesVisibles, visibles]);
     const reperes = useMemo(() => {
-        const r = reperesRonds(lignesVisibles.flatMap((l) => visibles.map((s) => l[s.id])).filter((v): v is number => typeof v === 'number'));
-        return etroit && r ? r.filter((_, i) => i % 2 === 0) : r;
-    }, [lignesVisibles, visibles, etroit]);
+        const vals = lignesVisibles
+            .flatMap((l) => visibles.map((s) => l[s.id]))
+            .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+        const r = reperesRonds(vals);
+        if (!r) return undefined;
+        const dansDomaine = r.filter((tick) => tick >= domaineY[0] && tick <= domaineY[1]);
+        const retenus = etroit ? dansDomaine.filter((_, i) => i % 2 === 0) : dansDomaine;
+        return retenus.length >= 2 ? retenus : undefined;
+    }, [lignesVisibles, visibles, domaineY, etroit]);
     const dates = useMemo(() => {
         const n = lignesVisibles.length;
         if (n === 0) return [];
         const nb = Math.min(n, etroit ? 3 : 5);
         return Array.from(new Set(Array.from({ length: nb }, (_, k) => String(lignesVisibles[Math.round((k * (n - 1)) / Math.max(1, nb - 1))].date))));
     }, [lignesVisibles, etroit]);
+    const decimalesAxeY: 0 | 1 = Math.abs(domaineY[1] - domaineY[0]) < 6 ? 1 : 0;
     const debut = donnees[0]?.date ? formatDate(jour(String(donnees[0].date)), { day: 'numeric', month: 'short', year: 'numeric' }) : null;
 
     const basculer = (id: string) => {
+        if (modeFocus === 'focus') {
+            if (selection.size === 1 && selection.has(id) && id !== 'TOTAL') {
+                onSelection(new Set(['TOTAL']));
+            } else {
+                onSelection(new Set([id]));
+            }
+            return;
+        }
         const next = new Set(selection);
-        if (next.has(id)) next.delete(id); else next.add(id);
+        if (next.has(id)) {
+            if (next.size > 1) next.delete(id);
+        } else {
+            next.add(id);
+        }
         onSelection(next);
     };
     const etiquette = (s: SerieDisponible) => {
@@ -229,7 +260,7 @@ export const PerformanceComparee: React.FC<Props> = ({ donnees, series, selectio
                 type="button"
                 onClick={() => basculer(s.id)}
                 aria-pressed={actif}
-                className={`h-9 px-3 rounded-full border flex items-center gap-2 text-[13px] transition-colors focus-ring ${actif ? 'border-white/12 bg-surfaceHighlight/60 text-ink-50' : 'border-white/6 text-ink-400'}`}
+                className={`min-h-11 px-3 rounded-full border flex items-center gap-2 text-[13px] transition-colors focus-ring ${actif ? 'border-bordure-champ bg-surfaceHighlight/60 text-ink-50' : 'border-bordure text-ink-400'}`}
             >
                 <span className="w-3 h-[3px] rounded-sm" style={{ background: d.couleur, opacity: actif ? 1 : 0.4 }} aria-hidden="true" />
                 {d.libelle}
@@ -251,7 +282,7 @@ export const PerformanceComparee: React.FC<Props> = ({ donnees, series, selectio
     ];
 
     return (
-        <section aria-labelledby="perf-comparee-titre" className="rounded-2xl bg-surface border border-white/6 p-4 sm:px-6 sm:py-5 flex flex-col gap-3.5 min-w-0">
+        <section aria-labelledby="perf-comparee-titre" className="rounded-2xl bg-surface border border-bordure p-4 sm:px-6 sm:py-5 flex flex-col gap-3.5 min-w-0">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
                 <div className="flex items-center gap-2.5 flex-wrap">
                     <h2 id="perf-comparee-titre" className="text-[17px] lg:text-[18px] font-semibold text-ink-50">Performance comparée</h2>
@@ -261,36 +292,75 @@ export const PerformanceComparee: React.FC<Props> = ({ donnees, series, selectio
                         </span>
                     )}
                 </div>
-                <div role="group" aria-label="Période du graphe" className={etroit ? 'grid grid-cols-4 p-1 rounded-xl bg-dark border border-white/6' : 'flex gap-1 shrink-0'}>
-                    {PERIODES.map((p) => (
+                <div className="flex flex-wrap items-center gap-2">
+                    <div role="group" aria-label="Mode de lecture des courbes" className="inline-flex p-0.5 rounded-xl bg-fond border border-bordure">
                         <button
-                            key={p.id}
                             type="button"
-                            onClick={() => onPeriode(p.id)}
-                            aria-pressed={periode === p.id}
-                            className={`h-9 px-3 rounded-lg text-[13px] transition-colors focus-ring ${periode === p.id ? (etroit ? 'bg-ink-50 text-dark font-semibold' : 'bg-surfaceHighlight text-ink-50 font-semibold') : 'text-ink-300 hover:bg-white/5'}`}
+                            onClick={() => {
+                                setModeFocus('focus');
+                                if (selection.size > 1) {
+                                    const premiere = [...selection][0] ?? 'TOTAL';
+                                    onSelection(new Set([premiere]));
+                                }
+                            }}
+                            aria-pressed={modeFocus === 'focus'}
+                            className={`touch-target px-2.5 py-1 rounded-lg text-xs transition-colors focus-ring ${modeFocus === 'focus' ? 'bg-surfaceHighlight text-ink-50 font-semibold' : 'text-ink-400 hover:text-ink-200'}`}
                         >
-                            {p.libelle}
+                            Focus 1 courbe
                         </button>
-                    ))}
+                        <button
+                            type="button"
+                            onClick={() => setModeFocus('superposer')}
+                            aria-pressed={modeFocus === 'superposer'}
+                            className={`touch-target px-2.5 py-1 rounded-lg text-xs transition-colors focus-ring ${modeFocus === 'superposer' ? 'bg-surfaceHighlight text-ink-50 font-semibold' : 'text-ink-400 hover:text-ink-200'}`}
+                        >
+                            Superposer
+                        </button>
+                    </div>
+                    <div role="group" aria-label="Période du graphe" className={etroit ? 'grid grid-cols-4 p-1 rounded-xl bg-dark border border-bordure w-full sm:w-auto' : 'flex gap-1 shrink-0'}>
+                        {PERIODES.map((p) => (
+                            <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => onPeriode(p.id)}
+                                aria-pressed={periode === p.id}
+                                className={`min-h-11 px-3 rounded-lg text-[13px] transition-colors focus-ring ${periode === p.id ? (etroit ? 'bg-ink-50 text-dark font-semibold' : 'bg-surfaceHighlight text-ink-50 font-semibold') : 'text-ink-300 hover:bg-surface-douce'}`}
+                            >
+                                {p.libelle}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
-            <div style={{ width: '100%', height: etroit ? 220 : 300 }}>
+            <div style={{ width: '100%', height: etroit ? 250 : 340 }}>
                 {chargement ? (
                     <Skeleton variant="chart" className="h-full!" />
                 ) : lignes.length > 1 ? (
                     <div role="img" aria-label="Variation en pourcentage du portefeuille et de chaque compte sur la période — détail chiffré dans le tableau de données." className="w-full h-full">
                         <ZoomContainer zoom={zoom} hint={false} className="w-full h-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={lignesVisibles} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
+                                <ComposedChart data={lignesVisibles} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
+                                    <defs>
+                                        {visibles.map((s) => {
+                                            const d = decor.get(s.id)!;
+                                            return (
+                                                <linearGradient key={s.id} id={`perf-grad-${s.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`} x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor={d.couleur} stopOpacity={0.26} />
+                                                    <stop offset="95%" stopColor={d.couleur} stopOpacity={0.01} />
+                                                </linearGradient>
+                                            );
+                                        })}
+                                    </defs>
                                     <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                                    <ReferenceLine y={0} stroke="var(--bordure-champ)" strokeDasharray="3 3" strokeWidth={1} />
+                                    {domaineY[0] <= 0 && domaineY[1] >= 0 && (
+                                        <ReferenceLine y={0} stroke="var(--bordure-champ)" strokeDasharray="3 3" strokeWidth={1} />
+                                    )}
                                     <XAxis dataKey="date" ticks={dates} interval={0} tick={<TickDate />} tickLine={false} axisLine={false} />
                                     <YAxis /* AXE-NON-MONETAIRE : variation en %, jamais un montant */
-                                        orientation={etroit ? 'left' : 'right'} mirror={etroit} ticks={reperes} domain={['dataMin', 'dataMax']}
+                                        orientation={etroit ? 'left' : 'right'} mirror={etroit} ticks={reperes} domain={domaineY} allowDataOverflow={false}
                                         stroke="#8896a8" tick={{ fontSize: etroit ? 10 : 11, fontFamily: 'JetBrains Mono', dy: etroit ? -8 : 0 }}
-                                        tickLine={false} axisLine={false} width={64} tickFormatter={(v: number) => (isPrivacyMode ? '' : formatVariationPct(v))}
+                                        tickLine={false} axisLine={false} width={64} tickFormatter={(v: number) => (isPrivacyMode ? '' : formatVariationPct(v, decimalesAxeY))}
                                     />
                                     <Tooltip
                                         cursor={GF_CROSSHAIR_CURSOR}
@@ -304,16 +374,28 @@ export const PerformanceComparee: React.FC<Props> = ({ donnees, series, selectio
                                             />
                                         }
                                     />
+                                    {visibles.length === 1 && visibles.map((s) => (
+                                        <Area
+                                            key={`area-${s.id}`}
+                                            type="monotone"
+                                            dataKey={s.id}
+                                            baseValue="dataMin"
+                                            stroke="none"
+                                            fill={`url(#perf-grad-${s.id.replace(/[^a-zA-Z0-9_-]/g, '_')})`}
+                                            connectNulls
+                                            isAnimationActive={false}
+                                        />
+                                    ))}
                                     {visibles.map((s) => {
                                         const d = decor.get(s.id)!;
-                                        return <Line key={s.id} type="linear" dataKey={s.id} stroke={d.couleur} strokeWidth={s.id === 'TOTAL' ? 1.85 : 1.4} dot={false} activeDot={GF_ACTIVE_DOT} connectNulls isAnimationActive={!zoom.isPanning} animationDuration={320} />;
+                                        return <Line key={s.id} type="monotone" dataKey={s.id} stroke={d.couleur} strokeWidth={visibles.length === 1 ? 2.4 : s.id === 'TOTAL' ? 2.1 : 1.75} dot={false} activeDot={GF_ACTIVE_DOT} connectNulls isAnimationActive={!zoom.isPanning} animationDuration={320} />;
                                     })}
-                                </LineChart>
+                                </ComposedChart>
                             </ResponsiveContainer>
                         </ZoomContainer>
                     </div>
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center text-body text-ink-400 rounded-xl bg-white/3">Aucune donnée disponible pour cette période.</div>
+                    <div className="w-full h-full flex items-center justify-center text-body text-ink-400 rounded-xl bg-surface-douce">Aucune donnée disponible pour cette période.</div>
                 )}
             </div>
             <ChartDataTable caption="Variation en % de chaque série affichée, par date" columns={colonnes} rows={lignes} />
@@ -325,7 +407,7 @@ export const PerformanceComparee: React.FC<Props> = ({ donnees, series, selectio
                         type="button"
                         onClick={() => setTitresOuverts((o) => !o)}
                         aria-expanded={titresOuverts}
-                        className="h-9 px-3 rounded-full border border-dashed border-white/15 text-[13px] text-ink-300 hover:text-ink-50 focus-ring"
+                        className="min-h-11 px-3 rounded-full border border-dashed border-bordure-champ text-[13px] text-ink-300 hover:text-ink-50 focus-ring"
                     >
                         Titres ({titres.length}) {titresOuverts ? '−' : '+'}
                     </button>

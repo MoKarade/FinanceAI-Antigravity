@@ -144,7 +144,7 @@ export const PassphraseCreate: React.FC<PassphraseCreateProps> = ({ isOpen, onCl
                             autoFocus
                             value={passphrase}
                             onChange={(e) => setPassphrase(e.target.value)}
-                            className="w-full rounded-card border border-white/10 bg-black/40 px-3 py-2 text-ink-100 focus:border-primary/50 focus:outline-hidden"
+                            className="w-full rounded-card border border-bordure-champ bg-fond px-3 py-2 touch-target text-ink-100 focus:border-primary/50 focus:outline-hidden"
                         />
                         <label htmlFor="pc-confirmation" className="block text-meta text-ink-300">
                             Confirme la passphrase
@@ -155,13 +155,13 @@ export const PassphraseCreate: React.FC<PassphraseCreateProps> = ({ isOpen, onCl
                             autoComplete="new-password"
                             value={confirmation}
                             onChange={(e) => setConfirmation(e.target.value)}
-                            className="w-full rounded-card border border-white/10 bg-black/40 px-3 py-2 text-ink-100 focus:border-primary/50 focus:outline-hidden"
+                            className="w-full rounded-card border border-bordure-champ bg-fond px-3 py-2 touch-target text-ink-100 focus:border-primary/50 focus:outline-hidden"
                         />
                         {erreur && <p className="text-tiny italic text-rose-400">{erreur}</p>}
                         <button
                             onClick={() => void passerEtape2()}
                             disabled={!validation.ok}
-                            className="w-full rounded-card border border-primary/40 bg-primary/15 px-4 py-2 font-medium text-primary hover:bg-primary/25 disabled:opacity-50"
+                            className="w-full rounded-card border border-primary/40 bg-primary/15 px-4 py-2 touch-target font-medium text-primary hover:bg-primary/25 disabled:opacity-50"
                         >
                             Continuer
                         </button>
@@ -170,7 +170,7 @@ export const PassphraseCreate: React.FC<PassphraseCreateProps> = ({ isOpen, onCl
 
                 {etape === 2 && (
                     <>
-                        <div className="p-3 rounded-card bg-rose-500/10 border border-rose-500/30 space-y-2">
+                        <div className="p-3 rounded-card bg-erreur-fond border border-danger-500/30 space-y-2">
                             <p className="text-meta font-semibold text-rose-300">À lire avant de continuer</p>
                             <p className="text-tiny text-ink-200 leading-snug">
                                 Si cette phrase est perdue, tes données synchronisées deviennent{' '}
@@ -178,26 +178,26 @@ export const PassphraseCreate: React.FC<PassphraseCreateProps> = ({ isOpen, onCl
                                 ni l'agence — ne peut la retrouver.
                             </p>
                         </div>
-                        <div className="p-3 rounded-card border border-white/10 bg-black/30 font-mono text-center text-ink-100 select-all break-all">
+                        <div className="p-3 rounded-card border border-bordure bg-fond font-mono text-center text-ink-100 select-all break-all">
                             {passphrase}
                         </div>
                         <div className="flex gap-2">
                             <button
                                 onClick={() => telechargerCarte(passphrase)}
-                                className="flex-1 rounded-card border border-white/40 bg-white/5 px-3 py-2 text-meta font-medium text-ink-200 hover:bg-white/10"
+                                className="flex-1 rounded-card border border-bordure-champ bg-surface-douce px-3 py-2 touch-target text-meta font-medium text-ink-200 hover:bg-bordure"
                             >
                                 Télécharger la carte
                             </button>
                             <button
                                 onClick={() => window.print()}
-                                className="flex-1 rounded-card border border-white/40 bg-white/5 px-3 py-2 text-meta font-medium text-ink-200 hover:bg-white/10"
+                                className="flex-1 rounded-card border border-bordure-champ bg-surface-douce px-3 py-2 touch-target text-meta font-medium text-ink-200 hover:bg-bordure"
                             >
                                 Imprimer
                             </button>
                         </div>
                         <button
                             onClick={() => setEtape(3)}
-                            className="w-full rounded-card border border-primary/40 bg-primary/15 px-4 py-2 font-medium text-primary hover:bg-primary/25"
+                            className="w-full rounded-card border border-primary/40 bg-primary/15 px-4 py-2 touch-target font-medium text-primary hover:bg-primary/25"
                         >
                             J'ai lu — continuer
                         </button>
@@ -235,11 +235,11 @@ export const PassphraseCreate: React.FC<PassphraseCreateProps> = ({ isOpen, onCl
                             />
                             J'ai conservé une copie hors ligne de cette phrase.
                         </label>
-                        {erreur && <p className="text-tiny italic text-rose-400">{erreur}</p>}
+                        {erreur && <p className="text-tiny italic text-erreur-texte">{erreur}</p>}
                         <button
                             onClick={() => void onActiver()}
                             disabled={busy || !peutActiver({ passphrase, confirmation, copieHorsLigneConfirmee })}
-                            className="w-full rounded-card border border-primary/40 bg-primary/15 px-4 py-2 font-medium text-primary hover:bg-primary/25 disabled:opacity-50"
+                            className="w-full rounded-card border border-primary/40 bg-primary/15 px-4 py-2 touch-target font-medium text-primary hover:bg-primary/25 disabled:opacity-50"
                         >
                             {busy ? 'Activation…' : 'Activer le chiffrement'}
                         </button>

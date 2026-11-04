@@ -10,7 +10,7 @@
 //
 // Note : ce SW est uniquement chargé en PROD (vite import.meta.env.PROD).
 
-const CACHE_NAME = 'financeai-v22'; // v22 : peaufinage individuel des 13 onglets (cibles 44px et socle visuel) ; v21 : remplacement automatique des courbes synthetiques par les clotures reelles
+const CACHE_NAME = 'financeai-v23'; // v23 : courbes dynamiques (focus 1 courbe, mini-courbes, cadrage Y), assistant sobre et nettoyage regles ; v22 : peaufinage des 13 onglets
 const PRECACHE_URLS = ['/manifest.json', '/icon.svg'];
 
 // [CF-ACCESS] Une réponse mettable en cache doit être une réponse DIRECTE de notre origine : ni redirigée (session

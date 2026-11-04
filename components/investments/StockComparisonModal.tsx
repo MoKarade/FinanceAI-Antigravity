@@ -49,6 +49,17 @@ export const StockComparisonModal: React.FC<StockComparisonModalProps> = ({
         return new Set(matched);
     }, [data, symbols]);
 
+    const trimmedData = React.useMemo(() => {
+        if (data.length === 0 || visibleKeys.size === 0) return data;
+        const firstIdx = data.findIndex((row) =>
+            [...visibleKeys].some((k) => {
+                const v = Number(row[k]);
+                return Number.isFinite(v) && v > 0;
+            }),
+        );
+        return firstIdx > 0 ? data.slice(firstIdx) : data;
+    }, [data, visibleKeys]);
+
     const title = symbols.length === 1
         ? `Évolution — ${symbols[0]}`
         : `Comparaison — ${symbols.length} actions`;
@@ -65,13 +76,13 @@ export const StockComparisonModal: React.FC<StockComparisonModalProps> = ({
                 <div className="w-full h-[500px]">
                     {isLoading ? (
                         <Skeleton variant="chart" />
-                    ) : data.length === 0 || visibleKeys.size === 0 ? (
+                    ) : trimmedData.length === 0 || visibleKeys.size === 0 ? (
                         <div className="flex items-center justify-center h-full text-meta text-ink-400">
                             Aucune donnée disponible pour cette sélection.
                         </div>
                     ) : (
                         <StockChart
-                            data={data}
+                            data={trimmedData}
                             visibleKeys={visibleKeys}
                             isPrivacyMode={isPrivacyMode}
                         />

@@ -210,7 +210,7 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
 
     return createPortal(
         <div
-            className={`fixed inset-0 z-300 bg-black/70 backdrop-blur-xs flex justify-center animate-fade-in ${
+            className={`fixed inset-0 z-300 bg-fond/80 backdrop-blur-xs flex justify-center animate-fade-in ${
                 isNarrowViewport ? 'items-end' : 'items-center p-3 sm:p-6'
             }`}
             onClick={onClose}
@@ -221,7 +221,7 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
             tabIndex={-1}
         >
             <div
-                className={`bg-dark border border-white/15 shadow-[0_20px_70px_rgba(0,0,0,0.85)] overflow-y-auto p-5 w-full ${
+                className={`bg-dark border border-bordure-champ shadow-xl overflow-y-auto p-5 w-full ${
                     isNarrowViewport ? 'rounded-t-2xl h-[75vh] max-h-[75vh]' : 'max-w-2xl rounded-2xl max-h-[90vh]'
                 }`}
                 onClick={(e) => e.stopPropagation()}
@@ -229,10 +229,10 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
                 {/* [FUTUR-MOBILE-PR5] Poignée de feuille — purement décorative (aria-hidden),
                     renforce la perception « ça se glisse depuis le bas », mobile uniquement. */}
                 {isNarrowViewport && (
-                    <div aria-hidden="true" className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
+                    <div aria-hidden="true" className="mx-auto mb-3 h-1 w-10 rounded-full bg-bordure-champ" />
                 )}
                 {/* En-tête */}
-                <div className="flex items-start justify-between gap-3 mb-4 pb-3 border-b border-white/15">
+                <div className="flex items-start justify-between gap-3 mb-4 pb-3 border-b border-bordure-champ">
                     <div>
                         {/* ⚠️ [finding a11y #645] `aria-live` OBLIGATOIRE depuis les flèches
                             Veille/Lendemain : le focus reste volontairement SUR le bouton pour
@@ -240,7 +240,7 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
                             live, un utilisateur de lecteur d'écran cliquerait « Lendemain » cinq
                             fois sans AUCUN retour sur le jour atteint — la feature marcherait à
                             l'œil et serait muette à l'oreille. Pattern APG du sélecteur de date. */}
-                        <div className="text-lg font-black text-white tracking-tight" aria-live="polite" aria-atomic="true">{point.dateLabel || point.year || '—'}</div>
+                        <div className="text-lg font-black text-texte tracking-tight" aria-live="polite" aria-atomic="true">{point.dateLabel || point.year || '—'}</div>
                         <div className="text-tiny text-ink-400 mt-0.5">Âge {point.age ?? '—'}</div>
                         {/* ⚠️ [WCAG 2.5.3 label-in-name] L'aria-label CONTIENT le texte visible :
                             un label de REMPLACEMENT (« Jour précédent » seul) casserait la commande
@@ -253,7 +253,7 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
                                     onClick={() => onStepDay(-1)}
                                     disabled={!canStepPrev}
                                     aria-label="Veille (jour précédent)"
-                                    className="focus-ring inline-flex items-center justify-center min-h-[44px] text-tiny font-bold text-white bg-white/10 hover:bg-white/20 disabled:opacity-35 disabled:pointer-events-none border border-white/20 rounded-lg px-2.5 py-1.5 transition-colors"
+                                    className="focus-ring inline-flex items-center justify-center min-h-[44px] text-tiny font-bold text-texte bg-surface-douce hover:bg-bordure disabled:opacity-35 disabled:pointer-events-none border border-bordure-champ rounded-lg px-2.5 py-1.5 transition-colors"
                                 >
                                     ← Veille
                                 </button>
@@ -262,7 +262,7 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
                                     onClick={() => onStepDay(1)}
                                     disabled={!canStepNext}
                                     aria-label="Lendemain (jour suivant)"
-                                    className="focus-ring inline-flex items-center justify-center min-h-[44px] text-tiny font-bold text-white bg-white/10 hover:bg-white/20 disabled:opacity-35 disabled:pointer-events-none border border-white/20 rounded-lg px-2.5 py-1.5 transition-colors"
+                                    className="focus-ring inline-flex items-center justify-center min-h-[44px] text-tiny font-bold text-texte bg-surface-douce hover:bg-bordure disabled:opacity-35 disabled:pointer-events-none border border-bordure-champ rounded-lg px-2.5 py-1.5 transition-colors"
                                 >
                                     Lendemain →
                                 </button>
@@ -271,13 +271,13 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
                     </div>
                     <div className="text-right">
                         <div className="text-tiny uppercase tracking-widest text-ink-400 font-bold">Valeur nette</div>
-                        <PrivateAmount as="div" className="text-2xl font-black text-white font-mono leading-none mt-0.5">{fmt(point.NetWorth)}</PrivateAmount>
+                        <PrivateAmount as="div" className="text-2xl font-black text-texte font-mono leading-none mt-0.5">{fmt(point.NetWorth)}</PrivateAmount>
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
                         aria-label="Fermer"
-                        className="shrink-0 inline-flex text-ink-400 hover:text-white leading-none p-1 -m-1 rounded-sm focus-ring"
+                        className="shrink-0 inline-flex items-center justify-center touch-target text-ink-400 hover:text-texte leading-none p-1 -m-1 rounded-sm focus-ring"
                     >
                         <Icon name="close" size={18} />
                     </button>
@@ -295,15 +295,15 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
                                     key={a.key}
                                     type="button"
                                     onClick={() => setSelected(a)}
-                                    className="w-full p-2.5 rounded-xl bg-white/3 hover:bg-white/8 border border-white/5 transition-colors text-left focus-ring"
+                                    className="w-full p-2.5 rounded-xl bg-surface-douce hover:bg-bordure border border-bordure transition-colors text-left focus-ring touch-target"
                                 >
                                     <div className="flex items-center justify-between gap-2">
                                         <span className="flex items-center gap-2 min-w-0">
                                             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: a.color }} />
-                                            <span className="text-body text-white truncate">{a.label}</span>
+                                            <span className="text-body text-texte truncate">{a.label}</span>
                                         </span>
                                         <span className="flex items-center gap-2 shrink-0">
-                                            <PrivateAmount className="font-mono text-body text-white">{fmt(a.value)}</PrivateAmount>
+                                            <PrivateAmount className="font-mono text-body text-texte">{fmt(a.value)}</PrivateAmount>
                                             <span className="text-ink-500" aria-hidden="true">›</span>
                                         </span>
                                     </div>
@@ -332,12 +332,12 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
                             ))}
 
                             {/* Total — hors dettes, rendues juste en dessous. */}
-                            <div className="flex items-baseline justify-between gap-2 pt-2 mt-1 border-t border-white/10 px-3">
+                            <div className="flex items-baseline justify-between gap-2 pt-2 mt-1 border-t border-bordure px-3">
                                 <span className="text-tiny uppercase tracking-widest text-ink-300 font-bold">
                                     Total des comptes
                                     <span className="ml-1.5 normal-case tracking-normal text-ink-400 font-normal">— hors dettes</span>
                                 </span>
-                                <PrivateAmount className="font-mono text-body font-black text-white">{fmt(totalComptes)}</PrivateAmount>
+                                <PrivateAmount className="font-mono text-body font-black text-texte">{fmt(totalComptes)}</PrivateAmount>
                             </div>
                         </div>
 
@@ -351,7 +351,7 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
                                     <div className="flex items-center justify-between gap-2">
                                         <span className="flex items-center gap-2 min-w-0">
                                             <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-danger-500" />
-                                            <span className="text-body text-white truncate">
+                                            <span className="text-body text-texte truncate">
                                                 {liquidDebt > 0.5 && otherReducingDebt <= 0.5 ? 'Découvert (liquidités à sec)' : 'Dettes (prêts, cartes, découvert)'}
                                             </span>
                                         </span>
@@ -385,18 +385,18 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
                         {/* Flux du mois */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-5">
                             {incomes.map(([label, v]) => (
-                                <div key={label} className="flex justify-between text-meta bg-white/3 rounded-lg px-2.5 py-1.5">
+                                <div key={label} className="flex justify-between text-meta bg-surface-douce rounded-lg px-2.5 py-1.5">
                                     <span className="text-ink-400">{label}</span>
                                     <PrivateAmount className="font-mono text-green-400">+{fmt(v)}</PrivateAmount>
                                 </div>
                             ))}
                             {(point.Expenses || 0) > 0 && (
-                                <div className="flex justify-between text-meta bg-white/3 rounded-lg px-2.5 py-1.5">
+                                <div className="flex justify-between text-meta bg-surface-douce rounded-lg px-2.5 py-1.5">
                                     <span className="text-ink-400">Dépenses</span>
                                     <PrivateAmount className="font-mono text-danger-400">-{fmt(point.Expenses || 0)}</PrivateAmount>
                                 </div>
                             )}
-                            <div className="flex justify-between text-meta font-bold bg-white/5 rounded-lg px-2.5 py-1.5">
+                            <div className="flex justify-between text-meta font-bold bg-surface-douce rounded-lg px-2.5 py-1.5">
                                 <span className="text-ink-200">Variation nette (mois)</span>
                                 <PrivateAmount className={`font-mono ${(point.diffNW || 0) >= 0 ? 'text-green-400' : 'text-danger-400'}`}>
                                     {(point.diffNW || 0) > 0 ? '+' : ''}{fmt(point.diffNW || 0)}
@@ -406,7 +406,7 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
 
                         {/* Événements */}
                         {((point.lifeEvents?.length ?? 0) > 0 || (point.flowEvents?.length ?? 0) > 0) && (
-                            <div className="border-t border-white/10 pt-3">
+                            <div className="border-t border-bordure pt-3">
                                 <div className="text-tiny uppercase tracking-widest text-yellow-500 font-bold mb-2">Événements ce mois</div>
                                 {showFull ? (
                                     <ul className="space-y-1.5">
@@ -445,7 +445,7 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
                                 type="button"
                                 onClick={() => setDetailExpanded((o) => !o)}
                                 aria-expanded={detailExpanded}
-                                className="mt-3 w-full min-h-[44px] rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-tiny font-bold text-ink-200 focus-ring transition-colors"
+                                className="mt-3 w-full min-h-[44px] rounded-lg bg-surface-douce hover:bg-bordure border border-bordure text-tiny font-bold text-ink-200 focus-ring transition-colors"
                             >
                                 {detailExpanded ? 'Réduire' : 'Tout afficher'}
                             </button>

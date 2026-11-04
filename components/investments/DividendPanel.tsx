@@ -89,12 +89,12 @@ export const DividendPanel: React.FC<DividendPanelProps> = ({
 
     return (
         <Cadre sansCadre={sansCadre}>
-            <div className="flex justify-between items-center mb-6 bg-white/3 p-5 rounded-2xl border border-white/10 shadow-lg shadow-black/20">
+            <div className="flex justify-between items-center mb-6 bg-surface-douce p-5 rounded-2xl border border-bordure shadow-lg">
                 <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center shadow-inner border border-white/10"><Icon name="cash" size={26} className="text-ink-200" /></div>
+                    <div className="w-14 h-14 rounded-2xl bg-fond flex items-center justify-center shadow-inner border border-bordure"><Icon name="cash" size={26} className="text-ink-200" /></div>
                     <div>
                         <div className="text-tiny uppercase font-bold text-ink-400 tracking-widest mb-1">Rente Annuelle Estimée</div>
-                        <PrivateAmount as="div" className="text-3xl font-black text-white tracking-tight">{formatCAD(totalAnnualDividends)}</PrivateAmount>
+                        <PrivateAmount as="div" className="text-3xl font-black text-texte tracking-tight">{formatCAD(totalAnnualDividends)}</PrivateAmount>
                     </div>
                 </div>
                 <div className="text-right hidden sm:block">
@@ -106,7 +106,7 @@ export const DividendPanel: React.FC<DividendPanelProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {isLoading ? (
                     Array(4).fill(0).map((_, i) => (
-                        <div key={i} className="bg-white/3 p-4 rounded-xl border border-white/5 h-24 flex flex-col gap-3">
+                        <div key={i} className="bg-surface-douce p-4 rounded-xl border border-bordure h-24 flex flex-col gap-3">
                             <div className="flex justify-between">
                                 <div className="w-10 h-10 skeleton-box rounded-full"></div>
                                 <div className="w-20 h-4 skeleton-box rounded-sm"></div>
@@ -119,11 +119,11 @@ export const DividendPanel: React.FC<DividendPanelProps> = ({
                         <div key={i} className="premium-card p-4 rounded-xl flex flex-col justify-between hover:border-success-500/30 transition-all group">
                             <div className="flex justify-between items-start mb-2 relative z-10">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-meta font-bold text-white shadow-inner group-hover:bg-success-500/10 transition-colors">
+                                    <div className="w-10 h-10 rounded-xl bg-surface-douce flex items-center justify-center text-meta font-bold text-texte shadow-inner group-hover:bg-success-500/10 transition-colors">
                                         {item.name.substring(0, 2).toUpperCase()}
                                     </div>
                                     <div>
-                                        <div className="font-bold text-white text-body tracking-tight">{item.name}</div>
+                                        <div className="font-bold text-texte text-body tracking-tight">{item.name}</div>
                                         <div className="text-tiny text-ink-400">{item.id.split(':')[0]}</div>
                                     </div>
                                 </div>
@@ -132,9 +132,9 @@ export const DividendPanel: React.FC<DividendPanelProps> = ({
                                     <div className="text-tiny text-ink-400 font-medium">{item.freq === 4 ? 'Trimestriel' : 'Annuel'}</div>
                                 </div>
                             </div>
-                            <div className="mt-3 pt-2 border-t border-white/5 flex justify-between items-center relative z-10">
+                            <div className="mt-3 pt-2 border-t border-bordure flex justify-between items-center relative z-10">
                                 <span className="text-tiny text-ink-400 font-medium">Prochain paiement</span>
-                                <span className="text-tiny font-bold text-white bg-success-500/20 px-2.5 py-1 rounded-lg border border-success-500/10 text-emerald-300">
+                                <span className="text-tiny font-bold bg-success-500/20 px-2.5 py-1 rounded-lg border border-success-500/10 text-emerald-300">
                                     {item.nextPayout}
                                 </span>
                             </div>
@@ -152,21 +152,21 @@ export const DividendPanel: React.FC<DividendPanelProps> = ({
                 <div className="mt-8 pt-6 border-t border-success-500/10">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                         <div>
-                            <h4 className="text-body font-bold text-white flex items-center gap-2">
+                            <h4 className="text-body font-bold text-texte flex items-center gap-2">
                                 <Icon name="investments" size={16} className="text-ink-300" /> Projection sur 12 mois
                             </h4>
                         </div>
 
-                        <div className="flex items-center gap-6 bg-black/40 p-3 rounded-xl border border-white/5 w-full sm:w-auto">
-                            <label className="flex items-center gap-2 cursor-pointer group">
+                        <div className="flex items-center gap-6 bg-fond p-3 rounded-xl border border-bordure w-full sm:w-auto">
+                            <label className="flex items-center gap-2 cursor-pointer group min-h-11">
                                 <div className={`w-8 h-4 rounded-full transition-colors relative ${dripEnabled ? 'bg-success-500' : 'bg-surfaceHighlight'}`}>
-                                    <div className={`w-3 h-3 bg-white rounded-full absolute top-[2px] transition-all ${dripEnabled ? 'left-4 translate-x-0.5' : 'left-0.5'}`}></div>
+                                    <div className={`w-3 h-3 bg-texte rounded-full absolute top-[2px] transition-all ${dripEnabled ? 'left-4 translate-x-0.5' : 'left-0.5'}`}></div>
                                 </div>
                                 <input type="checkbox" className="hidden" checked={dripEnabled} onChange={(e) => setDripEnabled(e.target.checked)} />
-                                <span className="text-tiny font-bold text-ink-200 group-hover:text-white transition-colors">DRIP (Réinvestir)</span>
+                                <span className="text-tiny font-bold text-ink-200 group-hover:text-texte transition-colors">DRIP (Réinvestir)</span>
                             </label>
 
-                            <div className="w-px h-6 bg-white/10 hidden sm:block"></div>
+                            <div className="w-px h-6 bg-bordure hidden sm:block"></div>
 
                             <div className="flex items-center gap-2 flex-1 sm:flex-none">
                                 <span className="text-tiny text-ink-300 whitespace-nowrap">Croissance des div. :</span>
@@ -177,7 +177,7 @@ export const DividendPanel: React.FC<DividendPanelProps> = ({
                                     max="50"
                                     value={divGrowthRate}
                                     onChange={(e) => setDivGrowthRate(Number(e.target.value))}
-                                    className="bg-black/50 border border-white/10 rounded-sm px-2 py-0.5 text-meta text-white font-bold w-14 outline-hidden focus:border-success-500 transition-colors text-center"
+                                    className="bg-surface-douce border border-bordure-champ rounded-sm px-2 py-0.5 touch-target text-meta text-texte font-bold w-14 outline-hidden focus:border-success-500 transition-colors text-center"
                                 />
                                 <span className="text-tiny text-ink-300">% / an</span>
                             </div>

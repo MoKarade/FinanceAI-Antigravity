@@ -312,9 +312,9 @@ export const Investments: React.FC<InvestmentsProps> = ({
                 // ne porte pas les buckets nuls à cette date ni les actifs achetés plus tard).
                 const allKeys = new Set<string>();
                 data.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
-                // Sélection par défaut : le TOTAL portefeuille + les totaux par compte.
+                // Sélection par défaut : si un seul compte actif reproduit TOTAL, isoler TOTAL pour éviter deux courbes confondues.
                 const keysToSelect = [...allKeys].filter(k => k.includes('TOTAL'));
-                setSelectedKeys(new Set(keysToSelect));
+                setSelectedKeys(new Set(keysToSelect.length <= 2 ? ['TOTAL'] : keysToSelect));
             }
             setIsLoading(false);
         };
@@ -731,6 +731,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                 gainPct,
                 valeur,
                 poids: 0,
+                historique: (a.priceHistory ?? []).map((p) => p.price).filter((v) => Number.isFinite(v) && v > 0),
             };
         })
         .filter((l) => l.valeur > 0)
@@ -989,7 +990,15 @@ export const Investments: React.FC<InvestmentsProps> = ({
 
             {subTab === 'overview' && (
                 <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
-                    <TitresDetenus lignes={lignesTitres} couple={couple} etroit={etroit} />
+                    <TitresDetenus
+                        lignes={lignesTitres}
+                        couple={couple}
+                        etroit={etroit}
+                        onSelectSymbole={(sym) => {
+                            setSelectedKeys(new Set([sym]));
+                            document.getElementById('perf-comparee-titre')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        }}
+                    />
                     {/* CI-1000x Phase 1 (axe B) — répartition du portefeuille par personne (mode couple). */}
                     <NetWorthByOwnerCard assets={assets} setAssets={setAssets} />
                 </div>
@@ -1597,6 +1606,49 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                         </div>
                                     </div>
                                 </div>
+                                {(() => {
+                                    const pts = (savedAsset?.priceHistory ?? []).map((p) => p.price).filter((v) => Number.isFinite(v) && v > 0).slice(-60);
+                                    if (pts.length < 2) return null;
+                                    const minP = Math.min(...pts);
+                                    const maxP = Math.max(...pts);
+                                    const ampP = maxP - minP;
+                                    const w = 240;
+                                    const h = 38;
+                                    const stepX = w / Math.max(1, pts.length - 1);
+                                    const poly = pts.map((v, idx) => {
+                                        const x = Number((idx * stepX).toFixed(1));
+                                        const y = ampP > 0 ? Number((34 - ((v - minP) / ampP) * 30).toFixed(1)) : 19;
+                                        return `${x},${y}`;
+                                    }).join(' ');
+                                    const hausse = (asset.trendPct ?? (pts[pts.length - 1]! - pts[0]!)) >= 0;
+                                    return (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSelectedCompareSymbols(new Set([asset.id]));
+                                                setShowComparisonModal(true);
+                                            }}
+                                            aria-label={`Ouvrir la courbe détaillée de ${asset.name}`}
+                                            className="w-full mb-3 px-2.5 py-1.5 rounded-xl bg-fond/70 border border-bordure hover:border-bordure-champ flex items-center justify-between gap-2 transition-colors focus-ring relative z-10"
+                                        >
+                                            <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-9 overflow-visible" preserveAspectRatio="none" aria-hidden="true">
+                                                <polygon
+                                                    points={`0,${h} ${poly} ${w},${h}`}
+                                                    fill={hausse ? 'rgba(52, 179, 154, 0.14)' : 'rgba(248, 113, 113, 0.14)'}
+                                                />
+                                                <polyline
+                                                    fill="none"
+                                                    stroke={hausse ? 'var(--gf-vert)' : 'var(--gf-rouge)'}
+                                                    strokeWidth="1.8"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    points={poly}
+                                                />
+                                            </svg>
+                                            <span className="text-[11px] font-mono text-ink-300 shrink-0">Courbe ↗</span>
+                                        </button>
+                                    );
+                                })()}
                             </div>
 
                             <div className="flex items-center justify-between pt-3 border-t border-bordure relative z-10 mt-auto gap-2 flex-wrap">

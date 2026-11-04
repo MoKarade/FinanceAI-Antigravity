@@ -427,7 +427,7 @@ export const ActionPlanDrilldown: React.FC<ActionPlanDrilldownProps> = ({ chartD
                                 <button
                                     type="button"
                                     onClick={() => jumpTo(i)}
-                                    className="px-1.5 py-0.5 rounded-sm text-ink-400 hover:text-ink-100 hover:bg-white/5 focus-ring transition-colors"
+                                    className="px-2 py-1 touch-target rounded-sm text-ink-400 hover:text-ink-100 hover:bg-surface-douce focus-ring transition-colors"
                                 >
                                     {b.label}
                                 </button>
@@ -439,9 +439,9 @@ export const ActionPlanDrilldown: React.FC<ActionPlanDrilldownProps> = ({ chartD
             </nav>
 
             {/* Résumé de la période courante. */}
-            <div className="bg-white/3 rounded-lg p-3 mb-3">
+            <div className="bg-surface-douce rounded-lg p-3 mb-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                    <span className="text-meta font-bold text-white">
+                    <span className="text-meta font-bold text-texte">
                         {current.label}
                         {current.ageStart != null && (
                             <span className="text-ink-400 font-normal">
@@ -471,7 +471,7 @@ export const ActionPlanDrilldown: React.FC<ActionPlanDrilldownProps> = ({ chartD
                         const whyOpen = openWhy.has(key);
                         const amountClass = item.kind === 'withdraw' || (item.amount ?? 0) < 0 ? 'text-orange-300' : 'text-success-400';
                         return (
-                            <li key={key} className="rounded-lg bg-white/3 border border-white/5 px-2.5 py-2">
+                            <li key={key} className="rounded-lg bg-surface-douce border border-bordure px-2.5 py-2">
                                 <div className="flex items-start gap-2">
                                     {checkable ? (
                                         // [FUTUR-MOBILE-PR5] `<label>` et NON `<span>` : un `<span>` ne relaie PAS le
@@ -506,7 +506,7 @@ export const ActionPlanDrilldown: React.FC<ActionPlanDrilldownProps> = ({ chartD
                                             type="button"
                                             onClick={() => toggle(setOpenWhy, key)}
                                             aria-expanded={whyOpen}
-                                            className={`mt-1 inline-flex items-center gap-1 text-tiny text-primary/80 hover:text-primary focus-ring rounded ${
+                                            className={`mt-1 inline-flex items-center gap-1 touch-target text-tiny text-primary/80 hover:text-primary focus-ring rounded ${
                                                 isNarrowViewport ? 'min-h-[44px]' : ''
                                             }`}
                                         >
@@ -538,13 +538,13 @@ export const ActionPlanDrilldown: React.FC<ActionPlanDrilldownProps> = ({ chartD
                                     type="button"
                                     onClick={() => b.hasChildren && drillTo(b)}
                                     disabled={!b.hasChildren}
-                                    className={`text-left bg-white/3 rounded-lg p-2.5 border border-white/5 transition-colors focus-ring ${
-                                        b.hasChildren ? 'hover:bg-white/[0.07] hover:border-primary/30 cursor-pointer' : 'cursor-default opacity-90'
+                                    className={`text-left bg-surface-douce rounded-lg p-2.5 touch-target border border-bordure transition-colors focus-ring ${
+                                        b.hasChildren ? 'hover:bg-bordure hover:border-primary/30 cursor-pointer' : 'cursor-default opacity-90'
                                     }`}
                                     title={b.hasChildren ? `Creuser : ${b.label}` : b.label}
                                 >
                                     <div className="flex items-center justify-between gap-2 mb-1.5">
-                                        <span className="text-meta font-bold text-white truncate">{b.label}</span>
+                                        <span className="text-meta font-bold text-texte truncate">{b.label}</span>
                                         <span className="flex items-center gap-1.5 shrink-0">
                                             {b.isRetired && <span className="text-tiny text-amber-300 bg-warning-500/10 px-1.5 py-0.5 rounded-sm">Retraite</span>}
                                             <PrivateAmount className={`text-tiny font-mono tabular-nums ${childNet >= 0 ? 'text-success-400' : 'text-orange-300'}`}>

@@ -34,12 +34,12 @@ const AccountDrillTooltip: React.FC<AccountDrillTooltipProps> = ({ active, paylo
     const d = payload[0].payload as AccountPoint;
     const reasons = explainMovement(d);
     return (
-        <div className="gf-tooltip-card bg-[#11161f] border border-white/15 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] p-3 w-56 text-meta">
+        <div className="gf-tooltip-card bg-surface border border-bordure-champ rounded-xl shadow-xl p-3 w-56 text-meta">
             <div className="flex items-center justify-between gap-2 mb-1.5">
-                <span className="font-bold text-white">{d.dateLabel || d.year}</span>
+                <span className="font-bold text-texte">{d.dateLabel || d.year}</span>
                 <span className="text-tiny text-ink-400">{accountLabel}</span>
             </div>
-            <PrivateAmount as="div" className="font-mono text-base font-black text-white mb-2">{fmtMoney(d.value)}</PrivateAmount>
+            <PrivateAmount as="div" className="font-mono text-base font-black text-texte mb-2">{fmtMoney(d.value)}</PrivateAmount>
             {reasons.length > 0 ? (
                 <div className="space-y-1">
                     <div className="text-tiny uppercase tracking-wide text-ink-400 font-bold">Ce mois</div>
@@ -54,7 +54,7 @@ const AccountDrillTooltip: React.FC<AccountDrillTooltipProps> = ({ active, paylo
                 <div className="text-tiny text-ink-400">Équité = capital d’hypothèque remboursé + valorisation</div>
             )}
             {d.events.length > 0 && (
-                <div className="mt-2 pt-1.5 border-t border-white/10 space-y-1">
+                <div className="mt-2 pt-1.5 border-t border-bordure space-y-1">
                     {d.events.map((e, i) => {
                         const { icon, text } = splitEventIcon(e);
                         return (
@@ -153,19 +153,19 @@ export const DrillDownCompte: React.FC<DrillDownCompteProps> = ({
                         <button
                             type="button"
                             onClick={onRetour}
-                            className="text-tiny font-bold text-ink-300 hover:text-white mb-3 focus-ring rounded-sm"
+                            className="inline-flex items-center touch-target text-tiny font-bold text-ink-300 hover:text-texte mb-3 focus-ring rounded-sm"
                         >
                             ‹ Retour aux comptes
                         </button>
                         <div className="flex items-center gap-2 mb-3">
                             <span className="w-3 h-3 rounded-full" style={{ background: selected.color }} />
-                            <span className="font-bold text-white">{selected.label}</span>
-                            <PrivateAmount className="ml-auto font-mono text-body text-white">{fmt(Number(point[selected.key]) || 0)}</PrivateAmount>
+                            <span className="font-bold text-texte">{selected.label}</span>
+                            <PrivateAmount className="ml-auto font-mono text-body text-texte">{fmt(Number(point[selected.key]) || 0)}</PrivateAmount>
                         </div>
 
                         {/* Sélecteur de période + commandes Google Finance zoom/déplacement */}
                         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                            <div className="flex gap-0.5 p-0.5 rounded-card bg-black/30 border border-white/5 w-fit">
+                            <div className="flex gap-0.5 p-0.5 rounded-card bg-fond border border-bordure w-fit">
                                 {[5, 10, 20, 30].filter((y) => y * 12 < lastMonth).map((y) => {
                                     const active = !!zoom.range && zoom.range[0] === 0 && zoom.range[1] === idxForYears(y);
                                     return (
@@ -173,7 +173,7 @@ export const DrillDownCompte: React.FC<DrillDownCompteProps> = ({
                                             key={y}
                                             type="button"
                                             onClick={() => zoom.showRange(0, idxForYears(y))}
-                                            className={`px-2 py-0.5 text-tiny font-bold rounded-sm transition-colors focus-ring ${active ? 'bg-primary text-dark' : 'text-ink-300 hover:text-dark hover:bg-white/10'}`}
+                                            className={`px-2 py-0.5 touch-target text-tiny font-bold rounded-sm transition-colors focus-ring ${active ? 'bg-primary text-dark' : 'text-ink-300 hover:text-dark hover:bg-surface-douce'}`}
                                         >
                                             {/* NOMBRE-NON-MONETAIRE : axe d'âge ou d'année de la projection, pas une valeur dérivée du dossier */}
                                             {y} ans
@@ -183,7 +183,7 @@ export const DrillDownCompte: React.FC<DrillDownCompteProps> = ({
                                 <button
                                     type="button"
                                     onClick={zoom.reset}
-                                    className={`px-2 py-0.5 text-tiny font-bold rounded-sm transition-colors focus-ring ${!zoom.isZoomed ? 'bg-primary text-dark' : 'text-ink-300 hover:text-dark hover:bg-white/10'}`}
+                                    className={`px-2 py-0.5 touch-target text-tiny font-bold rounded-sm transition-colors focus-ring ${!zoom.isZoomed ? 'bg-primary text-dark' : 'text-ink-300 hover:text-dark hover:bg-surface-douce'}`}
                                 >
                                     Tout
                                 </button>
@@ -267,7 +267,7 @@ export const DrillDownCompte: React.FC<DrillDownCompteProps> = ({
 
                         {/* G13 — pourquoi la valeur bouge : plus gros mouvements + raison */}
                         {keyMoments.length > 0 && (
-                            <div className="mt-4 border-t border-white/10 pt-3">
+                            <div className="mt-4 border-t border-bordure pt-3">
                                 <div className="text-tiny uppercase tracking-widest text-ink-400 font-bold mb-1">
                                     Pourquoi ça bouge — moments clés
                                 </div>
@@ -279,9 +279,9 @@ export const DrillDownCompte: React.FC<DrillDownCompteProps> = ({
                                     {keyMoments.map((d) => {
                                         const reasons = explainMovement(d);
                                         return (
-                                            <li key={d.monthIndex} className="bg-white/3 rounded-lg p-2.5">
+                                            <li key={d.monthIndex} className="bg-surface-douce rounded-lg p-2.5">
                                                 <div className="flex items-center justify-between gap-2 mb-1">
-                                                    <span className="text-meta font-bold text-white">{d.dateLabel || d.year}</span>
+                                                    <span className="text-meta font-bold text-texte">{d.dateLabel || d.year}</span>
                                                     <PrivateAmount className={`font-mono text-meta font-bold ${d.delta >= 0 ? 'text-green-400' : 'text-danger-400'}`}>
                                                         {d.delta > 0 ? '+' : ''}{fmtMoney(d.delta)}
                                                     </PrivateAmount>
@@ -319,14 +319,14 @@ export const DrillDownCompte: React.FC<DrillDownCompteProps> = ({
 
                         {/* G19 — espace de cotisation gagné par année (CELI/REER) */}
                         {roomByYear.length > 0 && (
-                            <div className="mt-4 border-t border-white/10 pt-3">
+                            <div className="mt-4 border-t border-bordure pt-3">
                                 <div className="text-tiny uppercase tracking-widest text-ink-400 font-bold mb-1">
                                     Espace de cotisation gagné par année
                                 </div>
                                 <p className="text-tiny text-ink-400 mb-2 leading-snug">
                                     Droits {selected.label} qui s'ajoutent chaque année (et ré-ajout de l'espace après un retrait, pour le CELI).
                                 </p>
-                                <div className="max-h-52 overflow-y-auto rounded-lg border border-white/10">
+                                <div className="max-h-52 overflow-y-auto rounded-lg border border-bordure">
                                     <table className="w-full text-meta">
                                         <thead className="sticky top-0 bg-dark">
                                             <tr className="text-tiny uppercase tracking-wide text-ink-400">
@@ -337,7 +337,7 @@ export const DrillDownCompte: React.FC<DrillDownCompteProps> = ({
                                         </thead>
                                         <tbody>
                                             {roomByYear.map((r) => (
-                                                <tr key={r.year} className="border-t border-white/5">
+                                                <tr key={r.year} className="border-t border-bordure">
                                                     <td className="px-2.5 py-1.5 text-ink-200 font-semibold">{r.year}</td>
                                                     <td className={`px-2.5 py-1.5 text-right font-mono ${r.gained === null ? 'text-ink-400' : r.gained > 0 ? 'text-green-300' : 'text-ink-400'}`}>
                                                         <PrivateAmount>{r.gained === null ? '—' : `+${fmtMoney(r.gained)}`}</PrivateAmount>

@@ -121,7 +121,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                         <span aria-live="polite">{stepIdx + 1} / {STEPS.length}</span>
                     </div>
                     <div
-                        className="w-full h-1 bg-white/5 rounded-full overflow-hidden"
+                        className="w-full h-1 bg-surface-douce rounded-full overflow-hidden"
                         role="progressbar"
                         /* NOMBRE-NON-MONETAIRE : progression d'une tâche (démarrage, import, visite guidée), pas une donnée du dossier */
                         aria-valuenow={Math.round(progress)}
@@ -152,7 +152,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                                 { icon: 'bot', text: "Une IA (optionnelle) catégorise tes dépenses et analyse ton budget." },
                                 { icon: 'lock', text: "Tes données restent sur ton appareil. Aucun serveur, aucun compte à créer." },
                             ] as Array<{ icon: IconName; text: string }>).map((f, i) => (
-                                <div key={i} className="flex items-center gap-3 p-3 bg-white/5 rounded-card border border-white/5">
+                                <div key={i} className="flex items-center gap-3 p-3 bg-surface-douce rounded-card border border-bordure">
                                     <Icon name={f.icon} size={22} className="text-primary shrink-0" />
                                     <span className="text-body text-ink-200">{f.text}</span>
                                 </div>
@@ -172,7 +172,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                             <p className="text-meta text-ink-400 mt-1">Sert aux calculs d'impôts et à la projection de ton avenir</p>
                         </div>
 
-                        <div className="space-y-4 p-4 bg-white/5 rounded-card border border-white/10">
+                        <div className="space-y-4 p-4 bg-surface-douce rounded-card border border-bordure">
                             <div className="font-bold text-ink-50 text-body">Utilisateur principal</div>
                             <div className="grid grid-cols-2 gap-3">
                                 <Field id="user1-name" label="Prénom">
@@ -205,7 +205,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                         </div>
 
                         {hasCoupleMode && (
-                            <div className="space-y-4 p-4 bg-white/5 rounded-card border border-white/10 animate-fade-in">
+                            <div className="space-y-4 p-4 bg-surface-douce rounded-card border border-bordure animate-fade-in">
                                 <div className="font-bold text-ink-50 text-body">Partenaire</div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <Field id="user2-name" label="Prénom">
@@ -235,7 +235,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                             </p>
                         </div>
                         <div className="space-y-4">
-                            <div className="p-4 bg-white/5 rounded-card border border-white/10">
+                            <div className="p-4 bg-surface-douce rounded-card border border-bordure">
                                 <label htmlFor="anthropic-key" className="text-body font-bold text-ink-50 flex items-center gap-2 mb-2">
                                     <Icon name="sparkles" size={18} className="text-repere" /> Clé API Google Gemini
                                     <span className="text-tiny text-ink-400 font-normal">(Catégorisation IA + conseiller Gemini + objectifs intelligents)</span>
@@ -262,10 +262,10 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                                 { label: 'CELI', key: 'celi', value: celiBalance, onChange: setCeliBalance, hint: 'Compte Épargne Libre-Impôt' },
                                 { label: 'REER', key: 'reer', value: reerBalance, onChange: setReerBalance, hint: "Régime Épargne-Retraite" },
                             ].map(({ label, key, value, onChange, hint }) => (
-                                <div key={key} className="p-4 bg-white/5 rounded-card border border-white/10">
+                                <div key={key} className="p-4 bg-surface-douce rounded-card border border-bordure">
                                     <label htmlFor={`balance-${key}`} className="text-body font-bold text-ink-50 flex items-center gap-2 mb-1">{label} <span className="text-tiny text-ink-400 font-normal">{hint}</span></label>
                                     <div className="flex items-center gap-2 mt-2">
-                                        <input id={`balance-${key}`} type="number" inputMode="decimal" placeholder="0" className="flex-1 bg-dark border border-white/10 rounded-card px-3 py-2 text-ink-50 font-mono focus-ring" value={value || ''} onChange={e => onChange(Math.max(0, Math.min(100000000, parseFloat(e.target.value) || 0)))} />
+                                        <input id={`balance-${key}`} type="number" inputMode="decimal" placeholder="0" className="flex-1 bg-dark border border-bordure-champ rounded-card px-3 py-2 touch-target text-ink-50 font-mono focus-ring" value={value || ''} onChange={e => onChange(Math.max(0, Math.min(100000000, parseFloat(e.target.value) || 0)))} />
                                         <span className="text-ink-400 text-body">$</span>
                                     </div>
                                 </div>

@@ -202,11 +202,11 @@ export const RequirementCard: React.FC<{ req: Requirement; currentTab?: Tab }> =
     const ImportComp = req.importKind ? IMPORT_COMPONENTS[req.importKind] : null;
 
     return (
-        <div className="rounded-2xl border border-white/10 bg-surface/50 p-5 space-y-4">
+        <div className="rounded-2xl border border-bordure bg-surface/50 p-5 space-y-4">
             <div className="flex items-start gap-3">
                 <span
                     className={`shrink-0 w-9 h-9 rounded-card flex items-center justify-center ${
-                        met ? 'bg-success-500/15 text-success-400' : 'bg-white/8 text-ink-300'
+                        met ? 'bg-success-500/15 text-success-400' : 'bg-surface-douce text-ink-300'
                     }`}
                     aria-hidden="true"
                 >
@@ -227,7 +227,7 @@ export const RequirementCard: React.FC<{ req: Requirement; currentTab?: Tab }> =
                         {fields.map((f) => (
                             <label key={f.id} className="block">
                                 <span className="text-tiny uppercase tracking-wider text-ink-400 font-semibold">{f.label}</span>
-                                <div className="mt-1 flex items-center gap-2 rounded-card bg-white/5 border border-white/10 px-3 focus-within:border-primary/40 transition-colors">
+                                <div className="mt-1 flex items-center gap-2 rounded-card bg-fond border border-bordure-champ px-3 focus-within:border-primary/40 transition-colors">
                                     <input
                                         type="number"
                                         inputMode="decimal"
@@ -235,7 +235,7 @@ export const RequirementCard: React.FC<{ req: Requirement; currentTab?: Tab }> =
                                         placeholder={f.placeholder ?? '0'}
                                         onChange={(e) => setVals((p) => ({ ...p, [f.id]: e.target.value }))}
                                         aria-label={f.label}
-                                        className="flex-1 min-w-0 bg-transparent py-3 text-body text-ink-50 outline-hidden font-mono"
+                                        className="flex-1 min-w-0 bg-transparent py-3 touch-target text-body text-ink-50 outline-hidden font-mono"
                                     />
                                     {f.unit && <span className="text-meta text-ink-400 shrink-0">{f.unit}</span>}
                                 </div>
@@ -245,7 +245,7 @@ export const RequirementCard: React.FC<{ req: Requirement; currentTab?: Tab }> =
                     <button
                         type="button"
                         onClick={save}
-                        className="inline-flex items-center justify-center min-h-[44px] px-4 py-2 rounded-card bg-primary text-dark text-meta font-bold hover:bg-white transition-colors focus-ring"
+                        className="inline-flex items-center justify-center min-h-[44px] px-4 py-2 rounded-card bg-primary text-dark text-meta font-bold hover:brightness-110 transition-colors focus-ring"
                     >
                         Enregistrer
                     </button>
@@ -258,7 +258,7 @@ export const RequirementCard: React.FC<{ req: Requirement; currentTab?: Tab }> =
                 <button
                     type="button"
                     onClick={() => navigateWithFocus(req.focus!.tab, req.focus!.section || undefined)}
-                    className="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-card border border-white/15 bg-white/5 text-meta font-medium text-ink-100 hover:bg-white/10 hover:text-ink-50 transition-colors focus-ring"
+                    className="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-card border border-bordure-champ bg-surface-douce text-meta font-medium text-ink-100 hover:bg-bordure hover:text-ink-50 transition-colors focus-ring"
                 >
                     <Icon name="settings" size={14} /> Configurer / ajouter →
                 </button>
@@ -336,7 +336,7 @@ const FullSetupScreen: React.FC<{
                         aria-valuemax={total}
                         aria-label={`Configuration : ${done} sur ${total} prérequis prêts`}
                     >
-                        <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden max-w-40">
+                        <div className="flex-1 h-1.5 rounded-full bg-bordure overflow-hidden max-w-40">
                             {/* NOMBRE-NON-MONETAIRE : progression d'une tâche (démarrage, import, visite guidée), pas une donnée du dossier */}
                             <div className="h-full bg-primary rounded-full transition-[width] duration-300" style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
                         </div>
@@ -351,7 +351,7 @@ const FullSetupScreen: React.FC<{
                         <button
                             type="button"
                             onClick={onCreateInPage}
-                            className="inline-flex items-center gap-2 min-h-[44px] px-3 py-1.5 rounded-card bg-primary text-dark text-meta font-bold hover:bg-white transition-colors focus-ring"
+                            className="inline-flex items-center gap-2 min-h-[44px] px-3 py-1.5 rounded-card bg-primary text-dark text-meta font-bold hover:brightness-110 transition-colors focus-ring"
                         >
                             <Icon name="plus" size={14} /> Créer via la page
                         </button>
@@ -359,7 +359,7 @@ const FullSetupScreen: React.FC<{
                     <button
                         type="button"
                         onClick={() => { void loadTestData(); }}
-                        className="inline-flex items-center gap-2 min-h-[44px] px-3 py-1.5 rounded-card border border-white/15 bg-white/5 text-meta font-medium text-ink-200 hover:bg-white/10 hover:text-ink-50 transition-colors focus-ring"
+                        className="inline-flex items-center gap-2 min-h-[44px] px-3 py-1.5 rounded-card border border-bordure-champ bg-surface-douce text-meta font-medium text-ink-200 hover:bg-bordure hover:text-ink-50 transition-colors focus-ring"
                     >
                         <Icon name="flask" size={14} /> Données de test
                     </button>
@@ -398,7 +398,7 @@ const SoftSetupBanner: React.FC<{ title: string; requirements: Requirement[]; cu
                     type="button"
                     onClick={() => setOpen((o) => !o)}
                     aria-expanded={open}
-                    className="inline-flex items-center gap-2 min-h-[40px] px-3 py-1.5 rounded-card border border-white/15 bg-white/5 text-meta font-medium text-ink-200 hover:bg-white/10 hover:text-ink-50 transition-colors focus-ring"
+                    className="inline-flex items-center gap-2 min-h-[44px] touch-target px-3 py-1.5 rounded-card border border-bordure-champ bg-surface-douce text-meta font-medium text-ink-200 hover:bg-bordure hover:text-ink-50 transition-colors focus-ring"
                 >
                     <Icon name="settings" size={14} /> {open ? 'Masquer' : 'Compléter'}
                 </button>

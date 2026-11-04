@@ -94,7 +94,7 @@ export const SyncConflictModal: React.FC = () => {
 
     return (
         <div
-            className="fixed inset-0 z-10000 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in"
+            className="fixed inset-0 z-10000 flex items-center justify-center p-4 bg-fond/80 backdrop-blur-xs animate-fade-in"
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="sync-conflict-title"
@@ -103,7 +103,7 @@ export const SyncConflictModal: React.FC = () => {
                 <div className="flex items-start gap-3">
                     <Icon name="alert" size={22} className="mt-0.5 text-warning-400 shrink-0" />
                     <div className="flex-1">
-                        <h2 id="sync-conflict-title" className="text-white font-bold text-base">
+                        <h2 id="sync-conflict-title" className="text-texte font-bold text-base">
                             Tes données diffèrent entre cet appareil et Google Drive
                         </h2>
                         <p className="text-ink-300 text-meta mt-1 leading-snug">
@@ -113,7 +113,7 @@ export const SyncConflictModal: React.FC = () => {
                 </div>
 
                 {status.error && (
-                    <p role="alert" className="text-tiny text-rose-300 italic">{status.error}</p>
+                    <p role="alert" className="text-tiny text-erreur-texte italic">{status.error}</p>
                 )}
 
                 {s && (
@@ -132,7 +132,7 @@ export const SyncConflictModal: React.FC = () => {
                             )}
                             <div className="text-tiny text-ink-400 mt-1">Données actuelles (pas encore sauvegardées)</div>
                         </div>
-                        <div className="rounded-card border border-white/10 bg-white/5 p-3">
+                        <div className="rounded-card border border-bordure bg-surface-douce p-3">
                             <div className="text-tiny uppercase text-ink-300 font-bold">Google Drive</div>
                             {s.drive.encrypted ? (
                                 <div className="text-meta text-ink-100 mt-1">Chiffré — contenu inconnu</div>
@@ -171,7 +171,7 @@ export const SyncConflictModal: React.FC = () => {
                             onClick={() => choose('local')}
                             disabled={busy}
                             aria-busy={busy}
-                            className="px-4 py-2 rounded-card bg-primary text-dark text-meta font-bold hover:bg-primary/90 disabled:opacity-50 focus-ring"
+                            className="px-4 py-2 touch-target rounded-card bg-primary text-dark text-meta font-bold hover:bg-primary/90 disabled:opacity-50 focus-ring"
                         >
                             {busy ? 'Envoi…' : 'Garder cet appareil (envoyer vers Drive)'}
                         </button>
@@ -179,13 +179,13 @@ export const SyncConflictModal: React.FC = () => {
                             type="button"
                             onClick={() => setConfirmRestore(true)}
                             disabled={busy}
-                            className="px-4 py-2 rounded-card bg-white/5 border border-white/40 text-ink-200 text-meta font-medium hover:bg-white/10 disabled:opacity-50 focus-ring"
+                            className="px-4 py-2 touch-target rounded-card bg-surface-douce border border-bordure-champ text-ink-200 text-meta font-medium hover:bg-bordure disabled:opacity-50 focus-ring"
                         >
                             Restaurer depuis Drive…
                         </button>
                     </div>
                 ) : (
-                    <div className="p-3 rounded-card bg-rose-500/10 border border-rose-500/30 space-y-2">
+                    <div className="p-3 rounded-card bg-erreur-fond border border-danger-500/30 space-y-2">
                         <p className="text-tiny text-ink-200 leading-snug">
                             Ça <strong>remplace</strong> les données de cet appareil
                             {s ? <> ({s.local.assets} placement(s))</> : ''} par celles de Drive
@@ -198,7 +198,7 @@ export const SyncConflictModal: React.FC = () => {
                                 type="button"
                                 onClick={() => setConfirmRestore(false)}
                                 disabled={busy}
-                                className="px-3 py-1.5 rounded-card bg-white/5 border border-white/40 text-ink-200 text-meta font-medium hover:bg-white/10 disabled:opacity-50 focus-ring"
+                                className="px-3 py-1.5 touch-target rounded-card bg-surface-douce border border-bordure-champ text-ink-200 text-meta font-medium hover:bg-bordure disabled:opacity-50 focus-ring"
                             >
                                 Annuler
                             </button>
@@ -207,7 +207,7 @@ export const SyncConflictModal: React.FC = () => {
                                 onClick={() => choose('drive')}
                                 disabled={busy}
                                 aria-busy={busy}
-                                className="px-3 py-1.5 rounded-card bg-rose-500/20 border border-rose-500/40 text-rose-200 text-meta font-bold hover:bg-rose-500/30 disabled:opacity-50 focus-ring"
+                                className="px-3 py-1.5 touch-target rounded-card bg-erreur-fond border border-danger-500/40 text-erreur-texte text-meta font-bold hover:bg-danger-500/30 disabled:opacity-50 focus-ring"
                             >
                                 {busy ? 'Restauration…' : 'Oui, restaurer Drive'}
                             </button>

@@ -65,7 +65,7 @@ export const UsersCard: React.FC<UsersCardProps> = ({ config, setConfig }) => {
     setConfig({ ...config, users: newUsers });
   };
   // [S5-REFONTE-PROFIL] Champs des maquettes : 44 px de haut, fond page, bordure douce.
-  const CHAMP = 'w-full h-11 px-3.5 rounded-[10px] border border-white/10 bg-dark text-body text-ink-50 focus-ring';
+  const CHAMP = 'w-full h-11 px-3.5 rounded-[10px] border border-bordure-champ bg-dark text-body text-ink-50 focus-ring';
 
   return (
     <section aria-labelledby="profil-utilisateurs" className="space-y-4">
@@ -76,7 +76,7 @@ export const UsersCard: React.FC<UsersCardProps> = ({ config, setConfig }) => {
               ref={partnerToggleRef}
               onClick={() => setShowPartnerForm((v) => !v)}
               aria-expanded={showPartnerForm}
-              className="min-h-[44px] px-4 rounded-lg border border-white/40 text-body text-ink-100 hover:bg-white/5 transition-colors focus-ring"
+              className="min-h-[44px] px-4 rounded-lg border border-bordure-champ text-body text-ink-100 hover:bg-surface-douce transition-colors focus-ring"
             >
               + Ajouter un conjoint
             </button>
@@ -99,7 +99,7 @@ export const UsersCard: React.FC<UsersCardProps> = ({ config, setConfig }) => {
                   value={partnerDraft.name}
                   onChange={(e) => setPartnerDraft((p) => ({ ...p, name: e.target.value }))}
                   placeholder="ex: Anna"
-                  className="mt-1 w-full bg-white/5 border border-white/10 rounded-sm px-3 py-2 text-body text-white focus:border-primary outline-hidden"
+                  className="mt-1 w-full bg-fond border border-bordure-champ rounded-sm px-3 py-2 touch-target text-body text-texte focus:border-primary outline-hidden"
                 />
               </label>
               <label className="block">
@@ -111,7 +111,7 @@ export const UsersCard: React.FC<UsersCardProps> = ({ config, setConfig }) => {
                   value={partnerDraft.age}
                   onChange={(e) => setPartnerDraft((p) => ({ ...p, age: e.target.value }))}
                   placeholder="ex: 32"
-                  className="mt-1 w-full bg-white/5 border border-white/10 rounded-sm px-3 py-2 text-body text-white focus:border-primary outline-hidden"
+                  className="mt-1 w-full bg-fond border border-bordure-champ rounded-sm px-3 py-2 touch-target text-body text-texte focus:border-primary outline-hidden"
                 />
               </label>
               <label className="block" htmlFor="partner-netSalary">
@@ -123,7 +123,7 @@ export const UsersCard: React.FC<UsersCardProps> = ({ config, setConfig }) => {
                   value={partnerDraft.netSalary}
                   onChange={(e) => setPartnerDraft((p) => ({ ...p, netSalary: e.target.value }))}
                   placeholder="0 si sans revenu"
-                  className="mt-1 w-full bg-white/5 border border-white/10 rounded-sm px-3 py-2 text-body text-white focus:border-primary outline-hidden"
+                  className="mt-1 w-full bg-fond border border-bordure-champ rounded-sm px-3 py-2 touch-target text-body text-texte focus:border-primary outline-hidden"
                 />
               </label>
             </div>
@@ -153,7 +153,7 @@ export const UsersCard: React.FC<UsersCardProps> = ({ config, setConfig }) => {
               className="premium-card rounded-2xl p-5 sm:p-6 flex flex-col gap-4 h-full"
             >
               <div className="flex items-center gap-3">
-                <span className={`w-10 h-10 rounded-full flex items-center justify-center font-extrabold text-dark shrink-0 ${idx === 0 ? 'bg-[#34b39a]' : 'bg-[#7c93f2]'}`} aria-hidden="true">
+                <span className={`w-10 h-10 rounded-full flex items-center justify-center font-extrabold text-dark shrink-0 ${idx === 0 ? 'bg-accent' : 'bg-info-400'}`} aria-hidden="true">
                   {(user.name || '?').trim().charAt(0).toUpperCase() || '?'}
                 </span>
                 <div className="flex-1 min-w-0 flex flex-col">
@@ -176,7 +176,7 @@ export const UsersCard: React.FC<UsersCardProps> = ({ config, setConfig }) => {
                   <input id={`uc-age-${idx}`} type="number" value={user.age || 30} onChange={(e) => majUser(idx, { age: parseInt(e.target.value) || 30 })} className={`${CHAMP} font-mono`} min={18} max={80} />
                 </div>
               </div>
-              <div className="rounded-[10px] bg-surface border border-white/6 p-3.5 flex flex-col gap-2.5">
+              <div className="rounded-[10px] bg-surface border border-bordure p-3.5 flex flex-col gap-2.5">
                 <label className="flex items-center justify-between gap-3 cursor-pointer min-h-11">
                   <span className="flex flex-col gap-0.5">
                     <span className="text-body text-ink-100">Immigré au Canada</span>
@@ -187,7 +187,7 @@ export const UsersCard: React.FC<UsersCardProps> = ({ config, setConfig }) => {
                     type="checkbox"
                     checked={!!user.isImmigrant}
                     onChange={(e) => majUser(idx, { isImmigrant: e.target.checked })}
-                    className="appearance-none shrink-0 relative w-11 h-[26px] rounded-full bg-surfaceHighlight border border-white/15 cursor-pointer transition-colors checked:bg-success-500 checked:border-success-500 focus-ring before:content-[''] before:absolute before:top-[3px] before:left-[3px] before:w-[18px] before:h-[18px] before:rounded-full before:bg-ink-400 before:transition-transform checked:before:translate-x-[18px] checked:before:bg-white"
+                    className="appearance-none shrink-0 relative w-11 h-[26px] rounded-full bg-surfaceHighlight border border-bordure-champ cursor-pointer transition-colors checked:bg-success-500 checked:border-success-500 focus-ring before:content-[''] before:absolute before:top-[3px] before:left-[3px] before:w-[18px] before:h-[18px] before:rounded-full before:bg-ink-400 before:transition-transform checked:before:translate-x-[18px] checked:before:bg-texte"
                   />
                 </label>
                 {user.isImmigrant && (

@@ -362,7 +362,7 @@ export const FintableSyncCard: React.FC = () => {
                         value={token}
                         onChange={(e) => saveToken(e.target.value)}
                         onBlur={() => { void persistToken(); }}
-                        className="w-full bg-dark border border-border rounded-sm px-3 py-2 text-white focus:border-primary outline-hidden"
+                        className="w-full bg-dark border border-bordure-champ rounded-sm px-3 py-2 touch-target text-texte focus:border-primary outline-hidden"
                         placeholder="ft_..."
                         aria-describedby="fintable-token-help"
                     />
@@ -381,7 +381,7 @@ export const FintableSyncCard: React.FC = () => {
                         onClick={() => { void handleTest(); }}
                         disabled={busy !== 'idle' || token.trim() === ''}
                         aria-describedby="fintable-actions-why"
-                        className="px-3 py-2 bg-info-500/15 hover:bg-info-500/25 border border-info-500/30 rounded-card text-info-400 text-meta font-bold transition-colors focus-ring disabled:opacity-50"
+                        className="px-3 py-2 touch-target bg-info-500/15 hover:bg-info-500/25 border border-info-500/30 rounded-card text-info-400 text-meta font-bold transition-colors focus-ring disabled:opacity-50"
                     >
                         {busy === 'testing' ? 'Test en cours…' : 'Tester la connexion'}
                     </button>
@@ -390,7 +390,7 @@ export const FintableSyncCard: React.FC = () => {
                         onClick={() => { void handleSync(false); }}
                         disabled={busy !== 'idle' || token.trim() === '' || isTestMode}
                         aria-describedby="fintable-actions-why"
-                        className="px-3 py-2 bg-primary/90 hover:bg-primary text-dark rounded-card text-meta font-bold transition-colors focus-ring disabled:opacity-50"
+                        className="px-3 py-2 touch-target bg-primary/90 hover:bg-primary text-dark rounded-card text-meta font-bold transition-colors focus-ring disabled:opacity-50"
                     >
                         {busy === 'syncing' ? 'Synchronisation…' : 'Synchroniser maintenant'}
                     </button>
@@ -404,7 +404,7 @@ export const FintableSyncCard: React.FC = () => {
                         disabled={busy !== 'idle' || token.trim() === '' || isTestMode}
                         aria-describedby="fintable-actions-why"
                         title="Rapatrie TOUT l'historique exposé par Fintable, pas seulement les jours qui suivent ta transaction la plus récente. Les doublons évidents sont neutralisés automatiquement ; les cas douteux te sont listés."
-                        className="px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/15 rounded-card text-ink-200 text-meta font-bold transition-colors focus-ring disabled:opacity-50"
+                        className="px-3 py-2 touch-target bg-surface-douce hover:bg-bordure border border-bordure-champ rounded-card text-ink-200 text-meta font-bold transition-colors focus-ring disabled:opacity-50"
                     >
                         {busy === 'syncing' ? 'En cours…' : 'Rattraper l\u2019historique'}
                     </button>
@@ -544,7 +544,7 @@ export const FintableSyncCard: React.FC = () => {
                             {accounts.map((a) => {
                                 const role = roleOf(fintableRoles, a.id);
                                 return (
-                                    <li key={a.id} className="p-2 bg-white/2 border border-white/5 rounded-card">
+                                    <li key={a.id} className="p-2 bg-surface-douce border border-bordure rounded-card">
                                         <div className="flex flex-wrap items-center gap-2 justify-between">
                                             <div className="min-w-0">
                                                 <div className="text-body text-ink-200 truncate">{a.label}</div>
@@ -572,7 +572,7 @@ export const FintableSyncCard: React.FC = () => {
                                                         if (kind === 'investment') return setRole(a.id, { kind: 'investment', taxRegime: DEFAULT_REGIME });
                                                         return setRole(a.id, { kind });
                                                     }}
-                                                    className="bg-dark border border-border rounded-sm px-2 py-1 text-meta text-white focus:border-primary outline-hidden"
+                                                    className="bg-dark border border-bordure-champ rounded-sm px-2 py-1 touch-target text-meta text-texte focus:border-primary outline-hidden"
                                                 >
                                                     <option value="">— à déclarer —</option>
                                                     {(Object.keys(ROLE_LABELS) as RoleKind[]).map((k) => (
@@ -611,7 +611,7 @@ export const FintableSyncCard: React.FC = () => {
                                                             id={`debtname-${a.id}`}
                                                             value={role.debtName}
                                                             onChange={(e) => setRole(a.id, { kind: 'debt', debtName: e.target.value })}
-                                                            className="w-full bg-dark border border-border rounded-sm px-2 py-1 text-meta text-white focus:border-primary outline-hidden"
+                                                            className="w-full bg-dark border border-bordure-champ rounded-sm px-2 py-1 touch-target text-meta text-texte focus:border-primary outline-hidden"
                                                         >
                                                             {/* [FINTABLE-CARTE-SANS-DETTE] L'option vide est un CHOIX nommé,
                                                                 pas un « tu n'as pas fini » : elle importe les transactions
@@ -665,7 +665,7 @@ export const FintableSyncCard: React.FC = () => {
                                                             ? { kind: 'investment' }
                                                             : { kind: 'investment', taxRegime: v as 'CELI' | 'REER' | 'NON-ENREG' });
                                                     }}
-                                                    className="bg-dark border border-border rounded-sm px-2 py-1 text-meta text-white focus:border-primary outline-hidden"
+                                                    className="bg-dark border border-bordure-champ rounded-sm px-2 py-1 touch-target text-meta text-texte focus:border-primary outline-hidden"
                                                 >
                                                     <option value="">— non déclaré —</option>
                                                     <option value="NON-ENREG">Non enregistré</option>
@@ -692,7 +692,7 @@ export const FintableSyncCard: React.FC = () => {
                 )}
 
                 {report && (
-                    <div className="text-tiny text-ink-400 border-t border-white/5 pt-2">
+                    <div className="text-tiny text-ink-400 border-t border-bordure pt-2">
                         Dernière passe : {new Date(report.at).toLocaleString('fr-CA')} ·{' '}
                         {report.error === null
                             ? `${report.transactionsAdded} transaction(s) ajoutée(s), ${report.accountsSeen} compte(s) vu(s)`

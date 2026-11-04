@@ -1,6 +1,0 @@
-{
-  "summary": "Plan de simplification de l'onglet Sauvegarde (retrait de toute référence à l'ancienne application et du verrou MCP) et mise en place du double bouclier zéro perte de données (synchronisation Google Drive toujours visible + coffre de protection automatique hors mode test).",
-  "updatedAt": "2026-11-02T15:56:15.338036856Z",
-  "requestFeedback": true,
-  "userFacing": true
-}

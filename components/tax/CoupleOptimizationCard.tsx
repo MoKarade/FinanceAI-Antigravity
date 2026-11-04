@@ -110,8 +110,7 @@ export const CoupleOptimizationCard: React.FC = () => {
     // [S5-REFONTE-IMPOTS] Carte des maquettes : filet pointillé (fonction à activer), phrase courte,
     // un bouton pleine largeur. Sans clé : le bouton MÈNE à la clé (Réglages · Clés API).
     return (
-        <section aria-labelledby="optim-couple-titre" className="gemini-rainbow-card rounded-2xl border border-dashed border-bordure-champ p-4 sm:p-5 overflow-hidden">
-            <div className="gemini-rainbow-bar -mx-4 sm:-mx-5 -mt-4 sm:-mt-5 mb-3" aria-hidden="true" />
+        <section aria-labelledby="optim-couple-titre" className="bg-surface rounded-2xl border border-dashed border-bordure-champ p-4 sm:p-5 overflow-hidden">
             <div className="space-y-3">
                 <h2 id="optim-couple-titre" className="text-[17px] lg:text-[16px] font-semibold text-ink-50">Optimisation fiscale du couple</h2>
                 <p className="text-[13px] text-ink-300 leading-5">

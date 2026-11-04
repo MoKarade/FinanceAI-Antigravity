@@ -31,9 +31,9 @@ const configTailwind = readFileSync(resolve(racine, 'tailwind.config.js'), 'utf8
  * et le groupe 2 ; départ du 2026-10-17 : 439 / 1 305 / 220). Ne se relèvent pas sans décision de Marc ; se resserrent à chaque
  * écran migré. Restent en dur : les palettes des graphiques (courbes, légendes, jalons).
  */
-const PLAFOND_PALETTE = 176;
-const PLAFOND_BLANC_NOIR = 518;
-const PLAFOND_HEX = 196;
+const PLAFOND_PALETTE = 162;
+const PLAFOND_BLANC_NOIR = 233;
+const PLAFOND_HEX = 193;
 
 const VARIABLES = [
     '--fond', '--surface', '--surface-douce', '--bordure', '--bordure-champ',

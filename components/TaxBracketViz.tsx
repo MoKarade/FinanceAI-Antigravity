@@ -103,7 +103,7 @@ export const TaxBracketViz: React.FC<TaxBracketVizProps> = ({ annualGrossIncome,
         return (
             <div className="space-y-2">
                 <div className="flex items-baseline justify-between">
-                    <h3 className="text-meta font-bold text-white">{jurisdiction}</h3>
+                    <h3 className="text-meta font-bold text-texte">{jurisdiction}</h3>
                     <PrivateBlock as="span" className="text-tiny font-mono" title="Impôt net (crédits inclus)">
                         <span className="text-danger-400">{formatCAD(netTax)}</span>
                         <span className="text-ink-400 mx-1">·</span>
@@ -114,7 +114,7 @@ export const TaxBracketViz: React.FC<TaxBracketVizProps> = ({ annualGrossIncome,
                     </PrivateBlock>
                 </div>
                 <div
-                    className="relative h-8 bg-black/40 rounded-sm overflow-hidden border border-white/10"
+                    className="relative h-8 bg-fond rounded-sm overflow-hidden border border-bordure"
                     role="img"
                     aria-label={isPrivacyMode
                         ? `Graphique des tranches d'imposition ${jurisdiction}. Revenu et taux masqués (mode discret). Détail dans le tableau suivant.`
@@ -143,7 +143,7 @@ export const TaxBracketViz: React.FC<TaxBracketVizProps> = ({ annualGrossIncome,
                                 title={`Tranche ${(b.rate * 100).toFixed(1)}% : ${formatCAD(min)} → ${b.upTo === Infinity ? '∞' : formatCAD(b.upTo)}`}
                             >
                                 {/* MONTANT-PUBLIC : taux légal de la tranche (barème), pas un ratio de l'utilisateur. */}
-                                <span className="text-tiny text-white font-mono">{(b.rate * 100).toFixed(0)}%</span>
+                                <span className="text-tiny text-texte font-mono">{(b.rate * 100).toFixed(0)}%</span>
                             </div>
                         );
                     })}
@@ -187,7 +187,7 @@ export const TaxBracketViz: React.FC<TaxBracketVizProps> = ({ annualGrossIncome,
                     <summary className="cursor-pointer text-ink-400 hover:text-ink-200 italic py-1.5">
                         Voir décomposition $ par tranche
                     </summary>
-                    <div className="mt-1 space-y-0.5 pl-2 border-l border-white/10">
+                    <div className="mt-1 space-y-0.5 pl-2 border-l border-bordure">
                         {breakdown.perBracket.map((b, i) => b.income > 0 && (
                             <div key={i} className="flex justify-between font-mono">
                                 {/* MONTANT-PUBLIC — bornes du palier ; le revenu imposé DANS ce
@@ -226,7 +226,7 @@ export const TaxBracketViz: React.FC<TaxBracketVizProps> = ({ annualGrossIncome,
                 </p>
                 {renderBracketBar(fedBrackets as never, 'Fédéral (ARC)', '59, 130, 246', fedBreakdown, report.fedTax)}
                 {renderBracketBar(qcBrackets as never, 'Québec (Revenu Québec)', '236, 72, 153', qcBreakdown, report.qcTax)}
-                <div className="grid grid-cols-2 gap-3 p-3 bg-white/5 rounded-sm border border-white/10">
+                <div className="grid grid-cols-2 gap-3 p-3 bg-surface-douce rounded-sm border border-bordure">
                     <div>
                         <div className="text-tiny text-ink-400 uppercase tracking-wide">Combiné effectif</div>
                         <PrivateAmount as="div" className="text-base font-bold text-warning-400 font-mono">{combinedEffective.toFixed(2)}%</PrivateAmount>

@@ -210,18 +210,18 @@ const FutureHistorySection: React.FC = () => {
                         avant ce lot il vivait dans une Card pleine largeur où 6 boutons sur une seule
                         ligne tenaient toujours. Marc : « trop cramped ». Passer à la ligne plutôt que
                         d'écraser chaque bouton en dessous d'une cible tactile lisible. */}
-                    <div className="flex flex-wrap justify-end gap-0.5 bg-black/40 rounded-lg p-0.5 border border-white/10">
+                    <div className="flex flex-wrap justify-end gap-0.5 bg-fond rounded-lg p-0.5 border border-bordure">
                         {/* [A11Y] aria-pressed = période active annoncée au lecteur d'écran ;
                             focus-ring = focus clavier visible (préexistant au déménagement). */}
                         {(['1M', '3M', 'YTD', '1Y', 'ALL', 'CUSTOM'] as TimeRange[]).map(r => (
-                            <button key={r} type="button" onClick={() => setTimeRange(r)} aria-pressed={timeRange === r} className={`px-3 py-1 text-tiny font-bold rounded-sm transition-all focus-ring ${timeRange === r ? 'bg-white text-black shadow-sm' : 'text-ink-300 hover:text-white hover:bg-white/5'}`}>{r}</button>
+                            <button key={r} type="button" onClick={() => setTimeRange(r)} aria-pressed={timeRange === r} className={`px-3 py-1 touch-target text-tiny font-bold rounded-sm transition-all focus-ring ${timeRange === r ? 'bg-accent text-sur-accent shadow-sm' : 'text-ink-300 hover:text-texte hover:bg-surface-douce'}`}>{r}</button>
                         ))}
                     </div>
                     {timeRange === 'CUSTOM' && (
                         <div className="flex items-center gap-1.5">
-                            <input type="date" aria-label="Date de début" value={customStart} onChange={e => setCustomStart(e.target.value)} className="bg-black/40 border border-white/10 rounded-sm px-2 py-1 text-tiny text-white focus:border-white/30 outline-hidden" />
+                            <input type="date" aria-label="Date de début" value={customStart} onChange={e => setCustomStart(e.target.value)} className="bg-fond border border-bordure rounded-sm px-2 py-1 touch-target text-tiny text-texte focus:border-bordure-champ outline-hidden" />
                             <span className="text-ink-500 text-tiny" aria-hidden="true">→</span>
-                            <input type="date" aria-label="Date de fin" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="bg-black/40 border border-white/10 rounded-sm px-2 py-1 text-tiny text-white focus:border-white/30 outline-hidden" />
+                            <input type="date" aria-label="Date de fin" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="bg-fond border border-bordure rounded-sm px-2 py-1 touch-target text-tiny text-texte focus:border-bordure-champ outline-hidden" />
                         </div>
                     )}
                 </div>
@@ -241,12 +241,12 @@ const FutureHistorySection: React.FC = () => {
                                 onClick={() => toggleAccount(key)}
                                 aria-pressed={!isHidden}
                                 title={isHidden ? `Afficher ${key}` : `Masquer ${key}`}
-                                className={`inline-flex items-center justify-center gap-1.5 px-2 py-1 rounded-full text-tiny font-medium border transition-colors focus-ring ${
+                                className={`inline-flex items-center justify-center gap-1.5 px-2 py-1 touch-target rounded-full text-tiny font-medium border transition-colors focus-ring ${
                                     isNarrowViewport ? 'min-h-[44px] min-w-[44px]' : ''
                                 } ${
                                     isHidden
-                                        ? 'bg-white/2 text-ink-400 border-white/5 hover:bg-white/5'
-                                        : 'bg-white/10 text-ink-100 border-white/15 hover:bg-white/15'
+                                        ? 'bg-surface-douce text-ink-400 border-bordure hover:bg-bordure'
+                                        : 'bg-surface-douce text-ink-100 border-bordure-champ hover:bg-bordure'
                                 }`}
                             >
                                 <span
@@ -263,12 +263,12 @@ const FutureHistorySection: React.FC = () => {
                         onClick={toggleTotal}
                         aria-pressed={showTotalLine}
                         title={showTotalLine ? 'Masquer la ligne Total' : 'Afficher la ligne Total'}
-                        className={`ml-2 inline-flex items-center justify-center gap-1.5 px-2 py-1 rounded-full text-tiny font-bold border transition-colors focus-ring ${
+                        className={`ml-2 inline-flex items-center justify-center gap-1.5 px-2 py-1 touch-target rounded-full text-tiny font-bold border transition-colors focus-ring ${
                             isNarrowViewport ? 'min-h-[44px] min-w-[44px]' : ''
                         } ${
                             showTotalLine
-                                ? 'bg-white text-black border-white'
-                                : 'bg-white/2 text-ink-400 border-white/10 hover:bg-white/5'
+                                ? 'bg-accent text-sur-accent border-accent'
+                                : 'bg-surface-douce text-ink-400 border-bordure hover:bg-bordure'
                         }`}
                     >
                         <span aria-hidden="true">∑</span>

@@ -316,6 +316,25 @@ export const ZoomableTimeChart: React.FC<ZoomableTimeChartProps> = ({
         };
     }, [compIndices, visibleData, rowValue, xKey, spanDays]);
 
+    const yDomain = useMemo<[number | 'auto', number | 'auto']>(() => {
+        if (stacked && series.filter((s) => s.type !== 'line').length > 1) {
+            return ['auto', 'auto'];
+        }
+        const vals: number[] = [];
+        for (const row of visibleData) {
+            for (const s of series) {
+                const v = Number(row[s.key]);
+                if (Number.isFinite(v)) vals.push(v);
+            }
+        }
+        if (vals.length === 0) return ['auto', 'auto'];
+        const minV = Math.min(...vals);
+        const maxV = Math.max(...vals);
+        const span = Math.max(maxV - minV, Math.abs(maxV) * 0.01 || 1);
+        const pad = span * 0.06;
+        return [Number((minV - pad).toFixed(2)), Number((maxV + pad).toFixed(2))];
+    }, [visibleData, series, stacked]);
+
     return (
         <>
         <div
@@ -461,7 +480,7 @@ export const ZoomableTimeChart: React.FC<ZoomableTimeChartProps> = ({
                     />
                     {axeYMinimal ? (
                         // Axe masqué (domaine identique) : le tracé récupère la gouttière de 55 px.
-                        <YAxis hide domain={['auto', 'auto']} />
+                        <YAxis hide domain={yDomain} />
                     ) : (
                         <YAxis
                             stroke="#555"
@@ -469,7 +488,7 @@ export const ZoomableTimeChart: React.FC<ZoomableTimeChartProps> = ({
                             axisLine={false}
                             tick={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
                             width={55}
-                            domain={['auto', 'auto']}
+                            domain={yDomain}
                             tickFormatter={(val) => privacyMode ? '***' : yFormatter(val)}
                         />
                     )}
@@ -518,9 +537,10 @@ export const ZoomableTimeChart: React.FC<ZoomableTimeChartProps> = ({
                                 key={s.key}
                                 type="monotone"
                                 dataKey={s.key}
+                                baseValue={stacked && series.filter((sr) => sr.type !== 'line').length > 1 ? undefined : 'dataMin'}
                                 stackId={stacked ? (s.stackId ?? '1') : undefined}
                                 stroke={s.color}
-                                strokeWidth={s.strokeWidth ?? 1.45}
+                                strokeWidth={s.strokeWidth ?? 1.85}
                                 fill={`url(#ztc-grad-${idx})`}
                                 activeDot={GF_ACTIVE_DOT}
                                 name={s.name ?? s.key}

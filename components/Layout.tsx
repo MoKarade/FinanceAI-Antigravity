@@ -251,12 +251,12 @@ export const Layout: React.FC<LayoutProps> = ({
           <button
             type="button"
             onClick={() => setShowGeminiModal(true)}
-            title={isSidebarCollapsed ? 'Conseiller Gemini' : undefined}
+            title={isSidebarCollapsed ? 'Assistant' : undefined}
             aria-label="Ouvrir le conseiller financier Gemini"
-            className="touch-target gemini-rainbow-btn h-10 px-2.5 rounded-xl flex items-center justify-center gap-2 text-meta font-semibold hover:opacity-95 transition-opacity focus-ring"
+            className="touch-target h-10 px-2.5 rounded-xl flex items-center justify-center gap-2 text-meta font-semibold bg-surface-douce border border-bordure text-ink-100 hover:bg-bordure hover:text-ink-50 transition-colors focus-ring"
           >
-            <Icon name="sparkles" size={16} className="gemini-rainbow-sparkle shrink-0" aria-hidden="true" />
-            <span className={isSidebarCollapsed ? 'sr-only' : 'truncate'}>Conseiller Gemini</span>
+            <Icon name="sparkles" size={15} className="text-repere shrink-0" aria-hidden="true" />
+            <span className={isSidebarCollapsed ? 'sr-only' : 'truncate'}>Assistant</span>
           </button>
           <button
             type="button"

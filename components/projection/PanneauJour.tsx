@@ -70,7 +70,7 @@ export const PanneauJour: React.FC<PanneauJourProps> = (props) => {
     // de la série afficherait les montants d'une date que personne n'a demandée.
     if (!data) {
         return (
-            <div className="mt-3 rounded-card border border-white/10 bg-surface/40 px-3 py-4 text-center text-tiny text-ink-300">
+            <div className="mt-3 rounded-card border border-bordure bg-surface/40 px-3 py-4 text-center text-tiny text-ink-300">
                 Aucun jour à décrire — la courbe ne fournit pas encore de point exploitable.
             </div>
         );
@@ -87,7 +87,7 @@ export const PanneauJour: React.FC<PanneauJourProps> = (props) => {
                 disabled={!canStepPrev}
                 aria-label={`Veille — ${aidePas.aide}`}
                 title={aidePas.aide}
-                className="focus-ring inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-tiny font-bold text-white bg-white/10 hover:bg-white/20 disabled:opacity-35 disabled:pointer-events-none border border-white/40 rounded-lg px-2.5 sm:px-3 py-2 transition-colors"
+                className="focus-ring inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-tiny font-bold text-texte bg-surface-douce hover:bg-bordure disabled:opacity-35 disabled:pointer-events-none border border-white/50 rounded-lg px-2.5 sm:px-3 py-2 transition-colors"
             >
                 ← Veille
             </button>
@@ -97,7 +97,7 @@ export const PanneauJour: React.FC<PanneauJourProps> = (props) => {
                 disabled={!canStepNext}
                 aria-label={`Lendemain — ${aidePas.aide}`}
                 title={aidePas.aide}
-                className="focus-ring inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-tiny font-bold text-white bg-white/10 hover:bg-white/20 disabled:opacity-35 disabled:pointer-events-none border border-white/40 rounded-lg px-2.5 sm:px-3 py-2 transition-colors"
+                className="focus-ring inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-tiny font-bold text-texte bg-surface-douce hover:bg-bordure disabled:opacity-35 disabled:pointer-events-none border border-white/50 rounded-lg px-2.5 sm:px-3 py-2 transition-colors"
             >
                 Lendemain →
             </button>
@@ -105,7 +105,7 @@ export const PanneauJour: React.FC<PanneauJourProps> = (props) => {
             {/* Le PAS des flèches. Choix de Marc pour le téléphone, où viser un jour à la tape est
                 impossible (≈ 0,7 px par mois à l'horizon par défaut) — mais utile partout : trois
                 ans en arrière coûtent trois tapes au lieu de mille. */}
-            <div role="group" aria-label="Pas des flèches" className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-black/30 border border-white/10">
+            <div role="group" aria-label="Pas des flèches" className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-fond border border-bordure">
                 {PAS_NAVIGATION.map((p) => (
                     <button
                         key={p.id}
@@ -113,7 +113,7 @@ export const PanneauJour: React.FC<PanneauJourProps> = (props) => {
                         onClick={() => onPasChange(p.id)}
                         aria-pressed={pas === p.id}
                         title={p.aide}
-                        className={`touch-target inline-flex items-center justify-center px-2 sm:px-2.5 py-1.5 text-tiny font-bold rounded-sm transition-colors focus-ring ${pas === p.id ? 'bg-primary text-dark' : 'text-ink-300 hover:text-ink-50 hover:bg-white/10'}`}
+                        className={`touch-target inline-flex items-center justify-center px-2 sm:px-2.5 py-1.5 text-tiny font-bold rounded-sm transition-colors focus-ring ${pas === p.id ? 'bg-primary text-dark' : 'text-ink-300 hover:text-ink-50 hover:bg-surface-douce'}`}
                     >
                         {p.label}
                     </button>
@@ -136,7 +136,7 @@ export const PanneauJour: React.FC<PanneauJourProps> = (props) => {
                 <button
                     type="button"
                     onClick={onRelease}
-                    className="focus-ring inline-flex items-center justify-center min-h-[44px] text-tiny font-bold text-ink-200 bg-white/10 hover:bg-white/20 border border-white/40 rounded-lg px-2.5 sm:px-3 py-2 transition-colors"
+                    className="focus-ring inline-flex items-center justify-center min-h-[44px] text-tiny font-bold text-ink-200 bg-surface-douce hover:bg-bordure border border-white/50 rounded-lg px-2.5 sm:px-3 py-2 transition-colors"
                 >
                     Revenir à aujourd’hui
                 </button>
@@ -158,11 +158,11 @@ export const PanneauJour: React.FC<PanneauJourProps> = (props) => {
             data-panneau-jour=""
             data-jour-epingle={origine === 'epingle' ? '' : undefined}
             aria-label="Détail du jour sélectionné sur la courbe"
-            className="mt-3 rounded-card border border-white/10 bg-surface/40 p-3 focus-ring"
+            className="mt-3 rounded-card border border-bordure bg-surface/40 p-3 focus-ring"
         >
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
                 <div className="flex items-baseline gap-2 min-w-0">
-                    <span className="text-body font-extrabold text-white tracking-tight">{data.dateLabel || 'N/A'}</span>
+                    <span className="text-body font-extrabold text-texte tracking-tight">{data.dateLabel || 'N/A'}</span>
                     <span className="text-tiny font-bold text-primary bg-primary/15 border border-primary/30 px-2 py-0.5 rounded-full whitespace-nowrap">Âge {data.age || '??'}</span>
                 </div>
                 {/* ⚠️ L'ORIGINE est écrite, pas devinée : « aujourd'hui », « aperçu » et « épinglé »

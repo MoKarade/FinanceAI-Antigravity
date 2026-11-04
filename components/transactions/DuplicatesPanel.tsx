@@ -121,7 +121,7 @@ export const DuplicatesPanel: React.FC<Props> = ({
             {!integre && <button
                 onClick={() => { setOpen((p) => !p); setDirty(false); }}
                 aria-expanded={open}
-                className="w-full flex items-center justify-between px-4 py-3 text-meta font-bold text-ink-200 hover:text-ink-50 transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 touch-target text-meta font-bold text-ink-200 hover:text-ink-50 transition-colors"
             >
                 <span className="flex items-center gap-2">
                     <Icon name="actions" size={15} className="text-ink-400" />
@@ -135,7 +135,7 @@ export const DuplicatesPanel: React.FC<Props> = ({
                         </span>
                     )}
                     {markedCount > 0 && (
-                        <span className="bg-white/10 text-ink-300 px-2 py-0.5 rounded-full">
+                        <span className="bg-surface-douce text-ink-300 px-2 py-0.5 rounded-full">
                             {markedCount} marqué{markedCount > 1 ? 's' : ''}
                         </span>
                     )}
@@ -152,10 +152,10 @@ export const DuplicatesPanel: React.FC<Props> = ({
                                 key={t.value}
                                 onClick={() => { setTolerance(t.value); setDirty(false); }}
                                 aria-pressed={tolerance === t.value}
-                                className={`px-3 py-1 rounded-full text-meta min-h-[24px] focus-ring ${
+                                className={`px-3 py-1 touch-target rounded-full text-meta focus-ring ${
                                     tolerance === t.value
                                         ? 'bg-warning-500/20 text-ink-50 border border-warning-500/40'
-                                        : 'bg-white/5 text-ink-300 border border-white/10'
+                                        : 'bg-surface-douce text-ink-300 border border-bordure'
                                 }`}
                             >
                                 {t.label}
@@ -204,14 +204,14 @@ export const DuplicatesPanel: React.FC<Props> = ({
                                 <button
                                     onClick={apply}
                                     disabled={effectiveSelected.size === 0}
-                                    className="px-3 py-2 rounded-lg text-meta font-bold bg-warning-600 text-dark disabled:opacity-40 focus-ring min-h-[24px]"
+                                    className="px-3 py-2 touch-target rounded-lg text-meta font-bold bg-warning-600 text-dark disabled:opacity-40 focus-ring"
                                 >
                                     Marquer {effectiveSelected.size} transaction{effectiveSelected.size > 1 ? 's' : ''} en doublon
                                 </button>
                                 {markedCount > 0 && (
                                     <button
                                         onClick={onUnmarkAll}
-                                        className="px-3 py-2 rounded-lg text-meta bg-white/5 text-ink-300 border border-white/10 focus-ring min-h-[24px]"
+                                        className="px-3 py-2 touch-target rounded-lg text-meta bg-surface-douce text-ink-300 border border-bordure focus-ring"
                                     >
                                         Annuler tous les marquages ({markedCount})
                                     </button>
@@ -234,7 +234,7 @@ const GroupRow: React.FC<{
     selected: Set<number>;
     onToggle: (id: number) => void;
 }> = ({ group, selected, onToggle }) => (
-    <li className="rounded-lg border border-white/10 bg-black/20 p-2">
+    <li className="rounded-lg border border-bordure bg-fond p-2">
         <div className="flex items-center justify-between gap-2 mb-1">
             <PrivateAmount className="text-meta font-bold text-ink-100">
                 {formatCAD(group.amount)}
