@@ -18,7 +18,7 @@ import { handleError } from './syncErrors';
 import { logError } from '../errorLogger';
 import { modeDonneesFictives } from '../../store/modeTestActif';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { isStarterTemplateState } from '../dataRecovery';
+import { isStarterTemplateState } from '../../utils/starterData';
 
 /** Résultat d'un push — permet à l'UI d'être honnête (toast réel vs « rien à sauvegarder »).
  *  `conflict` : Drive a été réécrit depuis la version vue, RIEN n'a été écrit et le modal de conflit

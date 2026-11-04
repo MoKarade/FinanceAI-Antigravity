@@ -18,7 +18,7 @@
 
 import type { Transaction } from '../../types';
 
-export interface DuplicateMember {
+interface DuplicateMember {
     id: number;
     date: string;
     payee: string;

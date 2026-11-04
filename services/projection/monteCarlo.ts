@@ -4,7 +4,7 @@
 // éviter dépendance circulaire avec projection.ts.
 
 import { lifetimeTaxTotal } from './lifetimeTax';
-import type { SimulationParams, AllocationStrategy, FutureScenarioType } from '../projection';
+import type { SimulationParams, AllocationStrategy, FutureScenarioType } from './types';
 import type { EngineOverrides } from './strategyConfig';
 import { logErrorThrottled } from '../errorLogger';
 
@@ -197,7 +197,13 @@ export function runMonteCarlo(
     const p50Data = allRuns.length ? percentileParMois(0.50) : Array(nMonths + 1).fill(0);
     const p90Data = allRuns.length ? percentileParMois(0.90) : Array(nMonths + 1).fill(0);
 
-    const startNW = (params.calculatedStartingCash + params.liveCSVBalances.CELI + params.liveCSVBalances.CELIAPP + params.liveCSVBalances.REER + params.liveCSVBalances.NON_ENREG + params.liveCSVBalances.CRYPTO + params.liveCSVBalances.REEE);
+    const useManual = Boolean(params.projection?.useManualBalances);
+    const cashStart = useManual ? (params.projection.manualCash ?? params.calculatedStartingCash) : params.calculatedStartingCash;
+    const celiStart = useManual ? (params.projection.manualCELI ?? params.liveCSVBalances.CELI) : params.liveCSVBalances.CELI;
+    const reerStart = useManual ? (params.projection.manualREER ?? params.liveCSVBalances.REER) : params.liveCSVBalances.REER;
+    const nonRegStart = useManual ? (params.projection.manualNonReg ?? params.liveCSVBalances.NON_ENREG) : params.liveCSVBalances.NON_ENREG;
+    const cryptoStart = useManual ? (params.projection.manualCrypto ?? params.liveCSVBalances.CRYPTO) : params.liveCSVBalances.CRYPTO;
+    const startNW = (cashStart + celiStart + params.liveCSVBalances.CELIAPP + reerStart + nonRegStart + cryptoStart + params.liveCSVBalances.REEE);
 
     const survivalScore = successRate / 100;
     const safetyScore = allRuns.filter(r => r.minNetWorth > startNW * 0.1).length / iterations;

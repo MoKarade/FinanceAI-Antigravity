@@ -9,7 +9,7 @@ import { listBackups, readStoredPayload } from './backupAuto';
 import { getOrCreateDeviceKey } from './secureKeyStore';
 import { sanitizePersonaArtifacts } from './personaSanitizer';
 import { hasMeaningfulData } from '../utils/onboarding';
-import { buildStarterState } from '../utils/starterData';
+import { buildStarterState, isStarterTemplateState } from '../utils/starterData';
 import { computePresentTermes } from './portfolio';
 import { presentTermesOfGoal, monthsSince } from './projection/pastPurchaseInit';
 import { initSync, pullNow } from './sync/syncOrchestrator';
@@ -118,23 +118,7 @@ function isTestPersonaState(candidate: Record<string, unknown>): boolean {
     return false;
 }
 
-/** Détecte si un état est le gabarit starter synthétique (Alex / init-cat-logement / init-debt-auto). */
-export function isStarterTemplateState(candidate: Partial<AppState> | null | undefined): boolean {
-    if (!candidate) return false;
-    const firstUserName = candidate.config?.users?.[0]?.name ?? '';
-    const hasStarterBudget = (candidate.budgetItems ?? []).some((b) => b.id === 'init-cat-logement');
-    const hasStarterDebt = (candidate.debts ?? []).some((d) => d.id === 'init-debt-auto');
-    const hasStarterGoal = (candidate.financialGoals ?? []).some((g) => g.id === 'init-goal-urgence');
-    const hasBrokerLedger = Array.isArray(candidate.brokerLedger) && candidate.brokerLedger.length > 0;
-    if (hasBrokerLedger) return false;
-    if ((candidate.transactions ?? []).length > 60 || (candidate.assets ?? []).length > 5) {
-        return false;
-    }
-    if (firstUserName === 'Alex' && (hasStarterBudget || hasStarterDebt || hasStarterGoal)) {
-        return true;
-    }
-    return (hasStarterBudget && hasStarterDebt) || (hasStarterDebt && hasStarterGoal);
-}
+export { isStarterTemplateState } from '../utils/starterData';
 
 /** Détecte la présence de la propriété fictive `init-prop-principale` (+203 k$ → ~430 k$). */
 export function hasInflatedStarterProperty(candidate: Partial<AppState> | null | undefined): boolean {

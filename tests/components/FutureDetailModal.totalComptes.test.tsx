@@ -8,7 +8,7 @@
  * somme est bien calculée. Une addition juste d'un ENSEMBLE faux resterait verte.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import React from 'react';
 import { FutureDetailModal } from '../../components/projection/FutureDetailModal';
 import type { ProjectionChartPoint } from '../../services/projection/types';

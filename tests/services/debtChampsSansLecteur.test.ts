@@ -19,7 +19,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { toPosix } from '../helpers/toPosix';
-import { stripCommentsJsx, partDeCodeRestante } from '../../utils/stripComments';
+import { stripCommentsJsx } from '../../utils/stripComments';
 
 const RACINES = ['components', 'services', 'mcp', 'hooks', 'store', 'utils'];
 

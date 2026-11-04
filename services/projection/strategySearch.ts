@@ -16,7 +16,7 @@
 //    (monthlyOutput.ts l.144 : {NetWorth, monthIndex} seulement), ces deux
 //    métriques n'y sont donc pas disponibles.
 
-import type { SimulationParams, AllocationStrategy, FutureScenarioType } from '../projection';
+import type { SimulationParams, AllocationStrategy, FutureScenarioType } from './types';
 import type { EngineOverrides, StrategyConfig } from './strategyConfig';
 import { configToEngine } from './strategySpace';
 import { lifetimeTaxTotal } from './lifetimeTax';

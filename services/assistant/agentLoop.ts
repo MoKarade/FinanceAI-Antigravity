@@ -24,7 +24,7 @@ import type { EntreeJournal } from './journalModifications';
 import { declarationsOutils, executerAction, type DeclarationOutil, type ResultatExecution, type ContexteExecution } from './actionRegistry';
 import type { MessageConversation } from './types';
 
-export type ContenuGemini = Content;
+type ContenuGemini = Content;
 
 export interface RequeteGemini {
     modele: string;
@@ -44,7 +44,7 @@ export interface ClientGemini {
     generer: (req: RequeteGemini) => Promise<ReponseGemini>;
 }
 
-export const MAX_ITERATIONS_DEFAUT = 8;
+const MAX_ITERATIONS_DEFAUT = 8;
 
 export interface OptionsTour {
     client: ClientGemini;
@@ -96,7 +96,7 @@ export function instructionSysteme(dateDuJour: string): string {
 }
 
 /** Historique de la conversation → contenus Gemini (texte seulement ; les outils des tours passés sont résumés). */
-export function historiqueVersContenus(historique: MessageConversation[]): ContenuGemini[] {
+function historiqueVersContenus(historique: MessageConversation[]): ContenuGemini[] {
     const contenus: ContenuGemini[] = [];
     for (const m of historique) {
         if (m.erreur) continue;

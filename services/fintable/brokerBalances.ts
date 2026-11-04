@@ -165,7 +165,7 @@ export interface TauxCourants {
 }
 
 /** Ce que vaut une entrée courtier À LA LECTURE. */
-export type SoldeCourtierRelu =
+type SoldeCourtierRelu =
     | { statut: 'ok'; montantCad: number; reconverti: boolean }
     | { statut: 'taux-manquant'; devise: string }
     | { statut: 'illisible' };
@@ -188,7 +188,7 @@ export type SoldeCourtierRelu =
  * on retombe alors sur `balanceCad` et son `missingRate` — la valeur convertie à SA date. Ce n'est
  * pas idéal, c'est honnête : on n'a pas le montant natif, donc on ne peut rien reconvertir.
  */
-export function relireSoldeCourtier(
+function relireSoldeCourtier(
     b: Partial<FintableBrokerBalance> | undefined,
     fx: TauxCourants,
 ): SoldeCourtierRelu {

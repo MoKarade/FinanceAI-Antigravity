@@ -16,7 +16,7 @@
  * ⚠️ La garde lit `innerHTML` : une valeur fuit par le TEXTE **et** par un ATTRIBUT (`title`,
  * `aria-label`, `value`). Chercher la chaîne dans le HTML rendu couvre les deux d'un coup.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { render, fireEvent, screen } from '@testing-library/react';
 import React from 'react';
 import { useFinanceStore } from '../../store/useFinanceStore';

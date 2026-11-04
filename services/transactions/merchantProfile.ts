@@ -22,7 +22,7 @@ const MIN_OCCURRENCES = 3;
 const MAX_RELATIVE_SPREAD = 0.15;
 const DAY_MS = 86_400_000;
 
-export type MerchantCadence = 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'irregular';
+type MerchantCadence = 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'irregular';
 
 /** Fenêtres d'intervalle (en jours) par cadence — larges, les prélèvements glissent d'un mois à l'autre. */
 const CADENCE_WINDOWS: Array<{ cadence: MerchantCadence; min: number; max: number }> = [

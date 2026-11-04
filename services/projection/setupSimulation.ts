@@ -10,7 +10,7 @@
 
 import { mulberry32 } from './helpers';
 import { TAX_BASE_YEAR, REGISTERED_PLAN_MIN_AGE, ageOptsForSalaryInversion, calculateCeliRoom, calculateGrossFromNet, getResidencyStartYear, RRSP_ANNUAL_LIMITS, RRSP_ANNUAL_LIMIT_FALLBACK, FIRST_KNOWN_RRSP_YEAR, RRSP_ANNUAL_LIMIT_PRE_TABLE, rrqAdjustmentFactor as computeRrqFactor, GOV_PENSION_RRQ_SHARE, GOV_PENSION_PSV_SHARE, RRSP_ROOM_RATE, RRQ_MAX_DEFERRAL_AGE, RRQ_STANDARD_START_AGE } from '../../utils/tax';
-import type { FutureScenarioType } from '../projection';
+import type { FutureScenarioType } from './types';
 
 /**
  * Construit un RNG mulberry32 seedé déterministiquement à partir des

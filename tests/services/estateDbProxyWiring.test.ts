@@ -34,8 +34,6 @@ vi.mock('../../services/projection/estateCalculation', async (importOriginal) =>
 });
 
 import { __runScenarioForTests, type SimulationParams } from '../../services/projection';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import type { ProjectionConfig, BudgetConfig, RetirementGoal, User } from '../../types';
 import type { AllocationStrategy, ProjectionChartPoint } from '../../services/projection/types';
 

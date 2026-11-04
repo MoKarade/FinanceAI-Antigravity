@@ -49,7 +49,6 @@ vi.mock('../../services/projection/taxJanuary', async (importOriginal) => {
 });
 
 const BRUT_ANNUEL = 100_000;
-const TAUX_DROITS = 0.18;
 
 const users: User[] = [
     { name: 'Marc', grossSalary: BRUT_ANNUEL / 12, netSalary: 5_600, color: '#10b981', age: 35, birthYear: 1991, canadaArrivalYear: 1991, hasOwnedPropertyLast4Years: false, celiContributed: 0, rrspContributed: 0 },

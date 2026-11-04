@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { AppState, Tab } from '../types';
-import type { ProjectionResult } from '../services/projection/types';
+import { Tab } from '../types';
 import { quotaStorage } from '../services/quotaStorage';
 import { saveLockedProjection, clearLockedProjection } from '../services/lockedProjectionStore';
 import { STORAGE_KEYS } from '../utils/storageKeys';
@@ -9,101 +8,10 @@ import { initialState } from './etatParDefaut';
 import { migratePersistedState } from './migrationsPersistees';
 import { creerActionsModeTest } from './actionsModeTest';
 import { fusionnerEtatPersiste, surRehydratation, extrairePersistable } from './optionsPersistance';
-import { champsFxApres, type EcritureFx } from '../services/fx/ecritureFx';
+import { champsFxApres } from '../services/fx/ecritureFx';
 import { brancherCoutIa } from '../services/aiChat/coutIa';
-
-// Phase B2 — Deep-link cross-tab: un onglet pose un "intent" de focus, la page
-// destination le consomme au mount (scroll, highlight, focus, etc.).
-export interface PendingFocus {
-    tab: Tab;
-    section: string | null;
-    /** Timestamp d'expiration (ms). Garde-fou: si la page cible ne consomme
-     *  pas dans 5s, on auto-purge pour éviter les focus fantômes. */
-    expiresAt: number;
-}
-
-/** PH2-c — statut du moteur de projection app-level (ProjectionEngine). */
-export type ProjectionStatus = 'idle' | 'computing' | 'error';
-
-export interface FinanceState extends AppState {
-    activeTab: Tab;
-    isPrivacyMode: boolean;
-    // Wiring 2026-05 (Option A): dernier résultat de calculateFutureProjection,
-    // mis à jour par FutureProjection. Lu par Dashboard/Investments/Budget/etc.
-    // pour afficher des projections cohérentes sans recalculer.
-    lastProjection: ProjectionResult | null;
-    /** PH2-a (clé de voûte) — toggle Monte-Carlo de l'onglet Futur, REMONTÉ dans le store
-     *  pour survivre aux changements d'onglet (le contrôle ne se réinitialise plus au retour
-     *  sur Futur) et persisté pour survivre au reload. */
-    projectionRunMC: boolean;
-    /** PH2-c (clé de voûte) — statut du moteur de projection app-level (ProjectionEngine).
-     *  Transitoire (NON persisté) : tout onglet peut afficher « recalcul… » / erreur sans
-     *  tenir l'état de calcul localement. */
-    projectionStatus: ProjectionStatus;
-    /** [ENG-INFINITY-NON-GARDE-A-LA-FRONTIERE] Phrase à montrer quand une ENTRÉE du moteur est
-     *  illisible (valeur non finie restaurée d'un backup, d'une sync Drive, d'un import). Elle NOMME
-     *  le champ et la personne : « ouvre Future » ne répare pas une donnée corrompue.
-     *  `null` = rien à refuser. Transitoire (NON persisté) : c'est un état DÉRIVÉ de l'état
-     *  persisté, le sauvegarder le ferait survivre à la correction du champ. */
-    projectionRefus: string | null;
-    /** PH2-d — courbe VERROUILLÉE : snapshot complet d'un ProjectionResult choisi par l'utilisateur.
-     *  TRANSITOIRE en mémoire (NON dans le persist localStorage — trop gros) ; persisté CHIFFRÉ en
-     *  IndexedDB (services/lockedProjectionStore) et restauré au boot si `isProjectionLocked`. */
-    lockedProjection: ProjectionResult | null;
-    /** PH2-d — vrai si une courbe est verrouillée. Persisté (booléen ADDITIF, pas de bump v7) ;
-     *  le gros blob `lockedProjection` vit en IndexedDB. */
-    isProjectionLocked: boolean;
-    /** [PROJECTION-PERSIST 2026-07-16] Signature des inputs de la DERNIÈRE projection RÉVÉLÉE par
-     *  l'utilisateur (clic « Calculer »/« Appliquer »). Persistée (string ADDITIVE, pas de bump v7,
-     *  synchronisée Drive → cross-PC) : au reload/changement de page/autre appareil, la courbe reste
-     *  affichée au lieu de re-demander un calcul (demande Marc). null = jamais révélé.
-     *  Si les inputs divergent (sig ≠ courante), l'UI FIGE l'ancienne courbe (blob IDB, cf
-     *  lockedProjectionStore record `revealed`) + badge « pas à jour » (choix Marc : figer, pas recalculer). */
-    revealedProjectionSig: string | null;
-    pendingFocus: PendingFocus | null;
-    // Mode test : true = l'app affiche des fixtures de test, banner visible
-    isTestMode: boolean;
-    /** Snapshot des vraies données sauvegardé AVANT activation du mode test.
-     *  Restauré quand l'utilisateur sort du mode test. */
-    // Omit<…,'apiKeys'> : invariant de sécurité GARANTI au compilateur — le snapshot des vraies
-    // données (désormais persisté en localStorage) ne peut JAMAIS contenir les clés API.
-    realDataSnapshot: Partial<Omit<AppState, 'apiKeys'>> | null;
-    /** Id du persona de test actuellement chargé (null hors mode test). */
-    activeTestPersonaId: string | null;
-    setActiveTab: (tab: Tab) => void;
-    setPrivacyMode: (v: boolean) => void;
-    togglePrivacyMode: () => void;
-    setAppState: (state: Partial<AppState>) => void;
-    setLastProjection: (r: ProjectionResult | null) => void;
-    setProjectionRunMC: (v: boolean) => void;
-    setProjectionStatus: (s: ProjectionStatus) => void;
-    setProjectionRefus: (m: string | null) => void;
-    /** PH2-d — verrouille la courbe courante (snapshot mémoire + persistance IndexedDB chiffrée). */
-    lockProjection: (r: ProjectionResult) => void;
-    /** PH2-d — déverrouille (efface le snapshot mémoire ET l'entrée IndexedDB). */
-    unlockProjection: () => void;
-    /** PH2-d — restaure la courbe verrouillée depuis IndexedDB au boot (sans ré-écrire l'IDB). */
-    setLockedProjection: (r: ProjectionResult | null) => void;
-    /** [PROJECTION-PERSIST] fixe/efface la signature de la projection révélée (null = re-gate). */
-    setRevealedProjectionSig: (sig: string | null) => void;
-    /** Navigate to a tab with an optional section to scroll/focus on arrival. */
-    navigateWithFocus: (tab: Tab, section?: string) => void;
-    /** Called by the destination page after it has consumed the focus intent. */
-    clearPendingFocus: () => void;
-    /** Champs et règles : `services/fx/ecritureFx.ts` (`EcritureFx`, `champsFxApres`). */
-    updateFxRates: (rates: EcritureFx) => void;
-    updateApiKeys: (keys: { gemini?: string; anthropic?: string; finnhub?: string; fintable?: string }) => void;
-    updateLastUpdate: () => void;
-    resetState: () => void;
-    /** Active le mode test : sauvegarde l'état actuel + applique des fixtures.
-     *  `personaId` (optionnel) identifie le persona chargé pour le banner. */
-    enableTestMode: (fixtures: Partial<AppState>, personaId?: string | null) => void;
-    /** Désactive le mode test : restaure l'état sauvegardé. */
-    disableTestMode: () => void;
-    /** [PERSONA-PURGE] Retire du mode RÉEL tout artefact de persona de test (ids déterministes).
-     *  No-op en mode test. Rend le nombre d'items retirés (0 = déjà propre). */
-    purgePersonaArtifacts: () => number;
-}
+import type { FinanceState } from './types';
+export type { FinanceState, PendingFocus, ProjectionStatus } from './types';
 
 
 // [GODFILE-STORE] Ré-exports de compatibilité : les consommateurs (composants, services, tests)

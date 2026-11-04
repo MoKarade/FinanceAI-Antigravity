@@ -31,8 +31,7 @@ import {
     detectInternalTransfers as detectGenericTransfers,
     type TransferCandidate,
 } from '../transactions/detectTransfers';
-import type { FintableAccountRole } from './mapSnapshot';
-import type { FintableTransaction } from './types';
+import type { FintableAccountRole, FintableTransaction } from './types';
 
 /** Fenêtre par défaut : un paiement de carte est débité et crédité à quelques jours d'intervalle. */
 const DEFAULT_TOLERANCE_DAYS = DEFAULT_TRANSFER_TOLERANCE_DAYS;

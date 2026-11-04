@@ -14,7 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import { __runScenarioForTests, type SimulationParams } from '../../services/projection';
 import { computeRetirementIncome } from '../../services/projection/retirementIncome';
-import { processReerMeltdown, MELTDOWN_TARGET_BASE } from '../../services/projection/meltdownReer';
+import { processReerMeltdown } from '../../services/projection/meltdownReer';
 import { GIS_MAX_MONTHLY_SINGLE_2026 } from '../../utils/tax';
 import type { AllocationStrategy } from '../../services/projection/types';
 import type { ProjectionConfig, BudgetConfig, RetirementGoal, User } from '../../types';

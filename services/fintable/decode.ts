@@ -13,6 +13,7 @@
 
 import {
     FintableError,
+    type EchantillonCleInconnue,
     type FintableAccount,
     type FintableHolding,
     type FintableTransaction,
@@ -20,6 +21,7 @@ import {
     type FtRawHolding,
     type FtRawTransaction,
 } from './types';
+export type { EchantillonCleInconnue } from './types';
 
 function isRecord(v: unknown): v is Record<string, unknown> {
     return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -178,13 +180,6 @@ export function clesInconnues(
         }
     }
     return [...vues].sort();
-}
-
-/** Un champ hors contrat, avec quelques VALEURS observées — pour trancher s'il sert à quelque chose. */
-export interface EchantillonCleInconnue {
-    cle: string;
-    /** Valeurs observées, TRONQUÉES et bornées. Jamais l'ensemble : c'est un échantillon, pas un dump. */
-    exemples: string[];
 }
 
 /** Longueur max d'une valeur citée. Un mémo bancaire peut porter un nom complet ou une adresse. */

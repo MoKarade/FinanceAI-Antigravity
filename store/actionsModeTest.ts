@@ -9,7 +9,7 @@ import { sanitizePersonaArtifacts } from '../services/personaSanitizer';
 import { clearAttachmentCache } from '../services/aiChat/attachments';
 import { clearHistorySyncReport } from '../services/history/syncDiagnostics';
 import { personaResetBase } from './etatParDefaut';
-import type { FinanceState } from './useFinanceStore';
+import type { FinanceState } from './types';
 
 type ActionsModeTest = Pick<FinanceState, 'enableTestMode' | 'disableTestMode' | 'purgePersonaArtifacts'>;
 

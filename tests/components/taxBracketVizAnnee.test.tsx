@@ -176,7 +176,7 @@ describe('[TAXBRACKETVIZ-ANNEE] la paire appelant/composant reste accordée', ()
 
         // Et le défaut ne revient pas côté moteur : le champ reste REQUIS. Un `startYear?:` ou un
         // `startYear = <littéral>` rouvrirait la classe entière sans qu'aucun appelant ne bronche.
-        const moteur = lireCode('services/projection.ts');
+        const moteur = `${lireCode('services/projection.ts')}\n${lireCode('services/projection/types.ts')}`;
         expect(moteur, 'le champ doit rester REQUIS').toMatch(/\n\s*startYear:\s*number;/);
         expect(moteur, 'aucun défaut d’année ne revient à la déstructuration')
             .not.toMatch(/startYear\s*=\s*\d{4}/);

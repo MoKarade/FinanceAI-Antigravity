@@ -6,7 +6,7 @@
 // worker (commit 4) injecte runScenario pour exécuter le MC sur chaque config.
 // Import SimulationParams en type-only → pas de cycle avec projection.ts.
 
-import type { SimulationParams, AllocationStrategy } from '../projection';
+import type { SimulationParams, AllocationStrategy } from './types';
 import {
     LEVER_LIBRARY,
     withdrawalOrderToStrategy,

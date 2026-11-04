@@ -8,8 +8,8 @@
 
 import type { RegisteredAccountType } from '../../types';
 
-export interface MinimalPurchase { date: string; quantity: number; price: number }
-export interface MinimalPricePoint { date: string; price: number }
+interface MinimalPurchase { date: string; quantity: number; price: number }
+interface MinimalPricePoint { date: string; price: number }
 export interface MinimalAsset {
     symbol: string;
     quantity: number;
@@ -106,7 +106,7 @@ export const STALE_PRICE_DAYS = 7;
  * « dans le futur » : il suffisait qu'un appelant demande une fenêtre se terminant dans le PASSÉ
  * pour que la cotation d'aujourd'hui soit jugée fraîche et réécrive une date ancienne.
  */
-export function cotationFraicheSubstituable(
+function cotationFraicheSubstituable(
     a: Pick<MinimalAsset, 'currentPrice' | 'priceUpdatedAt'>,
     dernierCloseIso: string | null,
     refMs: number,

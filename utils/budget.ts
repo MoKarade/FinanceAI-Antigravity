@@ -9,7 +9,7 @@
 // transactions sans poste, postes sans dépense).
 
 import type { BudgetCategory, Transaction } from '../types';
-import { isSpend, spendAmountOf, isHorsComparaisonBudget } from './spendRules';
+import { spendAmountOf, isHorsComparaisonBudget } from './spendRules';
 
 /**
  * Rapproche une catégorie de transaction d'un poste de budget. Règle (préservée

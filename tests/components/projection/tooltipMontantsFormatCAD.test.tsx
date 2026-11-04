@@ -12,7 +12,6 @@
  * un remplacement de classe se relit membre par membre.
  */
 import { describe, it, expect } from 'vitest';
-import { screen } from '@testing-library/react';
 import { renderPanneauJour } from '../../helpers/panneauJour';
 import { formatCAD, formatNumber } from '../../../utils/format';
 import type { ProjectionChartPoint } from '../../../services/projection/types';

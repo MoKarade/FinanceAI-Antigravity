@@ -32,7 +32,7 @@ import { useState, useRef, useMemo, useCallback } from 'react';
  * composent correctement même avant le commit.
  */
 
-export interface TimeChartZoomHandlers {
+interface TimeChartZoomHandlers {
     onMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
     onMouseMove: (e: React.MouseEvent<HTMLDivElement>) => void;
     onMouseUp: () => void;

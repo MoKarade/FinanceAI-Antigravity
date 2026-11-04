@@ -24,7 +24,21 @@
 //      explicitement `pending=false` pour tout miroir. C'est non négociable ici : `applyDocument`
 //      déduplique mais ne supprime JAMAIS → une pending importée puis repostée = doublon À VIE.
 
-import type { EchantillonCleInconnue } from './decode';
+/** Un champ hors contrat, avec quelques VALEURS observées — pour trancher s'il sert à quelque chose. */
+export interface EchantillonCleInconnue {
+    cle: string;
+    /** Valeurs observées, TRONQUÉES et bornées. Jamais l'ensemble : c'est un échantillon, pas un dump. */
+    exemples: string[];
+}
+
+export type FintableTaxRegime = 'CELI' | 'REER' | 'NON-ENREG';
+export const FINTABLE_TAX_REGIMES: readonly FintableTaxRegime[] = ['CELI', 'REER', 'NON-ENREG'];
+export type SigneSoldeDette = 'négatif' | 'positif' | 'zéro' | 'absent';
+export type FintableAccountRole =
+    | { kind: 'cash' }
+    | { kind: 'debt'; debtName: string }
+    | { kind: 'investment'; taxRegime?: FintableTaxRegime }
+    | { kind: 'ignore' };
 
 /** Erreur standard de l'API : `{error: {type, message}}` (une seule forme pour toute l'API). */
 export interface FtErrorBody {
@@ -249,7 +263,7 @@ export interface FintableConnection {
 }
 
 /** Onglet d'une feuille Google configuré côté Fintable (`null` = non configuré). */
-export interface FintableSheetTabs {
+interface FintableSheetTabs {
     accounts: string | null;
     transactions: string | null;
     /** ⚠️ `null` = l'onglet Positions n'est pas configuré côté Fintable. */

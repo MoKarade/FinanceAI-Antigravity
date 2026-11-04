@@ -20,7 +20,7 @@ import { buildSimulationParamsFromState } from '../../services/projection/buildS
 import { useDerivedFinancials } from '../../utils/useDerivedFinancials';
 import { TEST_PERSONAS } from '../../services/testPersonas';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import type { AppState } from '../../types';
+import type { AppState, Debt, Transaction } from '../../types';
 
 const jour = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -32,25 +32,25 @@ describe('[DETTE-VIREMENTS-REELS] parité navigateur / MCP sur une dette LIÉE �
         const fx = persona.build();
         const auj = new Date();
         const dep = new Date(auj.getTime() - 60 * 86400000);
-        const tx: any[] = [];
+        const tx: Transaction[] = [];
         for (let k = 1; k <= 8; k++) {
-            tx.push({ id: `bail${k}`, date: jour(new Date(dep.getTime() + k * 7 * 86400000)), payee: 'Credit-bail Auto Nord', amount: -161.54, category: 'Transport', type: 'expense' });
+            tx.push({ id: k, date: jour(new Date(dep.getTime() + k * 7 * 86400000)), payee: 'Credit-bail Auto Nord', amount: -161.54, category: 'Transport', status: 'processed' });
         }
-        (fx as any).transactions = [...((fx as any).transactions ?? []), ...tx];
-        (fx as any).debts = [{
+        fx.transactions = [...(fx.transactions ?? []), ...tx];
+        fx.debts = [{
             id: 'bail', name: 'Bail auto', category: 'Car', kind: 'auto-lease',
             balance: 30161.54, interestRate: 0, minimumPayment: 700,
             startDate: '2026-01-12', termEndDate: '2029-12-12', paymentFrequency: 'weekly',
             balanceAsOf: jour(dep), paymentPayee: 'Credit-bail Auto Nord',
-        }];
+        } as Debt];
         act(() => { useFinanceStore.getState().enableTestMode(fx, persona.id); });
         const state = useFinanceStore.getState() as unknown as AppState;
         const derived = renderHook(() => useDerivedFinancials(state));
         const { result } = renderHook(() => useSimulationParams(derived.result.current.calculatedMonthlySavings));
         const mcp = buildSimulationParamsFromState(state, { startYear: result.current.startYear, startMonth: result.current.startMonth });
 
-        const soldeHook = (result.current.params.debts as any[])[0].balance;
-        const soldeMcp = (mcp.debts as any[])[0].balance;
+        const soldeHook = result.current.params.debts[0].balance;
+        const soldeMcp = mcp.debts[0].balance;
         expect(soldeHook).toBe(soldeMcp);
         // ⚠️ La VALEUR, pas seulement l'égalité : huit virements hebdomadaires déduits du solde
         // enregistré. Sans elle, deux chemins également figés au solde brut passeraient.

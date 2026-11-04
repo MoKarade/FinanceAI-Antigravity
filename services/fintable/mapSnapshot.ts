@@ -29,45 +29,16 @@
 import type { BankStatementPayload, CashBalancePayload, DebtPayload, DocumentPayload } from '../../mcp/ingest/applyDocument';
 import { cleCompte } from './deriveCutoverDate';
 import { MAX_CLES_CITEES } from './decode';
-import type { FintableSnapshot, FintableTransaction } from './types';
+import {
+    FINTABLE_TAX_REGIMES,
+    type FintableAccountRole,
+    type FintableSnapshot,
+    type FintableTaxRegime,
+    type FintableTransaction,
+    type SigneSoldeDette,
+} from './types';
+export { FINTABLE_TAX_REGIMES, type FintableAccountRole, type FintableTaxRegime, type SigneSoldeDette };
 import { detectInternalTransfers, type TransferPair } from './detectTransfers';
-
-/**
- * [FINTABLE-6] Régime fiscal d'un compte de placement. Déclaré par Marc dans le fichier de rôles,
- * jamais deviné depuis `Account.type` (texte libre côté Fintable : « display it, don't switch on it »).
- * Détermine dans quel panier l'écart courtier (solde réel − Σ titres saisis) est ventilé — s'y tromper
- * fausserait l'impôt de toute la projection, pas seulement un affichage.
- *
- * ⚠️ Les valeurs sont EXACTEMENT celles de `RegisteredAccountType` (`types.ts`) — surtout pas une
- * graphie parallèle type `NON_ENREGISTRE` : deux formats pour la même notion, c'est la table de
- * lookup morte en silence de [[INVEST-ALLOC-GEO-SECTOR]]. Ce module reste sans dépendance (mapper
- * PUR), donc la parité est verrouillée par test plutôt que par un import.
- */
-export type FintableTaxRegime = 'CELI' | 'REER' | 'NON-ENREG';
-
-/**
- * SOURCE UNIQUE des valeurs acceptées, à l'exécution. Tout message de remède et toute validation
- * en DÉRIVENT (`join(' | ')`) au lieu de re-taper la liste : une graphie re-codée à côté finit
- * toujours par diverger — et ici le prix est lourd, un `taxRegime` invalide fait `throw` dans
- * `parseRolesJson`, donc `process.exit(1)` du serveur MCP ENTIER au démarrage (pas seulement la
- * sync). Classe [[MCP-CATEGORY-ALLOWLIST]] : « les listes des messages se dérivent de la source
- * unique, jamais re-codées ».
- */
-export const FINTABLE_TAX_REGIMES: readonly FintableTaxRegime[] = ['CELI', 'REER', 'NON-ENREG'];
-
-/**
- * [FINTABLE-SOLDE-CARTE-SIGNE-INVERSE] Signe d'un solde de compte au rôle `debt` — **jamais son
- * montant**.
- *
- * ⚠️ Le rapport de synchro finit dans `SystemView` SANS gate de mode discret ET `cat`é en clair dans
- * les journaux GitHub Actions (`fintable-sync.yml`) — une surface plus persistante que l'app. Le
- * signe suffit à trancher la convention ; le montant n'ajoute rien et ne se retire plus une fois
- * écrit (finding panel PR #531).
- *
- * `'absent'` couvre le solde manquant ET le non fini : un `NaN` n'est pas un zéro, et le rabattre
- * sur `'zéro'` affirmerait une mesure qu'on n'a pas (§1 no-fake-data).
- */
-export type SigneSoldeDette = 'négatif' | 'positif' | 'zéro' | 'absent';
 
 export function signeSolde(balance: number | null | undefined): SigneSoldeDette {
     if (typeof balance !== 'number' || !Number.isFinite(balance)) return 'absent';
@@ -75,32 +46,6 @@ export function signeSolde(balance: number | null | undefined): SigneSoldeDette 
     if (balance > 0) return 'positif';
     return 'zéro';
 }
-
-/** Rôle d'un compte Fintable dans FinanceAI. Toujours EXPLICITE (cf. piège n°2). */
-export type FintableAccountRole =
-    /** Compte courant / épargne → son solde entre dans les liquidités, ses transactions sont importées. */
-    | { kind: 'cash' }
-    /**
-     * Carte de crédit → ses transactions sont des dépenses, et son solde met à jour la DETTE
-     * `debtName`.
-     * ⚠️ [FINTABLE-CARTE-SANS-DETTE] `debtName` VIDE est un état LÉGITIME, pas une configuration
-     * inachevée : « importe les transactions, ne touche à aucun solde ». Demande de Marc
-     * (2026-09-14) — il veut ses dépenses de carte dans le budget sans avoir à créer une dette.
-     * Avant, un nom vide débranchait le compte ENTIER en amont (`toMapperRoles` l'omettait), donc
-     * 100 % de ses transactions étaient jetées comme « compte sans rôle » — mesuré 0/5.
-     */
-    | { kind: 'debt'; debtName: string }
-    /**
-     * Compte de placement → son SOLDE fait autorité (positions hors de portée, cf FINTABLE-POSITIONS).
-     * `taxRegime` est OPTIONNEL et n'est JAMAIS inféré (règle : « le type fiscal CELI/REER/NON-ENREG
-     * ne s'infère jamais — c'est une table pilotée par Marc »). Absent → le solde est quand même
-     * enregistré (référence + affichage), mais l'écart courtier ne peut pas être ventilé dans le bon
-     * panier fiscal → il est SIGNALÉ plutôt que rangé au hasard. Dégradation gracieuse voulue : un
-     * régime manquant ne doit pas faire échouer toute la passe (leçon « isolation par payload »).
-     */
-    | { kind: 'investment'; taxRegime?: FintableTaxRegime }
-    /** Explicitement ignoré. */
-    | { kind: 'ignore' };
 
 export interface FintableMappingConfig {
     /** Rôle PAR ID de compte Fintable. Un id absent → compte signalé « sans rôle », jamais deviné. */

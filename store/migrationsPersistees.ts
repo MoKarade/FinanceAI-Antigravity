@@ -4,7 +4,7 @@
 // options de persistance, à côté de son consommateur.
 import type { AppState } from '../types';
 import { logError } from '../services/errorLogger';
-import type { FinanceState } from './useFinanceStore';
+import type { FinanceState } from './types';
 
 /** Type de migration : union de l'état courant + champs legacy des versions précédentes. */
 type MigratingState = Partial<FinanceState> & {

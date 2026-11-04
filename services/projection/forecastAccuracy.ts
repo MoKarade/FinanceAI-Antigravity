@@ -18,7 +18,7 @@
 import type { ProjectionChartPoint } from './types';
 
 /** Un mois du passé où réel ET prévision verrouillée existent tous les deux. */
-export interface ForecastAccuracyMonth {
+interface ForecastAccuracyMonth {
     /** Indice de mois (entier) du moteur. */
     monthIndex: number;
     /** Patrimoine net RÉELLEMENT mesuré (dernier jour mesuré du mois). */

@@ -32,7 +32,7 @@ export const OBJECTIVE_LABELS: Record<OptimizeObjective, string> = {
 };
 
 /** Sous-scores normalisés 0..1 d'une config (pour l'affichage du détail). */
-export interface ScoreBreakdown {
+interface ScoreBreakdown {
     survival: number;   // successRate / 100
     wealth: number;     // patrimoine médian P50 normalisé
     tax: number;        // impôt à vie inversé+normalisé (1 = impôt le plus bas)

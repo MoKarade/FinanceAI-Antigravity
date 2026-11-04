@@ -54,9 +54,11 @@ function essayerDebit(cle, max, maintenant = Date.now()) {
     return { ok: true };
 }
 
-/** IP du client : premier saut de `x-forwarded-for` (posé par Firebase Hosting / le frontal Google), sinon `x-real-ip`. */
+/** IP du client : dernier saut de `x-forwarded-for` (ajouté par le répartiteur Google Cloud / Firebase Hosting, non falsifiable par l'en-tête client), sinon `x-real-ip`. */
 function ipClient(headers) {
-    const candidats = [headers.get('x-forwarded-for')?.split(',')[0], headers.get('x-real-ip')];
+    const xff = headers.get('x-forwarded-for');
+    const dernierSaut = xff ? xff.split(',').map((s) => s.trim()).filter(Boolean).pop() : undefined;
+    const candidats = [dernierSaut, headers.get('x-real-ip')];
     const ip = candidats.map((c) => c?.trim()).find((c) => c);
     return (ip || 'inconnue').slice(0, 64);
 }

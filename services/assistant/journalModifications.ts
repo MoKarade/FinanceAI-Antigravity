@@ -50,7 +50,7 @@ function clesDonnees(): Array<keyof AppState> {
 }
 
 /** Copie profonde des données du store (sans fonctions, sans apiKeys). */
-export function capturerDonnees(): Record<string, unknown> {
+function capturerDonnees(): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     for (const k of clesDonnees()) out[k] = facadeStoreAssistant.lire(k);
     return out;
@@ -59,7 +59,7 @@ export function capturerDonnees(): Record<string, unknown> {
 const egal = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 /** Clés dont la valeur diffère entre deux captures. */
-export function tranchesModifiees(avant: Record<string, unknown>, apres: Record<string, unknown>): string[] {
+function tranchesModifiees(avant: Record<string, unknown>, apres: Record<string, unknown>): string[] {
     const cles = new Set([...Object.keys(avant), ...Object.keys(apres)]);
     return [...cles].filter((k) => !CLES_IGNOREES.has(k) && !egal(avant[k], apres[k]));
 }

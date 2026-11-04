@@ -96,7 +96,7 @@ export function parseYahooQuote(data: YahooChartResponse, symbol: string): Quote
         price,
         change: hasPrev ? price - (prev as number) : 0,
         changePercent: hasPrev ? ((price - (prev as number)) / (prev as number)) * 100 : 0,
-        currency: (meta?.currency || '').toUpperCase(),
+        currency: meta?.currency === 'GBp' ? 'GBp' : (meta?.currency || '').toUpperCase(),
         timestamp: typeof meta?.regularMarketTime === 'number' ? meta.regularMarketTime * 1000 : Date.now(),
     };
 }

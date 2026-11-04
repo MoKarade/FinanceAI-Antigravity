@@ -9,7 +9,7 @@ import { ProjectionConfig, RealEstateGoal } from '../../types';
 import { AdvancedProjectionParams } from '../AdvancedProjectionParams';
 import { ReturnRateField } from './ReturnRateField';
 import { ValeurMaxMaisonField } from './macroFields/ValeurMaxMaisonField';
-import { STOCHASTIC_TOGGLES, INFLATION_CATEGORIES, REPLAY_OPTIONS } from './ProjectionControls';
+import { STOCHASTIC_TOGGLES, INFLATION_CATEGORIES, REPLAY_OPTIONS } from './projectionControlsConstants';
 
 /**
  * [FUTUR-MOBILE-PR4] Composition MOBILE de l'onglet Hypothèses — décision Marc 2026-09-10 :

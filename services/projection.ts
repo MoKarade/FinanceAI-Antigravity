@@ -1,9 +1,7 @@
 // services/projection.ts — moteur de projection financière (migré depuis utils/useFutureSimulation.ts)
 import { formatCAD } from '../utils/format';
-import type { EntreeRefusee } from './projection/verifierEntreesMoteur';
-import { ProjectionConfig, RealEstateGoal, ChildGoal, TravelGoal, LifeEvent, Debt, RetirementGoal, BudgetConfig as Config, InsurancePolicy, VehicleReplacement, MajorRenovation, CharitableGoal, RentalProperty, PrivateBusiness, FinancialGoal } from '../types';
 import { calculateFiscalReport, getMarginalRate, calculateDividendTax, getDividendGrossUpRate, calculateGrossWithholdingRRSP, getResidencyStartYear, CAPITAL_GAINS_INCLUSION_STANDARD, FHSA_ANNUAL_LIMIT_PER_USER, FHSA_LIFETIME_LIMIT_PER_USER, PSV_ELIGIBILITY_AGE, PSV_RESIDENCY_START_AGE, PENSION_SPLIT_MIN_AGE, RRQ_STANDARD_START_AGE } from '../utils/tax';
-import { RRIF_RATES, welcomeTax, NONREG_DIVIDEND_DISTRIBUTION_SHARE } from './projection/helpers';
+import { RRIF_RATES, welcomeTax } from './projection/helpers';
 import { salaryShares, splitByShares, stepReerByUser, addByWeights } from './projection/perUserBalances';
 import { logError, logErrorThrottled } from './errorLogger';
 import { runMonteCarlo, effectiveMcIterations, type MonteCarloResult } from './projection/monteCarlo';
@@ -46,8 +44,8 @@ import { handleNonRegSale as portfolioNonRegSale, handleCryptoSale as portfolioC
 import { computeEstateNetWorth } from './projection/estateCalculation';
 import { computeMonthlyMarketRates, type StressTestConfig } from './projection/marketShocks';
 import { computeEffectiveExpenseInflation } from './projection/monthlyCalcs';
-import { type AllocationStrategy, type FutureScenarioType, type ProjectionResult } from './projection/types';
-export type { AllocationStrategy, FutureScenarioType, ProjectionChartPoint, ProjectionResult } from './projection/types';
+import { type AllocationStrategy, type FutureScenarioType, type ProjectionResult, type SimulationParams } from './projection/types';
+export type { AllocationStrategy, FutureScenarioType, ProjectionChartPoint, ProjectionResult, LiveCSVBalances, SimulationParams } from './projection/types';
 export type { StrategySearchResult, ConfigResult } from './projection/strategySearch';
 export type { StrategyConfig } from './projection/strategyConfig';
 export {
@@ -57,63 +55,6 @@ export {
     type RankedConfig,
     type OptimizeObjective,
 } from './projection/strategyConfigRanking';
-
-/** Balances en direct lues depuis les comptes (CSV ou saisie manuelle). */
-export interface LiveCSVBalances {
-    CELI: number;
-    CELIAPP: number;
-    REER: number;
-    NON_ENREG: number;
-    CRYPTO: number;
-    REEE: number;
-    /** Champs supplémentaires éventuels — tolérance aux sources externes. */
-    [key: string]: number;
-}
-
-export interface SimulationParams {
-    /**
-     * [ENG-INFINITY-NON-GARDE-A-LA-FRONTIERE] Entrées inexploitables relevées à la frontière du
-     * moteur (`buildSimulationParams`). Non vide ⇒ la projection NE DOIT PAS être calculée : une
-     * valeur non finie y produit soit un `Infinity` qui se propage, soit — pire — un `NaN` absorbé
-     * en 0 qui rend une courbe lisse et entièrement fausse (mesuré : 62 400 $/an évaporés sans une
-     * seule valeur non finie sur les 361 points publiés).
-     *
-     * Champ ADDITIF et optionnel : absent, le comportement est bit-identique à avant.
-     */
-    entreesRefusees?: readonly EntreeRefusee[];
-    projection: ProjectionConfig;
-    calculatedStartingCash: number;
-    liveCSVBalances: LiveCSVBalances;
-    realEstateGoals: RealEstateGoal[];
-    debts: Debt[];
-    childGoals: ChildGoal[];
-    travelGoals: TravelGoal[];
-    lifeEvents: LifeEvent[];
-    retirementGoal: RetirementGoal;
-    config: Config;
-    baseGrossAnnual: number;
-    baseNetAnnual: number;
-    currentRentExpense: number;
-    baseMonthlyExpenses: number;
-    /**
-     * Année du mois 0 de la simulation. **REQUISE** depuis `[ENG-STARTYEAR-DEFAUT-2026]` : elle
-     * portait un défaut `= 2026` à la déstructuration, et un défaut d'année se périme en silence —
-     * en 2027 la projection serait partie de 2026 sans que rien ne bronche. Mesuré à l'époque : un
-     * seul appelant l'omettait (`GoalSeekerCard` via `Retirement.tsx`), donc le défaut n'était pas
-     * mort. Le rendre requis fait exiger la valeur par `tsc` sur chaque site, présent et futur —
-     * c'est le correctif prescrit par le dépôt pour cette classe, pas un meilleur littéral.
-     */
-    startYear: number;
-    startMonth?: number;
-    // W5.x — Conteneurs étendus (optionnels pour backward compat)
-    insurancePolicies?: InsurancePolicy[];
-    vehicleReplacements?: VehicleReplacement[];
-    majorRenovations?: MajorRenovation[];
-    charitableGoals?: CharitableGoal[];
-    rentalProperties?: RentalProperty[];
-    privateBusinesses?: PrivateBusiness[];
-    financialGoals?: FinancialGoal[];
-}
 
 // Cycle 7 split: calculateGrossNeeded retiré (dead code, jamais appelé)
 
@@ -929,6 +870,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             nonReg *= keep;
             nonRegACB *= keep;
             crypto *= keep;
+            cryptoACB *= keep;
             reee *= keep;
             realEstateEquity *= keep;
             mortgageBalance *= keep;
@@ -1376,56 +1318,6 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             impotSalaireMois = 0;
         }
 
-
-        // Cycle 10 split: OAS Clawback → ./projection/taxCycle (computeOasClawback)
-        // FA-2 — décomposition par conjoint transmise : le seuil de récupération est PAR
-        // PARTICULIER (revenu_i vs seuil), plus jamais l'agrégat familial vs seuil individuel.
-        if (currentMonthIndex === 11 && m > 0 && isRetired && age >= PENSION_SPLIT_MIN_AGE) {
-            // FA-3a — le SRG (non imposable, hors revenu net de récupération en pratique) est
-            // exclu du revenu de clawback, total ET par conjoint (réparti également).
-            // NB : pas de clamp sur (v − gisShare) — un négatif est fini, économiquement correct
-            // (très loin du seuil → aucun clawback) et PRÉSERVE l'invariant Σ(perUser) == total
-            // que computeOasClawback vérifie (garde de somme symétrique).
-            // survivorMode (retour code-reviewer FA-2) : un seul bénéficiaire VIVANT — diviser le
-            // revenu du survivant par activeUsersCount=2 sous-estimerait son clawback. n=1 et pas
-            // de décomposition (repli = revenu complet vs seuil individuel, exact pour 1 personne).
-            // [panel #613 — ÉLEVÉ-4] `soloHousehold`, PAS `survivorMode`. Le commentaire de
-            // `cashflowAllocation.ts` DOCUMENTE une cohérence à 3 voies — `taxFilers` (taxDecember),
-            // `oasBeneficiaries` (clawback PSV) et `liveFilers` (cascade) doivent dire le MÊME
-            // nombre de contribuables. Le premier correctif ne basculait que `taxFilers` : le
-            // divorcé était imposé comme célibataire mais gardait un seuil de récupération PSV de
-            // COUPLE. Mesuré : clawback 0 $ au lieu de 7 016 $/an sur un retraité à 144 k$.
-            // Casser en silence une cohérence écrite dans le code est le pire des deux mondes.
-            const oasBeneficiaries = soloHousehold ? 1 : activeUsersCount;
-            const gisShare = incomeRetirementGis / Math.max(1, oasBeneficiaries);
-            const oasResult = computeOasClawback(
-                currentMonthIndex, m, isRetired, age, expenseMultiplier,
-                incomeRetirement - incomeRetirementGis, accRetraitsReerYear, accRentesYear,
-                psvBasePension, simInflation,
-                oasBeneficiaries,
-                // [panel #613 — ÉLEVÉ-5] Même drapeau que `oasBeneficiaries` ci-dessus, et c'est
-                // ce qui referme un échec SILENCIEUX : après un divorce, `incomeRetirementPerUser`
-                // est de longueur 1 (liste d'users raccourcie) ; avec `n = 2`, la garde
-                // `perUser.length === n` de `computeOasClawback` échouait sans aucune trace et
-                // retombait sur le split égal. Mesuré : 2 696 $/an de clawback → 0 $.
-                soloHousehold ? undefined : incomeRetirementPerUser.map((v) => v - gisShare),
-                soloHousehold ? undefined : accRetraitsReerYearByUser,
-                // PV-9 : gains imposables de l'année (50 % d'inclusion appliqué dans la fonction)
-                // entrent dans le revenu net de récupération PSV (ligne 23400 ARC).
-                capitalGainsRealizedThisYear,
-                // FA-8 : cap du clawback = PSV réellement VERSÉE (breakdown nominal de décembre,
-                // HORS SRG — facteur de report, bonus 75+, prorata résidence et survivant inclus),
-                // au lieu de la base sans report (psvBasePension, désormais simple repli legacy).
-                pensionPSV - incomeRetirementGis,
-                // [FISC-DIV-DERIVED-BASES] dividendes MAJORÉS de l'année : le revenu de
-                // récupération PSV (ligne 23400) inclut le dividende imposable, comme les gains
-                // (PV-9). Source unique de la formule ; MESURÉ +1 552,50 $/an sur un couple
-                // 100 k$/conjoint + 500 k$ non-enreg à 5 % (part distribuée 30 % incluse).
-                computeAnnualNonRegDividends(nonReg, baseRates.nonReg ?? 0) * getDividendGrossUpRate('eligible'),
-            );
-            oasClawbackNextPeriod = oasResult.clawbackAnnual;
-            if (oasResult.logMsg) flowEventsLog.push(oasResult.logMsg);
-        }
 
         // Cycle 12 split: January reset → ./projection/taxCycle.processJanuaryReset
         const janResult = processJanuaryReset(
@@ -2219,6 +2111,25 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             // PV-9 : capture des gains réalisés de l'année AVANT le reset (réutilisés par le clawback
             // PSV ci-dessous, même décembre, et par le test SRG de l'an prochain via le lag de janvier).
             capitalGainsRealizedThisYear = accCapitalGainsYear;
+
+            if (isRetired && age >= PENSION_SPLIT_MIN_AGE) {
+                const oasBeneficiaries = soloHousehold ? 1 : activeUsersCount;
+                const gisShare = incomeRetirementGis / Math.max(1, oasBeneficiaries);
+                const oasResult = computeOasClawback(
+                    currentMonthIndex, m, isRetired, age, expenseMultiplier,
+                    incomeRetirement - incomeRetirementGis, accRetraitsReerYear, accRentesYear,
+                    psvBasePension, simInflation,
+                    oasBeneficiaries,
+                    soloHousehold ? undefined : incomeRetirementPerUser.map((v) => v - gisShare),
+                    soloHousehold ? undefined : accRetraitsReerYearByUser,
+                    capitalGainsRealizedThisYear,
+                    pensionPSV - incomeRetirementGis,
+                    computeAnnualNonRegDividends(nonReg, baseRates.nonReg ?? 0) * getDividendGrossUpRate('eligible'),
+                );
+                oasClawbackNextPeriod = oasResult.clawbackAnnual;
+                if (oasResult.logMsg) flowEventsLog.push(oasResult.logMsg);
+            }
+
             accCapitalGainsYear = 0;
             smithInterestDeductibleYear = 0;
             accRrspYear = 0;
@@ -2254,7 +2165,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             // Cycle 12 (cf. commentaire ci-dessus) ; le CELIAPP était resté en arrière.
 
             // Cycle 10 split: TLH → ./projection/taxCycle (processTaxLossHarvesting)
-            const currentNonRegRate = enableMonteCarlo ? mcNonRegRate : baseRates.nonReg;
+            const currentNonRegRate = (enableMonteCarlo || historicalSequence !== null) ? mcNonRegRate : baseRates.nonReg;
             const tlhResult = processTaxLossHarvesting(currentMonthIndex, m, nonReg, nonRegACB, currentNonRegRate);
             if (tlhResult.harvestedLoss > 0) {
                 capitalLossBank += tlhResult.harvestedLoss;
@@ -2344,6 +2255,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             mcCeliRate, mcReerRate, mcNonRegRate, mcCryptoRate, mcCashRate, baseRates,
             usEquityShareCeli: effProj.usEquityShareCeli,
             usEquityDividendYield: effProj.usEquityDividendYield,
+            hasHistoricalSequence: historicalSequence !== null,
         });
         const { effectiveCeliRate, effectiveReerRate, effectiveNonRegRate, activeCeliRate, activeCryptoRate, activeCashRate } = gr;
 

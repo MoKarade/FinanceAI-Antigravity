@@ -23,7 +23,6 @@ import { todayIsoLocal } from './dailyRefine';
 import type {
     BudgetConfig,
     BudgetCategory,
-    Asset,
     RealEstateGoal,
     ChildGoal,
     TravelGoal,

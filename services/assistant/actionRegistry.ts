@@ -32,10 +32,10 @@ import { TRANCHES, jsonSur, type TrancheCollection, type TrancheListeTexte, type
 import { argsAfficherBloc, type BlocRiche } from './blocsRiches';
 import { journaliserEcriture, type EntreeJournal } from './journalModifications';
 
-export type TypeAction = 'lecture' | 'ecriture';
+type TypeAction = 'lecture' | 'ecriture';
 
 /** Ce que l'exécution d'une action rend à la boucle agentique. */
-export interface ResultatAction {
+interface ResultatAction {
     /** Charge utile renvoyée au modèle (sérialisable JSON). */
     pourModele: unknown;
     /** Résumé lisible (écritures : libellé de la pastille « Modifié : … »). */
@@ -76,7 +76,7 @@ function lireTranche(cle: keyof AppState): unknown {
  * Applique un patch de tranches au store après vérification de l'état CANDIDAT complet.
  * Lève une erreur claire (renvoyée au modèle) si la forme ou les types deviennent invalides.
  */
-export function appliquerPatch(patch: Partial<AppState>): void {
+function appliquerPatch(patch: Partial<AppState>): void {
     const sur = { ...patch } as Record<string, unknown>;
     delete sur.apiKeys;
     const candidat: Record<string, unknown> = { ...facadeStoreAssistant.persistables(), ...sur };
@@ -95,7 +95,7 @@ const estObjet = (v: unknown): v is Record<string, unknown> => v !== null && typ
  * fusionnés PAR INDEX (pour `config.users` : `[{}, {…}]` ne touche que la 2e personne), autres
  * tableaux remplacés.
  */
-export function fusionProfonde(base: unknown, patch: unknown): unknown {
+function fusionProfonde(base: unknown, patch: unknown): unknown {
     if (Array.isArray(patch)) {
         if (Array.isArray(base) && patch.every(estObjet)) {
             const out = [...base];
@@ -478,12 +478,12 @@ function construireRegistre(): ActionAssistant[] {
 export const ACTIONS: ActionAssistant[] = construireRegistre();
 const PAR_NOM = new Map(ACTIONS.map((a) => [a.nom, a]));
 
-export function trouverAction(nom: string): ActionAssistant | undefined {
+function trouverAction(nom: string): ActionAssistant | undefined {
     return PAR_NOM.get(nom);
 }
 
 /** JSON Schema accepté par Gemini (`parametersJsonSchema`) : objet inline, sans $ref ni méta ni `not`. */
-export function versSchemaGemini(schema: z.ZodType): Record<string, unknown> {
+function versSchemaGemini(schema: z.ZodType): Record<string, unknown> {
     const brut = z.toJSONSchema(schema, { target: 'draft-7', io: 'input', unrepresentable: 'any' }) as Record<string, unknown>;
     const nettoyer = (n: unknown): unknown => {
         if (Array.isArray(n)) return n.map(nettoyer);

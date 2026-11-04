@@ -13,7 +13,7 @@ import { logErrorThrottled } from '../errorLogger';
  * `docs/FISCAL_REFERENCE.md` §8, pas un barème — elle vivait en deux `0.95` nus dans un module que le
  * ratchet fiscal ne scannait pas. Sert au produit encaissé ET au gain en capital d'un locatif.
  */
-export const REAL_ESTATE_SALE_NET_FACTOR = 0.95;
+const REAL_ESTATE_SALE_NET_FACTOR = 0.95;
 
 // ── Voyages ──────────────────────────────────────────────────────────────────
 

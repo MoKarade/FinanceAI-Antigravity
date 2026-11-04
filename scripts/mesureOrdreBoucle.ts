@@ -12,10 +12,11 @@
 import type { BudgetConfig, ProjectionConfig, RetirementGoal } from '../types';
 
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const engineArg = process.argv[2];
 if (!engineArg) throw new Error('usage: npx tsx scripts/mesureOrdreBoucle.ts <chemin de services/projection.ts>');
-const enginePath = resolve(engineArg); // un chemin relatif nu ne serait pas importable dynamiquement
+const engineUrl = pathToFileURL(resolve(engineArg)).href; // URL file:// valide sous Windows et POSIX
 
 const num = (v: unknown): number => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -136,7 +137,7 @@ const resume = (label: string, res: Record<string, unknown>) => {
 };
 
 const main = async () => {
-    const mod = await import(enginePath);
+    const mod = await import(engineUrl);
     const run = mod.__runScenarioForTests as (p: unknown, s: string, mc?: boolean, d?: boolean) => Record<string, unknown>;
     const out = [
         resume('F_MELT / MELTDOWN_REER', run(F_MELT, 'MELTDOWN_REER', false, false)),

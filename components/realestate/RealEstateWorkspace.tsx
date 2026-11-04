@@ -22,6 +22,7 @@ import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { PrivateAmount } from '../ui/PrivateAmount';
+import { PrivateNumberInput } from '../ui/PrivateNumberInput';
 
 /**
  * [REFONTE-NAV-L3] Atelier immobilier PARTAGÉ entre les deux vues du split :
@@ -585,7 +586,7 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
                                 <legend className="text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-400 mb-2">Hypothèses du comparatif</legend>
                                 <div>
                                     <label htmlFor="rew-currentRent" className="text-meta text-ink-300 block mb-1">Loyer actuel (scénario « louer ») — $/mois</label>
-                                    <input id="rew-currentRent" type="number" step="50" value={currentRent} onChange={e => setCurrentRent(Number(e.target.value))} className="w-full h-11 px-3 font-mono text-ink-50" />
+                                    <PrivateNumberInput id="rew-currentRent" step="50" value={currentRent} onChange={e => setCurrentRent(Number(e.target.value))} className="w-full h-11 px-3 font-mono text-ink-50" />
                                 </div>
                                 <div>
                                     <label className="flex justify-between text-meta text-ink-300 mb-1">

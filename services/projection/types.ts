@@ -2,7 +2,65 @@
 // Cycle 28 split: types partagés entre projection.ts et les sous-modules.
 // Élimine les imports circulaires (monthlyOutput, meltdownReer, cashflowAllocation → projection.ts).
 
+import type { EntreeRefusee } from './verifierEntreesMoteur';
+import type {
+    ProjectionConfig,
+    RealEstateGoal,
+    ChildGoal,
+    TravelGoal,
+    LifeEvent,
+    Debt,
+    RetirementGoal,
+    BudgetConfig as Config,
+    InsurancePolicy,
+    VehicleReplacement,
+    MajorRenovation,
+    CharitableGoal,
+    RentalProperty,
+    PrivateBusiness,
+    FinancialGoal,
+} from '../../types';
+
 export type AllocationStrategy = 'AUTO_MARGINAL' | 'PRIO_REER' | 'PRIO_CELI' | 'MELTDOWN_REER' | 'DEBT_FIRST' | 'PRIO_CELI_NO_RAP';
+
+/** Balances en direct lues depuis les comptes (CSV ou saisie manuelle). */
+export interface LiveCSVBalances {
+    CELI: number;
+    CELIAPP: number;
+    REER: number;
+    NON_ENREG: number;
+    CRYPTO: number;
+    REEE: number;
+    /** Champs supplémentaires éventuels — tolérance aux sources externes. */
+    [key: string]: number;
+}
+
+export interface SimulationParams {
+    entreesRefusees?: readonly EntreeRefusee[];
+    projection: ProjectionConfig;
+    calculatedStartingCash: number;
+    liveCSVBalances: LiveCSVBalances;
+    realEstateGoals: RealEstateGoal[];
+    debts: Debt[];
+    childGoals: ChildGoal[];
+    travelGoals: TravelGoal[];
+    lifeEvents: LifeEvent[];
+    retirementGoal: RetirementGoal;
+    config: Config;
+    baseGrossAnnual: number;
+    baseNetAnnual: number;
+    currentRentExpense: number;
+    baseMonthlyExpenses: number;
+    startYear: number;
+    startMonth?: number;
+    insurancePolicies?: InsurancePolicy[];
+    vehicleReplacements?: VehicleReplacement[];
+    majorRenovations?: MajorRenovation[];
+    charitableGoals?: CharitableGoal[];
+    rentalProperties?: RentalProperty[];
+    privateBusinesses?: PrivateBusiness[];
+    financialGoals?: FinancialGoal[];
+}
 
 export type FutureScenarioType =
     | 'BASE'

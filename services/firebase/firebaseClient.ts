@@ -91,14 +91,14 @@ export function handleFirestoreError(
         error: error instanceof Error ? error.message : String(error),
         authInfo: {
             userId: auth.currentUser?.uid,
-            email: auth.currentUser?.email,
+            email: auth.currentUser?.email ? '[masqué]' : undefined,
             emailVerified: auth.currentUser?.emailVerified,
             isAnonymous: auth.currentUser?.isAnonymous,
             tenantId: auth.currentUser?.tenantId,
             providerInfo:
                 auth.currentUser?.providerData?.map((provider) => ({
                     providerId: provider.providerId,
-                    email: provider.email,
+                    email: provider.email ? '[masqué]' : null,
                 })) || [],
         },
         operationType,

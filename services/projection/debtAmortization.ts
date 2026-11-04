@@ -170,7 +170,7 @@ export interface EntreeAmortissement {
  * tous les `pasJours`. `finMs` borne la grille (fin de terme échue), `null` quand rien ne la borne
  * avant aujourd'hui. `versement` est le montant d'UNE période, dérivé du paiement MENSUEL saisi.
  */
-export interface GrilleVersements {
+interface GrilleVersements {
     premierMs: number;
     pasJours: number;
     versement: number;
@@ -195,7 +195,7 @@ const PERIODES_PAR_AN: Readonly<Record<'weekly' | 'biweekly', number>> = { weekl
 
 /** Horodatage UTC du jour ISO, ou `null`. Tout est en UTC ici : une grille en jours n'a pas à
  *  dépendre du fuseau de qui regarde (`UN-CONTENEUR-EN-UTC-NE-PEUT-PAS-DEPARTAGER-LOCAL-ET-UTC`). */
-export function jourMs(dateIso: string | undefined | null): number | null {
+function jourMs(dateIso: string | undefined | null): number | null {
     if (typeof dateIso !== 'string' || dateIso.length < 10) return null;
     const ms = Date.parse(`${dateIso.slice(0, 10)}T00:00:00Z`);
     return Number.isFinite(ms) ? ms : null;
@@ -209,7 +209,7 @@ export function jourMs(dateIso: string | undefined | null): number | null {
  * regardée n'est pas compté — à ce moment-là il n'était pas encore prélevé, et c'est la même
  * convention que la forme mensuelle (le mois de début porte encore tous ses versements).
  */
-export function nbVersementsApres(grille: GrilleVersements, apresMs: number, jusquMs: number): number {
+function nbVersementsApres(grille: GrilleVersements, apresMs: number, jusquMs: number): number {
     const fin = grille.finMs !== null && grille.finMs < jusquMs ? grille.finMs : jusquMs;
     if (!Number.isFinite(apresMs) || !Number.isFinite(fin) || fin <= apresMs) return 0;
     const pas = grille.pasJours * JOUR_MS;
@@ -346,7 +346,7 @@ export function paiementsReelsDette(
  * ce serait précisément le comportement que ce lot remplace, réintroduit par le bas et sans rien de
  * visible (`CORRECTIF-VERT-EN-TEST-INERTE-EN-PROD`).
  */
-export type SourceVersements =
+type SourceVersements =
     | { forme: 'grille'; grille: GrilleVersements }
     | { forme: 'virements'; paiements: readonly PaiementReel[] }
     /** `incoherents` : la dette NOMME un marchand, ses virements ont été lus, et leur somme depuis
@@ -358,7 +358,7 @@ export type SourceVersements =
 /** Σ des versements tombant STRICTEMENT après `apresMs` et au plus tard `jusquMs`.
  *  Même convention que `nbVersementsApres`, et pour la même raison : le versement qui tombe
  *  EXACTEMENT à la date regardée n'était pas encore prélevé à ce moment-là. */
-export function verseEntre(source: SourceVersements, apresMs: number, jusquMs: number): number {
+function verseEntre(source: SourceVersements, apresMs: number, jusquMs: number): number {
     if (source.forme === 'grille') return source.grille.versement * nbVersementsApres(source.grille, apresMs, jusquMs);
     if (source.forme === 'virements') {
         let somme = 0;
@@ -1134,8 +1134,8 @@ export function prepareSupplementAmortiAbsolu(
     // (donc à chaque ajout de transaction). On paie la série UNE fois, la boucle ne fait plus
     // qu'indexer. Aucun cache, aucune identité de tableau à surveiller : c'est l'APPELANT qui hisse
     // la préparation hors de sa boucle, et le typecheck l'y oblige.
-    const prepares = (dettes ?? []).filter(d => !!d).map(dette => ({ dette, r: amortirDettePassee(dette, moisAujourdhui, aujourdhuiIso, transactions) }));
-    return (courant: number): number => prepares.reduce((somme, { dette, r }) => {
+    const prepares = (dettes ?? []).filter(d => !!d).map(dette => ({ r: amortirDettePassee(dette, moisAujourdhui, aujourdhuiIso, transactions) }));
+    return (courant: number): number => prepares.reduce((somme, { r }) => {
         if (r.forme !== 'ok') return somme;
         const index = courant - r.premierMoisAbsolu;
         if (index < 0 || index >= r.soldes.length) return somme;
@@ -1173,8 +1173,8 @@ export function prepareSupplementAmortiParJour(
     transactions: ReadonlyArray<MouvementDette> | null | undefined,
 ): (jourIso: string) => number {
     const aujourdhuiMs = jourMs(aujourdhuiIso);
-    const prepares = (dettes ?? []).filter(d => !!d).map(dette => ({ dette, r: amortirDettePassee(dette, moisAujourdhui, aujourdhuiIso, transactions) }));
-    return (jourIso: string): number => prepares.reduce((somme, { dette, r }) => {
+    const prepares = (dettes ?? []).filter(d => !!d).map(dette => ({ r: amortirDettePassee(dette, moisAujourdhui, aujourdhuiIso, transactions) }));
+    return (jourIso: string): number => prepares.reduce((somme, { r }) => {
         if (r.forme !== 'ok') return somme;
         // [DETTE-VIREMENTS-REELS] On lit la SOURCE publiée par la série, jamais une seconde
         // décision : grille modélisée ou virements réels, `verseEntre` répond pour les deux.

@@ -13,8 +13,8 @@
 import type { Conversation, MessageConversation, ResumeConversation } from './types';
 
 export const MAX_MESSAGES_JSON = 900_000;
-export const MAX_MESSAGES = 2000;
-export const MAX_TITRE = 200;
+const MAX_MESSAGES = 2000;
+const MAX_TITRE = 200;
 
 export interface DepotConversations {
     readonly genre: 'firestore' | 'local';
@@ -27,7 +27,7 @@ export interface DepotConversations {
 }
 
 /** Identifiant compatible avec la règle `isValidId` (^[a-zA-Z0-9_-]+$). */
-export function nouvelIdConversation(): string {
+function nouvelIdConversation(): string {
     const alea = typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -68,7 +68,7 @@ export function serialiserMessages(messages: MessageConversation[]): { messagesJ
 }
 
 /** Désérialise sans jamais lever : un contenu illisible donne un fil vide. */
-export function deserialiserMessages(json: unknown): MessageConversation[] {
+function deserialiserMessages(json: unknown): MessageConversation[] {
     if (typeof json !== 'string') return [];
     try {
         const v: unknown = JSON.parse(json);

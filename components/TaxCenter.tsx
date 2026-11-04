@@ -14,7 +14,7 @@ import { TAB_LABELS } from '../constants';
 // Phase 4 A4: bascule sur services/gemini.ts (Gemini 2.5 Flash + Vision)
 import { analyzePayslip } from '../services/gemini';
 import { logError } from '../services/errorLogger';
-import { causeErreurIa, messageErreurIa } from '../services/messageErreurIa';
+import { causeErreurIa, messageErreurIa, MESSAGE_IA_MODE_DISCRET } from '../services/messageErreurIa';
 import { assetValueCad } from '../services/portfolio';
 import { ageOptsForSalaryInversion, calculateFiscalReport, calculateGrossFromNet } from '../services/tax';
 import { netModelResidual } from '../services/taxResidual';
@@ -150,8 +150,13 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
 
     const handleFileDrop = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return;
+        if (useFinanceStore.getState().isPrivacyMode) {
+            showToast(MESSAGE_IA_MODE_DISCRET, "info");
+            e.target.value = '';
+            return;
+        }
         if (!apiKey) {
-            showToast("Clé API Anthropic requise pour analyser les relevés.", "info");
+            showToast("Clé API Google Gemini requise pour analyser les relevés.", "info");
             return;
         }
 
@@ -468,9 +473,9 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
                 </div>
             )}
             {/* [SEC-VISION-CONSENT-INJECTION] Loi 25 : l'import envoie la fiche de paie BRUTE (nom,
-                employeur, salaire exact) à Anthropic — le dire explicitement près de l'action. */}
+                employeur, salaire exact) à Google Gemini — le dire explicitement près de l'action. */}
             <p className="text-tiny text-ink-400 -mt-2">
-                L'import envoie ta fiche de paie (image/PDF, avec nom/employeur/salaire) à Anthropic (Claude) pour en extraire les montants.{' '}
+                L'import envoie ta fiche de paie (image/PDF, avec nom/employeur/salaire) à Google Gemini pour en extraire les montants.{' '}
                 <button type="button" onClick={openDrive} className="touch-target inline-flex items-center underline underline-offset-2 hover:text-ink-100 focus-ring rounded-sm">Ouvrir Google Drive ↗</button>
             </p>
 

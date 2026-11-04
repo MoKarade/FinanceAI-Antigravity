@@ -3,7 +3,7 @@
 // Données statiques extraites de calculateFutureProjection — facilite la
 // modification des labels, descriptions, pros/cons sans toucher au moteur.
 
-import type { AllocationStrategy, FutureScenarioType } from '../projection';
+import type { AllocationStrategy, FutureScenarioType } from './types';
 
 interface ScenarioDefinition {
     stratType: FutureScenarioType;

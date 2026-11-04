@@ -24,7 +24,7 @@
  * de liquidités, il ne réduit pas la mise réinvestie).
  */
 import { describe, it, expect, vi } from 'vitest';
-import { processDecemberTaxFiling, computeAnnualNonRegDividends } from '../../services/projection/taxDecember';
+import { computeAnnualNonRegDividends } from '../../services/projection/taxDecember';
 import { __runScenarioForTests, type SimulationParams } from '../../services/projection';
 import type { ProjectionConfig, BudgetConfig, RetirementGoal, User } from '../../types';
 import type { AllocationStrategy } from '../../services/projection/types';

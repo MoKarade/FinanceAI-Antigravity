@@ -26,6 +26,7 @@ export interface GlidepathCtx {
     baseRates: BaseRates;
     usEquityShareCeli?: number;
     usEquityDividendYield?: number;
+    hasHistoricalSequence?: boolean;
 }
 
 interface GlidepathRates {
@@ -56,11 +57,12 @@ export function computeGlidepathRates(ctx: Readonly<GlidepathCtx>): GlidepathRat
     let glideFactor = yearsToRetirement < glideStartYears ? (yearsToRetirement / glideStartYears) : 1.0;
     if (isRetired) glideFactor = Math.max(0.60, glideFactor);
 
-    const activeCeliRate = enableMonteCarlo ? mcCeliRate : baseRates.celi;
-    const activeReerRate = enableMonteCarlo ? mcReerRate : baseRates.reer;
-    const activeNonRegRate = enableMonteCarlo ? mcNonRegRate : baseRates.nonReg;
-    const activeCryptoRate = enableMonteCarlo ? mcCryptoRate : baseRates.crypto;
-    const activeCashRate = enableMonteCarlo ? mcCashRate : baseRates.cash;
+    const useDynamicRates = enableMonteCarlo || !!ctx.hasHistoricalSequence;
+    const activeCeliRate = useDynamicRates ? mcCeliRate : baseRates.celi;
+    const activeReerRate = useDynamicRates ? mcReerRate : baseRates.reer;
+    const activeNonRegRate = useDynamicRates ? mcNonRegRate : baseRates.nonReg;
+    const activeCryptoRate = useDynamicRates ? mcCryptoRate : baseRates.crypto;
+    const activeCashRate = useDynamicRates ? mcCashRate : baseRates.cash;
 
     const effectiveCeliRateRaw = activeCeliRate * glideFactor + targetGlideRate * (1 - glideFactor);
     const effectiveReerRate = activeReerRate * glideFactor + targetGlideRate * (1 - glideFactor);

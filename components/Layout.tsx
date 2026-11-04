@@ -393,7 +393,7 @@ export const Layout: React.FC<LayoutProps> = ({
                     ))}
                   </div>
 
-                  {resultatsRecherche.titresFiltres.length > 0 && (
+                  {!isPrivacyMode && resultatsRecherche.titresFiltres.length > 0 && (
                     <div className="px-2 pt-2">
                       <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400">Titres en portefeuille</p>
                       {resultatsRecherche.titresFiltres.map((asset, idx) => (

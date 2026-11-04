@@ -6,7 +6,7 @@
 // à côté du create() : c'est elle que les incidents ont appris à ne pas éparpiller.
 import { logError } from '../services/errorLogger';
 import { verifierTypesRestaures, resumeTechniqueDesFautifs } from '../services/verifierTypesRestaures';
-import type { FinanceState } from './useFinanceStore';
+import type { FinanceState } from './types';
 
 // [STORE-REHYDRATE-SILENT, audit 2026-07-16] Statut de la RÉHYDRATATION ZUSTAND (`financeai-storage`,
 // parse + migrate v1→v7) — chemin DISTINCT de la migration legacy ci-dessus (getInitialStateWithMigration),

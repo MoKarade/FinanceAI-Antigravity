@@ -27,6 +27,7 @@ import { formatCAD, formatCompactCAD, formatPercent } from '../utils/format';
 import { maskedTick } from '../utils/chartPrivacy';
 import { MASKED_AMOUNT_LABEL } from '../utils/privacyAria';
 import { PrivateAmount } from './ui/PrivateAmount';
+import { PrivateText } from './ui/PrivateText';
 import { AnimatedNetWorth } from './ui/AnimatedNetWorth';
 import { Icon, type IconName } from './ui/Icon';
 import { FxEstimateBadge } from './ui/FxEstimateBadge';
@@ -398,13 +399,14 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             const seriesActifs = actifsCompte
                 .map((a) => {
                     const stats = computePurchaseStats(a);
-                    const hist = (a.priceHistory ?? []).map((p) => p.price * (a.quantity || 1));
+                    const fxFactor = toCurrencyFactor(state.fxRates, a.currency || 'CAD');
+                    const hist = (a.priceHistory ?? []).map((p) => p.price * (a.quantity || 1) * fxFactor);
                     if (hist.length >= 2) return construireSerie1Mois(assetValueCad(a, state.fxRates), hist, 0);
                     if (stats.totalCost > 0 && a.currentPrice > 0) {
                         return construireSerie1Mois(
                             assetValueCad(a, state.fxRates),
-                            [stats.totalCost, assetValueCad(a, state.fxRates)],
-                            stats.totalGain,
+                            [stats.totalCost * fxFactor, assetValueCad(a, state.fxRates)],
+                            stats.totalGain * fxFactor,
                         );
                     }
                     return [];
@@ -981,12 +983,13 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 }
 
                 const positif = (variationPct ?? 0) >= 0;
-                const historiquePrix = (a.priceHistory ?? []).map((p) => p.price);
+                const qte = a.quantity && a.quantity > 0 ? a.quantity : 1;
+                const historiquePrix = (a.priceHistory ?? []).map((p) => p.price * qte * fxFactor);
                 const serieBrute =
                     historiquePrix.length >= 2
                         ? historiquePrix
                         : stats.totalCost > 0 && stats.averageCost > 0 && a.currentPrice > 0
-                          ? [stats.averageCost, a.currentPrice]
+                          ? [stats.averageCost * qte * fxFactor, val]
                           : [];
                 const serie1Mois = construireSerie1Mois(
                     val,
@@ -1504,7 +1507,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                 }}
                                                 className="touch-target w-full px-4 py-2 flex items-center justify-between gap-2 text-xs hover:bg-surface-douce transition-colors duration-100 focus-ring"
                                             >
-                                                <span className="truncate text-ink-100">{tx.payee}</span>
+                                                <PrivateText quoi="marchand" className="truncate text-ink-100">{tx.payee}</PrivateText>
                                                 <PrivateAmount className="font-mono font-semibold tabular-nums text-ink-200 shrink-0">
                                                     {formatCAD(tx.amount)}
                                                 </PrivateAmount>
@@ -1706,7 +1709,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             {pos.symbole}
                                         </div>
                                         <div className="text-[11px] text-ink-400 truncate">
-                                            {pos.nom}
+                                            <PrivateAmount>{pos.nom}</PrivateAmount>
                                         </div>
                                     </div>
 
@@ -2468,7 +2471,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     <div className="min-w-0 flex-1 space-y-1">
                                         <div className="flex items-center justify-between gap-2">
                                             <span className="text-xs font-semibold text-ink-50 truncate inline-flex items-center gap-1.5">
-                                                <span>{cat.categorie}</span>
+                                                <PrivateText quoi="categorie">{cat.categorie}</PrivateText>
                                                 {cat.estTransfert && (
                                                     <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono bg-repere-fond text-repere">
                                                         Transfert
@@ -2835,10 +2838,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         >
                                             <div className="min-w-0 flex-1">
                                                 <div className="text-xs font-medium text-ink-50 truncate">
-                                                    {tx.payee}
+                                                    <PrivateText quoi="marchand">{tx.payee}</PrivateText>
                                                 </div>
                                                 <div className="text-[11px] text-ink-400 truncate font-mono tabular-nums">
-                                                    {tx.date.slice(5)} · {tx.category}
+                                                    {tx.date.slice(5)} · <PrivateText quoi="categorie">{tx.category}</PrivateText>
                                                 </div>
                                             </div>
                                             <PrivateAmount

@@ -14,7 +14,7 @@ import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 
-export type DrawerVariant = 'lateral' | 'feuille';
+type DrawerVariant = 'lateral' | 'feuille';
 
 interface DrawerProps {
     isOpen: boolean;

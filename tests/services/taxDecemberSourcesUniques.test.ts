@@ -11,12 +11,11 @@
 // ⚠️ Ce fichier ne prouve pas « ça marche » (les 141 tests du module s'en chargent) : il verrouille
 // ce qui rendait la duplication dangereuse, c'est-à-dire les entrées SALES sur lesquelles les deux
 // copies rendaient des verdicts opposés.
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
     processDecemberTaxFiling, type DecemberContext, type DecemberHelpers,
 } from '../../services/projection/taxDecember';
-import { calculateFiscalReport, getMarginalRate, calculateDividendTax, getDividendGrossUpRate,
-    type AgeCreditOptions, type FiscalReport } from '../../utils/tax';
+import { type AgeCreditOptions, type FiscalReport } from '../../utils/tax';
 
 const DECEMBRE = 11;
 const ZERO = { revenu: 0, gains: 0, divers: 0, reer: 0, donCredit: 0 };

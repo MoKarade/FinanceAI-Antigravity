@@ -814,7 +814,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                         </div>
 
                                         <div className="w-full md:w-auto flex gap-2">
-                                            <select
+                                            <PrivateSelect
                                                 aria-label={`Catégorie pour ${maskPayee(group.payee, isPrivacyMode)}`}
                                                 className="bg-fond border border-bordure rounded-lg px-3 py-2 text-body text-texte focus:border-primary outline-hidden min-w-[180px]"
                                                 onChange={(e) => {
@@ -824,9 +824,9 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                             >
                                                 <option value="" disabled>Choisir une catégorie…</option>
                                                 {availableCategories.map(c => (
-                                                    <option key={c} value={c}>{c}</option>
+                                                    <option key={c} value={c}>{maskCategory(c, isPrivacyMode)}</option>
                                                 ))}
-                                            </select>
+                                            </PrivateSelect>
                                         </div>
                                     </div>
                                 ))
@@ -879,15 +879,15 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                         aria-label="Texte du marchand a matcher"
                                         className="flex-1 bg-fond/50 border border-bordure rounded-lg px-3 py-2 text-meta text-texte focus:border-accent outline-hidden"
                                     />
-                                    <select
+                                    <PrivateSelect
                                         value={newRuleCategory}
                                         onChange={e => setNewRuleCategory(e.target.value)}
                                         aria-label="Catégorie à appliquer"
                                         className="bg-fond/50 border border-bordure rounded-lg px-3 py-2 text-meta text-texte focus:border-accent outline-hidden"
                                     >
                                         <option value="">-- Catégorie --</option>
-                                        {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
+                                        {availableCategories.map(c => <option key={c} value={c}>{maskCategory(c, isPrivacyMode)}</option>)}
+                                    </PrivateSelect>
                                     <button
                                         onClick={handleAddRule}
                                         className="gf-chip px-3.5 py-2 bg-accent hover:bg-accent-fonce text-sur-accent text-meta font-bold rounded-full transition-colors"
@@ -902,11 +902,11 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                     <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
                                         {categorizationRules.map(rule => (
                                             <div key={rule.id} className="gf-row flex items-center gap-2 bg-fond/30 px-3 py-2 rounded-lg border border-bordure text-meta group">
-                                                <span className="text-ink-200 font-bold flex-1 truncate">"{rule.pattern}"</span>
+                                                <span className="text-ink-200 font-bold flex-1 truncate">"<PrivateText quoi="marchand">{rule.pattern}</PrivateText>"</span>
                                                 <Icon name="chevron-right" size={12} className="text-ink-500 hidden sm:inline shrink-0" />
                                                 <PrivateText quoi="categorie" className="text-ink-100 bg-bordure px-2 py-0.5 rounded-sm font-bold truncate max-w-[120px]">{rule.category}</PrivateText>
-                                                <button onClick={() => handleApplyRuleNow(rule)} aria-label={`Appliquer la règle ${rule.pattern}`} className="md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 text-ink-300 hover:text-primary transition-all text-tiny font-bold ml-1">Appliquer</button>
-                                                <button onClick={() => setConfirmDeleteRuleId(rule.id)} aria-label={`Supprimer la règle ${rule.pattern}`} className="md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 inline-flex text-danger-400 hover:text-danger-500 transition-all ml-1 p-2 -m-1"><Icon name="close" size={13} /></button>
+                                                <button onClick={() => handleApplyRuleNow(rule)} aria-label={`Appliquer la règle ${maskPayee(rule.pattern, isPrivacyMode)}`} className="md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 text-ink-300 hover:text-primary transition-all text-tiny font-bold ml-1">Appliquer</button>
+                                                <button onClick={() => setConfirmDeleteRuleId(rule.id)} aria-label={`Supprimer la règle ${maskPayee(rule.pattern, isPrivacyMode)}`} className="md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 inline-flex text-danger-400 hover:text-danger-500 transition-all ml-1 p-2 -m-1"><Icon name="close" size={13} /></button>
                                             </div>
                                         ))}
                                     </div>

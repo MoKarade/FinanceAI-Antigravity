@@ -20,7 +20,7 @@
 // lire, cliquer dedans, sans que le jour change sous les doigts.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export type ModeSelectionJour = 'idle' | 'hovering' | 'frozen';
+type ModeSelectionJour = 'idle' | 'hovering' | 'frozen';
 
 interface OptionsSelectionJour<P> {
     /** Clé d'identité d'un point (ex. `monthIndex`) → déduplique les re-rendus au survol. */

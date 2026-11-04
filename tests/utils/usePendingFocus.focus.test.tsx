@@ -10,7 +10,7 @@
 // test qui interroge `document.activeElement`, jamais la présence de l'appel.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
-import { render, act } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { usePendingFocus } from '../../utils/usePendingFocus';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { Tab } from '../../types';

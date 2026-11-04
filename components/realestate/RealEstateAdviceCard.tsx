@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Icon, type IconName } from '../ui/Icon';
 import { Card } from '../ui/Card';
 import { CollapsibleSection } from '../ui/CollapsibleSection';
+import { PrivateText } from '../ui/PrivateText';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { getRealEstateAdvice, type RealEstateContext, type RealEstateAdvice } from '../../services/gemini';
 import { messageErreurIa, MESSAGE_IA_MODE_DISCRET } from '../../services/messageErreurIa';
@@ -85,7 +86,7 @@ export const RealEstateAdviceCard: React.FC<RealEstateAdviceCardProps> = ({ cont
                 <>
                     <div className="p-3 bg-white/5 border border-white/10 rounded-lg">
                         <div className="text-tiny text-ink-400 uppercase font-bold mb-1">Bilan IA</div>
-                        <p className="text-meta text-ink-100 leading-relaxed">{advice.summary}</p>
+                        <p className="text-meta text-ink-100 leading-relaxed"><PrivateText quoi="memo">{advice.summary}</PrivateText></p>
                     </div>
                     <div className="space-y-2">
                         {advice.insights.map((ins, i) => {
@@ -99,7 +100,7 @@ export const RealEstateAdviceCard: React.FC<RealEstateAdviceCardProps> = ({ cont
                                             <div className="text-tiny opacity-80 uppercase tracking-wide">{meta.label}</div>
                                         </div>
                                     </div>
-                                    <p className="text-tiny text-ink-200 leading-relaxed ml-7">{ins.detail}</p>
+                                    <p className="text-tiny text-ink-200 leading-relaxed ml-7"><PrivateText quoi="memo">{ins.detail}</PrivateText></p>
                                 </div>
                             );
                         })}

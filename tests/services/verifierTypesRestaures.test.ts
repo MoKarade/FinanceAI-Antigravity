@@ -271,7 +271,7 @@ describe('[BACKUP-SCHEMA-NON-TYPE] ce qui NE doit pas être refusé', () => {
         // (`revealedProjectionSig`, `activeTestPersonaId`, …) et `partialize` en exclut seulement
         // huit. La dérivation d'origine n'avait lu que `types.ts` — d'où deux des trois clés
         // manquantes de l'incident. Une liste se dérive de CHAQUE surface qu'elle garde.
-        const fichier = readFileSync(resolve(process.cwd(), 'store/useFinanceStore.ts'), 'utf8');
+        const fichier = readFileSync(resolve(process.cwd(), 'store/types.ts'), 'utf8');
         // ⚠️ On borne au CORPS de `FinanceState` : le même fichier déclare `PendingFocus` et
         // `MigrationStatus`, qui ne sont PAS l'état persisté. Sans cette borne, le scan réclamait
         // `section` et `backupKey` — deux clés qui ne traversent jamais la persistance, et les
@@ -405,7 +405,7 @@ describe('[BACKUP-BOOLEEN-DANS-UN-MONTANT] un booléen dans un montant est refus
     });
 
     it('[garde de dérivation, 2e surface] tout champ booléen PERSISTÉ du store figure dans la liste', () => {
-        const fichier = readFileSync(resolve(process.cwd(), 'store/useFinanceStore.ts'), 'utf8');
+        const fichier = readFileSync(resolve(process.cwd(), 'store/types.ts'), 'utf8');
         const debut = fichier.indexOf('export interface FinanceState');
         const fin = fichier.indexOf('\n}', debut);
         expect(debut).toBeGreaterThan(0);

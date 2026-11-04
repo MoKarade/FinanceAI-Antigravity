@@ -241,3 +241,22 @@ export function buildStarterState(): Partial<AppState> {
 function dimIso(d: Date): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
+/** Détecte si un état est le gabarit starter synthétique (Alex / init-cat-logement / init-debt-auto). */
+export function isStarterTemplateState(candidate: Partial<AppState> | null | undefined): boolean {
+    if (!candidate) return false;
+    const firstUserName = candidate.config?.users?.[0]?.name ?? '';
+    const hasStarterBudget = (candidate.budgetItems ?? []).some((b) => b.id === 'init-cat-logement');
+    const hasStarterDebt = (candidate.debts ?? []).some((d) => d.id === 'init-debt-auto');
+    const hasStarterGoal = (candidate.financialGoals ?? []).some((g) => g.id === 'init-goal-urgence');
+    const hasBrokerLedger = Array.isArray(candidate.brokerLedger) && candidate.brokerLedger.length > 0;
+    if (hasBrokerLedger) return false;
+    if ((candidate.transactions ?? []).length > 60 || (candidate.assets ?? []).length > 5) {
+        return false;
+    }
+    if (firstUserName === 'Alex' && (hasStarterBudget || hasStarterDebt || hasStarterGoal)) {
+        return true;
+    }
+    return (hasStarterBudget && hasStarterDebt) || (hasStarterDebt && hasStarterGoal);
+}
+

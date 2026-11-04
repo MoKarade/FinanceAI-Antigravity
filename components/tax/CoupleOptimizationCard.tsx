@@ -5,6 +5,7 @@ import { messageErreurIa, MESSAGE_IA_MODE_DISCRET } from '../../services/message
 import { getCoupleOptimizationStrategies, type CoupleOptimizationStrategy, type CoupleTaxContext } from '../../services/gemini';
 import { formatCAD } from '../../utils/format';
 import { PrivateAmount } from '../ui/PrivateAmount';
+import { PrivateText } from '../ui/PrivateText';
 
 /**
  * Phase G.4 — Optimisation fiscale croisée pour couple.
@@ -159,7 +160,7 @@ export const CoupleOptimizationCard: React.FC = () => {
                                         </div>
                                         <span className="text-tiny font-mono opacity-70 shrink-0">{CONFIDENCE_LABELS[s.confidence]}</span>
                                     </div>
-                                    <p className="text-tiny text-ink-200 leading-relaxed">{s.description}</p>
+                                    <p className="text-tiny text-ink-200 leading-relaxed"><PrivateText quoi="memo">{s.description}</PrivateText></p>
                                     {s.estimated_savings_cad !== undefined && s.estimated_savings_cad > 0 && (
                                         // ⚠️ Ce montant vient du MODÈLE, pas du moteur. En police monospace verte
                                         // et encadré, il avait exactement l'allure des montants calculés affichés
