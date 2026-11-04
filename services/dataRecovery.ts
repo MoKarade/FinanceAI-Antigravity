@@ -59,11 +59,20 @@ export function computeDossierRichness(candidate: Partial<AppState> | null | und
     const avgHistoryPts =
         assetsCount > 0
             ? Math.min(
-                  500,
+                  100,
                   Math.floor(
                       assets.reduce((acc, a) => acc + (a?.priceHistory?.length ?? 0), 0) / assetsCount,
                   ),
               )
+            : 0;
+    const authenticPurchaseBonus =
+        assetsCount > 0 &&
+        assets.every((a) => {
+            const firstHist = a?.priceHistory?.[0]?.price;
+            const buyP = a?.purchases?.[0]?.price ?? a?.buyPrice;
+            return typeof firstHist === 'number' && typeof buyP === 'number' && Math.abs(firstHist - buyP) < 0.05;
+        })
+            ? 350
             : 0;
     const txCount = (candidate.transactions ?? []).length;
     const budgetCount = (candidate.budgetItems ?? []).length;
@@ -75,6 +84,7 @@ export function computeDossierRichness(candidate: Partial<AppState> | null | und
     return (
         assetsCount * 100 +
         avgHistoryPts +
+        authenticPurchaseBonus +
         txCount +
         budgetCount * 20 +
         immoCount * 50 +

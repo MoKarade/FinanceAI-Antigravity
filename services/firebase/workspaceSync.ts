@@ -891,10 +891,10 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
         // 3) OU `remoteRevision === lastKnownRevisionId` et l'horodatage local explicite est plus récent.
         const isLocalExplicitlyNewer =
             localHasMeaningfulData &&
+            !isRemoteRicherThanLocal &&
             ((dirtySinceMs > 0 && (remoteUpdatedAtMs === null || remoteUpdatedAtMs < dirtySinceMs)) ||
                 (lastSyncedOnThisDevice === '' && localRichness > remoteRichness) ||
-                (!isRemoteRicherThanLocal &&
-                    !remoteChangedByOtherDevice &&
+                (!remoteChangedByOtherDevice &&
                     localRichness >= remoteRichness &&
                     remoteUpdatedAtMs !== null &&
                     localLastUpdate > 0 &&

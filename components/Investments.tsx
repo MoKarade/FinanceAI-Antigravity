@@ -43,7 +43,7 @@ import { getQuote, getQuoteDetaille, hasQuoteProvider, clearMarketDataCache, cle
 import { verifierSymboleCotation } from '../services/verifierSymboleCotation';
 import { refreshAssetPrices, applyPricePatches } from '../services/priceRefresh';
 import { DividendPanel } from './investments/DividendPanel';
-import { formatCAD, formatDate, formatVariationPct } from '../utils/format';
+import { formatCAD, formatDate, formatNumber, formatVariationPct } from '../utils/format';
 import { logError } from '../services/errorLogger';
 import { getRebalanceJustifications, type RebalanceActionInput } from '../services/gemini';
 import { messageErreurIa, MESSAGE_IA_MODE_DISCRET } from '../services/messageErreurIa';
@@ -710,7 +710,29 @@ export const Investments: React.FC<InvestmentsProps> = ({
     const users = configStore?.users ?? [];
     const couple = isCoupleMode(users);
     const lignesTitres: LigneTitre[] = assets
-        .map((a, i) => ({ cle: `${a.symbol}-${a.accountType ?? ''}-${i}`, symbole: a.symbol, compte: a.accountType || 'NON-ENREG', proprietaire: couple ? nomProprietaire(a, users) : undefined, valeur: assetValueCad(a, fxRates), poids: 0 }))
+        .map((a, i) => {
+            const valeur = assetValueCad(a, fxRates);
+            const stats = computePurchaseStats(a);
+            const fx = toCurrencyFactor(fxRates, a.currency || 'CAD');
+            const prixAchat = stats?.averageCost ?? a.buyPrice;
+            const gainCad = stats ? stats.totalGain * fx : undefined;
+            const gainPct = stats ? stats.gainPct : null;
+            return {
+                cle: `${a.symbol}-${a.accountType ?? ''}-${i}`,
+                symbole: a.symbol,
+                nom: a.name,
+                compte: a.accountType || 'NON-ENREG',
+                proprietaire: couple ? nomProprietaire(a, users) : undefined,
+                quantite: a.quantity,
+                devise: a.currency || 'CAD',
+                prixAchat,
+                coursActuel: a.currentPrice,
+                gainCad,
+                gainPct,
+                valeur,
+                poids: 0,
+            };
+        })
         .filter((l) => l.valeur > 0)
         .map((l) => ({ ...l, poids: valeurPortefeuille > 0 ? (l.valeur / valeurPortefeuille) * 100 : 0 }))
         .sort((x, y) => y.valeur - x.valeur);
@@ -1638,11 +1660,29 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                     </select>
                                 </div>
                             </div>
-                            {/* Phase E.8 — DCA stats si purchases[] non-vide */}
-                            {purchaseStats && purchaseStats.purchaseCount > 1 && (
+                            {/* Phase E.8 — Détail détention, PRU et gain sur achat */}
+                            {purchaseStats && purchaseStats.purchaseCount >= 1 && (
                                 <div className="mt-3 pt-3 border-t border-bordure">
-                                    <div className="text-tiny text-info-400 uppercase font-bold mb-1">DCA · {purchaseStats.purchaseCount} achats</div>
+                                    {purchaseStats.purchaseCount > 1 && (
+                                        <div className="text-tiny text-info-400 uppercase font-bold mb-1">DCA · {purchaseStats.purchaseCount} achats</div>
+                                    )}
                                     <div className="space-y-0.5 text-tiny">
+                                        {savedAsset && (
+                                            <div className="flex justify-between">
+                                                <span className="text-ink-400">Détenu</span>
+                                                <PrivateAmount className="font-mono text-ink-100 font-bold">
+                                                    {`${formatNumber(savedAsset.quantity, { decimals: Number.isInteger(savedAsset.quantity) ? 0 : 2 })} actions`}
+                                                </PrivateAmount>
+                                            </div>
+                                        )}
+                                        {savedAsset && (
+                                            <div className="flex justify-between">
+                                                <span className="text-ink-400">Acheté → Cours</span>
+                                                <PrivateAmount className="font-mono text-ink-200">
+                                                    {`${formatNumber(purchaseStats.averageCost, { decimals: 2 })} → ${formatNumber(savedAsset.currentPrice, { decimals: 2 })} ${savedAsset.currency || 'CAD'}`}
+                                                </PrivateAmount>
+                                            </div>
+                                        )}
                                         {/* [ASSET-FX-DISPLAY] les stats DCA sont calculées en devise NATIVE
                                             (prix comparés entre eux) → conversion CAD à l'AFFICHAGE seulement,
                                             pour réconcilier avec la Valeur (CAD) de la même carte. Le % reste

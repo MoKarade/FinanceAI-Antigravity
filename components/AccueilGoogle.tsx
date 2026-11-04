@@ -960,10 +960,19 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 
                 const nomBrut = typeof a.name === 'string' && a.name.trim() ? a.name.trim() : a.symbol || `Titre ${idx + 1}`;
                 const symbole = (a.symbol || nomBrut.slice(0, 5) || `T${idx + 1}`).toUpperCase();
+                const qteStr =
+                    typeof a.quantity === 'number' && a.quantity > 0
+                        ? `${Number.isInteger(a.quantity) ? a.quantity : a.quantity.toFixed(2)} act.`
+                        : '';
+                const pruStr =
+                    stats.averageCost > 0 && a.currentPrice > 0
+                        ? `${stats.averageCost.toFixed(2)} → ${a.currentPrice.toFixed(2)} ${a.currency || 'CAD'}`
+                        : '';
+                const sousTitreDetail = [qteStr, pruStr].filter(Boolean).join(' · ') || nomBrut;
                 return {
                     id: `asset-${symbole}-${idx}`,
                     symbole,
-                    nom: nomBrut,
+                    nom: sousTitreDetail,
                     compte: a.accountType || 'Portefeuille',
                     valeur: val,
                     variationPct,
@@ -975,7 +984,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             })
             .filter((a) => a.valeur > 0)
             .sort((a, b) => b.valeur - a.valeur)
-            .slice(0, 8);
+            .slice(0, 15);
 
         if (actifs.length > 0) {
             const totalActifs = Math.max(1, actifs.reduce((s, a) => s + a.valeur, 0));
