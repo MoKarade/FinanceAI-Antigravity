@@ -82,6 +82,19 @@ function originForRelativeBase(baseUrl: string): string | undefined {
     return origin;
 }
 
+/**
+ * Normalise un jeton Fintable saisi ou collé par l'utilisateur :
+ * retire les guillemets englobants, le préfixe éventuel « Bearer » et tout espace parasite.
+ */
+export function nettoyerJetonFintable(raw: string | undefined | null): string {
+    if (typeof raw !== 'string') return '';
+    return raw
+        .replace(/^["'\s]+|["'\s]+$/g, '')
+        .replace(/^Bearer\s+/i, '')
+        .replace(/^["'\s]+|["'\s]+$/g, '')
+        .replace(/\s+/g, '');
+}
+
 export class FintableClient {
     private readonly token: string;
     private readonly baseUrl: string;
@@ -90,10 +103,11 @@ export class FintableClient {
     private readonly sleepImpl: (ms: number) => Promise<void>;
 
     constructor(opts: FintableClientOptions) {
-        if (!opts.token || typeof opts.token !== 'string') {
+        const cleanedToken = nettoyerJetonFintable(opts.token);
+        if (!cleanedToken) {
             throw new FintableError('Jeton Fintable manquant (lecture seule attendue).', 'AUTH');
         }
-        this.token = opts.token;
+        this.token = cleanedToken;
         this.baseUrl = (opts.baseUrl ?? FINTABLE_API_BASE).replace(/\/+$/, '');
         this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
         // ⚠️ [FINTABLE-BROWSER-FETCH-RECEIVER] JAMAIS `?? fetch` NU ici. Stocker `fetch` dans une
@@ -239,17 +253,37 @@ export class FintableClient {
     private async fetchWithinBudget(
         url: string,
     ): Promise<{ body: unknown; status: number; retryAfterSec: number | undefined }> {
+        const isRelativeProxy = !/^[a-z][a-z0-9+.-]*:\/\//i.test(this.baseUrl);
         const effectiveUrl = this.useDirectFallback ? this.toDirectFintableUrl(url) : url;
-        const result = await this.fetchSingleUrl(effectiveUrl);
 
-        // Sur un hébergement statique (ex. Firebase Hosting), la réécriture SPA renvoie `index.html`
-        // (200 OK, HTML commençant par `<`) sur `/api/fintable/*`. On bascule alors automatiquement
-        // vers l'API officielle `https://fintable.io/api/v2` (qui autorise CORS `Access-Control-Allow-Origin: *`).
-        if (
-            !this.useDirectFallback &&
-            result.isHtmlFallback &&
-            !/^[a-z][a-z0-9+.-]*:\/\//i.test(this.baseUrl)
-        ) {
+        let result: { body: unknown; status: number; retryAfterSec: number | undefined; isHtmlFallback: boolean };
+        try {
+            result = await this.fetchSingleUrl(effectiveUrl);
+        } catch (err) {
+            if (!this.useDirectFallback && isRelativeProxy) {
+                const directUrl = this.toDirectFintableUrl(url);
+                if (directUrl !== effectiveUrl) {
+                    this.useDirectFallback = true;
+                    return this.fetchSingleUrl(directUrl);
+                }
+            }
+            throw err;
+        }
+
+        // Sur un hébergement statique (ex. Firebase Hosting sans service Cloud Run actif ou réécriture SPA),
+        // `/api/fintable/*` peut renvoyer `index.html` (`isHtmlFallback`), un 404/405/502/503/504 du proxy,
+        // ou un 401/403 non-JSON (ex. barrière IAM en amont). On bascule alors automatiquement vers l'API
+        // officielle `https://fintable.io/api/v2` (qui autorise CORS `Access-Control-Allow-Origin: *`).
+        const isProxyUnavailable =
+            result.isHtmlFallback ||
+            result.status === 404 ||
+            result.status === 405 ||
+            result.status === 502 ||
+            result.status === 503 ||
+            result.status === 504 ||
+            ((result.status === 401 || result.status === 403) && result.body === null);
+
+        if (!this.useDirectFallback && isRelativeProxy && isProxyUnavailable) {
             this.useDirectFallback = true;
             const directUrl = this.toDirectFintableUrl(url);
             if (directUrl !== effectiveUrl) {
@@ -301,7 +335,7 @@ export class FintableClient {
                     // une page d'erreur d'infra. Dans les deux cas on garde `body = null` et le
                     // statut décide — jamais de crash brut de parsing remonté à l'appelant.
                     body = null;
-                    if (res.status >= 200 && res.status < 300 && (contentType.includes('text/html') || text.trimStart().startsWith('<'))) {
+                    if (contentType.includes('text/html') || text.trimStart().startsWith('<')) {
                         isHtmlFallback = true;
                     }
                 }

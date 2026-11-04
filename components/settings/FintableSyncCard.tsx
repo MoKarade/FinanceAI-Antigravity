@@ -62,6 +62,15 @@ const SYNC_BUSY_MESSAGE = 'Une synchronisation est déjà en cours — réessaie
  *  que `EMPTY_DEBTS` de `FutureProjection.tsx`, dont ce patron est repris tel quel). */
 const EMPTY_DEBTS: readonly Debt[] = [];
 
+function nettoyerJetonSaisi(raw: string | undefined | null): string {
+    if (typeof raw !== 'string') return '';
+    return raw
+        .replace(/^["'\s]+|["'\s]+$/g, '')
+        .replace(/^Bearer\s+/i, '')
+        .replace(/^["'\s]+|["'\s]+$/g, '')
+        .replace(/\s+/g, '');
+}
+
 function roleOf(roles: Record<string, FintableAccountRoleConfig> | undefined, id: string): FintableAccountRoleConfig | undefined {
     return roles?.[id];
 }
@@ -76,7 +85,7 @@ export const FintableSyncCard: React.FC = () => {
     // la suggestion. Lues du store plutôt que saisies — c'est tout l'objet du lot.
     const debts = useFinanceStore((s) => s.debts) ?? EMPTY_DEBTS;
 
-    const [token, setToken] = useState(apiKeys?.fintable ?? '');
+    const [token, setToken] = useState(() => nettoyerJetonSaisi(apiKeys?.fintable));
     const [accounts, setAccounts] = useState<SetupAccount[] | null>(null);
     const [busy, setBusy] = useState<'idle' | 'testing' | 'syncing'>('idle');
     const [error, setError] = useState<string | null>(null);
@@ -91,7 +100,17 @@ export const FintableSyncCard: React.FC = () => {
     /** Chaîne de sérialisation des écritures (finding #3 : sinon un blob PÉRIMÉ peut gagner la course). */
     const persistChainRef = useRef<Promise<void>>(Promise.resolve());
 
-    const saveToken = (value: string) => {
+    // Réconcilie l'état local si le jeton est hydraté de manière asynchrone depuis IndexedDB après le montage.
+    useEffect(() => {
+        if (pendingRef.current) return;
+        const hydrated = nettoyerJetonSaisi(apiKeys?.fintable);
+        if (hydrated && hydrated !== token) {
+            setToken(hydrated);
+        }
+    }, [apiKeys?.fintable, token]);
+
+    const saveToken = (rawValue: string) => {
+        const value = nettoyerJetonSaisi(rawValue);
         setToken(value);
         pendingRef.current = true;
         setAppState({ apiKeys: { ...apiKeys, fintable: value } });
@@ -169,7 +188,8 @@ export const FintableSyncCard: React.FC = () => {
             const { listFintableAccountsForSetup } = await importWithRetry(
                 () => import('../../services/fintable/browserSync'), 'fintable-sync',
             );
-            const res = await listFintableAccountsForSetup(token);
+            const effectiveToken = nettoyerJetonSaisi(token || useFinanceStore.getState().apiKeys?.fintable);
+            const res = await listFintableAccountsForSetup(effectiveToken);
             if (res.error !== null) { setError(res.error); setAccounts(null); return; }
             setAccounts(res.accounts.map((a) => ({
                 id: a.id, label: a.label, rawType: a.rawType, currency: a.currency,
@@ -230,7 +250,8 @@ export const FintableSyncCard: React.FC = () => {
             // La fenêtre qui compte est CLIC→ÉCRITURE (le fetch réseau, plusieurs secondes) : c'est
             // `getFreshState` qui la ferme, en relisant le store juste avant l'application.
             const current = useFinanceStore.getState() as unknown as AppState;
-            const { report: fresh, statePatch, incertaines: douteuses, echantillonsChampsInconnus } = await runFintableBrowserSync(current, token, {
+            const effectiveToken = nettoyerJetonSaisi(token || current.apiKeys?.fintable);
+            const { report: fresh, statePatch, incertaines: douteuses, echantillonsChampsInconnus } = await runFintableBrowserSync(current, effectiveToken, {
                 getFreshState: () => useFinanceStore.getState() as unknown as AppState,
                 backfill,
             });

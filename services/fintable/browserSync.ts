@@ -36,7 +36,7 @@
 // fermée. Le cron serveur reste en place et prioritaire si Marc monte un jour la config.
 
 import type { AppState, FintableSyncReport, FintableAccountRoleConfig } from '../../types';
-import { FintableClient } from './client';
+import { FintableClient, nettoyerJetonFintable } from './client';
 import { readFintableSnapshot } from './readSnapshot';
 import { comptesSansPositionsDuSnapshot } from './comptesSansPositions';
 import type { FintableSnapshot } from './types';
@@ -201,11 +201,12 @@ export async function listFintableAccountsForSetup(
     token: string,
     opts: { client?: FintableClient } = {},
 ): Promise<{ accounts: FintableSnapshot['accounts']; error: string | null }> {
-    if (typeof token !== 'string' || token.trim() === '') {
+    const cleanedToken = nettoyerJetonFintable(token);
+    if (!cleanedToken) {
         return { accounts: [], error: 'Jeton Fintable absent.' };
     }
     try {
-        const client = opts.client ?? new FintableClient({ token, baseUrl: FINTABLE_BROWSER_BASE });
+        const client = opts.client ?? new FintableClient({ token: cleanedToken, baseUrl: FINTABLE_BROWSER_BASE });
         const snapshot = await readFintableSnapshot(client, { skipHoldings: true, skipTransactions: true });
         return { accounts: snapshot.accounts, error: null };
     } catch (err) {
@@ -232,7 +233,8 @@ export async function runFintableBrowserSync(
         lastProductiveAt: lastProductiveAtSuivant(state.fintableSyncReport, 0, now()),
     });
 
-    if (typeof token !== 'string' || token.trim() === '') {
+    const cleanedToken = nettoyerJetonFintable(token);
+    if (!cleanedToken) {
         return { report: emptyReport(null, 'Jeton Fintable absent — ajoute-le dans Réglages.'), statePatch: null, incertaines: [], echantillonsChampsInconnus: [] };
     }
 
@@ -247,7 +249,7 @@ export async function runFintableBrowserSync(
         cutoverDateUsed = cutover.cutoverDateUsed;
         preflightWarnings.push(...cutover.warnings);
 
-        const client = opts.client ?? new FintableClient({ token, baseUrl: FINTABLE_BROWSER_BASE });
+        const client = opts.client ?? new FintableClient({ token: cleanedToken, baseUrl: FINTABLE_BROWSER_BASE });
         // ⚠️ ÉCART ASSUMÉ avec le cron, qui laisse `dateFrom: undefined` (illimité) sur état vierge :
         // ici on borne à 90 jours. Ce n'est PAS une protection anti-doublon — celle-ci est la bascule
         // (`transactionsAfter`, appliquée strictement par le mapper) et elle vaut `null` seulement si

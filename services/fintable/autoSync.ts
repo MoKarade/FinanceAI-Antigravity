@@ -171,13 +171,19 @@ async function runDailyFintableSyncGuarded(
     // [SVC-STORE-COUPLING] Pas de cast : `FinanceState extends AppState`, `getState()` EST un
     // AppState — les `as unknown as` historiques désactivaient tsc sur ces lectures pour rien.
     const state = useFinanceStore.getState();
-    const token = state.apiKeys?.fintable ?? '';
+    const rawToken = state.apiKeys?.fintable ?? '';
+    const token = typeof rawToken === 'string'
+        ? rawToken.replace(/^["'\s]+|["'\s]+$/g, '').replace(/^Bearer\s+/i, '').replace(/\s+/g, '')
+        : '';
 
-    if (typeof token !== 'string' || token.trim() === '') return { ran: false, reason: 'no-token' };
+    if (!token) return { ran: false, reason: 'no-token' };
     if (isTestModeNow()) return { ran: false, reason: 'test-mode' };
     if (!isDailySyncDue(state.fintableSyncReport, now())) return { ran: false, reason: 'fresh' };
-    const erreurMalformedAncienProxy = Boolean(state.fintableSyncReport?.error?.includes('[MALFORMED]'));
-    if (!opts.ignoreCooldown && !erreurMalformedAncienProxy && now() - readLastAttempt() < ATTEMPT_COOLDOWN_MS) {
+    const erreurAncienProxyOuCsp = Boolean(
+        state.fintableSyncReport?.error?.includes('[MALFORMED]') ||
+        state.fintableSyncReport?.error?.includes('[NETWORK]'),
+    );
+    if (!opts.ignoreCooldown && !erreurAncienProxyOuCsp && now() - readLastAttempt() < ATTEMPT_COOLDOWN_MS) {
         return { ran: false, reason: 'cooldown' };
     }
     if (!acquireFintableSyncLock()) return { ran: false, reason: 'in-flight' };
@@ -196,8 +202,11 @@ async function runDailyFintableSyncGuarded(
         // [Finding code-reviewer #545 §4] Gardes RE-vérifiées à l'état FRAIS après l'await : le
         // jeton peut avoir été effacé et le mode démo activé pendant le chargement du chunk.
         const current = useFinanceStore.getState();
-        const freshToken = current.apiKeys?.fintable ?? '';
-        if (typeof freshToken !== 'string' || freshToken.trim() === '') return { ran: false, reason: 'no-token' };
+        const rawFreshToken = current.apiKeys?.fintable ?? '';
+        const freshToken = typeof rawFreshToken === 'string'
+            ? rawFreshToken.replace(/^["'\s]+|["'\s]+$/g, '').replace(/^Bearer\s+/i, '').replace(/\s+/g, '')
+            : '';
+        if (!freshToken) return { ran: false, reason: 'no-token' };
         if (isTestModeNow()) return { ran: false, reason: 'test-mode' };
 
         // ⚠️ [FINTABLE-SYNC-STALE-BASE] `current` est la base PRÉ-fetch ; `getFreshState` relit le

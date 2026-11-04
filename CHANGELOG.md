@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-04 — Réparation de la synchronisation bancaire Fintable, placements exacts et synchronisation Cloud Firestore multi-appareils
+
+- **Synchronisation Fintable réparée (`index.html`, `services/fintable/client.ts`, `services/fintable/browserSync.ts`, `services/fintable/autoSync.ts`, `components/settings/FintableSyncCard.tsx`)** : autorisation de `https://fintable.io` dans la directive `connect-src` de la balise `<meta http-equiv="Content-Security-Policy">` de `index.html` (alignée sur `firebase.json` afin que le navigateur ne bloque plus le repli direct vers `https://fintable.io/api/v2`), nettoyage automatique du jeton (`nettoyerJetonFintable` : retrait des guillemets, espaces et préfixe `Bearer `), repli automatique vers l'API officielle sur indisponibilité du proxy `/api/fintable`, hydratation réactive du jeton chiffré dans `FintableSyncCard.tsx` et relance immédiate après une ancienne erreur `[NETWORK]`. Cache Service Worker : `financeai-v16`.
+
 ## 2026-11-03 — Derniers modèles Gemini (3.8 Flash & 4 Argon), réparation clé API et chat, Plan d'action en 5 horizons et grilles sans trous
 
 - **Derniers modèles Google Gemini partout (`services/aiChat/models.ts`, `services/aiChat/pricing.ts`, `services/gemini.ts`, `services/geminiClientAdapter.ts`)** : tous les appels IA de l'application passent sur `gemini-3.8-flash` (modèle principal), `gemini-4-argon` (raisonnement profond) et `gemini-3.5-flash-lite` (tâches rapides).

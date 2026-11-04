@@ -309,4 +309,45 @@ describe('récepteur de fetch (règle WebIDL du navigateur, simulée)', () => {
             (globalThis as { location?: unknown }).location = prevLocation;
         }
     });
+
+    it('bascule automatiquement vers https://fintable.io/api/v2 si le proxy relatif (/api/fintable) renvoie 404 ou échoue en réseau', async () => {
+        const prevLocation = (globalThis as { location?: unknown }).location;
+        (globalThis as { location?: unknown }).location = { origin: 'https://financeai-demo-public.web.app' };
+        try {
+            const calls: string[] = [];
+            const fetchImpl = vi.fn(async (url: string) => {
+                calls.push(url);
+                if (url.startsWith('https://financeai-demo-public.web.app/api/fintable/')) {
+                    return res(404, 'Not Found', { 'content-type': 'text/plain' });
+                }
+                return res(200, { data: [{ id: 'acc_direct_404' }] });
+            });
+
+            const client = new FintableClient({
+                token: '  "Bearer ft_jeton_propre_123" \n ',
+                baseUrl: '/api/fintable',
+                fetchImpl: fetchImpl as unknown as typeof fetch,
+            });
+
+            const out = await client.get<Array<{ id: string }>>('/accounts');
+            expect(out.data).toEqual([{ id: 'acc_direct_404' }]);
+            expect(calls).toEqual([
+                'https://financeai-demo-public.web.app/api/fintable/accounts',
+                'https://fintable.io/api/v2/accounts',
+            ]);
+            const headersSent = (fetchImpl.mock.calls[1] as unknown[])[1] as { headers: Record<string, string> };
+            expect(headersSent.headers.Authorization).toBe('Bearer ft_jeton_propre_123');
+        } finally {
+            (globalThis as { location?: unknown }).location = prevLocation;
+        }
+    });
+
+    it('autorise https://fintable.io dans connect-src à la fois dans firebase.json et dans la balise meta CSP de index.html', async () => {
+        const fs = await import('node:fs');
+        const path = await import('node:path');
+        const indexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf8');
+        const firebaseJson = fs.readFileSync(path.resolve(process.cwd(), 'firebase.json'), 'utf8');
+        expect(indexHtml).toMatch(/connect-src[^;]*https:\/\/fintable\.io/);
+        expect(firebaseJson).toMatch(/connect-src[^;]*https:\/\/fintable\.io/);
+    });
 });

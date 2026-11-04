@@ -489,4 +489,14 @@ describe('FintableSyncCard — rattrapage d\'historique', () => {
         fireEvent.click(screen.getByRole('button', { name: /Synchroniser maintenant/ }));
         await waitFor(() => expect(document.body.textContent).not.toContain(MARCHAND));
     });
+
+    it('hydrate le champ jeton si apiKeys.fintable arrive de manière asynchrone après le montage et nettoie les guillemets/Bearer', async () => {
+        useFinanceStore.setState({ apiKeys: { gemini: '', anthropic: '', finnhub: '', fintable: '' } });
+        render(<FintableSyncCard />);
+        const input = screen.getByLabelText(/Jeton Fintable/i) as HTMLInputElement;
+        expect(input.value).toBe('');
+
+        useFinanceStore.setState({ apiKeys: { gemini: '', anthropic: '', finnhub: '', fintable: '  "Bearer ft_hydrate_async"  ' } });
+        await waitFor(() => expect(input.value).toBe('ft_hydrate_async'));
+    });
 });

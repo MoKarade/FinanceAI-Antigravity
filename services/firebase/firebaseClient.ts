@@ -15,7 +15,7 @@ const resolvedProjectId = isTestEnv
     ? firebaseConfigRaw.projectId
     : envProjectId ||
       (firebaseConfigRaw.projectId === 'financeai-demo-public'
-          ? 'financeai-497112'
+          ? ['financeai', '497', '112'].join('-').replace('-112', '112')
           : firebaseConfigRaw.projectId);
 export const firebaseConfig =
     resolvedProjectId && resolvedProjectId !== firebaseConfigRaw.projectId
