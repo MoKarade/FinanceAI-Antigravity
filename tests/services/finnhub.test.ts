@@ -41,6 +41,10 @@ describe('toFinnhubSymbol — mapping des places', () => {
         // deviner routerait potentiellement vers un AUTRE instrument — pire qu'un cours absent.
         expect(toFinnhubSymbol('OTCMKTS:ZIND')).toBe('ZIND');
     });
+
+    it('mappe Tradegate (.TG) vers Xetra (.DE) pour assurer la cotation européenne', () => {
+        expect(toFinnhubSymbol('EXEMPLE.TG')).toBe('EXEMPLE.DE');
+    });
 });
 
 describe('FinnhubProvider — getQuote', () => {

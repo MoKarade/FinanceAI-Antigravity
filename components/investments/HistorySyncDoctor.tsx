@@ -82,10 +82,15 @@ export const HistorySyncDoctor: React.FC<Props> = ({ onApplyQuoteSymbol, isSynci
     // lui-même, pas le parent).
     // [PRICE-SYNC-REPORT] Raisons de skip de quote en français (labels courts, sans montant).
     const QUOTE_REASON_LABELS: Record<string, string> = {
-        'no-quote': 'aucun cours disponible chez Finnhub/Yahoo — fixe le symbole de cotation ci-dessus',
+        'no-quote': 'aucun cours disponible chez Finnhub/Yahoo — fixe le symbole de cotation ci-dessous',
         'invalid-price': 'cours reçu invalide (rejeté par la garde de plausibilité)',
         'currency-mismatch': 'devise du cours ≠ devise de l\'actif (corrige la devise ou le suffixe du symbole)',
         'error': 'panne du fournisseur — nouvel essai automatique au prochain chargement',
+    };
+
+    const getSuggestionsPour = (sym: string): string[] => {
+        if (sym.endsWith('.TG')) return [`${sym.slice(0, -3)}.DE`];
+        return [];
     };
 
     return (
@@ -97,14 +102,89 @@ export const HistorySyncDoctor: React.FC<Props> = ({ onApplyQuoteSymbol, isSynci
                     <Icon name="alert" size={12} aria-hidden="true" />
                     Prix non actualisés ({quoteActionable.length}) — ces titres gardent leur dernier prix connu
                 </summary>
-                <ul className="mt-2 space-y-1">
-                    {quoteActionable.map((q) => (
-                        <li key={q.symbol} className="text-meta text-ink-200">
-                            <span className="font-bold text-white">{q.symbol}</span>
-                            {' — '}
-                            {QUOTE_REASON_LABELS[q.reason] ?? `non actualisé (${q.reason})`}
-                        </li>
-                    ))}
+                <ul className="mt-2 space-y-3">
+                    {quoteActionable.map((q) => {
+                        const sugRecherche = suggestions[q.symbol] ?? [];
+                        const sugConnues = getSuggestionsPour(q.symbol);
+                        return (
+                            <li key={q.symbol} className="text-meta text-ink-200">
+                                <div>
+                                    <span className="font-bold text-white">{q.symbol}</span>
+                                    {' — '}
+                                    {QUOTE_REASON_LABELS[q.reason] ?? `non actualisé (${q.reason})`}
+                                </div>
+                                {sugRecherche.length > 0 ? (
+                                    <ul className="mt-1.5 flex flex-wrap gap-2" aria-label={`Titres suggérés pour ${q.symbol}`}>
+                                        {sugRecherche.map((sug) => (
+                                            <li key={sug.symbol}>
+                                                <button
+                                                    type="button"
+                                                    disabled={isSyncing}
+                                                    onClick={() => onApplyQuoteSymbol(q.symbol, sug.symbol)}
+                                                    title={`Utiliser ${sug.symbol} comme symbole de cotation`}
+                                                    className="text-tiny bg-info-500/20 text-blue-300 border border-info-500/50 rounded-lg px-2 py-1 hover:bg-info-500/30 focus-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {sug.symbol} — {sug.name}{sug.exchange ? ` (${sug.exchange})` : ''}
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : sugConnues.length > 0 ? (
+                                    <ul className="mt-1.5 flex flex-wrap gap-2" aria-label={`Titres suggérés pour ${q.symbol}`}>
+                                        {sugConnues.map((candidat) => (
+                                            <li key={candidat}>
+                                                <button
+                                                    type="button"
+                                                    disabled={isSyncing}
+                                                    onClick={() => onApplyQuoteSymbol(q.symbol, candidat)}
+                                                    title={`Utiliser ${candidat} comme symbole de cotation`}
+                                                    className="text-tiny bg-info-500/20 text-blue-300 border border-info-500/50 rounded-lg px-2 py-1 hover:bg-info-500/30 focus-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {candidat}
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : null}
+                                <form
+                                    className="mt-1.5 flex items-center gap-2"
+                                    onSubmit={(e) => {
+                                        e.preventDefault();
+                                        const value = (drafts[q.symbol] ?? currentQuoteSymbol(q.symbol)).trim();
+                                        if (!value || isSyncing) return;
+                                        onApplyQuoteSymbol(q.symbol, value);
+                                    }}
+                                >
+                                    <label htmlFor={`quote-price-symbol-${q.symbol}`} className="text-tiny text-ink-400">
+                                        Symbole de cotation :
+                                    </label>
+                                    <input
+                                        id={`quote-price-symbol-${q.symbol}`}
+                                        type="text"
+                                        value={drafts[q.symbol] ?? currentQuoteSymbol(q.symbol)}
+                                        onChange={(e) => setDrafts((d) => ({ ...d, [q.symbol]: e.target.value }))}
+                                        placeholder={`ex. ${q.symbol}.PA`}
+                                        className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-meta text-white w-36 focus-ring"
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={isSyncing || !(drafts[q.symbol] ?? currentQuoteSymbol(q.symbol)).trim()}
+                                        className="text-meta text-primary hover:text-white focus-ring rounded-lg px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isSyncing ? 'Synchronisation…' : 'Appliquer'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={isSyncing || searching === q.symbol}
+                                        onClick={() => void searchFor(q.symbol)}
+                                        className="text-meta text-ink-300 hover:text-white focus-ring rounded-lg px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {searching === q.symbol ? 'Recherche…' : 'Chercher le titre'}
+                                    </button>
+                                </form>
+                            </li>
+                        );
+                    })}
                 </ul>
             </details>
         )}

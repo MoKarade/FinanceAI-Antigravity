@@ -119,7 +119,11 @@ export async function getYahooQuote(symbol: string): Promise<Quote | null> {
         if (!res.ok) {
             throw new MarketDataError(`Yahoo ${res.status}`, res.status === 429 ? 'RATE_LIMIT' : 'NETWORK', 'yahoo');
         }
-        const data = (await res.json()) as YahooChartResponse;
+        const text = await res.text();
+        if (text.startsWith('<')) {
+            throw new MarketDataError('Le relais Yahoo renvoie du HTML (proxy inaccessible).', 'NETWORK', 'yahoo');
+        }
+        const data = JSON.parse(text) as YahooChartResponse;
         // [QUOTE-ERRKIND] Yahoo peut répondre 200 avec `chart.error` PEUPLÉ (hoquet backend, throttle
         // applicatif) SANS statut HTTP d'erreur → c'est TRANSITOIRE, pas une absence (finding MOYEN
         // code-reviewer #508 : sinon 3× → skip d'un vrai titre, la classe de bug corrigée ici
@@ -202,8 +206,9 @@ export async function getYahooHistory(symbol: string, from: Date, to: Date): Pro
     try {
         const res = await fetch(url, { signal: controller.signal });
         if (res.status === 404) return []; // symbole inconnu chez Yahoo = vide légitime (cacheable)
-        if (!res.ok) return null;          // proxy absent / 5xx / 429 = erreur (pas de cache)
-        const data = (await res.json()) as YahooChartResponse;
+        const text = await res.text();
+        if (text.startsWith('<')) return null;
+        const data = JSON.parse(text) as YahooChartResponse;
         return parseYahooChart(data, from, to);
     } catch (e) {
         logProviderError('YahooProxy', 'getHistory', symbol, e);

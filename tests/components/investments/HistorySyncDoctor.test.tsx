@@ -144,4 +144,13 @@ describe('HistorySyncDoctor', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Synchronisation…' }));
         expect(onApply).not.toHaveBeenCalled();
     });
+
+    it('propose le formulaire et les suggestions pour corriger un cours de quote non actualisé (ex: DEMO.TG -> DEMO.DE)', () => {
+        clearHistorySyncReport();
+        updateQuoteSkips([{ symbol: 'DEMO.TG', reason: 'no-quote' }]);
+        render(<HistorySyncDoctor onApplyQuoteSymbol={onApply} isSyncing={false} />);
+        expect(screen.getByRole('button', { name: 'DEMO.DE' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'DEMO.DE' }));
+        expect(onApply).toHaveBeenCalledWith('DEMO.TG', 'DEMO.DE');
+    });
 });

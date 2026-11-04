@@ -45,6 +45,10 @@ export function toFinnhubSymbol(ours: string): string {
         // Fallback : on tente le ticker brut
         return ticker;
     }
+    // Tradegate (.TG) n'est coté ni sur Finnhub ni sur Yahoo Finance -> basculer sur Xetra (.DE)
+    if (ours.endsWith('.TG')) {
+        return `${ours.slice(0, -3)}.DE`;
+    }
     return ours;
 }
 
