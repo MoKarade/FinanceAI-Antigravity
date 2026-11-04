@@ -62,11 +62,11 @@ type SousOngletCentre = 'avoirs' | 'insights' | 'transactions' | 'evenements';
 
 interface PointTrajectoire {
     annee: string;
-    valeur: number;
+    valeur: number | null;
     valeurPresent: number | null;
     valeurFutur: number | null;
     periode: 'present' | 'transition' | 'futur';
-    avoirs: number;
+    avoirs: number | null;
     dettes: number;
 }
 
@@ -626,6 +626,30 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         const chartData = lastProjection?.chartData ?? [];
         const pointsFutursMoteur = chartData.filter((pt) => typeof pt.monthIndex === 'number' && pt.monthIndex > 0);
 
+        // Extraction exacte des grandeurs projetées par le moteur selon la lentille sélectionnée (no-fake-data)
+        const extraireValeurMoteur = (pt: (typeof pointsFutursMoteur)[number] | undefined): number | null => {
+            if (!pt) return null;
+            if (lentilleHero === 'net') {
+                return Number.isFinite(pt.NetWorth) ? Math.round(pt.NetWorth) : null;
+            }
+            if (lentilleHero === 'portefeuille') {
+                const liq = Number(pt.Liquidites) || 0;
+                const celi = Number(pt.CELI) || 0;
+                const celiapp = Number(pt.CELIAPP) || 0;
+                const reer = Number(pt.REER) || 0;
+                const reee = Number(pt.REEE) || 0;
+                const nonreg = Number(pt.NonReg) || 0;
+                const crypto = Number(pt.Crypto) || 0;
+                const totalPortefeuille = liq + celi + celiapp + reer + reee + nonreg + crypto;
+                return Number.isFinite(totalPortefeuille) ? Math.round(totalPortefeuille) : null;
+            }
+            if (lentilleHero === 'immobilier') {
+                const immo = Number(pt.Immobilier);
+                return Number.isFinite(immo) ? Math.round(immo) : 0;
+            }
+            return Number.isFinite(pt.NetWorth) ? Math.round(pt.NetWorth) : null;
+        };
+
         // Mode par défaut 1M : courbe précise sur 1 mois d'historique (14 jalons + Aujourd'hui) et 1 mois projeté (+2j .. +1M)
         if (horizon === '1M') {
             const indicesJoursPasses = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28];
@@ -643,24 +667,24 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 };
             });
 
-            const premierMois = pointsFutursMoteur[0];
-            const epargneRef = Math.max(500, Math.round(epargneMensuelle * (ratioLentille || 1)));
-            const cibleBrute =
-                premierMois && Number.isFinite(premierMois.NetWorth)
-                    ? Math.round(premierMois.NetWorth * ratioLentille)
-                    : valeurActuelle + epargneRef;
-            // Garantit une pente future lisible vers le mois +1 (au moins l'épargne mensuelle + rendement mensuel)
-            const deltaFutur1M =
-                Math.abs(cibleBrute - valeurActuelle) >= Math.max(400, Math.round(valeurActuelle * 0.008))
-                    ? cibleBrute - valeurActuelle
-                    : Math.max(epargneRef, Math.round(valeurActuelle * 0.012));
+            const premierMois = pointsFutursMoteur.find((p) => p.monthIndex === 1) ?? pointsFutursMoteur[0];
+            const cibleMoteur = extraireValeurMoteur(premierMois);
 
             const etapesFuturesJours = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
             const pointsFutur1Mois: PointTrajectoire[] = etapesFuturesJours.map((jour) => {
+                if (cibleMoteur === null) {
+                    return {
+                        annee: jour === 30 ? '+1M' : `+${jour}j`,
+                        valeur: null,
+                        valeurPresent: null,
+                        valeurFutur: null,
+                        periode: 'futur' as const,
+                        avoirs: null,
+                        dettes: dettesReelles,
+                    };
+                }
                 const frac = jour / 30;
-                // Légère courbure composée naturelle pour distinguer visuellement la projection
-                const progression = frac * 0.85 + frac * frac * 0.15;
-                const val = Math.round(valeurActuelle + deltaFutur1M * progression);
+                const val = Math.round(valeurActuelle + (cibleMoteur - valeurActuelle) * frac);
                 return {
                     annee: jour === 30 ? '+1M' : `+${jour}j`,
                     valeur: val,
@@ -750,24 +774,18 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 
         const pointsFuturSymetriques: PointTrajectoire[] = moisEtapesSymetriques.map((moisAvance) => {
             const ptMoteur = trouverPointMoteur(moisAvance);
-            const fallbackVal = Math.round(
-                valeurActuelle * Math.pow(1.0045, moisAvance) + epargneRef * moisAvance,
-            );
-            const baseVal =
-                ptMoteur && Number.isFinite(ptMoteur.NetWorth) && ptMoteur.monthIndex >= Math.min(moisAvance, 6)
-                    ? Math.round(ptMoteur.NetWorth * ratioLentille)
-                    : fallbackVal;
+            const valReelle = extraireValeurMoteur(ptMoteur ?? undefined);
             const dettesPt =
                 ptMoteur && Number.isFinite(Number(ptMoteur.DettesNonImmo))
                     ? Math.max(0, Math.round(Number(ptMoteur.DettesNonImmo)))
                     : dettesReelles;
             return {
                 annee: formaterLabelMois(moisAvance, '+'),
-                valeur: baseVal,
+                valeur: valReelle,
                 valeurPresent: null,
-                valeurFutur: baseVal,
+                valeurFutur: valReelle,
                 periode: 'futur' as const,
-                avoirs: Math.max(0, baseVal + dettesPt),
+                avoirs: valReelle !== null ? Math.max(0, valReelle + dettesPt) : null,
                 dettes: dettesPt,
             };
         });
@@ -799,7 +817,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             if (typeof pt.valeurFutur === 'number' && Number.isFinite(pt.valeurFutur)) {
                 valeurs.push(pt.valeurFutur);
             }
-            if (modeCourbe === 'complete' && Number.isFinite(pt.avoirs)) {
+            if (modeCourbe === 'complete' && typeof pt.avoirs === 'number' && Number.isFinite(pt.avoirs)) {
                 valeurs.push(pt.avoirs);
             }
         }
@@ -821,17 +839,35 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         const finIdx = donneesTrajectoire.length - 1;
         const pMilieu = donneesTrajectoire[milieuIdx];
         const pFin = donneesTrajectoire[finIdx];
-        return [pMilieu, pFin].filter((p): p is PointTrajectoire => Boolean(p));
+        return [pMilieu, pFin].filter(
+            (p): p is PointTrajectoire => Boolean(p) && typeof p?.valeur === 'number',
+        );
     }, [tempsFortsActifs, donneesTrajectoire]);
 
     const gainHorizon = useMemo(() => {
         if (donneesTrajectoire.length < 2) return null;
-        const debut = donneesTrajectoire[0]!.valeur;
-        const milieu = donneesTrajectoire[Math.floor(donneesTrajectoire.length / 2)]!;
-        const fin = donneesTrajectoire[donneesTrajectoire.length - 1]!;
+        const debut = donneesTrajectoire[0]?.valeur;
+        const milieu = donneesTrajectoire[Math.floor(donneesTrajectoire.length / 2)];
+        const fin = donneesTrajectoire[donneesTrajectoire.length - 1];
+        if (
+            typeof debut !== 'number' ||
+            !Number.isFinite(debut) ||
+            !fin ||
+            typeof fin.valeur !== 'number' ||
+            !Number.isFinite(fin.valeur)
+        ) {
+            return null;
+        }
         const diff = fin.valeur - debut;
         const pct = Math.abs(debut) > 100 ? (diff / Math.abs(debut)) * 100 : null;
-        return { diff, pct, fin: fin.valeur, anneeFin: fin.annee, milieuValeur: milieu.valeur, anneeMilieu: milieu.annee };
+        return {
+            diff,
+            pct,
+            fin: fin.valeur,
+            anneeFin: fin.annee,
+            milieuValeur: milieu?.valeur ?? debut,
+            anneeMilieu: milieu?.annee ?? '',
+        };
     }, [donneesTrajectoire]);
 
     const partsRepartition = useMemo<PartRepartition[]>(() => {
@@ -2139,7 +2175,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             <ReferenceDot
                                                 key={`tf-${pt.annee}-${idx}`}
                                                 x={pt.annee}
-                                                y={pt.valeur}
+                                                y={pt.valeur ?? undefined}
                                                 r={5.5}
                                                 fill="var(--gf-ambre)"
                                                 stroke="var(--fond)"
@@ -2932,7 +2968,7 @@ const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({ active, payload
     const itemAvecValeur = payload.find((p) => p?.payload && typeof p.payload.valeur === 'number');
     const pt = itemAvecValeur?.payload ?? payload[0]?.payload;
     if (!pt) return null;
-    const ecart = pt.valeur - patrimoineInitial;
+    const ecart = typeof pt.valeur === 'number' ? pt.valeur - patrimoineInitial : 0;
     const badgePeriode =
         pt.periode === 'present'
             ? 'Présent (1M)'

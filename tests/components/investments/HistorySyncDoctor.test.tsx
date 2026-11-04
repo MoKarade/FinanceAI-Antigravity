@@ -145,7 +145,7 @@ describe('HistorySyncDoctor', () => {
         expect(onApply).not.toHaveBeenCalled();
     });
 
-    it('propose le formulaire et les suggestions pour corriger un cours de quote non actualisé (ex: DEMO.TG -> DEMO.DE)', () => {
+    it('propose le formulaire et les suggestions pour corriger un cours de quote non actualisé (ex: .TG -> .DE)', () => {
         clearHistorySyncReport();
         updateQuoteSkips([{ symbol: 'DEMO.TG', reason: 'no-quote' }]);
         render(<HistorySyncDoctor onApplyQuoteSymbol={onApply} isSyncing={false} />);

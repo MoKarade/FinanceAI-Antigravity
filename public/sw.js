@@ -10,7 +10,7 @@
 //
 // Note : ce SW est uniquement chargé en PROD (vite import.meta.env.PROD).
 
-const CACHE_NAME = 'financeai-v17'; // v17 : résolution automatique des cotations (.TG -> .DE), remèdes inline et élimination définitive des clignotements sur la courbe d'accueil ; v16 : autorisation fintable.io dans CSP meta et repli résilient Fintable ; v15 : suppression définitive des clignotements et saccades de la courbe d'accueil Recharts ; v14 : synchronisation Cloud Firestore
+const CACHE_NAME = 'financeai-v18'; // v18 : projection moteur fidele sur accueil et cours exacts dans performance comparee ; v17 : proxy Yahoo Cloud Run
 const PRECACHE_URLS = ['/manifest.json', '/icon.svg'];
 
 // [CF-ACCESS] Une réponse mettable en cache doit être une réponse DIRECTE de notre origine : ni redirigée (session

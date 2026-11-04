@@ -19,6 +19,7 @@ import { useFinanceStore } from '../../store/useFinanceStore';
 import { MASKED_AMOUNT_LABEL } from '../../utils/privacyAria';
 import { useTimeChartZoom } from '../../hooks/useTimeChartZoom';
 import { ZoomContainer } from '../ui/ZoomContainer';
+import { priceAt } from '../../services/history/reconstructPortfolioHistory';
 
 export type PeriodeGraphe = '1M' | '3M' | '6M' | 'ALL';
 const PERIODES: ReadonlyArray<{ id: PeriodeGraphe; libelle: string }> = [
@@ -151,6 +152,7 @@ export const PerformanceComparee: React.FC<Props> = ({ donnees, series, selectio
     // [PRIVACY-RATIOS-DUREES-UNIFORMES] La variation du TOTAL et de chaque COMPTE est un ratio perso : masquée en
     // mode discret. Celle d'un TITRE est une variation de prix de marché (décision de Marc : laissée visible).
     const isPrivacyMode = useFinanceStore((s) => s.isPrivacyMode);
+    const assets = useFinanceStore((s) => s.assets);
     const decor = useMemo(() => {
         let i = 0;
         return new Map(series.map((s) => {
@@ -161,10 +163,40 @@ export const PerformanceComparee: React.FC<Props> = ({ donnees, series, selectio
     const donneesParDate = useMemo(() => new Map(donnees.map((d) => [String(d.date), d])), [donnees]);
     const totaux = series.filter((s) => decor.get(s.id)?.total).sort((a, b) => (decor.get(a.id)!.ordre - decor.get(b.id)!.ordre));
     const titres = series.filter((s) => !decor.get(s.id)?.total);
-    const lignes = useMemo(() => toPerformanceRows(donnees, new Set(series.map((s) => s.id))), [donnees, series]);
+
+    // [INVEST-PRIX-TITRES-EXACTS] Pour un titre individuel (action, ETF, crypto), la courbe et sa
+    // variation doivent refléter la performance réelle de son cours de marché (insensible aux achats DCA).
+    // Les totaux de comptes (TOTAL, CELI, REER...) conservent leur valeur de portefeuille en CAD.
+    const donneesPerformance = useMemo(() => {
+        if (!assets || assets.length === 0 || titres.length === 0) return donnees;
+        const assetBySymbol = new Map<string, (typeof assets)[0]>();
+        for (const a of assets) {
+            if (a.symbol) assetBySymbol.set(a.symbol, a);
+            if (a.historySymbol) assetBySymbol.set(a.historySymbol, a);
+        }
+
+        return donnees.map((row) => {
+            const dateStr = String(row.date);
+            const rowCopie = { ...row };
+            for (const t of titres) {
+                const asset = assetBySymbol.get(t.id);
+                if (asset?.priceHistory && asset.priceHistory.length > 0) {
+                    const close = priceAt(asset, dateStr, 7) ?? priceAt(asset, dateStr);
+                    if (typeof close === 'number' && Number.isFinite(close) && close > 0) {
+                        rowCopie[t.id] = close;
+                    } else {
+                        rowCopie[t.id] = null as unknown as number;
+                    }
+                }
+            }
+            return rowCopie;
+        });
+    }, [donnees, assets, titres]);
+
+    const lignes = useMemo(() => toPerformanceRows(donneesPerformance, new Set(series.map((s) => s.id))), [donneesPerformance, series]);
     const zoom = useTimeChartZoom(lignes);
     const lignesVisibles = zoom.visibleData;
-    const variations = useMemo(() => new Map(series.map((s) => [s.id, variationFenetre(donnees, s.id, estSynthetique)])), [donnees, series, estSynthetique]);
+    const variations = useMemo(() => new Map(series.map((s) => [s.id, variationFenetre(donneesPerformance, s.id, estSynthetique)])), [donneesPerformance, series, estSynthetique]);
     const visibles = series.filter((s) => selection.has(s.id));
     const estPerso = (id: string) => decor.get(id)?.total === true;
     const pctSerie = (id: string, v: unknown, decimales: 0 | 1 | 2 = 1) => (isPrivacyMode && estPerso(id) ? MASKED_AMOUNT_LABEL : formatVariationPct(v, decimales));
