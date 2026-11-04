@@ -49,10 +49,14 @@ interface CeliAssetNudgeProps {
 export const CeliAssetNudge: React.FC<CeliAssetNudgeProps> = ({ onAddAsset }) => {
     const transactions = useFinanceStore(s => s.transactions);
     const assets = useFinanceStore(s => s.assets);
+    const fintableBrokerBalances = useFinanceStore(s => s.fintableBrokerBalances);
     const isTestMode = useFinanceStore(s => s.isTestMode);
     const [dismissed, setDismissed] = useState<boolean>(() => isDismissed());
 
     if (isTestMode || dismissed) return null;
+    if ((fintableBrokerBalances ?? []).some(b => b.taxRegime === 'CELI' && (Number(b.balanceCad) || 0) > 0)) {
+        return null;
+    }
 
     const status = computeCeliNudgeStatus(transactions, assets);
     if (!status.shouldShow) return null;

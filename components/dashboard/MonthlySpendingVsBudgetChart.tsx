@@ -15,7 +15,7 @@ import { useFinanceStore } from '../../store/useFinanceStore';
 import { useTodayIsoLocal } from '../../hooks/useSimulationParams';
 import { computeBudgetParity, isSavingsNature } from '../../utils/budget';
 import { lastMonths } from '../../utils/budgetSync';
-import { isSpend, spendAmountOf, isHorsComparaisonBudget, isTransferOrVirement, effectiveTransferCategory } from '../../utils/spendRules';
+import { isSpend, spendAmountOf, isHorsComparaisonBudget } from '../../utils/spendRules';
 import { monthlyConsumptionExpenses, monthlyTargetOf, computeBudgetParityScore } from '../../utils/healthRatios';
 import { formatCAD, formatCompactCAD } from '../../utils/format';
 import { maskedTick } from '../../utils/chartPrivacy';
@@ -103,7 +103,7 @@ export const MonthlySpendingVsBudgetChart: React.FC<MonthlySpendingVsBudgetChart
         const totauxParMois = new Map<string, number>(cles.map((c) => [c, 0]));
 
         for (const t of transactions) {
-            if (!isSpend(t, true) || isHorsComparaisonBudget(t)) continue;
+            if (!isSpend(t, false) || isHorsComparaisonBudget(t)) continue;
             const m = t.date?.slice(0, 7) ?? '';
             if (!totauxParMois.has(m)) continue;
             const montant = spendAmountOf(t);
@@ -124,11 +124,10 @@ export const MonthlySpendingVsBudgetChart: React.FC<MonthlySpendingVsBudgetChart
         });
     }, [transactions, dateRef, budgetMensuel, moisCourantCle]);
 
-    // Parité et score d'adhérence sur le mois courant (incluant les transferts/virements)
+    // Parité et score d'adhérence sur le mois courant (hors transferts/virements)
     const { donneesPostes, depenseMoisCourant, scoreAdherence } = useMemo(() => {
         const txMois = transactions
-            .filter((t) => (t.date?.slice(0, 7) ?? '') === moisCourantCle && isSpend(t, true))
-            .map((t) => (isTransferOrVirement(t) ? { ...t, category: effectiveTransferCategory(t) } : t));
+            .filter((t) => (t.date?.slice(0, 7) ?? '') === moisCourantCle && isSpend(t, false));
         const parity = computeBudgetParity(txMois, budgetItems);
         const score = computeBudgetParityScore(parity.actualsMap, budgetItems);
 

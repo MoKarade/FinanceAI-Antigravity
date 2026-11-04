@@ -11,7 +11,7 @@ import type { Transaction } from '../types';
 const NON_BUDGET_CATEGORIES = new Set([
     // Statuts « à classer » — même liste que STATUS_CATEGORIES (budgetSync) ; parité testée.
     'Uncategorized', 'Inconnu', 'Unknown', '', 'Non catégorisé',
-    'Transfert', 'Investissement',
+    'Transfert', 'Virement', 'Virements', 'Investissement',
     'Salaire', 'Revenus divers', // revenus : jamais des postes de dépense
     // Impôts : un règlement d'impôt N'EST PAS de la consommation — le revenu projeté est déjà
     // NET (le compter en poste gonflerait baseMonthlyExpenses → double-comptage vs revenu net ;
@@ -67,13 +67,10 @@ export const effectiveTransferCategory = (t: Transaction): string => {
 };
 
 /** Une ligne compte-t-elle dans les DÉPENSES d'un poste (sortie, ou crédit qui les réduit) ? */
-export const isSpend = (t: Transaction, includeTransfers = false): boolean => {
-    if (t.isDuplicate) return false;
-    if (!includeTransfers && t.isTransfer) return false;
-    const cat = includeTransfers && isTransferOrVirement(t)
-        ? effectiveTransferCategory(t)
-        : (t.category ?? '');
-    if (NON_BUDGET_CATEGORIES.has(cat) && !(includeTransfers && (cat === 'Transfert' || cat === 'Virement' || cat === 'Virements'))) {
+export const isSpend = (t: Transaction, _includeTransfers = false): boolean => {
+    if (t.isDuplicate || t.isTransfer || isTransferOrVirement(t)) return false;
+    const cat = (t.category ?? '').trim();
+    if (NON_BUDGET_CATEGORIES.has(cat)) {
         return false;
     }
     return t.amount < 0 || isCreditBack(t);

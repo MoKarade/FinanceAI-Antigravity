@@ -19,7 +19,6 @@ import {
     spendAmountOf,
     isHorsComparaisonBudget,
     isTransferOrVirement,
-    effectiveTransferCategory,
 } from './spendRules';
 
 
@@ -106,7 +105,7 @@ export const historicalMonthlyAverage = (
     transactions: Transaction[],
     category: string,
     ref: Date = new Date(),
-    includeTransfers = false,
+    _includeTransfers = false,
 ): number => {
     const months = fullHistoryMonths(transactions, ref);
     const inWindow = new Set(months);
@@ -114,9 +113,8 @@ export const historicalMonthlyAverage = (
     const current = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, '0')}`;
     let total = 0;
     for (const t of transactions) {
-        if (!isSpend(t, includeTransfers)) continue;
-        const cat = includeTransfers && isTransferOrVirement(t) ? effectiveTransferCategory(t) : t.category;
-        if (cat !== category) continue;
+        if (!isSpend(t, false)) continue;
+        if (t.category !== category) continue;
         const m = t.date?.slice(0, 7) ?? '';
         // Repli « mois courant seul » : STRICTEMENT le mois courant — jamais une transaction
         // datée dans le futur (import erroné/planifié — finding panel).
@@ -135,7 +133,7 @@ export const historicalMonthlyAverage = (
 export function computeMonthlyActualAverages(
     transactions: Transaction[],
     ref: Date = new Date(),
-    includeTransfers = false,
+    _includeTransfers = false,
 ): {
     /** Moyenne de TOUTES les sorties (impôts inclus) — assiette complète, celle de `TaxCenter`. */
     expenseAvg: number;
@@ -163,12 +161,10 @@ export function computeMonthlyActualAverages(
     const creditCatCredit = new Map<string, number>();
     const bump = (m: Map<string, number>, k: string, v: number): void => { m.set(k, (m.get(k) ?? 0) + v); };
     for (const t of transactions) {
-        if ((!includeTransfers && t.isTransfer) || t.isDuplicate) continue;
+        if (t.isTransfer || isTransferOrVirement(t) || t.isDuplicate) continue;
         const m = t.date?.slice(0, 7) ?? '';
         if (!inWindow.has(m)) continue;
-        const cat = includeTransfers && isTransferOrVirement(t)
-            ? effectiveTransferCategory(t)
-            : (t.category ?? '');
+        const cat = t.category ?? '';
         if (t.amount < 0) {
             if (CREDIT_BACK_CATEGORIES.has(cat)) bump(creditCatSpend, cat, Math.abs(t.amount));
             else {
@@ -225,16 +221,18 @@ export function syncBudgetWithTransactionCategories(
     transactions: Transaction[],
     budgetItems: BudgetCategory[],
     ref: Date = new Date(),
-    includeTransfers = false,
+    _includeTransfers = false,
 ): BudgetSyncResult {
     if (!transactions || transactions.length === 0) {
         return { items: budgetItems, added: [], removed: [], renamed: [], refreshedCount: 0, changed: false };
     }
     const observed = new Set<string>();
     for (const t of transactions) {
-        if (isSpend(t, includeTransfers)) {
-            const cat = includeTransfers && isTransferOrVirement(t) ? effectiveTransferCategory(t) : t.category;
-            if (cat) observed.add(cat);
+        if (isSpend(t, false)) {
+            const cat = (t.category ?? '').trim();
+            if (cat && cat !== 'Transfert' && cat !== 'Virement' && cat !== 'Virements') {
+                observed.add(cat);
+            }
         }
     }
 
@@ -246,7 +244,7 @@ export function syncBudgetWithTransactionCategories(
         .filter(item => observed.has(item.name))
         .map(item => {
             if (item.autoTarget !== true) return item;
-            const target = historicalMonthlyAverage(transactions, item.name, ref, includeTransfers);
+            const target = historicalMonthlyAverage(transactions, item.name, ref, false);
             if (target === item.target) return item;
             refreshedCount++;
             return { ...item, target };
@@ -279,7 +277,7 @@ export function syncBudgetWithTransactionCategories(
             // Réglages préservés, nom canonique ; une cible AUTO est recalculée SOUS LE NOUVEAU
             // nom dès cette passe (finding panel : sinon elle garde une passe de retard).
             const renamedItem = carrier.autoTarget === true
-                ? { ...carrier, name: cat, target: historicalMonthlyAverage(transactions, cat, ref, includeTransfers) }
+                ? { ...carrier, name: cat, target: historicalMonthlyAverage(transactions, cat, ref, false) }
                 : { ...carrier, name: cat };
             renamed.push(renamedItem);
             renamedLabels.push(`${carrier.name} → ${cat}`);
@@ -289,7 +287,7 @@ export function syncBudgetWithTransactionCategories(
         newItems.push({
             id: `cat_${Date.now()}_${seq++}`,
             name: cat,
-            target: historicalMonthlyAverage(transactions, cat, ref, includeTransfers),
+            target: historicalMonthlyAverage(transactions, cat, ref, false),
             frequency: 'Monthly',
             type: 'Commun',
             nature: SAVINGS_CATEGORIES.has(cat) ? 'Epargne' : NEED_CATEGORIES.has(cat) ? 'Besoin' : 'Envie',
@@ -362,7 +360,7 @@ export function buildMonthlyLedger(
     expenseCategories: string[],
     monthCount = 12,
     ref: Date = new Date(),
-    includeTransfers = false,
+    _includeTransfers = false,
 ): MonthlyLedger {
     const months = lastMonths(monthCount, ref);
     const index = new Map(months.map((m, i) => [m, i]));
@@ -378,12 +376,10 @@ export function buildMonthlyLedger(
     const totalIncomeByMonth = months.map(() => 0);
 
     for (const t of transactions) {
-        if ((!includeTransfers && t.isTransfer) || t.isDuplicate) continue;
+        if (t.isTransfer || isTransferOrVirement(t) || t.isDuplicate) continue;
         const mi = index.get(t.date?.slice(0, 7) ?? '');
         if (mi === undefined) continue;
-        const effectiveCat = includeTransfers && isTransferOrVirement(t)
-            ? effectiveTransferCategory(t)
-            : t.category;
+        const effectiveCat = t.category;
         if (t.amount < 0) {
             totalExpenseByMonth[mi] += Math.abs(t.amount);
             // [BUDGET-MATCH-UNIFY] Attribution tx→poste par la MÊME règle que le réel
@@ -394,8 +390,7 @@ export function buildMonthlyLedger(
             // VISIBLE — sinon Σ(lignes) < Total dépenses sans explication (finding panel).
             let cat = resolved.get(effectiveCat);
             if (cat === undefined) {
-                cat = matchCategoryToName(effectiveCat, expenseCategories)
-                    ?? (includeTransfers && isTransferOrVirement(t) ? effectiveCat : 'Autres / non classées');
+                cat = matchCategoryToName(effectiveCat, expenseCategories) ?? 'Autres / non classées';
                 resolved.set(effectiveCat, cat);
             }
             if (!expense.has(cat)) expense.set(cat, months.map(() => 0));

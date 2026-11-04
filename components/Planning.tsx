@@ -196,10 +196,8 @@ export const Planning: React.FC<PlanningProps> = ({ transactions, apiKey }) => {
                             <span className="w-1.5 h-1.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
                             <span>ABOS:CAD · CHARGES FIXES</span>
                         </span>
-                        <span className="gf-badge-nouvelle">Beta</span>
                     </div>
                     <h2 className="text-[17px] lg:text-[18px] font-semibold text-ink-50">Charges fixes et abonnements</h2>
-                    <p className="text-ink-300 text-body">Abonnements & Factures Récurrentes.</p>
                 </div>
                 <div className="gf-quote-strip w-full md:w-auto grid grid-cols-2 rounded-xl border border-bordure bg-fond">
                     <div className="gf-quote-cell text-right px-4 py-2.5">

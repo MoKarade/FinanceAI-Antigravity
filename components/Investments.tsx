@@ -665,20 +665,6 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                 <span className="w-1.5 h-1.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
                                 PORTFOLIO:CAD · MARCHÉS
                             </span>
-                            <span className="inline-flex items-center gap-1 font-semibold text-ink-200">
-                                <span aria-hidden="true" className="font-bold tracking-tight select-none">
-                                    <span className="gf-logo-b">F</span>
-                                    <span className="gf-logo-r">i</span>
-                                    <span className="gf-logo-y">n</span>
-                                    <span className="gf-logo-b">a</span>
-                                    <span className="gf-logo-g">n</span>
-                                    <span className="gf-logo-r">c</span>
-                                    <span className="gf-logo-y">e</span>
-                                    <span className="gf-logo-b">A</span>
-                                    <span className="gf-logo-g">I</span>
-                                </span>
-                                <span className="gf-badge-nouvelle">Beta</span>
-                            </span>
                         </span>
                     }
                 />
@@ -800,20 +786,6 @@ export const Investments: React.FC<InvestmentsProps> = ({
                             <span className="w-1.5 h-1.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
                             PORTFOLIO:CAD · MARCHÉS
                         </span>
-                        <span className="inline-flex items-center gap-1 font-semibold text-ink-200">
-                            <span aria-hidden="true" className="font-bold tracking-tight select-none">
-                                <span className="gf-logo-b">F</span>
-                                <span className="gf-logo-r">i</span>
-                                <span className="gf-logo-y">n</span>
-                                <span className="gf-logo-b">a</span>
-                                <span className="gf-logo-g">n</span>
-                                <span className="gf-logo-r">c</span>
-                                <span className="gf-logo-y">e</span>
-                                <span className="gf-logo-b">A</span>
-                                <span className="gf-logo-g">I</span>
-                            </span>
-                            <span className="gf-badge-nouvelle">Beta</span>
-                        </span>
                     </span>
                 }
                 nav={
@@ -891,10 +863,8 @@ export const Investments: React.FC<InvestmentsProps> = ({
             {/* [CELI-ASSET-NUDGE] virements CELI détectés mais aucun avoir CELI saisi → CELI affiché 0. */}
             <CeliAssetNudge onAddAsset={() => setShowAddStockForm(true)} />
 
-            {/* [FINTABLE-6 Lot 2] Le total du COURTIER fait autorité (demande Marc) : solde Fintable
-                par panier fiscal + écart explicite avec les titres saisis + fraîcheur. Ship dark
-                tant que la sync Fintable n'a jamais tourné. */}
-            <BrokerReconciliationCard variant="full" />
+            {/* [FINTABLE-6 Lot 2] Le total du COURTIER fait autorité (demande Marc) : affiché en mode compact sur Vue d'ensemble et complet dans Détail. */}
+            <BrokerReconciliationCard variant={subTab === 'detail' ? 'full' : 'compact'} />
 
             <div key={subTab} role="tabpanel" id={panelId('placements', subTab)} aria-labelledby={tabId('placements', subTab)} tabIndex={0} className="space-y-5 focus-ring rounded-card animate-tab-in stagger-in">
 

@@ -365,7 +365,7 @@ export const FutureKpiStrip: React.FC<{
                 cibleOnglet={Tab.BUDGET}
                 onClick={() => setActiveTab(Tab.BUDGET)}
             />
-            {ligneVariation && <div className="col-span-full -mt-1 pt-1 border-t border-bordure flex items-center justify-between flex-wrap gap-2">{ligneVariation}<span className="gf-badge-nouvelle">FinanceAI Quote</span></div>}
+            {ligneVariation && <div className="col-span-full -mt-1 pt-1 border-t border-bordure flex items-center justify-between flex-wrap gap-2">{ligneVariation}</div>}
         </section>
     );
 };

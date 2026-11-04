@@ -54,7 +54,17 @@ export function computeDossierRichness(candidate: Partial<AppState> | null | und
     if (!candidate) return 0;
     if (isTestPersonaState(candidate as Record<string, unknown>)) return 0;
     if (isStarterTemplateState(candidate)) return 0;
-    const assetsCount = (candidate.assets ?? []).length;
+    const assets = candidate.assets ?? [];
+    const assetsCount = assets.length;
+    const avgHistoryPts =
+        assetsCount > 0
+            ? Math.min(
+                  500,
+                  Math.floor(
+                      assets.reduce((acc, a) => acc + (a?.priceHistory?.length ?? 0), 0) / assetsCount,
+                  ),
+              )
+            : 0;
     const txCount = (candidate.transactions ?? []).length;
     const budgetCount = (candidate.budgetItems ?? []).length;
     const immoCount = (candidate.realEstateGoals ?? []).length;
@@ -64,6 +74,7 @@ export function computeDossierRichness(candidate: Partial<AppState> | null | und
         ((candidate.brokerLedger ?? []).length > 0 ? 2 : 0);
     return (
         assetsCount * 100 +
+        avgHistoryPts +
         txCount +
         budgetCount * 20 +
         immoCount * 50 +

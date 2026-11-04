@@ -243,8 +243,13 @@ export function packWorkspacePayloadForFirestore(
     statePayload: Record<string, unknown>,
     options: { transactionsSharded?: boolean } = {},
 ): Record<string, unknown> {
-    let compact = buildCompactFirestoreClone(statePayload, 30, null);
+    let compact = buildCompactFirestoreClone(statePayload, 600, null);
     let serialized = JSON.stringify(compact);
+
+    if (measureUtf8Bytes(serialized) > FIRESTORE_MAX_SAFE_UTF8_BYTES) {
+        compact = buildCompactFirestoreClone(statePayload, 180, null);
+        serialized = JSON.stringify(compact);
+    }
 
     if (measureUtf8Bytes(serialized) > FIRESTORE_MAX_SAFE_UTF8_BYTES) {
         compact = buildCompactFirestoreClone(statePayload, 0, null);

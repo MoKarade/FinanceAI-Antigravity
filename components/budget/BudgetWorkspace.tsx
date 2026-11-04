@@ -91,7 +91,6 @@ export const BudgetWorkspace: React.FC<BudgetWorkspaceProps> = ({
                             <span className="w-1.5 h-1.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
                             <span>BUDGET:CAD · TRÉSORERIE</span>
                         </span>
-                        <span className="gf-badge-nouvelle">Beta</span>
                     </span>
                 }
                 nav={

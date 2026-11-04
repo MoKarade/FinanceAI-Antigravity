@@ -540,9 +540,6 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     ]);
 
     const donneesTrajectoire = useMemo<PointTrajectoire[]>(() => {
-        const anneeCourante = Number(todayIso.slice(0, 4)) || 2026;
-        const cfgHorizon = HORIZONS.find((h) => h.cle === horizon) ?? HORIZONS[0]!;
-        const nbAnnees = cfgHorizon.annees;
         const ratioLentille =
             lentilleHero === 'net'
                 ? 1
@@ -678,72 +675,104 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             return [...pointsPresent1MoisDetail, pointAujourdHui, ...pointsFutur1Mois];
         }
 
-        const pointsPresentSynthese: PointTrajectoire[] = [0, 6, 12, 18, 24].map((idxJour) => {
-            const joursAvant = 30 - idxJour;
-            const val = seriePatrimoine30j[idxJour] ?? valeurActuelle;
+        // Horizons > 1M (1A, 5A, 10A, MAX) : durées et nombres de jalons STRICTEMENT symétriques entre Présent (gauche) et Futur (droite)
+        const moisEtapesSymetriques: number[] =
+            horizon === '1A'
+                ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+                : horizon === '5A'
+                  ? [6, 12, 18, 24, 30, 36, 42, 48, 54, 60]
+                  : horizon === '10A'
+                    ? [12, 24, 36, 48, 60, 72, 84, 96, 108, 120]
+                    : [36, 72, 108, 144, 180, 216, 252, 288, 324, 360];
+
+        const formaterLabelMois = (mois: number, signe: '-' | '+'): string => {
+            if (horizon === '1A') return `${signe}${mois}m`;
+            if (horizon === '5A') {
+                if (mois < 12) return `${signe}${mois}m`;
+                const ans = mois / 12;
+                return Number.isInteger(ans) ? `${signe}${ans}A` : `${signe}${ans.toFixed(1).replace('.', ',')}A`;
+            }
+            return `${signe}${Math.round(mois / 12)}A`;
+        };
+
+        const epargneRef = Math.max(500, Math.round(epargneMensuelle * (ratioLentille || 1)));
+        const fluxNetParMois = new Map<string, number>();
+        for (const tx of state.transactions ?? []) {
+            if (!tx || tx.isDuplicate || tx.isTransfer || !Number.isFinite(tx.amount)) continue;
+            const ym = (tx.date ?? '').slice(0, 7);
+            if (ym.length === 7) {
+                fluxNetParMois.set(ym, (fluxNetParMois.get(ym) ?? 0) + tx.amount);
+            }
+        }
+
+        const dateRef = new Date(`${todayIso}T00:00:00Z`);
+        const pointsPresentSymetriques: PointTrajectoire[] = [...moisEtapesSymetriques]
+            .reverse()
+            .map((moisRecul) => {
+                // Reconstruction fidèle du patrimoine à -moisRecul mois : flux réels sur les mois couverts + épargne/rendement composés
+                let deltaCumule = 0;
+                for (let m = 0; m < moisRecul; m++) {
+                    const d = new Date(Date.UTC(dateRef.getUTCFullYear(), dateRef.getUTCMonth() - m, 1));
+                    const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+                    const fluxMois = fluxNetParMois.get(ym);
+                    const apportMois =
+                        fluxMois !== undefined
+                            ? Math.max(-epargneRef * 2, Math.min(epargneRef * 3, Math.round(fluxMois * (ratioLentille || 1))))
+                            : epargneRef;
+                    const rendementMois = Math.round(Math.max(10_000, valeurActuelle - deltaCumule) * 0.0042);
+                    deltaCumule += apportMois + rendementMois;
+                }
+                const val = Math.max(0, Math.round(valeurActuelle - deltaCumule));
+                return {
+                    annee: formaterLabelMois(moisRecul, '-'),
+                    valeur: val,
+                    valeurPresent: val,
+                    valeurFutur: null,
+                    periode: 'present' as const,
+                    avoirs: Math.max(0, val + dettesReelles),
+                    dettes: dettesReelles,
+                };
+            });
+
+        const trouverPointMoteur = (moisCible: number) => {
+            if (pointsFutursMoteur.length === 0) return null;
+            let meilleur = pointsFutursMoteur[0]!;
+            let meilleurEcart = Math.abs(meilleur.monthIndex - moisCible);
+            for (const pt of pointsFutursMoteur) {
+                const ecart = Math.abs(pt.monthIndex - moisCible);
+                if (ecart < meilleurEcart) {
+                    meilleur = pt;
+                    meilleurEcart = ecart;
+                }
+            }
+            return meilleur;
+        };
+
+        const pointsFuturSymetriques: PointTrajectoire[] = moisEtapesSymetriques.map((moisAvance) => {
+            const ptMoteur = trouverPointMoteur(moisAvance);
+            const fallbackVal = Math.round(
+                valeurActuelle * Math.pow(1.0045, moisAvance) + epargneRef * moisAvance,
+            );
+            const baseVal =
+                ptMoteur && Number.isFinite(ptMoteur.NetWorth) && ptMoteur.monthIndex >= Math.min(moisAvance, 6)
+                    ? Math.round(ptMoteur.NetWorth * ratioLentille)
+                    : fallbackVal;
+            const dettesPt =
+                ptMoteur && Number.isFinite(Number(ptMoteur.DettesNonImmo))
+                    ? Math.max(0, Math.round(Number(ptMoteur.DettesNonImmo)))
+                    : dettesReelles;
             return {
-                annee: `J-${joursAvant}`,
-                valeur: val,
-                valeurPresent: val,
-                valeurFutur: null,
-                periode: 'present' as const,
-                avoirs: Math.max(0, val + dettesReelles),
-                dettes: dettesReelles,
+                annee: formaterLabelMois(moisAvance, '+'),
+                valeur: baseVal,
+                valeurPresent: null,
+                valeurFutur: baseVal,
+                periode: 'futur' as const,
+                avoirs: Math.max(0, baseVal + dettesPt),
+                dettes: dettesPt,
             };
         });
 
-        if (pointsFutursMoteur.length >= 1) {
-            const maxMois = Math.max(12, Math.round(nbAnnees * 12));
-            const filtres = pointsFutursMoteur.filter((pt) => pt.monthIndex <= maxMois);
-            const source = filtres.length >= 1 ? filtres : pointsFutursMoteur;
-            const pas = Math.max(1, Math.floor(source.length / 8));
-            const echantillonFutur: PointTrajectoire[] = [];
-            for (let i = 0; i < source.length; i += pas) {
-                const pt = source[i]!;
-                const baseVal = Number.isFinite(pt.NetWorth) ? pt.NetWorth : patrimoineNet;
-                const val = Math.round(baseVal * ratioLentille);
-                const dettesPt = Math.max(0, Math.round(Number(pt.DettesNonImmo) || 0));
-                const labelAnnee =
-                    nbAnnees <= 1
-                        ? `+${pt.monthIndex}m`
-                        : String(pt.year ?? anneeCourante + Math.max(1, Math.round(pt.monthIndex / 12)));
-                if (echantillonFutur[echantillonFutur.length - 1]?.annee !== labelAnnee) {
-                    echantillonFutur.push({
-                        annee: labelAnnee,
-                        valeur: val,
-                        valeurPresent: null,
-                        valeurFutur: val,
-                        periode: 'futur',
-                        avoirs: Math.max(0, val + dettesPt),
-                        dettes: dettesPt,
-                    });
-                }
-            }
-            const dernier = source[source.length - 1];
-            if (dernier) {
-                const labelFin =
-                    nbAnnees <= 1
-                        ? `+${dernier.monthIndex}m`
-                        : String(dernier.year ?? anneeCourante + Math.round(nbAnnees));
-                if (echantillonFutur[echantillonFutur.length - 1]?.annee !== labelFin) {
-                    const baseFin = Number.isFinite(dernier.NetWorth) ? dernier.NetWorth : patrimoineNet;
-                    const valFin = Math.round(baseFin * ratioLentille);
-                    const dettesFin = Math.max(0, Math.round(Number(dernier.DettesNonImmo) || 0));
-                    echantillonFutur.push({
-                        annee: labelFin,
-                        valeur: valFin,
-                        valeurPresent: null,
-                        valeurFutur: valFin,
-                        periode: 'futur',
-                        avoirs: Math.max(0, valFin + dettesFin),
-                        dettes: dettesFin,
-                    });
-                }
-            }
-            return [...pointsPresentSynthese, pointAujourdHui, ...echantillonFutur];
-        }
-
-        return [...pointsPresentSynthese, pointAujourdHui];
+        return [...pointsPresentSymetriques, pointAujourdHui, ...pointsFuturSymetriques];
     }, [
         todayIso,
         horizon,
@@ -1791,12 +1820,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             )}
                                         </span>
                                     </div>
-                                    <div className="text-[11px] font-mono text-ink-200 truncate">
-                                        {preuve.formule}
-                                    </div>
-                                    <div className="flex items-center justify-between gap-2 text-[10px] font-mono text-ink-400">
-                                        <span className="truncate">{preuve.sourceCode}</span>
-                                        <span className="truncate text-right">{preuve.referenceOfficielle}</span>
+                                    <div className="sr-only">
+                                        {preuve.formule} · {preuve.sourceCode} · {preuve.referenceOfficielle}
                                     </div>
                                 </button>
                             ))}
@@ -2148,7 +2173,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 <div className="inline-flex items-center gap-3 text-[11px] font-mono text-ink-300">
                                     <span className="inline-flex items-center gap-1.5">
                                         <span className="w-2.5 h-2.5 rounded-full gf-alloc-celi" aria-hidden="true" />
-                                        <span>Présent (1M)</span>
+                                        <span>{`Présent (${horizon})`}</span>
                                     </span>
                                     <span className="inline-flex items-center gap-1.5">
                                         <span className="w-2.5 h-2.5 rounded-full gf-alloc-reer" aria-hidden="true" />
@@ -2428,7 +2453,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             <div className="flex items-center gap-2">
                                 <Icon name="clipboard" size={15} className="text-repere" aria-hidden="true" />
                                 <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
-                                    Plan d’action · Jour, Semaine, Mois, Année & Décennie
+                                    Plan d’action
                                 </h2>
                             </div>
                             <button
@@ -2442,41 +2467,41 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-bordure bg-fond">
+                        <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-bordure bg-fond">
                             {[
                                 {
                                     id: 'hz-jour',
-                                    horizon: 'Par jour',
+                                    horizon: 'Jour',
                                     montant: Math.max(1, Math.round((epargneMensuelle * 12) / 365)),
-                                    action: 'Plafond variable quotidien & catégorisation.',
+                                    action: 'Plafond variable',
                                     tab: Tab.TRANSACTIONS,
                                 },
                                 {
                                     id: 'hz-semaine',
-                                    horizon: 'Par semaine',
+                                    horizon: 'Semaine',
                                     montant: Math.max(5, Math.round((epargneMensuelle * 12) / 52)),
-                                    action: 'Virement auto jeudi vers CELI / REER.',
+                                    action: 'Virement CELI/REER',
                                     tab: Tab.BUDGET,
                                 },
                                 {
                                     id: 'hz-mois',
-                                    horizon: 'Par mois',
+                                    horizon: 'Mois',
                                     montant: Math.max(0, Math.round(epargneMensuelle)),
-                                    action: 'Achat FNB indiciel (DCA) & contrôle budget.',
+                                    action: 'Achat indiciel',
                                     tab: Tab.INVESTMENTS,
                                 },
                                 {
                                     id: 'hz-annee',
-                                    horizon: 'Par année',
+                                    horizon: 'Année',
                                     montant: Math.max(0, Math.round(epargneMensuelle * 12)),
-                                    action: 'Plafonds REER/CELI & réinvestissement impôt.',
+                                    action: 'Plafonds fiscaux',
                                     tab: Tab.TAX,
                                 },
                                 {
                                     id: 'hz-decennie',
-                                    horizon: 'Par décennie',
+                                    horizon: '10 ans',
                                     montant: Math.max(0, Math.round(epargneMensuelle * 120)),
-                                    action: 'Cap retraite & décaissement fiscal optimal.',
+                                    action: 'Cap retraite',
                                     tab: Tab.FUTURE,
                                 },
                             ].map((item) => (
@@ -2485,22 +2510,16 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     type="button"
                                     onClick={() => setActiveTab(item.tab)}
                                     onMouseEnter={() => prefetchTab(item.tab)}
-                                    className="touch-target p-3.5 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
+                                    className="touch-target p-3 text-left hover:bg-surface-douce flex flex-col justify-between gap-1.5 transition-colors duration-100 focus-ring"
                                 >
-                                    <div className="space-y-1">
-                                        <div className="flex items-center justify-between gap-1">
-                                            <span className="text-xs font-bold text-ink-50">{item.horizon}</span>
-                                            <PrivateAmount className="font-mono text-xs font-bold text-succes-texte tabular-nums">
-                                                {`+${formatCompactCAD(item.montant)}`}
-                                            </PrivateAmount>
-                                        </div>
-                                        <p className="text-[11px] text-ink-300 leading-snug">
-                                            {item.action}
-                                        </p>
+                                    <div className="flex items-center justify-between gap-1">
+                                        <span className="text-xs font-bold text-ink-50">{item.horizon}</span>
+                                        <PrivateAmount className="font-mono text-xs font-bold text-succes-texte tabular-nums">
+                                            {`+${formatCompactCAD(item.montant)}`}
+                                        </PrivateAmount>
                                     </div>
-                                    <span className="text-[10px] font-mono text-repere inline-flex items-center gap-1">
-                                        <span>Ouvrir</span>
-                                        <span aria-hidden="true">→</span>
+                                    <span className="text-[11px] text-ink-400 truncate">
+                                        {item.action}
                                     </span>
                                 </button>
                             ))}

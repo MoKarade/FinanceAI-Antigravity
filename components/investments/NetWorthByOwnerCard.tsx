@@ -84,7 +84,7 @@ export const NetWorthByOwnerCard: React.FC<NetWorthByOwnerCardProps> = ({ assets
                     </li>
                 ))}
             </ul>
-            <p className="text-meta leading-[18px] text-ink-400">
+            <p className="sr-only">
                 CELI, REER et CELIAPP sont individuels ; le non-enregistré et le cash peuvent être communs.
             </p>
 

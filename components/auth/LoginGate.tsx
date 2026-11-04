@@ -96,11 +96,18 @@ export function LoginGate({ children }: LoginGateProps): React.ReactElement {
     return (
         <div className="min-h-screen flex items-center justify-center bg-dark px-4">
             <div className="w-full max-w-sm text-center space-y-6">
-                <div className="space-y-2">
-                    <h1 className="text-2xl font-semibold text-white">FinanceAI</h1>
+                <div className="space-y-3">
+                    <img
+                        src="/icon.svg"
+                        alt=""
+                        width={44}
+                        height={44}
+                        className="w-11 h-11 rounded-xl mx-auto shadow-sm"
+                        aria-hidden="true"
+                    />
+                    <h1 className="sr-only">FinanceAI</h1>
                     <p className="text-meta text-ink-200 leading-snug">
-                        Connecte-toi avec Google pour retrouver tes données sur tous tes appareils,
-                        automatiquement.
+                        Connecte-toi avec Google pour synchroniser tes données sur tous tes appareils.
                     </p>
                 </div>
 

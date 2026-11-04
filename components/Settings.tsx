@@ -150,17 +150,6 @@ export const Settings: React.FC<SettingsProps> = ({
             <span className="w-1.5 h-1.5 rounded-full bg-current gf-pulse-live" aria-hidden="true" />
             CONFIG:GOOGLE · CLOUD &amp; IA
           </span>
-          <span aria-hidden="true" className="font-bold tracking-tight select-none text-xs">
-            <span className="gf-logo-b">F</span>
-            <span className="gf-logo-r">i</span>
-            <span className="gf-logo-y">n</span>
-            <span className="gf-logo-b">a</span>
-            <span className="gf-logo-g">n</span>
-            <span className="gf-logo-r">c</span>
-            <span className="gf-logo-y">e</span>
-            <span className="gf-logo-b">A</span>
-            <span className="gf-logo-g">I</span>
-          </span>
         </span>
       }
       actions={
