@@ -1,7 +1,7 @@
 import React, { Suspense, useMemo, useState } from 'react';
 import {
     ComposedChart,
-    Bar,
+    CartesianGrid,
     Area,
     Line,
     ReferenceLine,
@@ -367,6 +367,33 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         const cash = Math.max(0, Math.round(liquidites));
 
         const agregerHistoriqueCompte = (filtre: (type: string) => boolean, valeurCourante: number, partEpargne: number): string => {
+            if (valeurCourante <= 0) {
+                return '0,11 48,11';
+            }
+            // 1. Priorité à l'historique réel daté des soldes courtiers Fintable (ex: Disnat CAD + USD sur 30j)
+            const histCourtier = (state.fintableBrokerHistory ?? []).filter((b) =>
+                filtre(String(b.taxRegime ?? 'NON-ENREG').toUpperCase()),
+            );
+            if (histCourtier.length >= 2) {
+                const parInstant = new Map<number, number>();
+                for (const entree of histCourtier) {
+                    const t = Number(entree.at) || 0;
+                    const v = Number(entree.balanceCad) || 0;
+                    if (t > 0 && Number.isFinite(v)) {
+                        parInstant.set(t, (parInstant.get(t) ?? 0) + v);
+                    }
+                }
+                const instantsTries = [...parInstant.entries()]
+                    .sort((a, b) => a[0] - b[0])
+                    .map(([, somme]) => somme);
+                if (instantsTries.length >= 2) {
+                    return construireSparklineReelle(
+                        construireSerie1Mois(valeurCourante, [...instantsTries, valeurCourante], 0),
+                    );
+                }
+            }
+
+            // 2. Sinon, agrégation des séries de prix des titres du compte
             const actifsCompte = (state.assets ?? []).filter((a) => filtre(String(a.accountType ?? '').toUpperCase()));
             const seriesActifs = actifsCompte
                 .map((a) => {
@@ -398,13 +425,13 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             return construireSparklineReelle(serieCompte);
         };
 
-        // Série 1 mois de l'encaisse reconstituée jour par jour à partir des transactions des 30 derniers jours
+        // Série 1 mois de l'encaisse reconstituée jour par jour à partir des transactions des 30 derniers jours (hors doublons et virements internes)
         const serieCash30Jours = (() => {
             const aujMs = Date.parse(`${todayIso}T12:00:00Z`) || Date.now();
             const txs = state.transactions ?? [];
             const fluxParJour = new Array<number>(30).fill(0);
             for (const tx of txs) {
-                if (tx.isDuplicate || !Number.isFinite(tx.amount)) continue;
+                if (tx.isDuplicate || tx.isTransfer || !Number.isFinite(tx.amount)) continue;
                 const txMs = Date.parse(`${tx.date.slice(0, 10)}T12:00:00Z`);
                 if (!Number.isFinite(txMs)) continue;
                 const diffJours = Math.floor((aujMs - txMs) / 86_400_000);
@@ -425,7 +452,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             return soldes;
         })();
 
-        return [
+        const listeBrute: IndiceCompte[] = [
             {
                 id: 'idx-celi',
                 ticker: 'CELI',
@@ -471,9 +498,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 poidsPct: Math.round((immo / base) * 100),
                 positif: immo > 0,
                 couleurTrait: 'var(--gf-ambre)',
-                pointsSparkline: construireSparklineReelle(
-                    construireSerie1Mois(immo, [], Math.max(250, Math.round(immo * 0.0035))),
-                ),
+                pointsSparkline:
+                    immo > 0
+                        ? construireSparklineReelle(
+                              construireSerie1Mois(immo, [], Math.max(250, Math.round(immo * 0.0035))),
+                          )
+                        : '0,11 48,11',
                 tab: Tab.REAL_ESTATE,
             },
             {
@@ -488,7 +518,26 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 tab: Tab.BUDGET,
             },
         ];
-    }, [totalAvoirs, assetBreakdown, realEstateEquity, liquidites, state.assets, state.fxRates, state.transactions, todayIso, epargneMensuelle]);
+
+        // Affiche toujours les comptes actifs (valeur > 0) en premier sur mobile pour éviter deux cartes à 0 $ en tête d'écran
+        if (listeBrute.some((item) => item.valeur > 0)) {
+            return [...listeBrute].sort(
+                (a, b) => (b.valeur > 0 ? 1 : 0) - (a.valeur > 0 ? 1 : 0) || b.valeur - a.valeur,
+            );
+        }
+        return listeBrute;
+    }, [
+        totalAvoirs,
+        assetBreakdown,
+        realEstateEquity,
+        liquidites,
+        state.assets,
+        state.fxRates,
+        state.transactions,
+        state.fintableBrokerHistory,
+        todayIso,
+        epargneMensuelle,
+    ]);
 
     const donneesTrajectoire = useMemo<PointTrajectoire[]>(() => {
         const anneeCourante = Number(todayIso.slice(0, 4)) || 2026;
@@ -505,10 +554,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         const valeurActuelle = Math.round(valeurHeroAffichee);
 
         // 1. Reconstitution fidèle des 30 derniers jours (Présent : 1 mois d'historique)
+        // Combine les flux quotidiens réels d'encaisse (hors doublons/transferts) et l'historique daté des placements
         const aujMs = Date.parse(`${todayIso}T12:00:00Z`) || Date.now();
         const flux30j = new Array<number>(30).fill(0);
         for (const tx of state.transactions ?? []) {
-            if (tx.isDuplicate || !Number.isFinite(tx.amount)) continue;
+            if (tx.isDuplicate || tx.isTransfer || !Number.isFinite(tx.amount)) continue;
             const txMs = Date.parse(`${tx.date.slice(0, 10)}T12:00:00Z`);
             if (!Number.isFinite(txMs)) continue;
             const diffJ = Math.floor((aujMs - txMs) / 86_400_000);
@@ -516,27 +566,54 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 flux30j[29 - diffJ] = (flux30j[29 - diffJ] ?? 0) + tx.amount;
             }
         }
-        const variation1Mois =
-            variation && Number.isFinite(variation.diff) && variation.diff !== 0
-                ? Math.round(variation.diff * ratioLentille)
-                : Math.round(epargneMensuelle * ( ratioLentille || 1 ));
-        const depart1Mois = Math.max(0, valeurActuelle - variation1Mois);
 
-        const pointsPresent1Mois: PointTrajectoire[] = [
-            { label: 'J-30', frac: 0 },
-            { label: 'J-20', frac: 0.33 },
-            { label: 'J-10', frac: 0.67 },
-        ].map((etape) => {
-            const val = Math.round(depart1Mois + (valeurActuelle - depart1Mois) * etape.frac);
-            return {
-                annee: etape.label,
-                valeur: val,
-                valeurPresent: val,
-                valeurFutur: null,
-                periode: 'present' as const,
-                avoirs: Math.max(0, val + dettesReelles),
-                dettes: dettesReelles,
-            };
+        // Série d'encaisse sur 30 jours (ancrée sur la liquidité actuelle au jour 29)
+        const serieCash30j = new Array<number>(30).fill(liquidites);
+        let cashCourant = liquidites;
+        for (let i = 29; i >= 1; i--) {
+            cashCourant = cashCourant - (flux30j[i] ?? 0);
+            serieCash30j[i - 1] = cashCourant;
+        }
+
+        // Série des placements sur 30 jours à partir de fintableBrokerHistory (si disponible) ou de la variation 30j
+        const valeurPlacementsActuelle = Math.max(0, portefeuilleMobilier - liquidites);
+        const seriePlacements30j = (() => {
+            const parInstant = new Map<number, number>();
+            for (const entree of state.fintableBrokerHistory ?? []) {
+                const t = Number(entree.at) || 0;
+                const v = Number(entree.balanceCad) || 0;
+                if (t > 0 && Number.isFinite(v)) {
+                    parInstant.set(t, (parInstant.get(t) ?? 0) + v);
+                }
+            }
+            const instantsTries = [...parInstant.entries()]
+                .sort((a, b) => a[0] - b[0])
+                .map(([, somme]) => somme);
+            if (instantsTries.length >= 2) {
+                return construireSerie1Mois(
+                    valeurPlacementsActuelle,
+                    [...instantsTries, valeurPlacementsActuelle],
+                    0,
+                );
+            }
+            const deltaPlacements =
+                variation && Number.isFinite(variation.diff) && variation.diff !== 0
+                    ? variation.diff - (serieCash30j[29]! - serieCash30j[0]!)
+                    : Math.round(epargneMensuelle * 0.65);
+            return construireSerie1Mois(valeurPlacementsActuelle, [], deltaPlacements);
+        })();
+
+        // Reconstruit les 30 points journaliers du patrimoine (J-29 .. Aujourd'hui), ancrés exactement sur valeurActuelle au jour 29
+        const seriePatrimoine30j = Array.from({ length: 30 }, (_, idx) => {
+            if (idx === 29) return valeurActuelle;
+            if (lentilleHero === 'immobilier') {
+                const deltaImmo = Math.round(valeurActuelle * 0.003 * ((29 - idx) / 29));
+                return Math.max(0, valeurActuelle - deltaImmo);
+            }
+            const ecartCash = (serieCash30j[idx] ?? liquidites) - liquidites;
+            const ecartPlacements =
+                (seriePlacements30j[idx] ?? valeurPlacementsActuelle) - valeurPlacementsActuelle;
+            return Math.max(0, Math.round(valeurActuelle + (ecartCash + ecartPlacements) * (ratioLentille || 1)));
         });
 
         const pointAujourdHui: PointTrajectoire = {
@@ -552,22 +629,43 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         const chartData = lastProjection?.chartData ?? [];
         const pointsFutursMoteur = chartData.filter((pt) => typeof pt.monthIndex === 'number' && pt.monthIndex > 0);
 
-        // Mode par défaut 1M : 1 mois d'historique (Présent) + 1 mois projeté (Futur : +10j, +20j, +30j)
+        // Mode par défaut 1M : courbe précise sur 1 mois d'historique (14 jalons + Aujourd'hui) et 1 mois projeté (+2j .. +1M)
         if (horizon === '1M') {
-            const premierMois = pointsFutursMoteur[0];
-            const cibleDans1Mois = premierMois && Number.isFinite(premierMois.NetWorth)
-                ? Math.round(premierMois.NetWorth * ratioLentille)
-                : Math.round(valeurActuelle + epargneMensuelle * (ratioLentille || 1));
-            const deltaFutur1M = cibleDans1Mois - valeurActuelle;
-
-            const pointsFutur1Mois: PointTrajectoire[] = [
-                { label: '+10j', frac: 0.33 },
-                { label: '+20j', frac: 0.67 },
-                { label: '+1M', frac: 1 },
-            ].map((etape) => {
-                const val = Math.round(valeurActuelle + deltaFutur1M * etape.frac);
+            const indicesJoursPasses = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28];
+            const pointsPresent1MoisDetail: PointTrajectoire[] = indicesJoursPasses.map((idxJour) => {
+                const joursAvant = 30 - idxJour;
+                const val = seriePatrimoine30j[idxJour] ?? valeurActuelle;
                 return {
-                    annee: etape.label,
+                    annee: `J-${joursAvant}`,
+                    valeur: val,
+                    valeurPresent: val,
+                    valeurFutur: null,
+                    periode: 'present' as const,
+                    avoirs: Math.max(0, val + dettesReelles),
+                    dettes: dettesReelles,
+                };
+            });
+
+            const premierMois = pointsFutursMoteur[0];
+            const epargneRef = Math.max(500, Math.round(epargneMensuelle * (ratioLentille || 1)));
+            const cibleBrute =
+                premierMois && Number.isFinite(premierMois.NetWorth)
+                    ? Math.round(premierMois.NetWorth * ratioLentille)
+                    : valeurActuelle + epargneRef;
+            // Garantit une pente future lisible vers le mois +1 (au moins l'épargne mensuelle + rendement mensuel)
+            const deltaFutur1M =
+                Math.abs(cibleBrute - valeurActuelle) >= Math.max(400, Math.round(valeurActuelle * 0.008))
+                    ? cibleBrute - valeurActuelle
+                    : Math.max(epargneRef, Math.round(valeurActuelle * 0.012));
+
+            const etapesFuturesJours = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
+            const pointsFutur1Mois: PointTrajectoire[] = etapesFuturesJours.map((jour) => {
+                const frac = jour / 30;
+                // Légère courbure composée naturelle pour distinguer visuellement la projection
+                const progression = frac * 0.85 + frac * frac * 0.15;
+                const val = Math.round(valeurActuelle + deltaFutur1M * progression);
+                return {
+                    annee: jour === 30 ? '+1M' : `+${jour}j`,
                     valeur: val,
                     valeurPresent: null,
                     valeurFutur: val,
@@ -577,21 +675,38 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 };
             });
 
-            return [...pointsPresent1Mois, pointAujourdHui, ...pointsFutur1Mois];
+            return [...pointsPresent1MoisDetail, pointAujourdHui, ...pointsFutur1Mois];
         }
+
+        const pointsPresentSynthese: PointTrajectoire[] = [0, 6, 12, 18, 24].map((idxJour) => {
+            const joursAvant = 30 - idxJour;
+            const val = seriePatrimoine30j[idxJour] ?? valeurActuelle;
+            return {
+                annee: `J-${joursAvant}`,
+                valeur: val,
+                valeurPresent: val,
+                valeurFutur: null,
+                periode: 'present' as const,
+                avoirs: Math.max(0, val + dettesReelles),
+                dettes: dettesReelles,
+            };
+        });
 
         if (pointsFutursMoteur.length >= 1) {
             const maxMois = Math.max(12, Math.round(nbAnnees * 12));
             const filtres = pointsFutursMoteur.filter((pt) => pt.monthIndex <= maxMois);
             const source = filtres.length >= 1 ? filtres : pointsFutursMoteur;
-            const pas = Math.max(1, Math.floor(source.length / 6));
+            const pas = Math.max(1, Math.floor(source.length / 8));
             const echantillonFutur: PointTrajectoire[] = [];
             for (let i = 0; i < source.length; i += pas) {
                 const pt = source[i]!;
                 const baseVal = Number.isFinite(pt.NetWorth) ? pt.NetWorth : patrimoineNet;
                 const val = Math.round(baseVal * ratioLentille);
                 const dettesPt = Math.max(0, Math.round(Number(pt.DettesNonImmo) || 0));
-                const labelAnnee = String(pt.year ?? anneeCourante + Math.max(1, Math.round(pt.monthIndex / 12)));
+                const labelAnnee =
+                    nbAnnees <= 1
+                        ? `+${pt.monthIndex}m`
+                        : String(pt.year ?? anneeCourante + Math.max(1, Math.round(pt.monthIndex / 12)));
                 if (echantillonFutur[echantillonFutur.length - 1]?.annee !== labelAnnee) {
                     echantillonFutur.push({
                         annee: labelAnnee,
@@ -606,7 +721,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             }
             const dernier = source[source.length - 1];
             if (dernier) {
-                const labelFin = String(dernier.year ?? anneeCourante + Math.round(nbAnnees));
+                const labelFin =
+                    nbAnnees <= 1
+                        ? `+${dernier.monthIndex}m`
+                        : String(dernier.year ?? anneeCourante + Math.round(nbAnnees));
                 if (echantillonFutur[echantillonFutur.length - 1]?.annee !== labelFin) {
                     const baseFin = Number.isFinite(dernier.NetWorth) ? dernier.NetWorth : patrimoineNet;
                     const valFin = Math.round(baseFin * ratioLentille);
@@ -622,11 +740,50 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     });
                 }
             }
-            return [...pointsPresent1Mois, pointAujourdHui, ...echantillonFutur];
+            return [...pointsPresentSynthese, pointAujourdHui, ...echantillonFutur];
         }
 
-        return [...pointsPresent1Mois, pointAujourdHui];
-    }, [todayIso, horizon, lentilleHero, lastProjection, patrimoineNet, valeurHeroAffichee, totalDettes, state.transactions, variation, epargneMensuelle]);
+        return [...pointsPresentSynthese, pointAujourdHui];
+    }, [
+        todayIso,
+        horizon,
+        lentilleHero,
+        lastProjection,
+        patrimoineNet,
+        valeurHeroAffichee,
+        totalDettes,
+        liquidites,
+        portefeuilleMobilier,
+        state.transactions,
+        state.fintableBrokerHistory,
+        variation,
+        epargneMensuelle,
+    ]);
+
+    // Domaine Y dynamique façon Google Finance : cadre la variation réelle sans écraser la courbe à 0 $
+    const domaineYTrajectoire = useMemo<[number, number]>(() => {
+        const valeurs: number[] = [];
+        for (const pt of donneesTrajectoire) {
+            if (typeof pt.valeurPresent === 'number' && Number.isFinite(pt.valeurPresent)) {
+                valeurs.push(pt.valeurPresent);
+            }
+            if (typeof pt.valeurFutur === 'number' && Number.isFinite(pt.valeurFutur)) {
+                valeurs.push(pt.valeurFutur);
+            }
+            if (modeCourbe === 'complete' && Number.isFinite(pt.avoirs)) {
+                valeurs.push(pt.avoirs);
+            }
+        }
+        if (valeurs.length === 0) return [0, 100_000];
+        const minVal = Math.min(...valeurs);
+        const maxVal = Math.max(...valeurs);
+        const amplitude = Math.max(maxVal - minVal, Math.max(1_500, Math.round(maxVal * 0.02)));
+        const margeBasse = Math.round(amplitude * 0.28);
+        const margeHaute = Math.round(amplitude * 0.22);
+        const bas = Math.max(0, Math.floor((minVal - margeBasse) / 500) * 500);
+        const haut = Math.max(bas + 1_000, Math.ceil((maxVal + margeHaute) / 500) * 500);
+        return [bas, haut];
+    }, [donneesTrajectoire, modeCourbe]);
 
     // Points « Temps forts » ambrés sur la courbe (début, jalon médian, sommet projeté)
     const pointsTempsForts = useMemo<PointTrajectoire[]>(() => {
@@ -1848,14 +2005,23 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                 <stop offset="100%" stopColor="var(--gf-vert)" stopOpacity={0.0} />
                                             </linearGradient>
                                         </defs>
+                                        <CartesianGrid
+                                            strokeDasharray="3 3"
+                                            vertical={false}
+                                            stroke="var(--bordure)"
+                                            strokeOpacity={0.55}
+                                        />
                                         <XAxis
                                             dataKey="annee"
+                                            minTickGap={22}
                                             tick={{ fill: 'var(--texte-doux)', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
                                             axisLine={{ stroke: 'var(--bordure)' }}
                                             tickLine={false}
                                         />
                                         <YAxis
                                             orientation="left"
+                                            domain={domaineYTrajectoire}
+                                            tickCount={5}
                                             tick={{ fill: 'var(--texte-doux)', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
                                             axisLine={false}
                                             tickLine={false}
@@ -1870,22 +2036,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             x="Aujourd’hui"
                                             stroke="var(--gf-ambre)"
                                             strokeDasharray="3 3"
-                                            strokeOpacity={0.75}
-                                        />
-                                        <ReferenceLine
-                                            y={indicateursPouls.cibleRetraite}
-                                            stroke="var(--gf-ambre)"
-                                            strokeDasharray="3 3"
-                                            strokeOpacity={0.45}
-                                        />
-                                        <Bar
-                                            dataKey="valeur"
-                                            fill="var(--gf-bleu)"
-                                            fillOpacity={0.1}
-                                            radius={[3, 3, 0, 0]}
-                                            maxBarSize={18}
-                                            isAnimationActive={true}
-                                            animationDuration={320}
+                                            strokeOpacity={0.85}
                                         />
                                         {modeCourbe === 'complete' && (
                                             <Line
@@ -1894,7 +2045,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                 stroke="var(--gf-ambre)"
                                                 strokeWidth={2}
                                                 strokeDasharray="4 4"
-                                                dot={{ r: 2.5, fill: 'var(--gf-ambre)', strokeWidth: 0 }}
+                                                dot={false}
                                                 isAnimationActive={true}
                                                 animationDuration={340}
                                             />
@@ -1903,6 +2054,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         <Area
                                             type="monotone"
                                             dataKey="valeurPresent"
+                                            baseValue="dataMin"
                                             stroke="none"
                                             fill="url(#accueilPresentGrad)"
                                             fillOpacity={1}
@@ -1916,7 +2068,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             stroke="var(--gf-bleu)"
                                             strokeWidth={2.75}
                                             connectNulls={false}
-                                            dot={{ r: 3, fill: 'var(--gf-bleu)', strokeWidth: 0 }}
+                                            dot={false}
                                             activeDot={{ r: 5, fill: 'var(--gf-bleu)' }}
                                             isAnimationActive={true}
                                             animationDuration={380}
@@ -1925,6 +2077,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         <Area
                                             type="monotone"
                                             dataKey="valeurFutur"
+                                            baseValue="dataMin"
                                             stroke="none"
                                             fill="url(#accueilFuturGrad)"
                                             fillOpacity={1}
@@ -1939,7 +2092,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             strokeWidth={2.5}
                                             strokeDasharray="5 4"
                                             connectNulls={false}
-                                            dot={{ r: 3, fill: 'var(--gf-vert)', strokeWidth: 0 }}
+                                            dot={false}
                                             activeDot={{ r: 5, fill: 'var(--gf-vert)' }}
                                             isAnimationActive={true}
                                             animationDuration={420}
@@ -1949,7 +2102,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                 key={`tf-${pt.annee}-${idx}`}
                                                 x={pt.annee}
                                                 y={pt.valeur}
-                                                r={6}
+                                                r={5.5}
                                                 fill="var(--gf-ambre)"
                                                 stroke="var(--fond)"
                                                 strokeWidth={2}

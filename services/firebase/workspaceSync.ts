@@ -460,7 +460,6 @@ export async function pullWorkspaceFromFirestoreNow(user: FirebaseUser): Promise
             }
             clearDirtySinceLastSync(uid);
             firestoreSessionSynced = true;
-            lastSerializedPayload = JSON.stringify(sanitizedRemote);
             useFinanceStore.getState().setAppState({
                 ...sanitizedRemote,
                 lastUpdate: remoteUpdatedAtMs ?? Date.now(),
@@ -470,6 +469,9 @@ export async function pullWorkspaceFromFirestoreNow(user: FirebaseUser): Promise
                 activeTestPersonaId: null,
                 realDataSnapshot: null,
             });
+            lastSerializedPayload = JSON.stringify(
+                extractSanitizedWorkspacePayload(useFinanceStore.getState()),
+            );
             saveProtectedDossierSnapshot({
                 ...sanitizedRemote,
                 lastUpdate: remoteUpdatedAtMs ?? Date.now(),
@@ -907,7 +909,6 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                 saveLastSyncedRevisionId(uid, remoteRevision);
                 clearDirtySinceLastSync(uid);
                 firestoreSessionSynced = true;
-                lastSerializedPayload = JSON.stringify(sanitizedRemote);
                 useFinanceStore.getState().setAppState({
                     ...sanitizedRemote,
                     lastUpdate: remoteUpdatedAtMs ?? Date.now(),
@@ -917,6 +918,9 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                     activeTestPersonaId: null,
                     realDataSnapshot: null,
                 });
+                lastSerializedPayload = JSON.stringify(
+                    extractSanitizedWorkspacePayload(useFinanceStore.getState()),
+                );
                 saveProtectedDossierSnapshot({
                     ...sanitizedRemote,
                     lastUpdate: remoteUpdatedAtMs ?? Date.now(),
