@@ -17,13 +17,13 @@ on:
 
 concurrency:
   group: deploy-hosting-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy-hosting:
     timeout-minutes: 15
     name: Build & deploy to Firebase Hosting
-    runs-on: ${{ github.event.repository.visibility == 'public' && 'ubuntu-latest' || fromJSON('["self-hosted","pc-marc"]') }}
+    runs-on: ubuntu-latest
     if: ${{ vars.GCP_PROJECT_ID != '' && vars.GCP_WIF_PROVIDER != '' && vars.GCP_DEPLOY_SA != '' }}
     permissions:
       contents: read
@@ -38,7 +38,7 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: '.nvmrc'
-          cache: ${{ (github.event.repository.private == false && 'npm') || '' }}
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund --ignore-scripts
