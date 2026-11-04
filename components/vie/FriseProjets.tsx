@@ -30,7 +30,7 @@ interface Props {
 export const FriseProjets: React.FC<Props> = (p) => {
     const annee0 = Number(p.aujourdhui.slice(0, 4));
     return (
-        <section aria-labelledby="frise-titre" className="rounded-2xl bg-surface border border-white/6 p-4 sm:px-6 sm:py-5 flex flex-col gap-3">
+        <section aria-labelledby="frise-titre" className="rounded-2xl bg-surface border border-bordure p-4 sm:px-6 sm:py-5 flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 id="frise-titre" className="text-[17px] lg:text-[18px] font-semibold text-ink-50">Frise {annee0} → {annee0 + DUREE_FRISE}</h2>
                 {!p.compacte && <span className="text-[13px] text-ink-400">Glisse un projet pour changer son année</span>}
@@ -93,7 +93,7 @@ const FriseHorizontale: React.FC<Props & { annee0: number }> = ({ items, selecti
 
     return (
         <div ref={boite} className="relative h-[150px] select-none">
-            <div className="absolute inset-x-0 top-[100px] h-0.5 bg-white/10" aria-hidden="true" />
+            <div className="absolute inset-x-0 top-[100px] h-0.5 bg-bordure" aria-hidden="true" />
             <div className="absolute left-0 top-[92px] w-[18px] h-[18px] rounded-full bg-ink-50" aria-hidden="true" />
             <div className="absolute left-0 top-[120px] font-mono text-[11px] text-ink-200">aujourd'hui</div>
             {annees.map((a) => {
@@ -142,7 +142,7 @@ const FriseHorizontale: React.FC<Props & { annee0: number }> = ({ items, selecti
 
 const FriseVerticale: React.FC<Props & { annee0: number }> = ({ items, selection, onSelection, aujourdhui, annee0 }) => (
     <ol className="relative flex flex-col gap-3 pl-1">
-        <span className="absolute left-[21px] top-2 bottom-2 w-px bg-white/10" aria-hidden="true" />
+        <span className="absolute left-[21px] top-2 bottom-2 w-px bg-bordure" aria-hidden="true" />
         <li className="relative flex items-center gap-4 pl-[15px]">
             <span className="w-3 h-3 rounded-full bg-ink-50" aria-hidden="true" />
             <span className="text-meta font-semibold text-ink-100">aujourd'hui</span>
@@ -156,7 +156,7 @@ const FriseVerticale: React.FC<Props & { annee0: number }> = ({ items, selection
                         type="button"
                         aria-pressed={selection === it.cle}
                         onClick={() => onSelection(it.cle)}
-                        className={`w-full flex items-center gap-3 text-left rounded-xl py-1.5 pr-1 focus-ring ${selection === it.cle ? 'bg-white/4' : ''}`}
+                        className={`w-full flex items-center gap-3 text-left rounded-xl py-1.5 pr-1 focus-ring touch-target ${selection === it.cle ? 'bg-surface-douce' : ''}`}
                     >
                         <span className="relative w-10 h-10 shrink-0 rounded-xl bg-dark border flex items-center justify-center" style={{ borderColor: `${couleur}66`, color: couleur }} aria-hidden="true">
                             <Icon name={it.icone} size={18} />

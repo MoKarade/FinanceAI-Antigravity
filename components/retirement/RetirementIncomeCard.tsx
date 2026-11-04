@@ -25,10 +25,10 @@ export const RetirementIncomeCard: React.FC = () => {
                         <div className="space-y-5">
                             <div>
                                 <label htmlFor="ric-govPension" className="block text-meta text-ink-300 mb-1">Rente État agrégée (RRQ + PSV, total ménage) / mois — legacy</label>
-                                <PrivateNumberInput id="ric-govPension" type="number" value={goal.governmentPension} onChange={e => updateGoal('governmentPension', numOr(e.target.value, goal.governmentPension))} className="w-full bg-black/40 border border-info-500/20 rounded-lg px-3 py-2 text-blue-300 font-bold focus:border-info-500 transition-colors outline-hidden" />
+                                <PrivateNumberInput id="ric-govPension" type="number" value={goal.governmentPension} onChange={e => updateGoal('governmentPension', numOr(e.target.value, goal.governmentPension))} className="w-full bg-fond border border-bordure-champ rounded-lg px-3 py-2 text-texte font-bold focus:border-accent transition-colors outline-hidden touch-target" />
                                 <p className="text-tiny text-ink-400 mt-1">Total des deux conjoints si tu es en couple. Si tu remplis les 2 champs ci-dessous (par personne), ce champ est ignoré.</p>
                             </div>
-                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/5">
+                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-bordure">
                                 <div>
                                     <label htmlFor="ric-rrq" className="block text-meta text-ink-300 mb-1">🇨🇦 RRQ projetée / mois (par personne)</label>
                                     <PrivateNumberInput id="ric-rrq"
@@ -37,7 +37,7 @@ export const RetirementIncomeCard: React.FC = () => {
                                         value={goal.rrqEstimateMonthly ?? ''}
                                         placeholder="ex: 1100"
                                         onChange={e => updateGoal('rrqEstimateMonthly', numOrUndef(e.target.value))}
-                                        className="w-full bg-black/40 border border-info-500/20 rounded-lg px-3 py-2 text-blue-300 text-body focus:border-info-500 transition-colors outline-hidden"
+                                        className="w-full bg-fond border border-bordure-champ rounded-lg px-3 py-2 text-texte text-body focus:border-accent transition-colors outline-hidden touch-target"
                                     />
                                     <p className="text-tiny text-ink-400 mt-1">Max 2025: 1 433$/mois. Consulte ton relevé RRQ.</p>
                                 </div>
@@ -49,7 +49,7 @@ export const RetirementIncomeCard: React.FC = () => {
                                         value={goal.psvEstimateMonthly ?? ''}
                                         placeholder="ex: 734"
                                         onChange={e => updateGoal('psvEstimateMonthly', numOrUndef(e.target.value))}
-                                        className="w-full bg-black/40 border border-info-500/20 rounded-lg px-3 py-2 text-blue-300 text-body focus:border-info-500 transition-colors outline-hidden"
+                                        className="w-full bg-fond border border-bordure-champ rounded-lg px-3 py-2 text-texte text-body focus:border-accent transition-colors outline-hidden touch-target"
                                     />
                                     <p className="text-tiny text-ink-400 mt-1">Max 2025: 734$/mois (40 ans résidence).</p>
                                 </div>
@@ -71,18 +71,18 @@ export const RetirementIncomeCard: React.FC = () => {
                                             value={goal.dbPensionMonthly ?? 0}
                                             onChange={e => updateGoal('dbPensionMonthly', numOr(e.target.value, goal.dbPensionMonthly ?? 0))}
                                             placeholder="0"
-                                            className="w-full bg-black/40 border border-success-500/20 rounded-lg px-3 py-2 text-emerald-300 font-bold focus:border-success-500 transition-colors outline-hidden"
+                                            className="w-full bg-fond border border-bordure-champ rounded-lg px-3 py-2 text-succes-texte font-bold focus:border-accent transition-colors outline-hidden touch-target"
                                         />
                                         <p className="text-tiny text-ink-400 mt-1">RREGOP, fonction publique federale, regime garanti viager. Laisse 0 si tu n'as que du REER/CD.</p>
                                     </div>
                                     {(goal.dbPensionMonthly ?? 0) > 0 && (
-                                        <div className="grid grid-cols-2 gap-3 pb-3 border-b border-white/5">
+                                        <div className="grid grid-cols-2 gap-3 pb-3 border-b border-bordure">
                                             <div>
                                                 <label htmlFor="ric-dbElection" className="block text-meta text-ink-300 mb-1">Option DB (au décès)</label>
                                                 <select id="ric-dbElection"
                                                     value={goal.dbElectionType ?? 'joint60'}
                                                     onChange={e => setGoal({ ...goal, dbElectionType: e.target.value as RetirementGoal['dbElectionType'] })}
-                                                    className="w-full bg-black/40 border border-success-500/10 rounded-lg px-3 py-2 text-emerald-200 text-body"
+                                                    className="w-full bg-fond border border-bordure-champ rounded-lg px-3 py-2 text-succes-texte text-body touch-target"
                                                 >
                                                     <option value="single">Vie seule (rente cesse)</option>
                                                     <option value="joint60">Conjoint à 60% (recommandé)</option>
@@ -98,7 +98,7 @@ export const RetirementIncomeCard: React.FC = () => {
                                                     max={100}
                                                     value={goal.dbSurvivorPct ?? 60}
                                                     onChange={e => updateGoal('dbSurvivorPct', numOr(e.target.value, goal.dbSurvivorPct ?? 60))}
-                                                    className="w-full bg-black/40 border border-success-500/10 rounded-lg px-3 py-2 text-emerald-200 text-body"
+                                                    className="w-full bg-fond border border-bordure-champ rounded-lg px-3 py-2 text-succes-texte text-body touch-target"
                                                 />
                                             </div>
                                         </div>
@@ -113,7 +113,7 @@ export const RetirementIncomeCard: React.FC = () => {
                                                     max={100}
                                                     value={goal.dbPensionIndexationPct ?? 100}
                                                     onChange={e => updateGoal('dbPensionIndexationPct', numOr(e.target.value, goal.dbPensionIndexationPct ?? 100))}
-                                                    className="w-full bg-black/40 border border-success-500/10 rounded-lg px-3 py-2 text-emerald-200 text-body focus:border-success-500 transition-colors outline-hidden"
+                                                    className="w-full bg-fond border border-bordure-champ rounded-lg px-3 py-2 text-succes-texte text-body focus:border-accent transition-colors outline-hidden touch-target"
                                                 />
                                                 <p className="text-tiny text-ink-400 mt-1">100 = pleine indexation, 50 = demi, 0 = nominale</p>
                                             </div>
@@ -125,7 +125,7 @@ export const RetirementIncomeCard: React.FC = () => {
                                                     max={75}
                                                     value={goal.dbPensionStartAge ?? goal.targetAge}
                                                     onChange={e => updateGoal('dbPensionStartAge', numOr(e.target.value, goal.dbPensionStartAge ?? goal.targetAge))}
-                                                    className="w-full bg-black/40 border border-success-500/10 rounded-lg px-3 py-2 text-emerald-200 text-body focus:border-success-500 transition-colors outline-hidden"
+                                                    className="w-full bg-fond border border-bordure-champ rounded-lg px-3 py-2 text-succes-texte text-body focus:border-accent transition-colors outline-hidden touch-target"
                                                 />
                                                 <p className="text-tiny text-ink-400 mt-1">Defaut = age cible retraite</p>
                                             </div>

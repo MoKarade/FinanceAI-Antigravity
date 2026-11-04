@@ -65,21 +65,21 @@ export const GoalSeekerCard: React.FC<GoalSeekerCardProps> = ({ paramsBuilder, t
                         type="number"
                         value={goalSeekTarget}
                         onChange={e => setGoalSeekTarget(Number(e.target.value))}
-                        className="w-full bg-black/40 border border-purple-500/20 rounded-lg px-3 py-2 text-purple-300 font-bold focus:border-purple-500 transition-colors outline-hidden"
+                        className="w-full bg-fond border border-bordure-champ rounded-lg px-3 py-2 text-texte font-bold focus:border-accent transition-colors outline-hidden touch-target"
                     />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                     <button
                         onClick={handleSavings}
                         disabled={busySavings}
-                        className="px-3 py-2 bg-purple-500/20 border border-purple-500/50 rounded-md text-purple-300 text-meta font-bold hover:bg-purple-500/30 disabled:opacity-50"
+                        className="px-3 py-2 bg-surface-douce border border-bordure-champ rounded-md text-texte text-meta font-bold hover:bg-bordure disabled:opacity-50 touch-target"
                     >
                         Trouver épargne $/mois
                     </button>
                     <button
                         onClick={handleAge}
                         disabled={busyAge}
-                        className="px-3 py-2 bg-purple-500/20 border border-purple-500/50 rounded-md text-purple-300 text-meta font-bold hover:bg-purple-500/30 disabled:opacity-50"
+                        className="px-3 py-2 bg-surface-douce border border-bordure-champ rounded-md text-texte text-meta font-bold hover:bg-bordure disabled:opacity-50 touch-target"
                     >
                         Âge retraite minimum
                     </button>
@@ -87,19 +87,19 @@ export const GoalSeekerCard: React.FC<GoalSeekerCardProps> = ({ paramsBuilder, t
                 <button
                     onClick={handleDrawdown}
                     disabled={busyDrawdown}
-                    className="w-full px-3 py-2 bg-indigo-500/20 border border-indigo-500/50 rounded-md text-indigo-300 text-meta font-bold hover:bg-indigo-500/30 disabled:opacity-50"
+                    className="w-full px-3 py-2 bg-surface-douce border border-bordure-champ rounded-md text-indigo-300 text-meta font-bold hover:bg-bordure disabled:opacity-50 touch-target"
                 >
                     Optimiser ordre de décaissement
                 </button>
                 {drawdownResult && !busyDrawdown && (
-                    <div className="p-3 bg-white/3 border border-white/10 rounded-lg space-y-2">
+                    <div className="p-3 bg-surface-douce border border-bordure rounded-lg space-y-2">
                         <p className="text-meta text-ink-300">{drawdownResult.explanation}</p>
                         <div className="space-y-1">
                             {drawdownResult.results
                                 .sort((a, b) => b.estateNetWorth - a.estateNetWorth)
                                 .map((r, i) => (
                                     <div key={r.scenarioType} className="flex justify-between text-tiny text-ink-200">
-                                        <span className="flex items-center gap-2"><span className="w-4 h-4 inline-flex items-center justify-center rounded-full bg-white/10 text-[10px] font-bold text-ink-300 shrink-0">{i + 1}</span>{r.strategyName}</span>
+                                        <span className="flex items-center gap-2"><span className="w-4 h-4 inline-flex items-center justify-center rounded-full bg-bordure text-[10px] font-bold text-ink-300 shrink-0">{i + 1}</span>{r.strategyName}</span>
                                         <PrivateAmount className="font-mono" title="Patrimoine successoral, rentes RRQ/PSV incluses">{formatCAD(r.estateNetWorth)}</PrivateAmount>
                                     </div>
                                 ))}
@@ -108,11 +108,11 @@ export const GoalSeekerCard: React.FC<GoalSeekerCardProps> = ({ paramsBuilder, t
                 )}
                 {anyBusy && <p className="text-meta text-ink-300">Calcul en cours…</p>}
                 {goalSeekResult && !busySavings && !busyAge && (
-                    <div className="p-3 bg-white/3 border border-white/10 rounded-lg">
+                    <div className="p-3 bg-surface-douce border border-bordure rounded-lg">
                         {goalSeekResult.savings !== undefined && (
                             <p className="text-body text-ink-200">
                                 Tu dois épargner <strong className="text-primary"><PrivateAmount>{formatCAD(goalSeekResult.savings)}</PrivateAmount>/mois</strong>
-                                {goalSeekResult.error && <span className="text-meta text-orange-300 mt-1 flex items-center gap-1.5"><Icon name="alert" size={13} /> {goalSeekResult.error}</span>}
+                                {goalSeekResult.error && <span className="text-meta text-alerte-texte mt-1 flex items-center gap-1.5"><Icon name="alert" size={13} /> {goalSeekResult.error}</span>}
                             </p>
                         )}
                         {goalSeekResult.age !== undefined && (

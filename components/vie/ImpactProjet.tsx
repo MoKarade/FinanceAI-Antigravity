@@ -22,10 +22,10 @@ export const ImpactProjet: React.FC<Props> = ({ projet, patrimoine, rendement, o
     const impact = analyserImpact(projet, patrimoine, rendement);
     const postes = repartitionEstimee(projet.type, projet.cout);
     const conseils = conseilsProjet(projet.type);
-    const tuile = 'px-3.5 py-3 rounded-xl bg-dark lg:bg-surface border border-white/6 lg:border-white/6 flex flex-col gap-0.5';
+    const tuile = 'px-3.5 py-3 rounded-xl bg-dark lg:bg-surface border border-bordure lg:border-bordure flex flex-col gap-0.5';
 
     return (
-        <section aria-labelledby="impact-titre" className="rounded-2xl bg-surface border border-white/6 p-4 sm:px-5 sm:py-[18px] flex flex-col gap-3.5">
+        <section aria-labelledby="impact-titre" className="rounded-2xl bg-surface border border-bordure p-4 sm:px-5 sm:py-[18px] flex flex-col gap-3.5">
             <div className="flex justify-between items-baseline gap-3">
                 <h2 id="impact-titre" className="text-[17px] lg:text-[16px] font-semibold text-ink-50 truncate">Impact · {projet.nom}</h2>
                 <span className="font-mono text-meta text-ink-400 shrink-0">{dateLongue(projet.date)}</span>
@@ -75,7 +75,7 @@ export const ImpactProjet: React.FC<Props> = ({ projet, patrimoine, rendement, o
                     </div>
                     {conseils.length > 0 && (
                         <ul className="flex flex-col gap-2">
-                            {conseils.map((c) => <li key={c} className="text-meta text-ink-200 bg-white/4 p-3 rounded-lg border border-white/6 leading-relaxed">{c}</li>)}
+                            {conseils.map((c) => <li key={c} className="text-meta text-ink-200 bg-surface-douce p-3 rounded-lg border border-bordure leading-relaxed">{c}</li>)}
                         </ul>
                     )}
                     <div className="flex justify-end">

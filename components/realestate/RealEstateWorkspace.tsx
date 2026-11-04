@@ -305,7 +305,7 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
     const nbBiens = isActuel ? countVisible : otherCount;
     const nbProjets = isActuel ? otherCount : countVisible;
     const onglets = (
-        <div role="group" aria-label="Biens et projets" className="gf-subtab-bar flex gap-1 p-1 lg:p-1 rounded-xl bg-surface lg:bg-transparent border border-white/6 lg:border-0 w-full lg:w-auto">
+        <div role="group" aria-label="Biens et projets" className="gf-subtab-bar flex gap-1 p-1 lg:p-1 rounded-xl bg-surface lg:bg-transparent border border-bordure lg:border-0 w-full lg:w-auto">
             {([
                 { tab: TabEnum.REAL_ESTATE, libelle: `Biens détenus · ${nbBiens}`, courant: isActuel },
                 { tab: TabEnum.REAL_ESTATE_PROJECTS, libelle: `Projets d'achat · ${nbProjets}`, courant: !isActuel },
@@ -315,7 +315,7 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
                     type="button"
                     onClick={() => { if (!o.courant) setActiveTab(o.tab); }}
                     aria-current={o.courant ? 'page' : undefined}
-                    className={`gf-subtab-pill flex-1 lg:flex-none min-h-10 lg:min-h-9 px-3.5 rounded-lg text-body transition-colors focus-ring ${o.courant ? 'gf-subtab-pill-active bg-ink-50 lg:bg-surfaceHighlight text-dark lg:text-ink-50 font-semibold' : 'text-ink-300 hover:bg-white/5'}`}
+                    className={`gf-subtab-pill flex-1 lg:flex-none min-h-10 lg:min-h-9 px-3.5 rounded-lg text-body transition-colors focus-ring touch-target ${o.courant ? 'gf-subtab-pill-active bg-ink-50 lg:bg-surfaceHighlight text-dark lg:text-ink-50 font-semibold' : 'text-ink-300 hover:bg-surface-douce'}`}
                 >
                     {o.libelle}
                 </button>
@@ -327,7 +327,7 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
             type="button"
             onClick={addNewGoal}
             aria-label={isActuel ? 'Ajouter un bien' : 'Ajouter un projet'}
-            className="h-10 px-3.5 lg:px-4 rounded-lg border border-white/40 lg:border-transparent text-ink-100 lg:bg-primary lg:text-dark text-body lg:font-bold focus-ring"
+            className="h-10 px-3.5 lg:px-4 rounded-lg border border-bordure-champ lg:border-transparent text-ink-100 lg:bg-primary lg:text-dark text-body lg:font-bold focus-ring touch-target"
         >
             <span className="lg:hidden">Ajouter</span><span className="hidden lg:inline">{isActuel ? 'Ajouter un bien' : 'Ajouter un projet'}</span>
         </button>
@@ -363,13 +363,13 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
         return (
             <div className="space-y-5 stagger-in pb-10">
                 {enTete}
-                <section className="rounded-2xl bg-surface border border-white/6 py-10 px-4 text-center space-y-4">
+                <section className="rounded-2xl bg-surface border border-bordure py-10 px-4 text-center space-y-4">
                     <p className="text-body text-ink-300">
                         {isActuel
                             ? 'Tu ne possèdes aucun bien immobilier pour l\'instant (photo d\'aujourd\'hui).'
                             : 'Aucun projet d\'achat futur pour l\'instant (les plans qui déforment la courbe).'}
                     </p>
-                    <button type="button" onClick={addNewGoal} className="h-10 px-4 rounded-lg bg-primary text-dark text-body font-bold focus-ring">
+                    <button type="button" onClick={addNewGoal} className="h-10 px-4 rounded-lg bg-primary text-dark text-body font-bold focus-ring touch-target">
                         {isActuel ? '+ Ajouter un bien détenu' : '+ Ajouter un projet d\'achat'}
                     </button>
                 </section>
@@ -379,7 +379,7 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
     }
 
     const residence = activeGoal.isPrimaryResidence || !activeGoal.isRented;
-    const tuile = 'gf-stat-cell rounded-2xl bg-surface border border-white/6 px-4 py-3.5 lg:px-[18px] flex flex-col gap-1 min-w-0';
+    const tuile = 'gf-stat-cell rounded-2xl bg-surface border border-bordure px-4 py-3.5 lg:px-[18px] flex flex-col gap-1 min-w-0';
     const etiquette = 'font-mono text-meta xl:text-[11px] xl:font-semibold xl:tracking-[0.06em] xl:uppercase text-ink-400';
     const montant = 'font-mono text-[18px] xl:text-[20px] font-bold text-ink-50';
     // NOMBRE-NON-MONETAIRE : pourcentages d'hypothèse de marché (rendement, appréciation), pas un montant.
@@ -432,8 +432,8 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
                         return (
                             // [A11Y-DELETE-SPAN-NO-KEYBOARD] Sélection et suppression sont des FRÈRES (jamais
                             // un contrôle dans un <button>).
-                            <div key={g.id} className={`rounded-lg border flex items-center text-body ${choisi ? 'bg-surfaceHighlight border-white/15 text-ink-50 font-semibold' : 'border-white/8 text-ink-300 hover:bg-white/5'}`}>
-                                <button type="button" onClick={() => setActiveGoalId(g.id)} aria-pressed={choisi} className="min-h-10 px-3.5 flex items-center gap-2 rounded-lg focus-ring">
+                            <div key={g.id} className={`rounded-lg border flex items-center text-body ${choisi ? 'bg-surfaceHighlight border-bordure-champ text-ink-50 font-semibold' : 'border-bordure text-ink-300 hover:bg-surface-douce'}`}>
+                                <button type="button" onClick={() => setActiveGoalId(g.id)} aria-pressed={choisi} className="min-h-10 px-3.5 flex items-center gap-2 rounded-lg focus-ring touch-target">
                                     {nomAffiche}
                                     {g.isActive && <span className="w-2 h-2 rounded-full bg-success-500" aria-label="active" />}
                                 </button>
@@ -452,7 +452,7 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
             )}
 
             {/* Carte du bien : nom, type, rôle dans la simulation, interrupteur « Actif ». */}
-            <section aria-labelledby="bien-titre" className="rounded-2xl bg-surface border border-white/6 p-4 sm:px-[22px] sm:py-[18px] flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-5">
+            <section aria-labelledby="bien-titre" className="rounded-2xl bg-surface border border-bordure p-4 sm:px-[22px] sm:py-[18px] flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-5">
                 <div className="flex-1 min-w-0 flex flex-col gap-1">
                     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                         <h2 id="bien-titre" className="text-[17px] lg:text-[20px] font-bold text-ink-50">{propertyName}</h2>
@@ -469,10 +469,10 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
                     role="switch"
                     aria-checked={activeGoal.isActive}
                     onClick={() => updateActiveGoal({ isActive: !activeGoal.isActive })}
-                    className="flex items-center justify-between lg:justify-start gap-3 min-h-11 px-3.5 lg:px-0 rounded-xl lg:rounded-none border border-white/6 lg:border-0 bg-dark/40 lg:bg-transparent text-body text-ink-200 focus-ring"
+                    className="flex items-center justify-between lg:justify-start gap-3 min-h-11 px-3.5 lg:px-0 rounded-xl lg:rounded-none border border-bordure lg:border-0 bg-dark/40 lg:bg-transparent text-body text-ink-200 focus-ring"
                 >
                     Actif dans la simulation
-                    <span className={`w-11 h-[26px] rounded-full p-[3px] flex transition-colors ${activeGoal.isActive ? 'bg-success-400 justify-end' : 'bg-white/15 justify-start'}`} aria-hidden="true">
+                    <span className={`w-11 h-[26px] rounded-full p-[3px] flex transition-colors ${activeGoal.isActive ? 'bg-success-400 justify-end' : 'bg-bordure-champ justify-start'}`} aria-hidden="true">
                         <span className={`w-5 h-5 rounded-full ${activeGoal.isActive ? 'bg-dark' : 'bg-ink-300'}`} />
                     </span>
                 </button>
@@ -528,18 +528,18 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
             </section>
 
             <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-5 items-start">
-                <section aria-labelledby="financement-titre" className="order-2 xl:order-none rounded-2xl bg-surface border border-white/6 p-4 sm:px-5 sm:py-[18px] flex flex-col gap-4 min-w-0">
+                <section aria-labelledby="financement-titre" className="order-2 xl:order-none rounded-2xl bg-surface border border-bordure p-4 sm:px-5 sm:py-[18px] flex flex-col gap-4 min-w-0">
                     <h2 id="financement-titre" className="text-[17px] lg:text-[16px] font-semibold text-ink-50">Financement</h2>
                     <div className="flex flex-col gap-2">
                         <span id="amortissement-libelle" className="text-[13px] text-ink-300">Amortissement</span>
-                        <div role="group" aria-labelledby="amortissement-libelle" className="grid grid-cols-4 p-1 rounded-xl bg-dark border border-white/6">
+                        <div role="group" aria-labelledby="amortissement-libelle" className="grid grid-cols-4 p-1 rounded-xl bg-dark border border-bordure">
                             {[15, 20, 25, 30].map((n) => (
                                 <button
                                     key={n}
                                     type="button"
                                     onClick={() => updateActiveGoal({ amortization: n })}
                                     aria-pressed={amortization === n}
-                                    className={`h-9 rounded-lg text-[13px] transition-colors focus-ring ${amortization === n ? 'bg-ink-50 text-dark font-semibold' : 'text-ink-200 hover:bg-white/5'}`}
+                                    className={`h-9 rounded-lg text-[13px] transition-colors focus-ring touch-target ${amortization === n ? 'bg-ink-50 text-dark font-semibold' : 'text-ink-200 hover:bg-surface-douce'}`}
                                 >
                                     {/* NOMBRE-NON-MONETAIRE : choix d'une durée d'amortissement (réglage proposé) */}
                                     {n} ans
@@ -567,11 +567,11 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
                         )}
                     </div>
                     <div className="grid grid-cols-2 gap-2.5">
-                        <div className="px-3 py-2.5 rounded-xl bg-dark border border-white/6">
+                        <div className="px-3 py-2.5 rounded-xl bg-dark border border-bordure">
                             <div className="text-meta text-ink-400">Rendement boursier</div>
                             <div className="font-mono text-ink-50">{pctTexte(marketReturn)} %</div>
                         </div>
-                        <div className="px-3 py-2.5 rounded-xl bg-dark border border-white/6">
+                        <div className="px-3 py-2.5 rounded-xl bg-dark border border-bordure">
                             <div className="text-meta text-ink-400">Appréciation immo</div>
                             <div className="font-mono text-ink-50">{pctTexte(localRentalAppreciation)} %</div>
                         </div>
@@ -597,7 +597,7 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
                                                 <button
                                                     type="button"
                                                     onClick={() => { setMarketReturnOverridden(false); setMarketReturn(globalReturnRate); setLocalStockReturn(globalReturnRate); }}
-                                                    className="text-meta text-primary underline underline-offset-2 focus-ring rounded-sm"
+                                                    className="text-meta text-primary underline underline-offset-2 focus-ring rounded-sm touch-target px-2"
                                                     title={`Resynchroniser avec la projection globale (${globalReturnRate} %)`}
                                                 >
                                                     ↺ Futur

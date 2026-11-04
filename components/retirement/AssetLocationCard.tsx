@@ -116,7 +116,7 @@ export const AssetLocationCard: React.FC<AssetLocationCardProps> = ({ annualGros
 
                 {/* Score d'efficacité + synthèse comptes */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <div className="bg-black/30 rounded-sm p-3 border border-white/5 col-span-1 text-center">
+                    <div className="bg-surface-douce rounded-sm p-3 border border-bordure col-span-1 text-center">
                         <div className="text-tiny text-ink-300 uppercase tracking-wide mb-1">Efficacité fiscale</div>
                         <div className={`text-2xl font-black ${scoreColor} tabular-nums`}>{efficiencyScore}</div>
                         <div className="text-tiny text-ink-400">/ 100</div>
@@ -142,7 +142,7 @@ export const AssetLocationCard: React.FC<AssetLocationCardProps> = ({ annualGros
                 {analysis && analysis.totalAnnualLoss > 0 && (
                     <div className="p-3 bg-danger-500/10 border border-danger-500/30 rounded-sm">
                         <div className="flex items-center justify-between">
-                            <span className="text-tiny text-red-300 font-bold uppercase">Manque à gagner annuel si inchangé</span>
+                            <span className="text-tiny text-erreur-texte font-bold uppercase">Manque à gagner annuel si inchangé</span>
                             <PrivateAmount className="text-base font-bold text-danger-400 font-mono">{formatCAD(analysis.totalAnnualLoss)}/an</PrivateAmount>
                         </div>
                         <p className="text-tiny text-ink-400 mt-1">Sur 20 ans capitalisé à 5% : ~<PrivateAmount>{formatCAD(analysis.totalAnnualLoss * 33)}</PrivateAmount> de patrimoine perdu.</p>
@@ -157,7 +157,7 @@ export const AssetLocationCard: React.FC<AssetLocationCardProps> = ({ annualGros
                             <button
                                 type="button"
                                 onClick={() => setHoldings(initialHoldings)}
-                                className="text-tiny px-2 py-1 bg-white/5 hover:bg-white/10 rounded-sm text-ink-300 transition-colors"
+                                className="text-tiny px-2 py-1 bg-surface-douce hover:bg-bordure rounded-sm text-ink-300 transition-colors touch-target"
                                 title="Réinitialiser depuis le portefeuille actuel"
                             >
                                 ↺ Depuis portefeuille
@@ -165,7 +165,7 @@ export const AssetLocationCard: React.FC<AssetLocationCardProps> = ({ annualGros
                             <button
                                 type="button"
                                 onClick={() => setHoldings([...holdings, { assetClass: 'us-equity', amount: 10000, currentAccount: 'CELI' }])}
-                                className="text-tiny px-2 py-1 bg-success-500/15 hover:bg-success-500/25 rounded-sm text-emerald-300 transition-colors"
+                                className="text-tiny px-2 py-1 bg-success-500/15 hover:bg-success-500/25 rounded-sm text-succes-texte transition-colors touch-target"
                             >
                                 + Ligne
                             </button>
@@ -179,12 +179,12 @@ export const AssetLocationCard: React.FC<AssetLocationCardProps> = ({ annualGros
                         « ↺ Depuis portefeuille » recharge tes vrais avoirs.
                     </p>
                     {holdings.map((h, i) => (
-                        <div key={i} className="grid grid-cols-12 gap-2 items-center bg-white/2 rounded-sm p-2">
+                        <div key={i} className="grid grid-cols-12 gap-2 items-center bg-surface-douce rounded-sm p-2">
                             <select
                                 aria-label={`Classe d'actif ${i + 1}`}
                                 value={h.assetClass}
                                 onChange={e => { const next = [...holdings]; next[i] = { ...h, assetClass: e.target.value as AssetClass }; setHoldings(next); }}
-                                className="col-span-4 bg-dark border border-border rounded-sm px-2 py-1 text-meta text-white"
+                                className="col-span-4 bg-dark border border-border rounded-sm px-2 py-1 text-meta text-texte touch-target"
                             >
                                 {(Object.keys(ASSET_CLASS_LABELS) as AssetClass[]).map(ac => (
                                     <option key={ac} value={ac}>{ASSET_CLASS_LABELS[ac]}</option>
@@ -194,13 +194,13 @@ export const AssetLocationCard: React.FC<AssetLocationCardProps> = ({ annualGros
                                 type="number" value={h.amount}
                                 aria-label={`Montant ${ASSET_CLASS_LABELS[h.assetClass]}`}
                                 onChange={e => { const next = [...holdings]; next[i] = { ...h, amount: Number(e.target.value) || 0 }; setHoldings(next); }}
-                                className="col-span-4 bg-dark border border-border rounded-sm px-2 py-1 text-meta text-white font-mono"
+                                className="col-span-4 bg-dark border border-border rounded-sm px-2 py-1 text-meta text-texte font-mono touch-target"
                             />
                             <select
                                 aria-label={`Compte de ${ASSET_CLASS_LABELS[h.assetClass]}`}
                                 value={h.currentAccount}
                                 onChange={e => { const next = [...holdings]; next[i] = { ...h, currentAccount: e.target.value as AccountType }; setHoldings(next); }}
-                                className="col-span-3 bg-dark border border-border rounded-sm px-2 py-1 text-meta text-white"
+                                className="col-span-3 bg-dark border border-border rounded-sm px-2 py-1 text-meta text-texte touch-target"
                             >
                                 <option value="CELI">CELI</option>
                                 <option value="REER">REER</option>
@@ -209,7 +209,7 @@ export const AssetLocationCard: React.FC<AssetLocationCardProps> = ({ annualGros
                             <button
                                 type="button"
                                 onClick={() => { const next = [...holdings]; next.splice(i, 1); setHoldings(next); }}
-                                className="col-span-1 text-danger-400 text-meta hover:text-red-300 p-2 -m-2"
+                                className="col-span-1 text-danger-400 text-meta hover:text-erreur-texte p-2 -m-2 touch-target"
                                 aria-label="Supprimer cette ligne"
                             >
                                 ×
@@ -220,19 +220,19 @@ export const AssetLocationCard: React.FC<AssetLocationCardProps> = ({ annualGros
 
                 {/* Recommandations en temps réel */}
                 {analysis && analysis.recommendations.length > 0 && (
-                    <div className="p-3 bg-emerald-900/30 border border-success-500/30 rounded-lg space-y-2">
-                        <p className="text-meta text-emerald-200 font-medium">{analysis.summary}</p>
+                    <div className="p-3 bg-succes-fond border border-success-500/30 rounded-lg space-y-2">
+                        <p className="text-meta text-succes-texte font-medium">{analysis.summary}</p>
                         {analysis.recommendations.map((r, i) => (
-                            <div key={i} className="text-tiny p-2 bg-black/40 rounded-sm space-y-1">
+                            <div key={i} className="text-tiny p-2 bg-fond rounded-sm space-y-1">
                                 <div className="flex justify-between gap-2">
                                     <span className="flex-1 min-w-0">
-                                        <strong className="text-white">{ASSET_CLASS_LABELS[r.assetClass]}</strong>
+                                        <strong className="text-texte">{ASSET_CLASS_LABELS[r.assetClass]}</strong>
                                         <PrivateAmount className="text-ink-400"> {formatCAD(r.amount)}</PrivateAmount>
                                         <span className="text-orange-400 mx-1">{r.currentAccount}</span>
                                         <span className="text-ink-500" aria-hidden="true">→</span>
                                         <span className="text-success-400 mx-1">{r.recommendedAccount}</span>
                                     </span>
-                                    <PrivateAmount className="text-red-300 font-mono shrink-0">−{formatCAD(r.annualLossIfUnchanged)}/an</PrivateAmount>
+                                    <PrivateAmount className="text-erreur-texte font-mono shrink-0">−{formatCAD(r.annualLossIfUnchanged)}/an</PrivateAmount>
                                 </div>
                                 <p className="text-ink-400 leading-snug">{r.rationale}</p>
                             </div>
@@ -241,7 +241,7 @@ export const AssetLocationCard: React.FC<AssetLocationCardProps> = ({ annualGros
                 )}
 
                 {analysis && analysis.recommendations.length === 0 && (
-                    <div className="p-3 bg-success-500/10 border border-success-500/30 rounded-sm text-emerald-300 text-meta font-medium text-center">
+                    <div className="p-3 bg-success-500/10 border border-success-500/30 rounded-sm text-succes-texte text-meta font-medium text-center">
                         Allocation déjà optimale — aucun déplacement à faire.
                     </div>
                 )}

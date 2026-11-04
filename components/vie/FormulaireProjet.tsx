@@ -66,14 +66,14 @@ export const FormulaireProjet: React.FC<Props> = ({ voyages, setVoyages, eveneme
             type="button"
             onClick={() => { setGenre(g); setErreur(null); }}
             aria-pressed={genre === g}
-            className={`h-9 px-3.5 rounded-lg text-body transition-colors focus-ring ${genre === g ? 'bg-surfaceHighlight text-ink-50 font-semibold' : 'text-ink-300 hover:bg-white/5'}`}
+            className={`h-9 px-3.5 rounded-lg text-body transition-colors focus-ring touch-target ${genre === g ? 'bg-surfaceHighlight text-ink-50 font-semibold' : 'text-ink-300 hover:bg-surface-douce'}`}
         >
             {libelle}
         </button>
     );
 
     return (
-        <section aria-labelledby="nouveau-projet-titre" className="rounded-2xl bg-surface border border-white/10 p-4 sm:p-5 flex flex-col gap-4">
+        <section aria-labelledby="nouveau-projet-titre" className="rounded-2xl bg-surface border border-bordure p-4 sm:p-5 flex flex-col gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 id="nouveau-projet-titre" className="text-[17px] font-semibold text-ink-50">Nouveau projet</h2>
                 <div role="group" aria-label="Genre de projet" className="flex gap-1">
@@ -147,10 +147,10 @@ export const FormulaireProjet: React.FC<Props> = ({ voyages, setVoyages, eveneme
                     )}
                 </div>
             )}
-            {erreur && <p className="text-meta text-red-300" role="alert">{erreur}</p>}
+            {erreur && <p className="text-meta text-erreur-texte" role="alert">{erreur}</p>}
             <div className="flex justify-end gap-2">
-                <button type="button" onClick={onFermer} className="h-10 px-4 rounded-lg text-body text-ink-300 hover:bg-white/5 focus-ring">Annuler</button>
-                <button type="button" onClick={ajouter} className="h-10 px-4 rounded-lg bg-primary text-dark text-body font-bold focus-ring">Ajouter</button>
+                <button type="button" onClick={onFermer} className="h-10 px-4 rounded-lg text-body text-ink-300 hover:bg-surface-douce focus-ring touch-target">Annuler</button>
+                <button type="button" onClick={ajouter} className="h-10 px-4 rounded-lg bg-primary text-dark text-body font-bold focus-ring touch-target">Ajouter</button>
             </div>
         </section>
     );

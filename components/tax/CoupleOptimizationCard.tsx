@@ -22,9 +22,9 @@ import { PrivateText } from '../ui/PrivateText';
  */
 
 const CONFIDENCE_COLORS: Record<CoupleOptimizationStrategy['confidence'], string> = {
-    high: 'text-emerald-300 border-success-500/30 bg-success-500/5',
-    medium: 'text-amber-300 border-warning-500/30 bg-warning-500/5',
-    low: 'text-ink-300 border-white/10 bg-white/5',
+    high: 'text-succes-texte border-success-500/30 bg-success-500/5',
+    medium: 'text-alerte-texte border-warning-500/30 bg-warning-500/5',
+    low: 'text-ink-300 border-bordure bg-surface-douce',
 };
 
 /**
@@ -110,7 +110,7 @@ export const CoupleOptimizationCard: React.FC = () => {
     // [S5-REFONTE-IMPOTS] Carte des maquettes : filet pointillé (fonction à activer), phrase courte,
     // un bouton pleine largeur. Sans clé : le bouton MÈNE à la clé (Réglages · Clés API).
     return (
-        <section aria-labelledby="optim-couple-titre" className="gemini-rainbow-card rounded-2xl border border-dashed border-white/15 p-4 sm:p-5 overflow-hidden">
+        <section aria-labelledby="optim-couple-titre" className="gemini-rainbow-card rounded-2xl border border-dashed border-bordure-champ p-4 sm:p-5 overflow-hidden">
             <div className="gemini-rainbow-bar -mx-4 sm:-mx-5 -mt-4 sm:-mt-5 mb-3" aria-hidden="true" />
             <div className="space-y-3">
                 <h2 id="optim-couple-titre" className="text-[17px] lg:text-[16px] font-semibold text-ink-50">Optimisation fiscale du couple</h2>
@@ -125,7 +125,7 @@ export const CoupleOptimizationCard: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={() => navigateWithFocus(Tab.SETTINGS, 'apiKeys-gemini')}
-                                className="w-full h-11 rounded-lg border border-white/40 text-body text-ink-100 hover:bg-white/5 transition-colors focus-ring"
+                                className="w-full h-11 rounded-lg border border-bordure-champ text-body text-ink-100 hover:bg-surface-douce transition-colors focus-ring"
                             >
                                 Ajouter ma clé Gemini pour l'activer
                             </button>
@@ -134,7 +134,7 @@ export const CoupleOptimizationCard: React.FC = () => {
                                 type="button"
                                 onClick={handleGenerate}
                                 disabled={isLoading}
-                                className="w-full h-11 rounded-lg border border-white/40 text-body text-ink-100 hover:bg-white/5 transition-colors focus-ring disabled:opacity-50"
+                                className="w-full h-11 rounded-lg border border-bordure-champ text-body text-ink-100 hover:bg-surface-douce transition-colors focus-ring disabled:opacity-50"
                             >
                                 {isLoading ? 'Analyse fiscale…' : 'Générer 3 stratégies IA'}
                             </button>
@@ -153,10 +153,10 @@ export const CoupleOptimizationCard: React.FC = () => {
                                 <div key={i} className={`p-4 rounded-lg border ${colors}`}>
                                     <div className="flex items-start justify-between gap-2 mb-2">
                                         <div className="flex items-center gap-2 min-w-0">
-                                            <span className="shrink-0 w-5 h-5 inline-flex items-center justify-center rounded-full bg-white/10 text-tiny font-bold text-ink-200" aria-hidden="true">
+                                            <span className="shrink-0 w-5 h-5 inline-flex items-center justify-center rounded-full bg-bordure text-tiny font-bold text-ink-200" aria-hidden="true">
                                                 {i + 1}
                                             </span>
-                                            <h4 className="font-bold text-white text-body">{s.title}</h4>
+                                            <h4 className="font-bold text-texte text-body">{s.title}</h4>
                                         </div>
                                         <span className="text-tiny font-mono opacity-70 shrink-0">{CONFIDENCE_LABELS[s.confidence]}</span>
                                     </div>
@@ -167,7 +167,7 @@ export const CoupleOptimizationCard: React.FC = () => {
                                         // dix lignes plus haut dans la Fiscalité — un chiffre inventé héritait donc
                                         // de l'autorité d'un chiffre vérifié. Il porte maintenant sa provenance
                                         // DANS son libellé, là où on ne peut pas la manquer.
-                                        <div className="mt-2 inline-block px-2 py-1 bg-white/5 border border-white/15 rounded-sm text-tiny font-mono text-ink-200">
+                                        <div className="mt-2 inline-block px-2 py-1 bg-surface-douce border border-bordure-champ rounded-sm text-tiny font-mono text-ink-200">
                                             Ordre de grandeur avancé par l'IA : <PrivateAmount>{formatCAD(s.estimated_savings_cad)}</PrivateAmount>/an
                                         </div>
                                     )}
@@ -187,7 +187,7 @@ export const CoupleOptimizationCard: React.FC = () => {
                             type="button"
                             onClick={handleGenerate}
                             disabled={isLoading}
-                            className="w-full py-2 bg-white/5 hover:bg-white/10 text-ink-200 rounded-lg text-tiny font-bold transition-colors disabled:opacity-50"
+                            className="w-full py-2 bg-surface-douce hover:bg-bordure text-ink-200 rounded-lg text-tiny font-bold transition-colors disabled:opacity-50 touch-target"
                         >
                             {isLoading ? 'Régénération…' : '↻ Régénérer les stratégies'}
                         </button>

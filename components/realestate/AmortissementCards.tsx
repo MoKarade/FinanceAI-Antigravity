@@ -32,10 +32,10 @@ export const AmortissementCards: React.FC<AmortissementCardsProps> = ({
         <>
             <Card title="Amortissement et Équité">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pb-2">
-                    <div><div className="text-tiny text-ink-400 uppercase tracking-wider">Welcome Tax</div><PrivateAmount as="div" className="text-body font-bold text-white">{formatCurrency(welcomeTax)}</PrivateAmount></div>
-                    <div><div className="text-tiny text-ink-400 uppercase tracking-wider">Notaire &amp; Insp.</div><PrivateAmount as="div" className="text-body font-bold text-white">{formatCurrency(notaryFees + inspectionFees)}</PrivateAmount></div>
-                    <div><div className="text-tiny text-ink-400 uppercase tracking-wider">Rénos Initiales</div><PrivateAmount as="div" className="text-body font-bold text-white">{formatCurrency(initialRenovations)}</PrivateAmount></div>
-                    <div><div className="text-tiny text-ink-400 uppercase tracking-wider">Maison Totale</div><PrivateAmount as="div" className="text-body font-bold text-white">{formatCurrency(price + initialRenovations)}</PrivateAmount></div>
+                    <div><div className="text-tiny text-ink-400 uppercase tracking-wider">Welcome Tax</div><PrivateAmount as="div" className="text-body font-bold text-texte">{formatCurrency(welcomeTax)}</PrivateAmount></div>
+                    <div><div className="text-tiny text-ink-400 uppercase tracking-wider">Notaire &amp; Insp.</div><PrivateAmount as="div" className="text-body font-bold text-texte">{formatCurrency(notaryFees + inspectionFees)}</PrivateAmount></div>
+                    <div><div className="text-tiny text-ink-400 uppercase tracking-wider">Rénos Initiales</div><PrivateAmount as="div" className="text-body font-bold text-texte">{formatCurrency(initialRenovations)}</PrivateAmount></div>
+                    <div><div className="text-tiny text-ink-400 uppercase tracking-wider">Maison Totale</div><PrivateAmount as="div" className="text-body font-bold text-texte">{formatCurrency(price + initialRenovations)}</PrivateAmount></div>
                 </div>
             </Card>
 
@@ -44,11 +44,11 @@ export const AmortissementCards: React.FC<AmortissementCardsProps> = ({
                     <div className="mb-3 flex flex-wrap gap-4 text-meta">
                         <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-danger-500 inline-block" />Intérêts totaux payés : <PrivateAmount className="font-bold text-danger-400">{formatCurrency(amortizationData.totalInterest)}</PrivateAmount></div>
                         <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-success-500 inline-block" />Gain Équité projeté : <PrivateAmount className="font-bold text-success-400">{formatCurrency((amortizationData.data[amortizationData.data.length - 1]?.Équité || 0) - downPayment)}</PrivateAmount></div>
-                        {yearlyRenovations > 0 && <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block" />Rénos totales : <PrivateAmount className="font-bold text-yellow-400">{formatCurrency(yearlyRenovations * amortization)}</PrivateAmount></div>}
+                        {yearlyRenovations > 0 && <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-alerte-texte inline-block" />Rénos totales : <PrivateAmount className="font-bold text-yellow-400">{formatCurrency(yearlyRenovations * amortization)}</PrivateAmount></div>}
                     </div>
                     <table className="w-full text-meta text-left min-w-[700px]">
                         <thead>
-                            <tr className="border-b border-white/10 text-ink-400 uppercase tracking-wider">
+                            <tr className="border-b border-bordure text-ink-400 uppercase tracking-wider">
                                 <th className="py-2 pr-4">Année</th>
                                 <th className="py-2 pr-4">Taux</th>
                                 <th className="py-2 pr-4 text-right">Intérêts/an</th>
@@ -63,15 +63,15 @@ export const AmortissementCards: React.FC<AmortissementCardsProps> = ({
                                 const isRenewal = idx > 0 && idx % 5 === 0;
                                 const equityPct = row.ValeuréPropriété > 0 ? Math.round((row.Équité / row.ValeuréPropriété) * 100) : 0;
                                 return (
-                                    <tr key={row.year} className={`border-b border-white/5 ${isRenewal ? 'bg-orange-900/10' : idx % 2 === 0 ? 'bg-white/2' : ''} hover:bg-white/5 transition-colors`}>
+                                    <tr key={row.year} className={`border-b border-bordure ${isRenewal ? 'bg-alerte-fond' : idx % 2 === 0 ? 'bg-surface-douce/40' : ''} hover:bg-surface-douce transition-colors`}>
                                         <td className="py-2 pr-4 font-bold">
                                             {row.calendarYear}
-                                            {isRenewal && <span className="ml-1.5 text-tiny text-orange-400 border border-orange-500/30 rounded-sm px-1">Renouvellement</span>}
+                                            {isRenewal && <span className="ml-1.5 text-tiny text-alerte-texte border border-alerte-texte/30 rounded-sm px-1">Renouvellement</span>}
                                         </td>
                                         <td className="py-2 pr-4 text-orange-300"><PrivateAmount>{row.TauxEnVigueur}</PrivateAmount></td>
                                         <td className="py-2 pr-4 text-right text-danger-400"><PrivateAmount>{formatCurrency(row.PartInteretAnnuelle)}</PrivateAmount></td>
                                         <td className="py-2 pr-4 text-right text-info-400"><PrivateAmount>{formatCurrency(row.PartPrincipalAnnuelle)}</PrivateAmount></td>
-                                        <td className="py-2 pr-4 text-right text-white"><PrivateAmount>{formatCurrency(row.Solde)}</PrivateAmount></td>
+                                        <td className="py-2 pr-4 text-right text-texte"><PrivateAmount>{formatCurrency(row.Solde)}</PrivateAmount></td>
                                         <td className="py-2 pr-4 text-right text-purple-300"><PrivateAmount>{formatCurrency(row.ValeuréPropriété)}</PrivateAmount></td>
                                         <td className="py-2 text-right">
                                             <PrivateAmount className="text-success-400 font-bold">{formatCurrency(row.Équité)}</PrivateAmount>
