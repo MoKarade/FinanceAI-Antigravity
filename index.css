@@ -1055,23 +1055,18 @@
 }
 
 @keyframes gfChartReveal {
-  /* Transform absent du keyframe 100% : avec forwards, seule l'opacité finale est figée,
-     ce qui préserve le plein écran et les éléments position:fixed. */
   0% {
     opacity: 0;
-    transform: translateY(10px) scale(0.992);
-  }
-  70% {
-    opacity: 1;
+    transform: translateY(4px);
   }
   100% {
     opacity: 1;
+    transform: translateY(0);
   }
 }
 
-.gf-chart-enter,
-.recharts-responsive-container {
-  animation: gfChartReveal 0.44s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.gf-chart-enter {
+  animation: gfChartReveal 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* ── Barres de répartition et jauges animées (toutes pages) ── */
@@ -1506,13 +1501,7 @@
 
 .recharts-line .recharts-curve,
 .recharts-area .recharts-curve {
-  filter: drop-shadow(0 2px 6px rgba(138, 180, 248, 0.22));
-  transition: stroke-width 0.2s ease, filter 0.2s ease;
-  animation: gfChartSeriesIn 0.48s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.recharts-area-area {
-  animation: gfChartSeriesIn 0.54s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: stroke-width 0.2s ease;
 }
 
 .recharts-bar-rectangles {
@@ -1537,39 +1526,15 @@
   filter: brightness(1.18) drop-shadow(0 0 8px rgba(138, 180, 248, 0.28));
 }
 
-@keyframes gfActiveDotPop {
-  0% {
-    transform: scale(0.5);
-    opacity: 0.4;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
 .recharts-active-dot circle {
-  filter: drop-shadow(0 0 8px rgba(138, 180, 248, 0.65));
   transform-box: fill-box;
   transform-origin: center;
-  animation: gfActiveDotPop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 .recharts-tooltip-wrapper {
   transition: transform 0.08s cubic-bezier(0.16, 1, 0.3, 1) !important;
   z-index: 40 !important;
   pointer-events: none !important;
-}
-
-@keyframes gfTooltipIn {
-  from {
-    opacity: 0;
-    transform: translateY(3px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
 }
 
 .gf-tooltip-card {
@@ -1587,7 +1552,7 @@
   min-width: 14rem;
   max-width: 19.5rem;
   font-variant-numeric: tabular-nums;
-  animation: gfTooltipIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: none !important;
 }
 
 .gf-tooltip-header {

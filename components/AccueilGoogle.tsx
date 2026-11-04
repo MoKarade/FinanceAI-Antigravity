@@ -2014,15 +2014,15 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             </div>
 
                             {/* Courbe principale : Présent (1 mois d'historique en bleu continu) vs Futur (projection en émeraude pointillé) */}
+                            {/* Courbe principale : Présent (historique en bleu continu) vs Futur (projection en émeraude pointillé) */}
                             <div
-                                key={`${activeTab}-trajectoire-${horizon}-${modeCourbe}-${lentilleHero}`}
                                 data-testid="recharts-trajectory-entrance"
                                 data-active-tab={activeTab}
                                 data-chart-horizon={horizon}
                                 data-chart-mode={modeCourbe}
                                 data-chart-lens={lentilleHero}
                                 role="img"
-                                aria-label="Graphique combiné du présent (1 mois) et du futur projeté — valeurs détaillées dans le tableau de données."
+                                aria-label="Graphique combiné du présent et du futur projeté — valeurs détaillées dans le tableau de données."
                                 className="h-[225px] sm:h-[270px] w-full gf-chart-enter rounded-lg bg-fond border border-bordure p-2"
                             >
                                 <ResponsiveContainer width="100%" height="100%">
@@ -2064,6 +2064,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         />
                                         <Tooltip
                                             isAnimationActive={false}
+                                            cursor={{ stroke: 'var(--texte-doux)', strokeWidth: 1, strokeDasharray: '3 3', strokeOpacity: 0.5 }}
                                             content={<TrajectoireTooltip patrimoineInitial={valeurHeroAffichee} />}
                                         />
                                         <ReferenceLine
@@ -2080,11 +2081,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                 strokeWidth={2}
                                                 strokeDasharray="4 4"
                                                 dot={false}
-                                                isAnimationActive={true}
-                                                animationDuration={340}
+                                                isAnimationActive={false}
                                             />
                                         )}
-                                        {/* Série PRÉSENT (1 mois d'historique jusqu'à Aujourd'hui) : trait continu bleu Google */}
+                                        {/* Série PRÉSENT : trait continu bleu Google */}
                                         <Area
                                             type="monotone"
                                             dataKey="valeurPresent"
@@ -2093,8 +2093,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             fill="url(#accueilPresentGrad)"
                                             fillOpacity={1}
                                             connectNulls={false}
-                                            isAnimationActive={true}
-                                            animationDuration={360}
+                                            isAnimationActive={false}
                                         />
                                         <Line
                                             type="monotone"
@@ -2103,11 +2102,13 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             strokeWidth={2.75}
                                             connectNulls={false}
                                             dot={false}
-                                            activeDot={{ r: 5, fill: 'var(--gf-bleu)' }}
-                                            isAnimationActive={true}
-                                            animationDuration={380}
+                                            activeDot={(props: { cx?: number; cy?: number; value?: number | null }) => {
+                                                if (props.value === null || props.value === undefined || !Number.isFinite(props.value) || typeof props.cx !== 'number' || typeof props.cy !== 'number') return null;
+                                                return <circle cx={props.cx} cy={props.cy} r={5} fill="var(--gf-bleu)" stroke="var(--fond)" strokeWidth={2} />;
+                                            }}
+                                            isAnimationActive={false}
                                         />
-                                        {/* Série FUTUR (projection à partir d'Aujourd'hui) : trait pointillé vert émeraude */}
+                                        {/* Série FUTUR (projection) : trait pointillé vert émeraude */}
                                         <Area
                                             type="monotone"
                                             dataKey="valeurFutur"
@@ -2116,8 +2117,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             fill="url(#accueilFuturGrad)"
                                             fillOpacity={1}
                                             connectNulls={false}
-                                            isAnimationActive={true}
-                                            animationDuration={400}
+                                            isAnimationActive={false}
                                         />
                                         <Line
                                             type="monotone"
@@ -2127,9 +2127,13 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             strokeDasharray="5 4"
                                             connectNulls={false}
                                             dot={false}
-                                            activeDot={{ r: 5, fill: 'var(--gf-vert)' }}
-                                            isAnimationActive={true}
-                                            animationDuration={420}
+                                            activeDot={(props: { cx?: number; cy?: number; value?: number | null; payload?: PointTrajectoire }) => {
+                                                if (props.value === null || props.value === undefined || !Number.isFinite(props.value) || typeof props.cx !== 'number' || typeof props.cy !== 'number') return null;
+                                                // À « Aujourd’hui », le point bleu de valeurPresent s'affiche déjà : éviter le double point SVG superposé
+                                                if (props.payload?.periode === 'transition' || props.payload?.annee === 'Aujourd’hui') return null;
+                                                return <circle cx={props.cx} cy={props.cy} r={5} fill="var(--gf-vert)" stroke="var(--fond)" strokeWidth={2} />;
+                                            }}
+                                            isAnimationActive={false}
                                         />
                                         {pointsTempsForts.map((pt, idx) => (
                                             <ReferenceDot
@@ -2925,7 +2929,8 @@ interface TrajectoireTooltipProps {
 
 const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({ active, payload, patrimoineInitial }) => {
     if (!active || !payload || payload.length === 0) return null;
-    const pt = payload[0]?.payload;
+    const itemAvecValeur = payload.find((p) => p?.payload && typeof p.payload.valeur === 'number');
+    const pt = itemAvecValeur?.payload ?? payload[0]?.payload;
     if (!pt) return null;
     const ecart = pt.valeur - patrimoineInitial;
     const badgePeriode =
