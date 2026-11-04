@@ -20,6 +20,7 @@ import { MASKED_AMOUNT_LABEL } from '../../utils/privacyAria';
 import { useTimeChartZoom } from '../../hooks/useTimeChartZoom';
 import { ZoomContainer } from '../ui/ZoomContainer';
 import { priceAt } from '../../services/history/reconstructPortfolioHistory';
+import { historyKeyMatchesSymbol } from '../../services/history/buildMarketData';
 
 export type PeriodeGraphe = '1M' | '3M' | '6M' | 'ALL';
 const PERIODES: ReadonlyArray<{ id: PeriodeGraphe; libelle: string }> = [
@@ -179,9 +180,10 @@ export const PerformanceComparee: React.FC<Props> = ({ donnees, series, selectio
             const dateStr = String(row.date);
             const rowCopie = { ...row };
             for (const t of titres) {
-                const asset = assetBySymbol.get(t.id);
+                const asset = assetBySymbol.get(t.id)
+                    || assets.find((a) => a.symbol === t.id || historyKeyMatchesSymbol(t.id, a.symbol) || (a.historySymbol && historyKeyMatchesSymbol(t.id, a.historySymbol)));
                 if (asset?.priceHistory && asset.priceHistory.length > 0) {
-                    const close = priceAt(asset, dateStr, 7) ?? priceAt(asset, dateStr);
+                    const close = priceAt(asset, dateStr, 7);
                     if (typeof close === 'number' && Number.isFinite(close) && close > 0) {
                         rowCopie[t.id] = close;
                     } else {

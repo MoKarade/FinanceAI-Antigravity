@@ -21,7 +21,6 @@ vi.mock('../../services/gemini', async () => {
     return {
         ...reel,
         MODEL_HAIKU: 'gemini-flash-lite-test',
-        // eslint-disable-next-line require-yield
         chatStream: async function* () { yield reponseModele; },
     };
 });
@@ -60,15 +59,15 @@ describe('[AI-BUDGETMODAL-RAW-FALLBACK] la forme de la réponse est LISIBLE', ()
         // le contenu dans une puce identique à une recommandation validée : on vérifie donc que le
         // conteneur DIFFÈRE, pas seulement qu'une phrase a été ajoutée.
         reponseModele = JSON.stringify(['Réduis l\'épicerie de 100 $.', 'Bloque 200 $.', 'Revois les abonnements.']);
-        const { container: conforme, unmount } = render(<BudgetAiModal apiKey="sk-test" payload={payload} onClose={() => {}} />);
+        const { unmount } = render(<BudgetAiModal apiKey="sk-test" payload={payload} onClose={() => {}} />);
         await waitFor(() => expect(screen.getByText(/Réduis l'épicerie/)).toBeTruthy());
-        const classesValidees = conforme.querySelector('.rounded-lg.p-4')?.className ?? '';
+        const classesValidees = document.body.querySelector('.rounded-lg.p-4')?.className ?? '';
         unmount();
 
         reponseModele = 'Texte libre du modèle, hors format.';
-        const { container: brut } = render(<BudgetAiModal apiKey="sk-test" payload={payload} onClose={() => {}} />);
+        render(<BudgetAiModal apiKey="sk-test" payload={payload} onClose={() => {}} />);
         await waitFor(() => expect(screen.getByText(/Texte libre du modèle/)).toBeTruthy());
-        const classesBrutes = brut.querySelector('.rounded-lg.p-4')?.className ?? '';
+        const classesBrutes = document.body.querySelector('.rounded-lg.p-4')?.className ?? '';
 
         expect(classesValidees, 'la mesure est vide — le sélecteur ne trouve plus les blocs').not.toBe('');
         expect(classesBrutes).not.toBe('');

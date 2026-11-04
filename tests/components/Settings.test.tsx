@@ -196,7 +196,8 @@ describe('Settings', () => {
         fireEvent.click(encBtn);
 
         // Find the confirm/export button inside the modal — it should be disabled with empty passphrase
-        const confirmBtn = screen.getAllByRole('button').find(
+        const dialog = screen.getByRole('dialog');
+        const confirmBtn = within(dialog).getAllByRole('button').find(
             b => b.textContent?.includes('Exporter chiffré') || b.textContent?.includes('Chiffrement')
         );
         if (confirmBtn) {

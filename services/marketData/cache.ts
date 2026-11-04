@@ -82,10 +82,15 @@ export async function withCache<T>(
 
         const value = await fetcher();
         if (value !== null) {
-            const entry: CachedEntry<T> = { value, expiresAt: Date.now() + TTL_PRESETS[bucket] };
-            store.set(cacheKey, entry);
-            if (PERSISTENT_BUCKETS.has(bucket)) {
-                void idbSetEntry(cacheKey, entry); // fire-and-forget, best-effort
+            // [HIST-NO-EMPTY-CACHE] Un historique vide ne doit JAMAIS être verrouillé 24h
+            // (ex. proxy pas encore déployé, panne transitoire) : permet une récupération immédiate.
+            const isEmptyHistory = bucket === 'history' && Array.isArray(value) && value.length === 0;
+            if (!isEmptyHistory) {
+                const entry: CachedEntry<T> = { value, expiresAt: Date.now() + TTL_PRESETS[bucket] };
+                store.set(cacheKey, entry);
+                if (PERSISTENT_BUCKETS.has(bucket)) {
+                    void idbSetEntry(cacheKey, entry); // fire-and-forget, best-effort
+                }
             }
         }
         return value;
@@ -109,6 +114,9 @@ export function clearMarketDataCache(bucket?: CacheBucket): void {
     const prefix = `${bucket}::`;
     for (const key of store.keys()) {
         if (key.startsWith(prefix)) store.delete(key);
+    }
+    if (PERSISTENT_BUCKETS.has(bucket)) {
+        void idbClearEntries(prefix);
     }
 }
 

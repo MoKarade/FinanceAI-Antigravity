@@ -130,7 +130,7 @@ export const HistorySyncDoctor: React.FC<Props> = ({ onApplyQuoteSymbol, isSynci
                                                     disabled={isSyncing}
                                                     onClick={() => onApplyQuoteSymbol(q.symbol, sug.symbol)}
                                                     title={`Utiliser ${sug.symbol} comme symbole de cotation`}
-                                                    className="text-tiny bg-info-500/20 text-accent border border-info-500/50 rounded-lg px-2 py-1 hover:bg-info-500/30 focus-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    className="touch-target text-tiny bg-info-500/20 text-accent border border-info-500/50 rounded-lg px-2 py-1 hover:bg-info-500/30 focus-ring disabled:opacity-50 disabled:cursor-not-allowed"
                                                 >
                                                     {sug.symbol} — {sug.name}{sug.exchange ? ` (${sug.exchange})` : ''}
                                                 </button>
@@ -146,7 +146,7 @@ export const HistorySyncDoctor: React.FC<Props> = ({ onApplyQuoteSymbol, isSynci
                                                     disabled={isSyncing}
                                                     onClick={() => onApplyQuoteSymbol(q.symbol, candidat)}
                                                     title={`Utiliser ${candidat} comme symbole de cotation`}
-                                                    className="text-tiny bg-info-500/20 text-accent border border-info-500/50 rounded-lg px-2 py-1 hover:bg-info-500/30 focus-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    className="touch-target text-tiny bg-info-500/20 text-accent border border-info-500/50 rounded-lg px-2 py-1 hover:bg-info-500/30 focus-ring disabled:opacity-50 disabled:cursor-not-allowed"
                                                 >
                                                     {candidat}
                                                 </button>
@@ -177,7 +177,7 @@ export const HistorySyncDoctor: React.FC<Props> = ({ onApplyQuoteSymbol, isSynci
                                     <button
                                         type="submit"
                                         disabled={isSyncing || !(drafts[q.symbol] ?? currentQuoteSymbol(q.symbol)).trim()}
-                                        className="text-meta text-primary hover:text-texte focus-ring rounded-lg px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="touch-target text-meta text-primary hover:text-texte focus-ring rounded-lg px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         {isSyncing ? 'Synchronisation…' : 'Appliquer'}
                                     </button>
@@ -185,7 +185,7 @@ export const HistorySyncDoctor: React.FC<Props> = ({ onApplyQuoteSymbol, isSynci
                                         type="button"
                                         disabled={isSyncing || searching === q.symbol}
                                         onClick={() => void searchFor(q.symbol)}
-                                        className="text-meta text-ink-300 hover:text-texte focus-ring rounded-lg px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="touch-target text-meta text-ink-300 hover:text-texte focus-ring rounded-lg px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         {searching === q.symbol ? 'Recherche…' : 'Chercher le titre'}
                                     </button>
@@ -230,7 +230,7 @@ export const HistorySyncDoctor: React.FC<Props> = ({ onApplyQuoteSymbol, isSynci
                                             disabled={isSyncing}
                                             onClick={() => onApplyQuoteSymbol(s.symbol, sug.symbol)}
                                             title={`Utiliser ${sug.symbol} comme symbole de cotation`}
-                                            className="text-tiny bg-info-500/20 text-accent border border-info-500/50 rounded-lg px-2 py-1 hover:bg-info-500/30 focus-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="touch-target text-tiny bg-info-500/20 text-accent border border-info-500/50 rounded-lg px-2 py-1 hover:bg-info-500/30 focus-ring disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             {sug.symbol} — {sug.name}{sug.exchange ? ` (${sug.exchange})` : ''}
                                         </button>
@@ -262,7 +262,7 @@ export const HistorySyncDoctor: React.FC<Props> = ({ onApplyQuoteSymbol, isSynci
                                 <button
                                     type="submit"
                                     disabled={isSyncing || !(drafts[s.symbol] ?? currentQuoteSymbol(s.symbol)).trim()}
-                                    className="text-meta text-primary hover:text-texte focus-ring rounded-lg px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="touch-target text-meta text-primary hover:text-texte focus-ring rounded-lg px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isSyncing ? 'Synchronisation…' : 'Appliquer'}
                                 </button>
@@ -270,7 +270,7 @@ export const HistorySyncDoctor: React.FC<Props> = ({ onApplyQuoteSymbol, isSynci
                                     type="button"
                                     disabled={isSyncing || searching === s.symbol}
                                     onClick={() => void searchFor(s.symbol)}
-                                    className="text-meta text-ink-300 hover:text-texte focus-ring rounded-lg px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="touch-target text-meta text-ink-300 hover:text-texte focus-ring rounded-lg px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {searching === s.symbol ? 'Recherche…' : 'Chercher le titre'}
                                 </button>

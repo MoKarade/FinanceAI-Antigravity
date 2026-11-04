@@ -100,14 +100,26 @@ export async function idbSweepExpired(now: number = Date.now()): Promise<void> {
     }
 }
 
-/** Vide tout le cache persisté (refresh forcé). */
-export async function idbClearEntries(): Promise<void> {
+/** Vide le cache persisté (tout, ou les clés commençant par `prefix`). */
+export async function idbClearEntries(prefix?: string): Promise<void> {
     if (typeof indexedDB === 'undefined') return;
     try {
         const db = await openDB();
         await new Promise<void>((resolve) => {
             const tx = db.transaction(STORE_NAME, 'readwrite');
-            tx.objectStore(STORE_NAME).clear();
+            const store = tx.objectStore(STORE_NAME);
+            if (!prefix) {
+                store.clear();
+            } else {
+                const req = store.openCursor();
+                req.onsuccess = () => {
+                    const cursor = req.result;
+                    if (!cursor) return;
+                    const key = String(cursor.key);
+                    if (key.startsWith(prefix)) cursor.delete();
+                    cursor.continue();
+                };
+            }
             tx.oncomplete = () => { db.close(); resolve(); };
             tx.onerror = () => { db.close(); resolve(); };
         });

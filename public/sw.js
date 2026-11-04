@@ -10,7 +10,7 @@
 //
 // Note : ce SW est uniquement chargé en PROD (vite import.meta.env.PROD).
 
-const CACHE_NAME = 'financeai-v18'; // v18 : projection moteur fidele sur accueil et cours exacts dans performance comparee ; v17 : proxy Yahoo Cloud Run
+const CACHE_NAME = 'financeai-v19'; // v19 : purge cache IDB, resync automatique cours actions manquants, performance boursiere exacte ; v18 : projection moteur fidele sur accueil
 const PRECACHE_URLS = ['/manifest.json', '/icon.svg'];
 
 // [CF-ACCESS] Une réponse mettable en cache doit être une réponse DIRECTE de notre origine : ni redirigée (session
@@ -67,7 +67,8 @@ self.addEventListener('fetch', (event) => {
     if (url.origin !== self.location.origin) return; // pas de cache pour Era / Finnhub / Anthropic
 
     // [CF-ACCESS / FIREBASE-AUTH] /api/* et /__/* : jamais mis en cache ni servis par le SW.
-    if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/__/')) return;
+    if (url.pathname.startsWith('/api/')) return;
+    if (url.pathname.startsWith('/__/')) return;
 
     // Cache-first pour /assets/* (chunks Vite hashés, immutable)
     // + portfolio-history.csv (historique immuable côté serveur, peut être

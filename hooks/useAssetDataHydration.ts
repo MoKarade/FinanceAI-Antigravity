@@ -44,7 +44,14 @@ export function useAssetDataHydration(
             try {
                 const { hydrateAssetHistories, applyHistoryPatches } = await import('../services/history/hydrateAssetHistories');
                 const { getHistoryDetaille, hasHistoryProvider } = await loadMarketData();
-                const res = await hydrateAssetHistories(current, { getHistory: getHistoryDetaille, hasProvider: hasHistoryProvider });
+                const { clearMarketDataCache } = await import('../services/marketData/cache');
+                // Si des actifs détenus ont un historique squelettique (< 5 points), purger l'ancien cache IDB
+                // potentiellement vide et forcer l'hydratation pour récupérer les cours réels du proxy Cloud Run.
+                const needsRecovery = current.some((a) => a.symbol && (a.quantity || 0) > 0 && (!a.priceHistory || a.priceHistory.length < 5));
+                if (needsRecovery) {
+                    clearMarketDataCache('history');
+                }
+                const res = await hydrateAssetHistories(current, { getHistory: getHistoryDetaille, hasProvider: hasHistoryProvider }, { force: needsRecovery });
                 if (cancelled) return;
                 // [HIST-MULTI-PROVIDER] Publier le rapport MÊME sans patch (c'est justement quand
                 // rien n'a pu être hydraté que le diagnostic par titre est utile à l'écran).
