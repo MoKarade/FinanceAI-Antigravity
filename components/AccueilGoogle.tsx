@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useMemo, useState } from 'react';
 import {
     ComposedChart,
     CartesianGrid,
@@ -40,7 +40,7 @@ import {
 } from '../services/projection/dailyCurve';
 import { buildLockedByMonth } from '../utils/lockedCurveOverlay';
 import { reperesRonds } from '../utils/reperesRonds';
-import { GF_CROSSHAIR_CURSOR, GF_ACTIVE_DOT, resolvePointByX } from '../utils/chartTooltip';
+import { GF_CROSSHAIR_CURSOR, GF_ACTIVE_DOT } from '../utils/chartTooltip';
 import { kpiPatrimoine } from './projection/kpiPatrimoine';
 import { RefLineLabel, TodayValueBadge } from './projection/ProjectionTooltip';
 import { couleurSerie } from './future/seriesConfig';
@@ -56,7 +56,6 @@ import { presentTermesOfGoal, monthsSince } from '../services/projection/pastPur
 import { assetValueCad, computeMonthlyBudgetAggregates, toCurrencyFactor } from '../services/portfolio';
 import { computePurchaseStats } from '../utils/assetPurchases';
 import { monthlyConsumptionExpenses } from '../utils/healthRatios';
-import { isSpend, isTransferOrVirement, effectiveTransferCategory } from '../utils/spendRules';
 import { formatCAD, formatCompactCAD, formatPercent } from '../utils/format';
 import { maskedTick } from '../utils/chartPrivacy';
 import { MASKED_AMOUNT_LABEL } from '../utils/privacyAria';
@@ -104,7 +103,21 @@ interface AccueilGoogleProps {
 type HorizonCle = '1M' | '1A' | '5A' | '10A' | 'MAX';
 type LentilleHero = 'net' | 'portefeuille' | 'liquidites' | 'immobilier';
 type ModeCourbe = 'nette' | 'complete';
-type SousOngletCentre = 'avoirs' | 'insights' | 'transactions' | 'evenements';
+
+interface PrioriteActionPatrimoniale {
+    id: string;
+    rang: string;
+    titre: string;
+    description: string;
+    statutLabel: string;
+    statutClasse: 'gf-delta-up' | 'gf-delta-amber' | 'gf-delta-neutral' | 'gf-delta-down';
+    montantPrincipal: number | null;
+    cibleMontant: number | null;
+    progressionPct: number;
+    classeBarre: string;
+    ctaLabel: string;
+    tab: Tab;
+}
 
 type PointTrajectoire = ProjectionChartPoint & {
     annee: string;
@@ -196,13 +209,6 @@ const LENTILLES_HERO: ReadonlyArray<{ cle: LentilleHero; label: string; ticker: 
     { cle: 'portefeuille', label: 'Portefeuille', ticker: 'PORT:CAD' },
     { cle: 'liquidites', label: 'Liquidités', ticker: 'CASH:CAD' },
     { cle: 'immobilier', label: 'Équité immobilière', ticker: 'IMMO:CAD' },
-];
-
-const SOUS_ONGLETS_CENTRE: ReadonlyArray<{ cle: SousOngletCentre; label: string; badgeNouveau?: boolean }> = [
-    { cle: 'avoirs', label: 'Flux 30j' },
-    { cle: 'insights', label: 'Insights', badgeNouveau: true },
-    { cle: 'transactions', label: 'Transactions' },
-    { cle: 'evenements', label: 'Événements' },
 ];
 
 const QUESTIONS_GEMINI_SUGGEREES: ReadonlyArray<string> = [
@@ -318,14 +324,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     const [horizon, setHorizon] = useState<HorizonCle>('1M');
     const [modeCourbe, setModeCourbe] = useState<ModeCourbe>('nette');
     const [tempsFortsActifs, setTempsFortsActifs] = useState(true);
-    const [sousOngletCentre, setSousOngletCentre] = useState<SousOngletCentre>('avoirs');
     const [segmentActif, setSegmentActif] = useState<string | null>(null);
     const [showConnexionsModal, setShowConnexionsModal] = useState(false);
     const [showGeminiModal, setShowGeminiModal] = useState(false);
-    const [pointSurvole, setPointSurvole] = useState<ProjectionChartPoint | null>(null);
-    const [pointFige, setPointFige] = useState<ProjectionChartPoint | null>(null);
-    const chartContainerRef = useRef<HTMLDivElement | null>(null);
-    const lastHoverPointRef = useRef<ProjectionChartPoint | null>(null);
 
     // Calcul immobilier cohérent avec FutureKpiStrip (avoirs − dettes = patrimoine net)
     const { realEstateEquity, realEstateValeur, realEstateHypotheque } = useMemo(() => {
@@ -980,42 +981,6 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         return brut ? (enrichDailyPoint(brut) ?? brut) : (chartDataMoteur[0] ?? null);
     }, [idxAncre, selectSeries, enrichDailyPoint, chartDataMoteur]);
 
-    const jourActif = pointFige ?? pointSurvole ?? pointAncre;
-
-    const idxJourActif = useMemo(() => {
-        if (!jourActif) return -1;
-        return selectSeries.findIndex((d) => d.monthIndex === jourActif.monthIndex);
-    }, [jourActif, selectSeries]);
-
-    const stepJourAccueil = useCallback(
-        (dir: -1 | 1) => {
-            if (selectSeries.length === 0) return;
-            const baseIdx = idxJourActif === -1 ? Math.max(0, idxAncre) : idxJourActif;
-            const cibleIdx = Math.max(0, Math.min(selectSeries.length - 1, baseIdx + dir));
-            const pt = selectSeries[cibleIdx];
-            if (pt) {
-                setPointFige(enrichDailyPoint(pt) ?? pt);
-            }
-        },
-        [selectSeries, idxJourActif, idxAncre, enrichDailyPoint],
-    );
-
-    const resoudrePointClientX = useCallback(
-        (clientX: number): ProjectionChartPoint | null => {
-            const grid = chartContainerRef.current?.querySelector('.recharts-cartesian-grid');
-            const rect = grid?.getBoundingClientRect();
-            const pt =
-                resolvePointByX(
-                    clientX,
-                    rect ? { left: rect.left, width: rect.width } : null,
-                    selectSeries,
-                    (p) => p.monthIndex,
-                ) ?? lastHoverPointRef.current;
-            return pt ? (enrichDailyPoint(pt) ?? pt) : null;
-        },
-        [selectSeries, enrichDailyPoint],
-    );
-
     // Échelle Y alignée sur FutureProjection.tsx (reperesRonds + cadrage dynamique sur 1M/1A)
     const echelleYTrajectoire = useMemo<{ ticks?: number[]; domaine: [number, number] }>(() => {
         const valeurs: number[] = [];
@@ -1456,57 +1421,159 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             .slice(0, 5);
     }, [state.transactions]);
 
-    // Synthèse des flux sur 1 mois (30 jours) & transferts (remplace le doublon Positions & comptes sous la courbe)
-    const flux30Jours = useMemo(() => {
-        const aujMs = Date.parse(`${todayIso}T12:00:00Z`) || Date.now();
-        const txs = (state.transactions ?? []).filter((t) => !t.isDuplicate && Number.isFinite(t.amount));
-        const recents = txs.filter((t) => {
-            const ms = Date.parse(`${t.date.slice(0, 10)}T12:00:00Z`);
-            return Number.isFinite(ms) && (aujMs - ms) / 86_400_000 <= 35;
-        });
-        const source = recents.length > 0 ? recents : txs.slice(0, 30);
+    // Plan d'action patrimonial personnalisé — calculé 100 % sur les données réelles du dossier (No-fake-data)
+    const prioritesPlanAction = useMemo<PrioriteActionPatrimoniale[]>(() => {
+        const depensesConso = indicateursPouls.depensesConso;
+        const cibleUrgence = depensesConso > 0 ? Math.round(depensesConso * 3) : null;
+        const moisAutonomie = indicateursPouls.moisAutonomie;
+        const pctUrgence =
+            cibleUrgence && cibleUrgence > 0
+                ? Math.min(100, Math.max(4, Math.round((liquidites / cibleUrgence) * 100)))
+                : liquidites > 0
+                  ? 100
+                  : 0;
+        const surplusCash = cibleUrgence !== null && liquidites > cibleUrgence ? Math.round(liquidites - cibleUrgence) : 0;
 
-        let revenus = 0;
-        let depenses = 0;
-        let transferts = 0;
-        const parCat = new Map<string, { montant: number; estTransfert: boolean }>();
+        const celiVal = Math.max(0, Math.round(assetBreakdown.celi || 0));
+        const reerVal = Math.max(0, Math.round(assetBreakdown.reer || 0));
+        const nonRegVal = Math.max(0, Math.round((assetBreakdown.nonReg || 0) + (assetBreakdown.reee || 0)));
+        const abriFiscalTotal = celiVal + reerVal;
+        const pctAbriFiscal =
+            portefeuillePlacements > 0
+                ? Math.min(100, Math.max(4, Math.round((abriFiscalTotal / portefeuillePlacements) * 100)))
+                : 0;
 
-        for (const tx of source) {
-            const abs = Math.abs(tx.amount);
-            if (isTransferOrVirement(tx)) {
-                transferts += abs;
-                const cat = effectiveTransferCategory(tx);
-                const prev = parCat.get(cat) ?? { montant: 0, estTransfert: true };
-                parCat.set(cat, { montant: prev.montant + abs, estTransfert: true });
-            } else if (tx.amount > 0) {
-                revenus += tx.amount;
-            } else if (isSpend(tx, true)) {
-                depenses += abs;
-                const cat = (tx.category || 'Autre').trim() || 'Autre';
-                const prev = parCat.get(cat) ?? { montant: 0, estTransfert: false };
-                parCat.set(cat, { montant: prev.montant + abs, estTransfert: false });
-            }
-        }
+        const dettesHorsHypo = Math.max(0, Math.round(Number.isFinite(dettesHorsImmo) ? dettesHorsImmo : 0));
+        const ratioSolvabilite = Math.max(0, Math.min(100, 100 - indicateursPouls.ratioEndettement));
 
-        const totalSorties = Math.max(1, depenses + transferts);
-        const topCategories = [...parCat.entries()]
-            .map(([categorie, info]) => ({
-                categorie,
-                montant: Math.round(info.montant),
-                pct: Math.min(100, Math.max(4, Math.round((info.montant / totalSorties) * 100))),
-                estTransfert: info.estTransfert,
-            }))
-            .sort((a, b) => b.montant - a.montant)
-            .slice(0, 5);
+        const cibleFire = Number.isFinite(fireNumber) && fireNumber > 0 ? Math.round(fireNumber) : indicateursPouls.cibleRetraite;
+        const pctFire =
+            cibleFire > 0
+                ? Math.min(100, Math.max(2, Math.round((Math.max(0, patrimoineNet) / cibleFire) * 100)))
+                : 0;
 
-        return {
-            revenus: Math.round(revenus),
-            depenses: Math.round(depenses),
-            transferts: Math.round(transferts),
-            fluxNet: Math.round(revenus - depenses),
-            topCategories,
-        };
-    }, [todayIso, state.transactions]);
+        return [
+            {
+                id: 'prio-liquidites',
+                rang: 'Priorité 1 · Trésorerie & Sécurité',
+                titre:
+                    moisAutonomie !== null && moisAutonomie >= 3
+                        ? 'Coussin de sécurité atteint — excédent déployable'
+                        : 'Consolider le coussin de liquidités (3 mois)',
+                description:
+                    moisAutonomie !== null
+                        ? surplusCash > 0
+                            // NOMBRE-NON-MONETAIRE : nombre de mois d'autonomie de trésorerie
+                            ? `Encaisse de ${moisAutonomie} mois de dépenses courantes. L’excédent au-dessus de 3 mois peut être investi en CELI ou REER.`
+                            // NOMBRE-NON-MONETAIRE : nombre de mois d'autonomie de trésorerie
+                            : `Autonomie actuelle de ${moisAutonomie} mois de dépenses courantes. Visez 3 mois complets d’encaisse disponible.`
+                        : 'Ajustez vos postes budgétaires mensuels pour calibrer précisément votre réserve de sécurité.',
+                statutLabel:
+                    moisAutonomie !== null
+                        // NOMBRE-NON-MONETAIRE : nombre de mois d'autonomie de trésorerie
+                        ? `${moisAutonomie} mois d’autonomie`
+                        : 'À calibrer',
+                statutClasse:
+                    moisAutonomie !== null && moisAutonomie >= 3
+                        ? 'gf-delta-up'
+                        : moisAutonomie !== null && moisAutonomie >= 1.5
+                          ? 'gf-delta-amber'
+                          : 'gf-delta-neutral',
+                montantPrincipal: liquidites,
+                cibleMontant: cibleUrgence,
+                progressionPct: pctUrgence,
+                classeBarre: 'gf-alloc-cash',
+                ctaLabel: surplusCash > 0 ? 'Investir l’excédent' : 'Gérer la trésorerie',
+                tab: surplusCash > 0 ? Tab.INVESTMENTS : Tab.BUDGET,
+            },
+            {
+                id: 'prio-fiscalite-placements',
+                rang: 'Priorité 2 · Enveloppes fiscales ARC / RQ',
+                titre:
+                    nonRegVal > abriFiscalTotal
+                        ? 'Prioriser le transfert vers CELI (7 000 $) & REER'
+                        : 'Automatiser les cotisations CELI & REER',
+                description:
+                    nonRegVal > 0
+                        ? `Une part importante du portefeuille est en compte non-enregistré. Maximisez vos droits CELI et REER pour réduire l’impôt annuel.`
+                        : 'Continuez d’alimenter vos comptes enregistrés libres d’impôt selon votre taux marginal combiné Québec / Fédéral.',
+                statutLabel: `${pctAbriFiscal} % à l’abri de l’impôt`,
+                statutClasse: pctAbriFiscal >= 60 ? 'gf-delta-up' : 'gf-delta-amber',
+                montantPrincipal: portefeuillePlacements,
+                cibleMontant: epargneMensuelle > 0 ? Math.round(epargneMensuelle * 12) : null,
+                progressionPct: Math.max(8, pctAbriFiscal),
+                classeBarre: 'gf-alloc-celi',
+                ctaLabel: 'Optimiser CELI / REER',
+                tab: Tab.INVESTMENTS,
+            },
+            {
+                id: 'prio-dettes',
+                rang: 'Priorité 3 · Passifs & Effet de levier',
+                titre:
+                    totalDettes <= 0
+                        ? 'Bilan sans dette — capacité d’emprunt intacte'
+                        : dettesHorsHypo > 0
+                          ? 'Accélérer le remboursement des dettes hors hypothèque'
+                          : 'Maîtriser l’amortissement hypothécaire',
+                description:
+                    totalDettes <= 0
+                        ? 'Aucun passif enregistré au bilan. L’intégralité de votre flux mensuel travaille pour la croissance de vos actifs.'
+                        : `Ratio d’endettement de ${indicateursPouls.ratioEndettement} % des avoirs totaux. Ciblez en priorité les dettes au taux d’intérêt le plus élevé.`,
+                statutLabel:
+                    totalDettes <= 0
+                        ? '0 % d’endettement'
+                        : `Levier ${indicateursPouls.ratioEndettement} %`,
+                statutClasse:
+                    indicateursPouls.ratioEndettement <= 25
+                        ? 'gf-delta-up'
+                        : indicateursPouls.ratioEndettement <= 45
+                          ? 'gf-delta-amber'
+                          : 'gf-delta-down',
+                montantPrincipal: totalDettes,
+                cibleMontant: dettesHorsHypo > 0 ? dettesHorsHypo : null,
+                progressionPct: ratioSolvabilite,
+                classeBarre: 'gf-alloc-reer',
+                ctaLabel: 'Plan de désendettement',
+                tab: Tab.DEBT,
+            },
+            {
+                id: 'prio-retraite-fire',
+                rang: 'Priorité 4 · Cap Retraite & Indépendance financière',
+                titre: jalonFire
+                    ? `Trajectoire d’indépendance financière projetée en ${jalonFire.year}`
+                    // NOMBRE-NON-MONETAIRE : âge cible de retraite saisi en réglage
+                    : `Cap retraite cible à ${indicateursPouls.ageRetraite} ans`,
+                description:
+                    pointRetraite && Number.isFinite(pointRetraite.NetWorth)
+                        // NOMBRE-NON-MONETAIRE : âge du profil au jalon de retraite
+                        ? `Selon la simulation actuelle, votre patrimoine net atteindra son jalon de retraite à ${pointRetraite.age} ans avec les rentes RRQ et PSV.`
+                        : 'Simulez vos scénarios Monte-Carlo et vos rentes gouvernementales (RRQ / PSV) pour sécuriser votre décaissement.',
+                statutLabel: `${pctFire} % de la cible FIRE`,
+                statutClasse: pctFire >= 50 ? 'gf-delta-up' : 'gf-delta-amber',
+                montantPrincipal:
+                    pointRetraite && Number.isFinite(pointRetraite.NetWorth)
+                        ? pointRetraite.NetWorth
+                        : patrimoineNet,
+                cibleMontant: cibleFire,
+                progressionPct: Math.max(6, pctFire),
+                classeBarre: 'gf-alloc-immo',
+                ctaLabel: 'Explorer la trajectoire',
+                tab: Tab.FUTURE,
+            },
+        ];
+    }, [
+        indicateursPouls,
+        liquidites,
+        assetBreakdown,
+        portefeuillePlacements,
+        dettesHorsImmo,
+        fireNumber,
+        patrimoineNet,
+        epargneMensuelle,
+        totalDettes,
+        jalonFire,
+        pointRetraite,
+    ]);
 
     const prochainsJalons = useMemo<JalonPatrimonial[]>(() => {
         const anneeCourante = Number(todayIso.slice(0, 4)) || 2026;
@@ -2096,12 +2163,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
                     </section>
 
-                    {/* Prochains jalons & calendrier patrimonial (équilibré dans la colonne gauche sur bureau, sous Événements sur mobile) */}
+                    {/* Prochains jalons & calendrier patrimonial */}
                     <section
                         aria-label="Prochains jalons patrimoniaux"
-                        className={`premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-4 ${
-                            sousOngletCentre === 'evenements' ? 'block' : 'hidden xl:block'
-                        }`}
+                        className="premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-4"
                     >
                         <div className="flex items-center justify-between gap-3 border-b border-bordure pb-3.5">
                             <div className="space-y-0.5">
@@ -2160,9 +2225,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     <section
                         data-testid="preuves-sources-panel"
                         aria-label="Preuves et sources de véracité des calculs"
-                        className={`premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-4 ${
-                            sousOngletCentre === 'evenements' ? 'block' : 'hidden xl:block'
-                        }`}
+                        className="premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-4"
                     >
                         <div className="flex items-center justify-between gap-3 border-b border-bordure pb-3.5">
                             <div className="space-y-0.5">
@@ -2393,25 +2456,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 
                             {/* Courbe principale synchronisée sur FutureProjection.tsx : journalier (1M/1A) & mensuel/empilé par compte (5A/10A/MAX) */}
                             <div
-                                ref={chartContainerRef}
                                 data-testid="recharts-trajectory-entrance"
                                 data-active-tab={activeTab}
                                 data-chart-horizon={horizon}
                                 data-chart-mode={modeCourbe}
                                 data-chart-lens={lentilleHero}
-                                onMouseMove={(e) => {
-                                    const pt = resoudrePointClientX(e.clientX);
-                                    if (pt) {
-                                        lastHoverPointRef.current = pt;
-                                        setPointSurvole(pt);
-                                    }
-                                }}
-                                onMouseLeave={() => setPointSurvole(null)}
-                                onPointerUp={(e) => {
-                                    const pt = resoudrePointClientX(e.clientX);
-                                    if (!pt) return;
-                                    setPointFige((cur) => (cur && cur.monthIndex === pt.monthIndex ? null : pt));
-                                }}
                                 role="img"
                                 aria-label="Graphique combiné du présent et du futur projeté — valeurs détaillées dans le tableau de données."
                                 className="h-[280px] sm:h-[340px] w-full gf-chart-enter rounded-xl bg-fond border border-bordure p-3 cursor-crosshair"
@@ -2491,9 +2540,6 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                     patrimoineInitial={valeurHeroAffichee}
                                                     isPrivacyMode={isPrivacyMode}
                                                     enrichPoint={enrichDailyPoint}
-                                                    onHoverPoint={(pt) => {
-                                                        if (pt) lastHoverPointRef.current = pt;
-                                                    }}
                                                 />
                                             }
                                         />
@@ -2563,17 +2609,6 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                     }
                                                 />
                                             )}
-
-                                        {/* Point figé au clic */}
-                                        {pointFige && (
-                                            <ReferenceLine
-                                                x={pointFige.monthIndex}
-                                                stroke="var(--texte)"
-                                                strokeWidth={1.25}
-                                                strokeDasharray="2 2"
-                                                ifOverflow="hidden"
-                                            />
-                                        )}
 
                                         {modeCourbe === 'complete' && lentilleHero === 'net' ? (
                                             <>
@@ -2895,511 +2930,317 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     )}
                                 </div>
                             </div>
-
-                            {/* Inspecteur du point sélectionné & Jalons Futur (même précision que FutureProjection.tsx) */}
-                            {jourActif && (
-                                <div
-                                    aria-label="Inspecteur précis du point et jalons de projection"
-                                    className="rounded-xl border border-bordure bg-fond p-4 sm:p-5 space-y-4"
-                                >
-                                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-bordure">
-                                        <div className="flex flex-wrap items-center gap-2.5">
-                                            <span className="text-sm font-mono font-bold text-ink-50">
-                                                {jourActif.dateLabel ||
-                                                    jourActif.dayIso ||
-                                                    `${MOIS_COURTS[calendarFromMonthIndex(startYear, startMonth, Math.floor(jourActif.monthIndex)).month] ?? ''} ${jourActif.year}`}
-                                            </span>
-                                            {typeof jourActif.age === 'number' && Number.isFinite(jourActif.age) && (
-                                                <span className="px-2.5 py-0.5 rounded-full border border-bordure bg-surface text-xs font-mono text-ink-300">
-                                                    {/* NOMBRE-NON-MONETAIRE : âge du profil au point inspecté */}
-                                                    {`${jourActif.age} ans`}
-                                                </span>
-                                            )}
-                                            <span
-                                                className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-medium ${
-                                                    jourActif.isPast || jourActif.dayIsReal
-                                                        ? 'gf-delta-neutral'
-                                                        : Math.abs(jourActif.monthIndex - xAuj) <= 0.04
-                                                          ? 'gf-delta-amber'
-                                                          : 'gf-delta-up'
-                                                }`}
-                                            >
-                                                {jourActif.isPast || jourActif.dayIsReal
-                                                    ? 'Passé réel'
-                                                    : Math.abs(jourActif.monthIndex - xAuj) <= 0.04
-                                                      ? "Aujourd'hui"
-                                                      : 'Projeté'}
-                                            </span>
-                                            {pointFige && (
-                                                <span className="text-xs font-mono text-alerte-texte">
-                                                    · Point épinglé
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        <div className="inline-flex items-center gap-1.5">
-                                            <button
-                                                type="button"
-                                                onClick={() => stepJourAccueil(-1)}
-                                                aria-label={isDailyCurve ? 'Reculer d’un jour sur la courbe' : 'Reculer d’un mois sur la courbe'}
-                                                className="touch-target px-3 py-1.5 rounded-lg border border-bordure bg-surface hover:bg-surface-douce text-xs font-mono text-ink-200 hover:text-ink-50 transition-colors duration-100 focus-ring"
-                                            >
-                                                {isDailyCurve ? '← J-1' : '← M-1'}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => stepJourAccueil(1)}
-                                                aria-label={isDailyCurve ? 'Avancer d’un jour sur la courbe' : 'Avancer d’un mois sur la courbe'}
-                                                className="touch-target px-3 py-1.5 rounded-lg border border-bordure bg-surface hover:bg-surface-douce text-xs font-mono text-ink-200 hover:text-ink-50 transition-colors duration-100 focus-ring"
-                                            >
-                                                {isDailyCurve ? 'J+1 →' : 'M+1 →'}
-                                            </button>
-                                            {pointFige && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setPointFige(null)}
-                                                    className="touch-target px-3 py-1.5 rounded-lg border border-bordure bg-surface hover:bg-surface-douce text-xs font-mono text-alerte-texte transition-colors duration-100 focus-ring"
-                                                >
-                                                    Aujourd’hui
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Ventilation exacte par compte au point inspecté */}
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono tabular-nums">
-                                        {[
-                                            { id: 'nw', label: 'Valeur nette', val: jourActif.NetWorth, dot: couleurSerie('NetWorth') },
-                                            { id: 'celi', label: 'CELI', val: jourActif.CELI, dot: couleurSerie('CELI') },
-                                            { id: 'reer', label: 'REER', val: jourActif.REER, dot: couleurSerie('REER') },
-                                            { id: 'celiapp', label: 'CELIAPP', val: jourActif.CELIAPP, dot: couleurSerie('CELIAPP') },
-                                            { id: 'nonreg', label: 'Non-enreg.', val: jourActif.NonReg, dot: couleurSerie('NonReg') },
-                                            { id: 'liq', label: 'Liquidités', val: jourActif.Liquidites, dot: couleurSerie('Liquidites') },
-                                            { id: 'immo', label: 'Équité immo', val: jourActif.Immobilier, dot: couleurSerie('Immobilier') },
-                                            { id: 'dette', label: 'Dettes', val: jourActif.DettesNonImmo, dot: COULEUR_DETTE },
-                                        ].map((item) => (
-                                            <div key={item.id} className="rounded-lg bg-surface px-3.5 py-2.5 border border-bordure space-y-1">
-                                                <div className="flex items-center gap-2 text-xs text-ink-300 truncate">
-                                                    <span
-                                                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                                                        style={{ backgroundColor: item.dot }}
-                                                        aria-hidden="true"
-                                                    />
-                                                    <span className="truncate">{item.label}</span>
-                                                </div>
-                                                <div className="text-sm font-semibold text-ink-50 truncate">
-                                                    <PrivateAmount>
-                                                        {typeof item.val === 'number' && Number.isFinite(item.val)
-                                                            ? formatCompactCAD(item.val)
-                                                            : '—'}
-                                                    </PrivateAmount>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    {/* 4 Jalons patrimoniaux synchronisés avec FutureProjection.tsx */}
-                                    {patrimoineKpi && (
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-bordure text-xs">
-                                            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-surface/60">
-                                                <span className="text-xs text-ink-300">Aujourd’hui</span>
-                                                <span className="font-mono text-sm font-semibold text-ink-100 tabular-nums">
-                                                    <PrivateAmount>
-                                                        {formatCompactCAD(pointAncre?.NetWorth ?? patrimoineNet)}
-                                                    </PrivateAmount>
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-surface/60">
-                                                <span className="text-xs text-ink-300">
-                                                    {jalonFire ? `FIRE (${jalonFire.year})` : 'Cible FIRE'}
-                                                </span>
-                                                <span className="font-mono text-sm font-semibold text-alerte-texte tabular-nums">
-                                                    <PrivateAmount>
-                                                        {jalonFire && Number.isFinite(jalonFire.NetWorth)
-                                                            ? formatCompactCAD(jalonFire.NetWorth)
-                                                            : Number.isFinite(fireNumber) && fireNumber > 0
-                                                              ? formatCompactCAD(fireNumber)
-                                                              : '—'}
-                                                    </PrivateAmount>
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-surface/60">
-                                                <span className="text-xs text-ink-300">
-                                                    {/* NOMBRE-NON-MONETAIRE : âge de la retraite sur la tuile jalon */}
-                                                    {pointRetraite ? `Retraite (${pointRetraite.age} ans)` : 'À la retraite'}
-                                                </span>
-                                                <span className="font-mono text-sm font-semibold text-ink-100 tabular-nums">
-                                                    <PrivateAmount>
-                                                        {pointRetraite && Number.isFinite(pointRetraite.NetWorth)
-                                                            ? formatCompactCAD(pointRetraite.NetWorth)
-                                                            : '—'}
-                                                    </PrivateAmount>
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-surface/60">
-                                                <span className="text-xs text-ink-300">
-                                                    {/* NOMBRE-NON-MONETAIRE : âge de fin d'horizon sur la tuile jalon */}
-                                                    {dernierPoint ? `Fin (${dernierPoint.age} ans)` : 'Fin d’horizon'}
-                                                </span>
-                                                <span className="font-mono text-sm font-semibold text-ink-100 tabular-nums">
-                                                    <PrivateAmount>{patrimoineKpi.value}</PrivateAmount>
-                                                </span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Grille de Statistiques Clés sous le graphique (Portefeuille et Liquidités séparés en tête) */}
-                        <div
-                            aria-label="Indicateurs de santé patrimoniale"
-                            className="grid grid-cols-2 sm:grid-cols-3 divide-x divide-y divide-bordure bg-fond"
-                        >
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.INVESTMENTS)}
-                                onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
-                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
-                            >
-                                <div className="flex items-center justify-between gap-2">
-                                    <span className="text-xs text-ink-300 inline-flex items-center gap-2">
-                                        <span className="w-2.5 h-2.5 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
-                                        <span>Portefeuille</span>
-                                    </span>
-                                    <span className="font-mono text-xs text-ink-400 tabular-nums">
-                                        <PrivateAmount>
-                                            {`${totalAvoirs > 0 ? Math.round((portefeuillePlacements / totalAvoirs) * 100) : 0} %`}
-                                        </PrivateAmount>
-                                    </span>
-                                </div>
-                                <span className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
-                                    <PrivateAmount>{formatCompactCAD(portefeuillePlacements)}</PrivateAmount>
-                                </span>
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.TRANSACTIONS)}
-                                onMouseEnter={() => prefetchTab(Tab.TRANSACTIONS)}
-                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
-                            >
-                                <div className="flex items-center justify-between gap-2">
-                                    <span className="text-xs text-ink-300 inline-flex items-center gap-2">
-                                        <span className="w-2.5 h-2.5 rounded-full gf-alloc-cash shrink-0" aria-hidden="true" />
-                                        <span>Liquidités</span>
-                                    </span>
-                                    <span className="font-mono text-xs text-ink-400 tabular-nums">
-                                        {indicateursPouls.moisAutonomie !== null ? (
-                                            <PrivateAmount>{`${indicateursPouls.moisAutonomie} mois`}</PrivateAmount>
-                                        ) : (
-                                            <span>—</span>
-                                        )}
-                                    </span>
-                                </div>
-                                <span className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
-                                    <PrivateAmount>{formatCompactCAD(liquidites)}</PrivateAmount>
-                                </span>
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.BUDGET)}
-                                onMouseEnter={() => prefetchTab(Tab.BUDGET)}
-                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
-                            >
-                                <div className="flex items-center justify-between gap-2">
-                                    <span className="text-xs text-ink-300">
-                                        Épargne mensuelle
-                                    </span>
-                                    <span className="font-mono text-xs text-ink-400 tabular-nums">
-                                        {indicateursPouls.tauxEpargne !== null ? (
-                                            <PrivateAmount>{`Taux ${indicateursPouls.tauxEpargne} %`}</PrivateAmount>
-                                        ) : (
-                                            <span>Taux —</span>
-                                        )}
-                                    </span>
-                                </div>
-                                <span className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
-                                    <PrivateAmount>
-                                        {`${epargneMensuelle >= 0 ? '+' : ''}${formatCompactCAD(epargneMensuelle)}/mois`}
-                                    </PrivateAmount>
-                                </span>
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.DEBT)}
-                                onMouseEnter={() => prefetchTab(Tab.DEBT)}
-                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
-                            >
-                                <div className="flex items-center justify-between gap-2">
-                                    <span className="text-xs text-ink-300">
-                                        Passifs & dettes
-                                    </span>
-                                    <span className="font-mono text-xs text-ink-400 tabular-nums">
-                                        <PrivateAmount>{`Levier ${indicateursPouls.ratioEndettement} %`}</PrivateAmount>
-                                    </span>
-                                </div>
-                                <span className="font-mono text-base sm:text-lg font-bold text-ink-200 tabular-nums">
-                                    <PrivateAmount>{formatCompactCAD(totalDettes)}</PrivateAmount>
-                                </span>
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.RETIREMENT)}
-                                onMouseEnter={() => prefetchTab(Tab.RETIREMENT)}
-                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
-                            >
-                                <div className="flex items-center justify-between gap-2">
-                                    {/* NOMBRE-NON-MONETAIRE : âge cible de retraite saisi en réglage */}
-                                    <span className="text-xs text-ink-300">
-                                        Retraite ({indicateursPouls.ageRetraite} ans)
-                                    </span>
-                                    <span className="font-mono text-xs text-ink-400 tabular-nums">
-                                        <PrivateAmount>{`${indicateursPouls.pctLiberte} %`}</PrivateAmount>
-                                    </span>
-                                </div>
-                                <span className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
-                                    <PrivateAmount>{formatCompactCAD(indicateursPouls.cibleRetraite)}</PrivateAmount>
-                                </span>
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.FUTURE)}
-                                onMouseEnter={() => prefetchTab(Tab.FUTURE)}
-                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
-                            >
-                                <span className="text-xs text-ink-300">
-                                    Cap {gainHorizon?.anneeMilieu ?? anneeActuelle + 5}
-                                </span>
-                                <span className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
-                                    <PrivateAmount>
-                                        {formatCompactCAD(gainHorizon?.milieuValeur ?? patrimoineNet)}
-                                    </PrivateAmount>
-                                </span>
-                            </button>
                         </div>
                     </section>
 
-                    {/* Flux 30 jours & Transferts (remplace le doublon Positions & comptes sous la courbe) */}
+                    {/* Plan d'action patrimonial amélioré (remplace l'inspecteur dupliqué, la grille tassée et le flux 30j) */}
                     <section
-                        aria-label="Flux 30 jours et transferts"
+                        data-testid="plan-action-ameliore"
+                        aria-label="Plan d'action patrimonial"
                         className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
                     >
-                        <div className="px-5 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3">
-                            <div
-                                role="group"
-                                aria-label="Vue détaillée du portefeuille"
-                                className="inline-flex flex-wrap items-center gap-1.5"
-                            >
-                                {SOUS_ONGLETS_CENTRE.map((ong) => (
-                                    <button
-                                        key={ong.cle}
-                                        type="button"
-                                        aria-pressed={sousOngletCentre === ong.cle}
-                                        onClick={() => setSousOngletCentre(ong.cle)}
-                                        className={`touch-target px-4 py-2 rounded-full text-xs sm:text-sm font-semibold inline-flex items-center gap-2 transition-all duration-150 focus-ring ${
-                                            sousOngletCentre === ong.cle
-                                                ? 'gf-subtab-pill-active'
-                                                : 'text-ink-300 hover:text-ink-50 hover:bg-surface-douce'
+                        {/* 1. En-tête du plan d'action & vélocité mensuelle */}
+                        <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-2.5">
+                                    <span className="w-8 h-8 rounded-full bg-fond border border-bordure inline-flex items-center justify-center shrink-0">
+                                        <Icon name="clipboard" size={16} className="text-repere" aria-hidden="true" />
+                                    </span>
+                                    <h2 className="text-base sm:text-lg font-semibold text-ink-50 tracking-normal">
+                                        Plan d’action patrimonial
+                                    </h2>
+                                    <span
+                                        className={`px-2.5 py-0.5 rounded-full font-mono text-xs font-semibold tabular-nums ${
+                                            epargneMensuelle > 0 ? 'gf-delta-up' : 'gf-delta-neutral'
                                         }`}
                                     >
-                                        <span>{ong.label}</span>
-                                        {ong.badgeNouveau && (
-                                            <span className="gf-badge-nouvelle">Nouveau</span>
-                                        )}
+                                        <PrivateAmount>
+                                            {`${epargneMensuelle >= 0 ? '+' : ''}${formatCompactCAD(epargneMensuelle)}/mois`}
+                                        </PrivateAmount>
+                                    </span>
+                                    {indicateursPouls.tauxEpargne !== null && (
+                                        <span className="px-2.5 py-0.5 rounded-full border border-bordure bg-fond font-mono text-xs text-ink-200 tabular-nums">
+                                            <PrivateAmount>{`Taux d’épargne ${indicateursPouls.tauxEpargne} %`}</PrivateAmount>
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-xs sm:text-sm text-ink-300">
+                                    Priorités concrètes calculées sur votre portefeuille, vos liquidités et votre projection fiscale Québec / Canada
+                                </p>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        ouvrirQuestionGemini(
+                                            'Quelles sont les 3 meilleures actions concrètes à exécuter ce mois-ci sur mon portefeuille et mon budget ?',
+                                        )
+                                    }
+                                    className="touch-target px-3.5 py-2 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-2 transition-colors focus-ring whitespace-nowrap"
+                                >
+                                    <Icon name="sparkles" size={14} className="text-repere" aria-hidden="true" />
+                                    <span>Analyser avec Gemini</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* 2. Les 4 grands jalons de trajectoire aérés (sans troncature) */}
+                        <div className="p-5 sm:p-6 bg-fond space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-semibold text-ink-200 tracking-wide">
+                                    Cap & jalons de la trajectoire
+                                </span>
+                                <span className="text-xs font-mono text-ink-400">
+                                    Synchronisé avec Futur
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab(Tab.INVESTMENTS)}
+                                    onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                                    className="touch-target rounded-xl bg-surface border border-bordure hover:border-bordure-champ p-4 text-left space-y-1.5 transition-colors focus-ring"
+                                >
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-xs font-medium text-ink-300">Aujourd’hui</span>
+                                        <span className="w-2 h-2 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
+                                    </div>
+                                    <div className="font-mono text-lg sm:text-xl font-bold text-ink-50 tabular-nums">
+                                        <PrivateAmount>
+                                            {formatCompactCAD(pointAncre?.NetWorth ?? patrimoineNet)}
+                                        </PrivateAmount>
+                                    </div>
+                                    <div className="text-xs text-ink-400">
+                                        Bilan net actuel
+                                    </div>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab(Tab.FUTURE)}
+                                    onMouseEnter={() => prefetchTab(Tab.FUTURE)}
+                                    className="touch-target rounded-xl bg-surface border border-bordure hover:border-bordure-champ p-4 text-left space-y-1.5 transition-colors focus-ring"
+                                >
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-xs font-medium text-ink-300">
+                                            {jalonFire ? `Jalon FIRE (${jalonFire.year})` : 'Cible FIRE'}
+                                        </span>
+                                        <span className="w-2 h-2 rounded-full gf-alloc-immo shrink-0" aria-hidden="true" />
+                                    </div>
+                                    <div className="font-mono text-lg sm:text-xl font-bold text-alerte-texte tabular-nums">
+                                        <PrivateAmount>
+                                            {jalonFire && Number.isFinite(jalonFire.NetWorth)
+                                                ? formatCompactCAD(jalonFire.NetWorth)
+                                                : Number.isFinite(fireNumber) && fireNumber > 0
+                                                  ? formatCompactCAD(fireNumber)
+                                                  : '—'}
+                                        </PrivateAmount>
+                                    </div>
+                                    <div className="text-xs text-ink-400">
+                                        <PrivateAmount>{`${indicateursPouls.pctLiberte} % accompli`}</PrivateAmount>
+                                    </div>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab(Tab.RETIREMENT)}
+                                    onMouseEnter={() => prefetchTab(Tab.RETIREMENT)}
+                                    className="touch-target rounded-xl bg-surface border border-bordure hover:border-bordure-champ p-4 text-left space-y-1.5 transition-colors focus-ring"
+                                >
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-xs font-medium text-ink-300">
+                                            {/* NOMBRE-NON-MONETAIRE : âge de la retraite sur la carte jalon */}
+                                            {pointRetraite ? `Retraite (${pointRetraite.age} ans)` : `Retraite (${indicateursPouls.ageRetraite} ans)`}
+                                        </span>
+                                        <span className="w-2 h-2 rounded-full gf-alloc-reer shrink-0" aria-hidden="true" />
+                                    </div>
+                                    <div className="font-mono text-lg sm:text-xl font-bold text-ink-50 tabular-nums">
+                                        <PrivateAmount>
+                                            {pointRetraite && Number.isFinite(pointRetraite.NetWorth)
+                                                ? formatCompactCAD(pointRetraite.NetWorth)
+                                                : formatCompactCAD(indicateursPouls.cibleRetraite)}
+                                        </PrivateAmount>
+                                    </div>
+                                    <div className="text-xs text-ink-400">
+                                        Patrimoine projeté
+                                    </div>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab(Tab.FUTURE)}
+                                    onMouseEnter={() => prefetchTab(Tab.FUTURE)}
+                                    className="touch-target rounded-xl bg-surface border border-bordure hover:border-bordure-champ p-4 text-left space-y-1.5 transition-colors focus-ring"
+                                >
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-xs font-medium text-ink-300">
+                                            {/* NOMBRE-NON-MONETAIRE : âge de fin d'horizon sur la carte jalon */}
+                                            {dernierPoint ? `Fin d’horizon (${dernierPoint.age} ans)` : 'Fin d’horizon'}
+                                        </span>
+                                        <span className="w-2 h-2 rounded-full gf-alloc-nonreg shrink-0" aria-hidden="true" />
+                                    </div>
+                                    <div className="font-mono text-lg sm:text-xl font-bold text-ink-50 tabular-nums">
+                                        <PrivateAmount>
+                                            {patrimoineKpi?.value ??
+                                                (dernierPoint && Number.isFinite(dernierPoint.NetWorth)
+                                                    ? formatCompactCAD(dernierPoint.NetWorth)
+                                                    : formatCompactCAD(patrimoineNet))}
+                                        </PrivateAmount>
+                                    </div>
+                                    <div className="text-xs text-ink-400">
+                                        Capital final simulé
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* 3. Priorités concrètes personnalisées (4 cartes spacieuses avec barres de progression et actions directes) */}
+                        <div className="p-5 sm:p-6 space-y-4">
+                            <div className="flex items-center justify-between gap-2">
+                                <h3 className="text-sm sm:text-base font-semibold text-ink-50">
+                                    Actions prioritaires recommandées
+                                </h3>
+                                <span className="text-xs text-ink-400">
+                                    Cliquez sur une priorité pour agir
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {prioritesPlanAction.map((prio) => (
+                                    <button
+                                        key={prio.id}
+                                        type="button"
+                                        onClick={() => setActiveTab(prio.tab)}
+                                        onMouseEnter={() => prefetchTab(prio.tab)}
+                                        className="touch-target rounded-xl border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ p-5 text-left flex flex-col justify-between gap-4 transition-all duration-150 focus-ring group"
+                                    >
+                                        <div className="space-y-2.5 w-full">
+                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <span className="text-xs font-mono font-semibold text-ink-300">
+                                                    {prio.rang}
+                                                </span>
+                                                <span
+                                                    className={`px-2.5 py-0.5 rounded-full font-mono text-xs font-semibold tabular-nums ${prio.statutClasse}`}
+                                                >
+                                                    <PrivateAmount>{prio.statutLabel}</PrivateAmount>
+                                                </span>
+                                            </div>
+
+                                            <div className="text-sm sm:text-base font-semibold text-ink-50 leading-snug">
+                                                {prio.titre}
+                                            </div>
+
+                                            <p className="text-xs sm:text-sm text-ink-300 leading-relaxed">
+                                                <PrivateAmount>{prio.description}</PrivateAmount>
+                                            </p>
+                                        </div>
+
+                                        <div className="space-y-3 w-full pt-2 border-t border-bordure">
+                                            <div className="flex items-baseline justify-between gap-3 font-mono text-xs sm:text-sm tabular-nums">
+                                                <span className="text-ink-300">
+                                                    Actuel :{' '}
+                                                    <strong className="text-ink-50">
+                                                        <PrivateAmount>
+                                                            {prio.montantPrincipal !== null
+                                                                ? formatCompactCAD(prio.montantPrincipal)
+                                                                : '—'}
+                                                        </PrivateAmount>
+                                                    </strong>
+                                                </span>
+                                                {prio.cibleMontant !== null && (
+                                                    <span className="text-ink-400">
+                                                        Cible :{' '}
+                                                        <strong className="text-ink-200">
+                                                            <PrivateAmount>
+                                                                {formatCompactCAD(prio.cibleMontant)}
+                                                            </PrivateAmount>
+                                                        </strong>
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <div className="h-2 w-full rounded-full bg-surface border border-bordure overflow-hidden">
+                                                <div
+                                                    style={{ width: `${isPrivacyMode ? 50 : prio.progressionPct}%` }}
+                                                    className={`h-full rounded-full gf-bar-grow ${prio.classeBarre}`}
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center justify-between gap-2 pt-0.5 text-xs sm:text-sm font-medium text-repere group-hover:underline">
+                                                <span>{prio.ctaLabel}</span>
+                                                <Icon name="chevron-right" size={14} aria-hidden="true" />
+                                            </div>
+                                        </div>
                                     </button>
                                 ))}
                             </div>
-
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.BUDGET)}
-                                onMouseEnter={() => prefetchTab(Tab.BUDGET)}
-                                className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
-                            >
-                                <span>Budget & Transferts</span>
-                                <Icon name="chevron-right" size={14} aria-hidden="true" />
-                            </button>
                         </div>
 
-                        {/* Grille 4 KPI des flux sur 1 mois (Entrées, Dépenses, Transferts, Net) */}
-                        <div
-                            className={`grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-bordure bg-fond ${
-                                sousOngletCentre === 'avoirs' ? 'grid' : 'hidden xl:grid'
-                            }`}
-                        >
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.TRANSACTIONS)}
-                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce transition-colors focus-ring space-y-1"
-                            >
-                                <div className="text-xs text-ink-300">Entrées (30j)</div>
-                                <div className="font-mono text-base font-bold text-succes-texte tabular-nums">
-                                    <PrivateAmount>{`+${formatCompactCAD(flux30Jours.revenus)}`}</PrivateAmount>
-                                </div>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.BUDGET)}
-                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce transition-colors focus-ring space-y-1"
-                            >
-                                <div className="text-xs text-ink-300">Dépenses (30j)</div>
-                                <div className="font-mono text-base font-bold text-ink-50 tabular-nums">
-                                    <PrivateAmount>{formatCompactCAD(flux30Jours.depenses)}</PrivateAmount>
-                                </div>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.BUDGET)}
-                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce transition-colors focus-ring space-y-1"
-                            >
-                                <div className="text-xs text-ink-300">Transferts (30j)</div>
-                                <div className="font-mono text-base font-bold text-repere tabular-nums">
-                                    <PrivateAmount>{formatCompactCAD(flux30Jours.transferts)}</PrivateAmount>
-                                </div>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.BUDGET)}
-                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce transition-colors focus-ring space-y-1"
-                            >
-                                <div className="text-xs text-ink-300">Solde net (30j)</div>
-                                <div
-                                    className={`font-mono text-base font-bold tabular-nums ${
-                                        flux30Jours.fluxNet >= 0 ? 'text-succes-texte' : 'text-erreur-texte'
-                                    }`}
-                                >
-                                    <PrivateAmount>
-                                        {`${flux30Jours.fluxNet >= 0 ? '+' : ''}${formatCompactCAD(flux30Jours.fluxNet)}`}
-                                    </PrivateAmount>
-                                </div>
-                            </button>
-                        </div>
+                        {/* 4. Cadence d'exécution multi-horizons (Mensuel · Trimestriel · Annuel · Décennal) */}
+                        <div className="p-5 sm:p-6 bg-fond space-y-3.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <h3 className="text-xs sm:text-sm font-semibold text-ink-200 tracking-wide">
+                                    Cadence d’exécution programmée
+                                </h3>
+                                <span className="text-xs text-ink-400">
+                                    Rythme d’accumulation selon votre épargne actuelle
+                                </span>
+                            </div>
 
-                        {/* Top catégories & virements du mois avec barres animées */}
-                        <div
-                            className={`divide-y divide-bordure bg-surface ${
-                                sousOngletCentre === 'avoirs' ? 'block' : 'hidden xl:block'
-                            }`}
-                        >
-                            {flux30Jours.topCategories.map((cat) => (
-                                <button
-                                    key={cat.categorie}
-                                    type="button"
-                                    onClick={() => setActiveTab(Tab.BUDGET)}
-                                    className="gf-row touch-target w-full px-5 sm:px-6 py-3.5 flex items-center justify-between gap-4 text-left focus-ring"
-                                >
-                                    <div className="min-w-0 flex-1 space-y-2">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <span className="text-sm font-semibold text-ink-50 truncate inline-flex items-center gap-2">
-                                                <PrivateText quoi="categorie">{cat.categorie}</PrivateText>
-                                                {cat.estTransfert && (
-                                                    <span className="px-2 py-0.5 rounded-md text-xs font-mono bg-repere-fond text-repere">
-                                                        Transfert
-                                                    </span>
-                                                )}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                                {[
+                                    {
+                                        id: 'cadence-mois',
+                                        periode: 'Ce mois-ci',
+                                        montant: Math.max(0, Math.round(epargneMensuelle)),
+                                        action: 'Virement automatique & DCA indiciel',
+                                        tab: Tab.BUDGET,
+                                    },
+                                    {
+                                        id: 'cadence-trimestre',
+                                        periode: 'Par trimestre',
+                                        montant: Math.max(0, Math.round(epargneMensuelle * 3)),
+                                        action: 'Rééquilibrage CELI / REER & coussin',
+                                        tab: Tab.INVESTMENTS,
+                                    },
+                                    {
+                                        id: 'cadence-annee',
+                                        periode: 'Sur 12 mois',
+                                        montant: Math.max(0, Math.round(epargneMensuelle * 12)),
+                                        action: 'Optimisation fiscale ARC & Revenu Québec',
+                                        tab: Tab.TAX,
+                                    },
+                                    {
+                                        id: 'cadence-5ans',
+                                        periode: 'Cap 5 ans',
+                                        montant: Math.max(0, Math.round(epargneMensuelle * 60)),
+                                        action: 'Apport projet & croissance composée',
+                                        tab: Tab.FUTURE,
+                                    },
+                                ].map((etape) => (
+                                    <button
+                                        key={etape.id}
+                                        type="button"
+                                        onClick={() => setActiveTab(etape.tab)}
+                                        onMouseEnter={() => prefetchTab(etape.tab)}
+                                        className="touch-target rounded-xl bg-surface border border-bordure hover:border-bordure-champ p-4 text-left flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="text-xs sm:text-sm font-semibold text-ink-100">
+                                                {etape.periode}
                                             </span>
-                                            <PrivateAmount className="font-mono text-sm font-bold text-ink-50 tabular-nums shrink-0">
-                                                {formatCAD(cat.montant)}
+                                            <PrivateAmount className="font-mono text-sm sm:text-base font-bold text-succes-texte tabular-nums">
+                                                {`+${formatCompactCAD(etape.montant)}`}
                                             </PrivateAmount>
                                         </div>
-                                        <div className="h-2 w-full rounded-full bg-fond overflow-hidden">
-                                            <div
-                                                style={{ width: `${isPrivacyMode ? 35 : cat.pct}%` }}
-                                                className={`h-full rounded-full gf-bar-grow ${
-                                                    cat.estTransfert ? 'gf-alloc-celi' : 'gf-alloc-reer'
-                                                }`}
-                                            />
-                                        </div>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    </section>
-
-                    {/* Plan d'action synthétique en 5 horizons (Jour · Semaine · Mois · Année · Décennie) */}
-                    <section
-                        aria-label="Plan d'action par jour, semaine, mois, année et décennie"
-                        className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
-                    >
-                        <div className="px-5 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3">
-                            <div className="flex items-center gap-2.5">
-                                <Icon name="clipboard" size={16} className="text-repere" aria-hidden="true" />
-                                <h2 className="text-base font-semibold text-ink-50 tracking-normal">
-                                    Plan d’action
-                                </h2>
+                                        <p className="text-xs text-ink-300 leading-snug">
+                                            {etape.action}
+                                        </p>
+                                    </button>
+                                ))}
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.FUTURE)}
-                                onMouseEnter={() => prefetchTab(Tab.FUTURE)}
-                                className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-1.5 focus-ring shrink-0"
-                            >
-                                <span>Détails</span>
-                                <Icon name="chevron-right" size={14} aria-hidden="true" />
-                            </button>
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-bordure bg-fond">
-                            {[
-                                {
-                                    id: 'hz-jour',
-                                    horizon: 'Jour',
-                                    montant: Math.max(1, Math.round((epargneMensuelle * 12) / 365)),
-                                    action: 'Plafond variable',
-                                    tab: Tab.TRANSACTIONS,
-                                },
-                                {
-                                    id: 'hz-semaine',
-                                    horizon: 'Semaine',
-                                    montant: Math.max(5, Math.round((epargneMensuelle * 12) / 52)),
-                                    action: 'Virement CELI/REER',
-                                    tab: Tab.BUDGET,
-                                },
-                                {
-                                    id: 'hz-mois',
-                                    horizon: 'Mois',
-                                    montant: Math.max(0, Math.round(epargneMensuelle)),
-                                    action: 'Achat indiciel',
-                                    tab: Tab.INVESTMENTS,
-                                },
-                                {
-                                    id: 'hz-annee',
-                                    horizon: 'Année',
-                                    montant: Math.max(0, Math.round(epargneMensuelle * 12)),
-                                    action: 'Plafonds fiscaux',
-                                    tab: Tab.TAX,
-                                },
-                                {
-                                    id: 'hz-decennie',
-                                    horizon: '10 ans',
-                                    montant: Math.max(0, Math.round(epargneMensuelle * 120)),
-                                    action: 'Cap retraite',
-                                    tab: Tab.FUTURE,
-                                },
-                            ].map((item) => (
-                                <button
-                                    key={item.id}
-                                    type="button"
-                                    onClick={() => setActiveTab(item.tab)}
-                                    onMouseEnter={() => prefetchTab(item.tab)}
-                                    className="touch-target p-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
-                                >
-                                    <div className="flex items-center justify-between gap-1.5">
-                                        <span className="text-xs sm:text-sm font-bold text-ink-50">{item.horizon}</span>
-                                        <PrivateAmount className="font-mono text-xs sm:text-sm font-bold text-succes-texte tabular-nums">
-                                            {`+${formatCompactCAD(item.montant)}`}
-                                        </PrivateAmount>
-                                    </div>
-                                    <span className="text-xs text-ink-400 truncate">
-                                        {item.action}
-                                    </span>
-                                </button>
-                            ))}
                         </div>
                     </section>
                 </div>
@@ -3484,12 +3325,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
                     </section>
 
-                    {/* Carte 2 : Répartition colorée du portefeuille (visible sous Insights sur mobile, toujours sur bureau) */}
+                    {/* Carte 2 : Répartition colorée du portefeuille */}
                     <section
                         aria-label="Répartition visuelle des actifs"
-                        className={`premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-5 ${
-                            sousOngletCentre === 'insights' ? 'block' : 'hidden xl:block'
-                        }`}
+                        className="premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-5"
                     >
                         <div className="flex items-center justify-between gap-3 border-b border-bordure pb-3.5">
                             <div className="space-y-0.5">
@@ -3654,12 +3493,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
                     </section>
 
-                    {/* Carte 3 : Flux d'opérations récentes (visible sous Transactions sur mobile, toujours sur bureau) */}
+                    {/* Carte 3 : Flux d'opérations récentes */}
                     <section
                         aria-label="Opérations récentes"
-                        className={`premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-4 ${
-                            sousOngletCentre === 'transactions' ? 'block' : 'hidden xl:block'
-                        }`}
+                        className="premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-4"
                     >
                         <div className="flex items-center justify-between gap-3 border-b border-bordure pb-3.5">
                             <div className="space-y-0.5">
@@ -3769,8 +3606,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 </div>
             </section>
 
-            {/* 4. EXÉCUTION BUDGÉTAIRE (6 MOIS) & OBJECTIFS FINANCIERS (affichés sous Insights sur mobile, toujours sur bureau) */}
-            <div className={`space-y-6 ${sousOngletCentre === 'insights' ? 'block' : 'hidden xl:block'}`}>
+            {/* 4. EXÉCUTION BUDGÉTAIRE (6 MOIS) & OBJECTIFS FINANCIERS */}
+            <div className="space-y-6">
                 <MonthlySpendingVsBudgetChart
                     transactions={state.transactions}
                     budgetItems={state.budgetItems}

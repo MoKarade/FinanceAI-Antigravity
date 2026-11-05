@@ -529,11 +529,11 @@ describe('Refonte Google Finance — GoogleFinanceHero & BoutonsPimenterFutur', 
         expect(btnHorizon5A).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByTestId('recharts-trajectory-entrance')).toHaveAttribute('data-chart-horizon', '5A');
 
-        // Vérifie la présence de l'inspecteur quotidien/mensuel et des jalons Futur synchronisés sur Accueil
-        expect(screen.getByLabelText(/Inspecteur précis du point et jalons de projection/i)).toBeInTheDocument();
-        const btnAvancerPas = screen.getByRole('button', { name: /Avancer d’un (jour|mois) sur la courbe/i });
-        fireEvent.click(btnAvancerPas);
-        expect(screen.getByText(/Point épinglé/i)).toBeInTheDocument();
+        // Vérifie la présence du Plan d'action patrimonial amélioré et de ses priorités personnalisées
+        expect(screen.getByTestId('plan-action-ameliore')).toBeInTheDocument();
+        expect(screen.getByLabelText(/Plan d'action patrimonial/i)).toBeInTheDocument();
+        expect(screen.getByText(/Actions prioritaires recommandées/i)).toBeInTheDocument();
+        expect(screen.getByText(/Cadence d’exécution programmée/i)).toBeInTheDocument();
 
         // Changement d'onglet global : tous les graphiques Recharts du tableau de bord reflètent le nouvel onglet
         act(() => {
