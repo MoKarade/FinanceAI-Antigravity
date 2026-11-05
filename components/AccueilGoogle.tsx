@@ -1693,31 +1693,31 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     return (
         <div
             data-testid="accueil-google-view"
-            className="max-w-[1440px] mx-auto space-y-4 pb-8"
+            className="max-w-[1560px] mx-auto space-y-6 lg:space-y-8 pb-12 leading-relaxed"
         >
             {/* 1. BARRE SUPÉRIEURE GOOGLE FINANCE : STATUT CLOUD AUTO + OMNIBOX PILULE + RUBAN DES 5 COMPTES (1 MOIS) */}
             <section
                 aria-label="Synthèse patrimoniale et recherche rapide"
                 className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
             >
-                <div className="p-3 sm:px-5 sm:py-3 bg-surface flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div className="p-4 sm:px-6 sm:py-4 bg-surface flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     {/* Statut de synchronisation automatique PC ↔ Mobile (sans logo dupliqué) */}
-                    <div className="flex items-center justify-between lg:justify-start gap-2.5 shrink-0">
+                    <div className="flex items-center justify-between lg:justify-start gap-3 shrink-0">
                         <span
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-fond border border-bordure text-[11px] font-mono text-ink-200"
+                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-fond border border-bordure text-xs font-mono text-ink-200"
                             title="Synchronisation automatique en temps réel entre PC et mobile"
                         >
-                            <span className="w-2 h-2 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
+                            <span className="w-2.5 h-2.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
                             <span>{syncStatus.state === 'syncing' ? 'Sync Cloud…' : 'Direct · PC & Mobile'}</span>
                         </span>
                     </div>
 
                     {/* Omnibox centrale en pilule */}
                     <div className="relative flex-1 max-w-2xl mx-auto w-full">
-                        <div className="gf-omnibox-pill relative flex items-center px-3.5">
+                        <div className="gf-omnibox-pill relative flex items-center px-4 py-0.5">
                             <Icon
                                 name="search"
-                                size={16}
+                                size={17}
                                 className="text-ink-300 pointer-events-none shrink-0"
                                 aria-hidden="true"
                             />
@@ -1743,7 +1743,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 }}
                                 placeholder="Rechercher un compte, un titre ou une opération…"
                                 aria-label="Rechercher dans votre patrimoine"
-                                className="champ-nu touch-target w-full pl-3 pr-3 bg-transparent text-xs sm:text-sm text-ink-50 placeholder-ink-400 focus-ring"
+                                className="champ-nu touch-target w-full pl-3 pr-3 bg-transparent text-sm text-ink-50 placeholder-ink-400 focus-ring"
                             />
                         </div>
 
@@ -1751,7 +1751,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             <div
                                 role="listbox"
                                 aria-label="Suggestions rapides"
-                                className="absolute left-0 right-0 top-full mt-2 rounded-xl bg-surface border border-bordure-champ divide-y divide-bordure z-40 text-left shadow-xl overflow-hidden"
+                                className="absolute left-0 right-0 top-full mt-2.5 rounded-xl bg-surface border border-bordure-champ divide-y divide-bordure z-40 text-left shadow-xl overflow-hidden"
                             >
                                 <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y divide-bordure">
                                     {resultatsOmnibox.pages.map((p) => (
@@ -1763,9 +1763,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                 setRechercheOuverte(false);
                                                 setRequete('');
                                             }}
-                                            className="touch-target px-3.5 py-2 flex items-center gap-2 text-xs text-ink-100 hover:bg-surface-douce transition-colors duration-100 focus-ring"
+                                            className="touch-target px-4 py-3 flex items-center gap-2.5 text-sm text-ink-100 hover:bg-surface-douce transition-colors duration-100 focus-ring"
                                         >
-                                            <Icon name={p.icon} size={14} className="text-ink-400 shrink-0" aria-hidden="true" />
+                                            <Icon name={p.icon} size={15} className="text-ink-400 shrink-0" aria-hidden="true" />
                                             <span className="truncate font-medium">{p.label}</span>
                                         </button>
                                     ))}
@@ -1781,7 +1781,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                     setRechercheOuverte(false);
                                                     setRequete('');
                                                 }}
-                                                className="touch-target w-full px-4 py-2 flex items-center justify-between gap-2 text-xs hover:bg-surface-douce transition-colors duration-100 focus-ring"
+                                                className="touch-target w-full px-4 py-3 flex items-center justify-between gap-3 text-sm hover:bg-surface-douce transition-colors duration-100 focus-ring"
                                             >
                                                 <span className="font-mono font-semibold text-ink-50">
                                                     {asset.symbol || asset.name}
@@ -1804,7 +1804,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                     setRechercheOuverte(false);
                                                     setRequete('');
                                                 }}
-                                                className="touch-target w-full px-4 py-2 flex items-center justify-between gap-2 text-xs hover:bg-surface-douce transition-colors duration-100 focus-ring"
+                                                className="touch-target w-full px-4 py-3 flex items-center justify-between gap-3 text-sm hover:bg-surface-douce transition-colors duration-100 focus-ring"
                                             >
                                                 <PrivateText quoi="marchand" className="truncate text-ink-100">{tx.payee}</PrivateText>
                                                 <PrivateAmount className="font-mono font-semibold tabular-nums text-ink-200 shrink-0">
@@ -1819,7 +1819,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     </div>
 
                     {/* Action rapide de connexion/import à droite (tous les boutons Gemini sont regroupés dans le panneau Gemini) */}
-                    <div className="flex items-center gap-2 shrink-0 overflow-x-auto no-scrollbar">
+                    <div className="flex items-center gap-2.5 shrink-0 overflow-x-auto no-scrollbar">
                         <button
                             type="button"
                             onClick={() => {
@@ -1827,9 +1827,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 setShowConnexionsModal(true);
                             }}
                             aria-label="Importer ou synchroniser des comptes"
-                            className="touch-target px-3.5 py-2 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-2 transition-colors duration-100 focus-ring whitespace-nowrap"
+                            className="touch-target px-4 py-2.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-sm font-medium text-ink-100 inline-flex items-center gap-2 transition-colors duration-100 focus-ring whitespace-nowrap"
                         >
-                            <Icon name="cloud" size={15} className="text-ink-300" aria-hidden="true" />
+                            <Icon name="cloud" size={16} className="text-ink-300" aria-hidden="true" />
                             <span>Comptes & Sync</span>
                         </button>
                     </div>
@@ -1846,26 +1846,26 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             type="button"
                             onClick={() => setActiveTab(idx.tab)}
                             onMouseEnter={() => prefetchTab(idx.tab)}
-                            className="touch-target shrink-0 min-w-[152px] lg:min-w-0 px-3.5 py-2.5 text-left hover:bg-surface-douce flex items-center justify-between gap-2 transition-all duration-150 focus-ring group"
+                            className="touch-target shrink-0 min-w-[176px] lg:min-w-0 px-4 sm:px-5 py-3.5 text-left hover:bg-surface-douce flex items-center justify-between gap-3 transition-all duration-150 focus-ring group"
                         >
-                            <div className="min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                    <span className="font-mono text-[11px] font-bold tracking-tight text-ink-50 group-hover:underline">
+                            <div className="min-w-0 space-y-1">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-mono text-xs font-bold tracking-normal text-ink-50 group-hover:underline">
                                         {idx.ticker}
                                     </span>
-                                    <span className="text-[11px] text-ink-400 truncate">
+                                    <span className="text-xs text-ink-400 truncate">
                                         {idx.label}
                                     </span>
                                 </div>
-                                <div className="font-mono text-xs sm:text-sm font-bold text-ink-50 tabular-nums mt-0.5">
+                                <div className="font-mono text-sm sm:text-base font-bold text-ink-50 tabular-nums">
                                     <PrivateAmount>{formatCompactCAD(idx.valeur)}</PrivateAmount>
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex items-center gap-2.5 shrink-0">
                                 <svg
-                                    width="46"
-                                    height="20"
+                                    width="52"
+                                    height="22"
                                     viewBox="0 0 48 22"
                                     aria-hidden="true"
                                     className="overflow-visible"
@@ -1880,7 +1880,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     />
                                 </svg>
                                 <span
-                                    className={`shrink-0 px-2 py-0.5 rounded-full font-mono text-[11px] font-semibold tabular-nums ${
+                                    className={`shrink-0 px-2.5 py-1 rounded-full font-mono text-xs font-semibold tabular-nums ${
                                         idx.positif ? 'gf-delta-up' : 'gf-delta-neutral'
                                     }`}
                                 >
@@ -1892,21 +1892,21 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 </div>
             </section>
 
-            {/* 2. ARCHITECTURE 3 COLONNES GOOGLE FINANCE BETA : LISTES & JALONS (3, BUREAU) · COURBE, AVOIRS & PLAN D'ACTION (6) · RECHERCHE GEMINI, ALLOCATION & ACTIVITÉ (3) */}
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start gf-spring-grid">
+            {/* 2. ARCHITECTURE 3 COLONNES GOOGLE FINANCE AÉRÉE : LISTES & JALONS (3, BUREAU) · COURBE, AVOIRS & PLAN D'ACTION (6) · RECHERCHE GEMINI, ALLOCATION & ACTIVITÉ (3) */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start gf-spring-grid">
                 {/* ── COLONNE GAUCHE (3 COL) : LISTES & PORTEFEUILLES + CALENDRIER & JALONS + PREUVES & SOURCES ── */}
                 <aside
                     aria-label="Listes et portefeuilles suivis"
-                    className="order-3 xl:order-1 xl:col-span-3 space-y-4"
+                    className="order-3 xl:order-1 xl:col-span-3 space-y-6"
                 >
                     <section className="hidden xl:block premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure">
                         {/* En-tête « Listes » */}
-                        <div className="px-4 py-3 flex items-center justify-between gap-2">
+                        <div className="px-5 py-4 flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
-                                <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                                <h2 className="text-base font-semibold text-ink-50 tracking-normal">
                                     Listes
                                 </h2>
-                                <span className="text-[11px] font-mono text-ink-400">
+                                <span className="text-xs font-mono text-ink-400">
                                     {/* NOMBRE-NON-MONETAIRE : nombre de lignes suivies */}
                                     ({positionsSuivies.length})
                                 </span>
@@ -1916,7 +1916,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 onClick={() => setActiveTab(Tab.INVESTMENTS)}
                                 onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
                                 aria-label="Gérer les listes et placements"
-                                className="touch-target px-2.5 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-200 inline-flex items-center gap-1 focus-ring"
+                                className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-200 inline-flex items-center gap-1.5 focus-ring"
                             >
                                 <Icon name="plus" size={14} aria-hidden="true" />
                                 <span>Ajouter</span>
@@ -1924,36 +1924,36 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
 
                         {/* Bloc « Portefeuilles » avec Valeur totale et carte Main active */}
-                        <div className="p-4 space-y-3 bg-fond">
+                        <div className="p-5 space-y-4 bg-fond">
                             <div className="flex items-center justify-between">
-                                <span className="text-xs font-semibold text-ink-200">Portefeuilles</span>
-                                <span className="text-[11px] font-mono text-ink-400">CAD</span>
+                                <span className="text-xs font-semibold text-ink-200 tracking-wide">Portefeuilles</span>
+                                <span className="text-xs font-mono text-ink-400">CAD</span>
                             </div>
 
-                            <div>
-                                <div className="text-[11px] text-ink-400">Patrimoine net total</div>
-                                <div className="font-mono text-lg sm:text-xl font-bold text-ink-50 tabular-nums mt-0.5">
+                            <div className="space-y-1">
+                                <div className="text-xs text-ink-400">Patrimoine net total</div>
+                                <div className="font-mono text-xl sm:text-2xl font-bold text-ink-50 tabular-nums">
                                     <PrivateAmount>{formatCAD(patrimoineNet)}</PrivateAmount>
                                 </div>
                             </div>
 
                             {/* Séparation explicite Portefeuille (Placements) vs Liquidités (Encaisse) */}
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-2 gap-3">
                                 <button
                                     type="button"
                                     aria-pressed={lentilleHero === 'portefeuille'}
                                     onClick={() => setLentilleHero('portefeuille')}
-                                    className={`touch-target rounded-lg p-2.5 text-left border transition-colors focus-ring ${
+                                    className={`touch-target rounded-xl p-3.5 text-left border transition-colors focus-ring ${
                                         lentilleHero === 'portefeuille'
                                             ? 'bg-surface-douce border-bordure-champ'
                                             : 'bg-surface border-bordure hover:border-bordure-champ'
                                     }`}
                                 >
-                                    <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-ink-400">
-                                        <span className="w-2 h-2 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
+                                    <div className="flex items-center gap-2 text-xs font-mono text-ink-300">
+                                        <span className="w-2.5 h-2.5 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
                                         <span className="truncate">Portefeuille</span>
                                     </div>
-                                    <div className="font-mono text-xs font-bold text-ink-50 tabular-nums mt-1">
+                                    <div className="font-mono text-sm font-bold text-ink-50 tabular-nums mt-1.5">
                                         <PrivateAmount>{formatCompactCAD(portefeuillePlacements)}</PrivateAmount>
                                     </div>
                                 </button>
@@ -1961,37 +1961,37 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     type="button"
                                     aria-pressed={lentilleHero === 'liquidites'}
                                     onClick={() => setLentilleHero('liquidites')}
-                                    className={`touch-target rounded-lg p-2.5 text-left border transition-colors focus-ring ${
+                                    className={`touch-target rounded-xl p-3.5 text-left border transition-colors focus-ring ${
                                         lentilleHero === 'liquidites'
                                             ? 'bg-surface-douce border-bordure-champ'
                                             : 'bg-surface border-bordure hover:border-bordure-champ'
                                     }`}
                                 >
-                                    <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-ink-400">
-                                        <span className="w-2 h-2 rounded-full gf-alloc-cash shrink-0" aria-hidden="true" />
+                                    <div className="flex items-center gap-2 text-xs font-mono text-ink-300">
+                                        <span className="w-2.5 h-2.5 rounded-full gf-alloc-cash shrink-0" aria-hidden="true" />
                                         <span className="truncate">Liquidités</span>
                                     </div>
-                                    <div className="font-mono text-xs font-bold text-ink-50 tabular-nums mt-1">
+                                    <div className="font-mono text-sm font-bold text-ink-50 tabular-nums mt-1.5">
                                         <PrivateAmount>{formatCompactCAD(liquidites)}</PrivateAmount>
                                     </div>
                                 </button>
                             </div>
 
                             {/* Carte active « Main » façon Google Finance Beta */}
-                            <div className="gf-portfolio-active rounded-lg p-3 space-y-1.5">
+                            <div className="gf-portfolio-active rounded-xl p-4 space-y-2">
                                 <div className="flex items-center justify-between gap-2">
-                                    <span className="text-xs font-bold text-ink-50 truncate">
+                                    <span className="text-sm font-bold text-ink-50 truncate">
                                         Main · {lentilleCourante.label}
                                     </span>
-                                    <span className="w-2 h-2 rounded-full gf-alloc-reer gf-pulse-live shrink-0" aria-hidden="true" />
+                                    <span className="w-2.5 h-2.5 rounded-full gf-alloc-reer gf-pulse-live shrink-0" aria-hidden="true" />
                                 </div>
-                                <div className="flex flex-wrap items-center justify-between gap-1.5 font-mono tabular-nums">
-                                    <span className="text-xs font-semibold text-ink-100">
+                                <div className="flex flex-wrap items-center justify-between gap-2 font-mono tabular-nums">
+                                    <span className="text-sm font-semibold text-ink-100">
                                         <PrivateAmount>{formatCAD(valeurHeroAffichee)}</PrivateAmount>
                                     </span>
                                     {gainHorizon && (
                                         <span
-                                            className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                                            className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                                                 gainHorizon.diff >= 0 ? 'gf-delta-up' : 'gf-delta-down'
                                             }`}
                                         >
@@ -2007,7 +2007,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             <div
                                 role="group"
                                 aria-label="Lentille d'affichage du patrimoine"
-                                className="grid grid-cols-1 gap-1 pt-1"
+                                className="grid grid-cols-1 gap-1.5 pt-1"
                             >
                                 {LENTILLES_HERO.map((l) => (
                                     <button
@@ -2015,14 +2015,14 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         type="button"
                                         aria-pressed={lentilleHero === l.cle}
                                         onClick={() => setLentilleHero(l.cle)}
-                                        className={`touch-target px-3 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between gap-2 transition-all duration-150 focus-ring ${
+                                        className={`touch-target px-3.5 py-2.5 rounded-lg text-sm font-medium flex items-center justify-between gap-2.5 transition-all duration-150 focus-ring ${
                                             lentilleHero === l.cle
                                                 ? 'gf-subtab-pill-active'
                                                 : 'text-ink-300 hover:text-ink-50 hover:bg-surface-douce border border-transparent'
                                         }`}
                                     >
                                         <span className="truncate">{l.label}</span>
-                                        <span className="font-mono text-[10px] opacity-80">{l.ticker}</span>
+                                        <span className="font-mono text-xs opacity-80">{l.ticker}</span>
                                     </button>
                                 ))}
                             </div>
@@ -2030,9 +2030,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 
                         {/* Liste des titres & enveloppes avec mini-sparklines et pilules colorées */}
                         <div className="divide-y divide-bordure bg-surface">
-                            <div className="px-4 py-2.5 flex items-center justify-between bg-surface-douce">
-                                <span className="text-xs font-semibold text-ink-200">Liste suivie</span>
-                                <span className="text-[11px] text-ink-400">Variation & Cours</span>
+                            <div className="px-5 py-3 flex items-center justify-between bg-surface-douce">
+                                <span className="text-xs font-semibold text-ink-200 tracking-wide">Liste suivie</span>
+                                <span className="text-xs text-ink-400">Variation & Cours</span>
                             </div>
 
                             {positionsSuivies.map((pos) => (
@@ -2041,20 +2041,20 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     type="button"
                                     onClick={() => setActiveTab(pos.tab)}
                                     onMouseEnter={() => prefetchTab(pos.tab)}
-                                    className="gf-row touch-target w-full px-3.5 py-2.5 flex items-center justify-between gap-2 text-left focus-ring"
+                                    className="gf-row touch-target w-full px-5 py-3.5 flex items-center justify-between gap-3 text-left focus-ring"
                                 >
-                                    <div className="min-w-0 flex-1">
-                                        <div className="font-mono text-xs font-bold text-ink-50 truncate">
+                                    <div className="min-w-0 flex-1 space-y-1">
+                                        <div className="font-mono text-sm font-bold text-ink-50 truncate">
                                             {pos.symbole}
                                         </div>
-                                        <div className="text-[11px] text-ink-400 truncate">
+                                        <div className="text-xs text-ink-400 truncate">
                                             <PrivateAmount>{pos.nom}</PrivateAmount>
                                         </div>
                                     </div>
 
                                     <svg
-                                        width="42"
-                                        height="18"
+                                        width="48"
+                                        height="20"
                                         viewBox="0 0 48 22"
                                         aria-hidden="true"
                                         className="shrink-0 overflow-visible"
@@ -2069,12 +2069,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         />
                                     </svg>
 
-                                    <div className="text-right font-mono tabular-nums shrink-0">
-                                        <div className="text-xs font-bold text-ink-50">
+                                    <div className="text-right font-mono tabular-nums shrink-0 space-y-1">
+                                        <div className="text-sm font-bold text-ink-50">
                                             <PrivateAmount>{formatCompactCAD(pos.valeur)}</PrivateAmount>
                                         </div>
                                         <span
-                                            className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold mt-0.5 ${
+                                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
                                                 pos.variationPct == null
                                                     ? 'gf-delta-neutral'
                                                     : pos.positif
@@ -2099,13 +2099,13 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     {/* Prochains jalons & calendrier patrimonial (équilibré dans la colonne gauche sur bureau, sous Événements sur mobile) */}
                     <section
                         aria-label="Prochains jalons patrimoniaux"
-                        className={`premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-3.5 ${
+                        className={`premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-4 ${
                             sousOngletCentre === 'evenements' ? 'block' : 'hidden xl:block'
                         }`}
                     >
-                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
-                            <div>
-                                <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                        <div className="flex items-center justify-between gap-3 border-b border-bordure pb-3.5">
+                            <div className="space-y-0.5">
+                                <h2 className="text-base font-semibold text-ink-50 tracking-normal">
                                     Calendrier & jalons
                                 </h2>
                                 <p className="text-xs text-ink-300">
@@ -2116,14 +2116,14 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(Tab.LIFE_PROJECTS)}
                                 onMouseEnter={() => prefetchTab(Tab.LIFE_PROJECTS)}
-                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
                             >
                                 <span>Projets</span>
                                 <Icon name="chevron-right" size={14} aria-hidden="true" />
                             </button>
                         </div>
 
-                        <div className="rounded-lg border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
+                        <div className="rounded-xl border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
                             {prochainsJalons.map((jalon) => {
                                 const ecartAnnees = jalon.annee - anneeActuelle;
                                 const delaiTexte = isPrivacyMode ? '••' : ecartAnnees <= 0 ? 'Actif' : `Dans ${ecartAnnees} an${ecartAnnees > 1 ? 's' : ''}`;
@@ -2132,22 +2132,22 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         key={jalon.id}
                                         type="button"
                                         onClick={() => setActiveTab(jalon.tab)}
-                                        className="gf-row touch-target w-full px-3 py-2 flex items-center justify-between gap-2.5 text-left focus-ring"
+                                        className="gf-row touch-target w-full px-4 py-3.5 flex items-center justify-between gap-3 text-left focus-ring"
                                     >
-                                        <div className="min-w-0 flex items-center gap-2.5">
-                                            <span className="px-2 py-0.5 rounded-md gf-delta-amber font-mono tabular-nums text-[11px] font-bold shrink-0">
+                                        <div className="min-w-0 flex items-center gap-3">
+                                            <span className="px-2.5 py-1 rounded-md gf-delta-amber font-mono tabular-nums text-xs font-bold shrink-0">
                                                 {jalon.annee}
                                             </span>
-                                            <div className="min-w-0">
-                                                <div className="text-xs font-medium text-ink-50 truncate">
+                                            <div className="min-w-0 space-y-0.5">
+                                                <div className="text-sm font-medium text-ink-50 truncate">
                                                     {jalon.titre}
                                                 </div>
-                                                <div className="text-[11px] text-ink-400 truncate">
+                                                <div className="text-xs text-ink-400 truncate">
                                                     {jalon.categorie} · {delaiTexte}
                                                 </div>
                                             </div>
                                         </div>
-                                        <PrivateAmount className="font-mono tabular-nums text-xs font-semibold text-ink-50 shrink-0">
+                                        <PrivateAmount className="font-mono tabular-nums text-sm font-semibold text-ink-50 shrink-0">
                                             {formatCompactCAD(jalon.montant)}
                                         </PrivateAmount>
                                     </button>
@@ -2160,14 +2160,14 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     <section
                         data-testid="preuves-sources-panel"
                         aria-label="Preuves et sources de véracité des calculs"
-                        className={`premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-3.5 ${
+                        className={`premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-4 ${
                             sousOngletCentre === 'evenements' ? 'block' : 'hidden xl:block'
                         }`}
                     >
-                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
-                            <div>
-                                <div className="flex items-center gap-1.5">
-                                    <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                        <div className="flex items-center justify-between gap-3 border-b border-bordure pb-3.5">
+                            <div className="space-y-0.5">
+                                <div className="flex items-center gap-2">
+                                    <h2 className="text-base font-semibold text-ink-50 tracking-normal">
                                         Preuves & Sources
                                     </h2>
                                     <span className="gf-badge-nouvelle">Vérifié</span>
@@ -2180,26 +2180,26 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(Tab.TAX)}
                                 onMouseEnter={() => prefetchTab(Tab.TAX)}
-                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-100 inline-flex items-center gap-1 focus-ring whitespace-nowrap shrink-0"
+                                className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 focus-ring whitespace-nowrap shrink-0"
                             >
                                 <span>Audit</span>
                                 <Icon name="chevron-right" size={14} aria-hidden="true" />
                             </button>
                         </div>
 
-                        <div className="rounded-lg border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
+                        <div className="rounded-xl border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
                             {preuvesVeracite.map((preuve) => (
                                 <button
                                     key={preuve.id}
                                     type="button"
                                     onClick={() => setActiveTab(preuve.tab)}
-                                    className="gf-row touch-target w-full p-3 text-left space-y-1 focus-ring"
+                                    className="gf-row touch-target w-full px-4 py-3.5 text-left space-y-1.5 focus-ring"
                                 >
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="text-xs font-semibold text-ink-50 truncate">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="text-sm font-semibold text-ink-50 truncate">
                                             {preuve.titre}
                                         </span>
-                                        <span className="px-1.5 py-0.5 rounded-full gf-delta-up font-mono text-[10px] font-semibold shrink-0">
+                                        <span className="px-2.5 py-0.5 rounded-full gf-delta-up font-mono text-xs font-semibold shrink-0">
                                             {preuve.montantNumeric != null ? (
                                                 <PrivateAmount>{formatCompactCAD(preuve.montantNumeric)}</PrivateAmount>
                                             ) : (
@@ -2217,19 +2217,19 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 </aside>
 
                 {/* ── COLONNE CENTRALE (6 COL, EN PREMIER SUR MOBILE) : COTATION « MAIN », COURBE BLEUE & SOUS-ONGLETS ── */}
-                <div className="order-1 xl:order-2 xl:col-span-6 space-y-4">
+                <div className="order-1 xl:order-2 xl:col-span-6 space-y-6">
                     {/* Fiche principale de cotation & trajectoire Google Finance Beta */}
                     <section
                         aria-label="Trajectoire du patrimoine"
                         className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
                     >
-                        <div className="p-4 sm:p-6 space-y-4">
+                        <div className="p-5 sm:p-7 space-y-5">
                             {/* Fil d'Ariane « ← Accueil | Main » + bouton Modifier */}
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex flex-wrap items-center gap-2 text-xs text-ink-300">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex flex-wrap items-center gap-2.5 text-sm text-ink-300">
                                     <span className="gf-ticker-symbol">{lentilleCourante.ticker}</span>
                                     <span aria-hidden="true" className="text-ink-400">|</span>
-                                    <h1 className="font-semibold text-ink-100 tracking-tight text-sm sm:text-base">
+                                    <h1 className="font-semibold text-ink-100 tracking-normal text-base sm:text-lg">
                                         {prenom ? `Main · ${prenom} (${lentilleCourante.label})` : `Main · ${lentilleCourante.label}`}
                                     </h1>
                                 </div>
@@ -2238,9 +2238,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     type="button"
                                     onClick={() => setActiveTab(Tab.INVESTMENTS)}
                                     onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
-                                    className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring"
+                                    className="touch-target px-4 py-2 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-2 transition-colors duration-100 focus-ring"
                                 >
-                                    <Icon name="edit" size={13} aria-hidden="true" />
+                                    <Icon name="edit" size={14} aria-hidden="true" />
                                     <span>Modifier</span>
                                 </button>
                             </div>
@@ -2249,7 +2249,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             <div
                                 role="group"
                                 aria-label="Assiette du patrimoine sur mobile"
-                                className="flex xl:hidden items-center gap-1.5 overflow-x-auto no-scrollbar"
+                                className="flex xl:hidden items-center gap-2 overflow-x-auto no-scrollbar"
                             >
                                 {LENTILLES_HERO.map((l) => (
                                     <button
@@ -2257,7 +2257,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         type="button"
                                         aria-pressed={lentilleHero === l.cle}
                                         onClick={() => setLentilleHero(l.cle)}
-                                        className={`touch-target shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors duration-100 focus-ring ${
+                                        className={`touch-target shrink-0 px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring ${
                                             lentilleHero === l.cle
                                                 ? 'gf-subtab-pill-active'
                                                 : 'bg-fond border border-bordure text-ink-300 hover:text-ink-50'
@@ -2269,18 +2269,18 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             </div>
 
                             {/* Montant Héro + Pilule de variation verte/rouge style Google Finance Beta */}
-                            <div className="space-y-1.5">
-                                <div className="flex flex-wrap items-baseline gap-2.5">
+                            <div className="space-y-2.5">
+                                <div className="flex flex-wrap items-baseline gap-3">
                                     <AnimatedNetWorth
                                         value={valeurHeroAffichee}
                                         as="div"
                                         testId="animated-global-net-worth"
-                                        className="font-mono tabular-nums text-3xl sm:text-4xl font-bold tracking-tight text-ink-50 leading-none"
+                                        className="font-mono tabular-nums text-3xl sm:text-5xl font-bold tracking-normal text-ink-50 leading-tight"
                                     />
 
                                     {variation && lentilleHero === 'net' ? (
                                         <span
-                                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-semibold tabular-nums ${
+                                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs sm:text-sm font-mono font-semibold tabular-nums ${
                                                 variation.diff >= 0 ? 'gf-delta-up' : 'gf-delta-down'
                                             }`}
                                         >
@@ -2295,7 +2295,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     ) : (
                                         gainHorizon && (
                                             <span
-                                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-semibold tabular-nums ${
+                                                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs sm:text-sm font-mono font-semibold tabular-nums ${
                                                     gainHorizon.diff >= 0 ? 'gf-delta-up' : 'gf-delta-down'
                                                 }`}
                                             >
@@ -2311,11 +2311,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     )}
                                 </div>
 
-                                <div className="flex flex-wrap items-center gap-2 text-xs font-mono tabular-nums text-ink-400">
+                                <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm font-mono tabular-nums text-ink-300">
                                     <span>{todayIso} · CAD</span>
                                     <FxEstimateBadge />
                                     {gainHorizon && (
-                                        <span className="text-ink-300">
+                                        <span className="text-ink-200">
                                             · Cible {gainHorizon.anneeFin} :{' '}
                                             <strong className="text-ink-50">
                                                 <PrivateAmount>{formatCompactCAD(gainHorizon.fin)}</PrivateAmount>
@@ -2326,18 +2326,18 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             </div>
 
                             {/* Pilules d'outils au-dessus du graphique : En aires / + Avoirs bruts / Temps forts / Simulateur */}
-                            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-bordure">
-                                <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-bordure">
+                                <div className="flex flex-wrap items-center gap-2.5">
                                     <div
                                         role="group"
                                         aria-label="Série affichée sur la courbe"
-                                        className="inline-flex items-center p-0.5 rounded-full border border-bordure bg-fond gap-0.5"
+                                        className="inline-flex items-center p-1 rounded-full border border-bordure bg-fond gap-1"
                                     >
                                         <button
                                             type="button"
                                             aria-pressed={modeCourbe === 'nette'}
                                             onClick={() => setModeCourbe('nette')}
-                                            className={`touch-target px-3 py-1 rounded-full text-xs font-medium transition-colors duration-100 focus-ring whitespace-nowrap ${
+                                            className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring whitespace-nowrap ${
                                                 modeCourbe === 'nette'
                                                     ? 'gf-subtab-pill-active'
                                                     : 'text-ink-300 hover:text-ink-50'
@@ -2349,7 +2349,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             type="button"
                                             aria-pressed={modeCourbe === 'complete'}
                                             onClick={() => setModeCourbe('complete')}
-                                            className={`touch-target px-3 py-1 rounded-full text-xs font-medium transition-colors duration-100 focus-ring whitespace-nowrap ${
+                                            className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring whitespace-nowrap ${
                                                 modeCourbe === 'complete'
                                                     ? 'gf-subtab-pill-active'
                                                     : 'text-ink-300 hover:text-ink-50'
@@ -2368,7 +2368,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             type="button"
                                             aria-pressed={tempsFortsActifs}
                                             onClick={() => setTempsFortsActifs((v) => !v)}
-                                            className={`touch-target px-3 py-1 rounded-full text-xs font-medium inline-flex items-center gap-2 border transition-all duration-150 focus-ring ${
+                                            className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium inline-flex items-center gap-2 border transition-all duration-150 focus-ring ${
                                                 tempsFortsActifs
                                                     ? 'gf-delta-amber'
                                                     : 'bg-fond text-ink-300 border-bordure hover:text-ink-50'
@@ -2384,7 +2384,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     type="button"
                                     onClick={() => setActiveTab(Tab.FUTURE)}
                                     onMouseEnter={() => prefetchTab(Tab.FUTURE)}
-                                    className="touch-target px-3.5 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                    className="touch-target px-4 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
                                 >
                                     <span>Simulateur</span>
                                     <Icon name="chevron-right" size={14} aria-hidden="true" />
@@ -2399,8 +2399,6 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 data-chart-horizon={horizon}
                                 data-chart-mode={modeCourbe}
                                 data-chart-lens={lentilleHero}
-                                role="img"
-                                aria-label="Graphique combiné du présent et du futur projeté — valeurs détaillées dans le tableau de données."
                                 onMouseMove={(e) => {
                                     const pt = resoudrePointClientX(e.clientX);
                                     if (pt) {
@@ -2414,7 +2412,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     if (!pt) return;
                                     setPointFige((cur) => (cur && cur.monthIndex === pt.monthIndex ? null : pt));
                                 }}
-                                className="h-[245px] sm:h-[290px] w-full gf-chart-enter rounded-lg bg-fond border border-bordure p-2 cursor-crosshair"
+                                role="img"
+                                aria-label="Graphique combiné du présent et du futur projeté — valeurs détaillées dans le tableau de données."
+                                className="h-[280px] sm:h-[340px] w-full gf-chart-enter rounded-xl bg-fond border border-bordure p-3 cursor-crosshair"
                             >
                                 <ResponsiveContainer width="100%" height="100%">
                                     <ComposedChart data={donneesTrajectoire} margin={{ top: 14, right: 10, left: 0, bottom: 0 }}>
@@ -2844,12 +2844,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             </div>
 
                             {/* Barre d'horizons directe (1M · 1A · 5A · 10A · MAX) + précision quotidienne/mensuelle identique à Futur */}
-                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                                <div className="flex flex-wrap items-center gap-1.5">
+                            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                                <div className="flex flex-wrap items-center gap-2">
                                     <div
                                         role="group"
                                         aria-label="Horizon de la courbe"
-                                        className="inline-flex items-center p-0.5 rounded-full border border-bordure bg-fond gap-0.5"
+                                        className="inline-flex items-center p-1 rounded-full border border-bordure bg-fond gap-1"
                                     >
                                         {HORIZONS.map((h) => (
                                             <button
@@ -2857,7 +2857,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                 type="button"
                                                 aria-pressed={horizon === h.cle}
                                                 onClick={() => setHorizon(h.cle)}
-                                                className={`touch-target px-3 py-1 rounded-full text-xs font-mono font-semibold tabular-nums transition-colors duration-100 focus-ring ${
+                                                className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-mono font-semibold tabular-nums transition-colors duration-100 focus-ring ${
                                                     horizon === h.cle
                                                         ? 'gf-subtab-pill-active'
                                                         : 'text-ink-300 hover:text-ink-50'
@@ -2872,24 +2872,24 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         type="button"
                                         onClick={basculerHorizonSuivant}
                                         aria-label="Choisir la durée Présent et Futur de la courbe"
-                                        className="touch-target px-2.5 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-[11px] font-mono text-ink-300 hover:text-ink-50 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring"
+                                        className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-mono text-ink-300 hover:text-ink-50 inline-flex items-center gap-2 transition-colors duration-100 focus-ring"
                                     >
-                                        <Icon name="refresh" size={12} aria-hidden="true" />
+                                        <Icon name="refresh" size={13} aria-hidden="true" />
                                         <span>{isDailyCurve ? 'Pas quotidien (1 j)' : 'Pas mensuel (1 m)'}</span>
                                     </button>
                                 </div>
 
-                                <div className="inline-flex flex-wrap items-center gap-3 text-[11px] font-mono text-ink-300">
-                                    <span className="inline-flex items-center gap-1.5">
+                                <div className="inline-flex flex-wrap items-center gap-3.5 text-xs font-mono text-ink-300">
+                                    <span className="inline-flex items-center gap-2">
                                         <span className="w-2.5 h-2.5 rounded-full gf-alloc-celi" aria-hidden="true" />
                                         <span>{`Passé réel (${horizon})`}</span>
                                     </span>
-                                    <span className="inline-flex items-center gap-1.5">
+                                    <span className="inline-flex items-center gap-2">
                                         <span className="w-2.5 h-2.5 rounded-full gf-alloc-reer" aria-hidden="true" />
                                         <span>{`Projection Futur (${horizon})`}</span>
                                     </span>
                                     {runMC && lentilleHero === 'net' && (
-                                        <span className="inline-flex items-center gap-1.5 text-ink-400">
+                                        <span className="inline-flex items-center gap-2 text-ink-400">
                                             <span>P10–P90 Monte-Carlo</span>
                                         </span>
                                     )}
@@ -2900,23 +2900,23 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             {jourActif && (
                                 <div
                                     aria-label="Inspecteur précis du point et jalons de projection"
-                                    className="rounded-lg border border-bordure bg-fond p-3 space-y-2.5"
+                                    className="rounded-xl border border-bordure bg-fond p-4 sm:p-5 space-y-4"
                                 >
-                                    <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-bordure">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <span className="text-xs font-mono font-bold text-ink-50">
+                                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-bordure">
+                                        <div className="flex flex-wrap items-center gap-2.5">
+                                            <span className="text-sm font-mono font-bold text-ink-50">
                                                 {jourActif.dateLabel ||
                                                     jourActif.dayIso ||
                                                     `${MOIS_COURTS[calendarFromMonthIndex(startYear, startMonth, Math.floor(jourActif.monthIndex)).month] ?? ''} ${jourActif.year}`}
                                             </span>
                                             {typeof jourActif.age === 'number' && Number.isFinite(jourActif.age) && (
-                                                <span className="px-2 py-0.5 rounded-full border border-bordure bg-surface text-[11px] font-mono text-ink-300">
+                                                <span className="px-2.5 py-0.5 rounded-full border border-bordure bg-surface text-xs font-mono text-ink-300">
                                                     {/* NOMBRE-NON-MONETAIRE : âge du profil au point inspecté */}
                                                     {`${jourActif.age} ans`}
                                                 </span>
                                             )}
                                             <span
-                                                className={`px-2 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider ${
+                                                className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-medium ${
                                                     jourActif.isPast || jourActif.dayIsReal
                                                         ? 'gf-delta-neutral'
                                                         : Math.abs(jourActif.monthIndex - xAuj) <= 0.04
@@ -2931,18 +2931,18 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                       : 'Projeté'}
                                             </span>
                                             {pointFige && (
-                                                <span className="text-[11px] font-mono text-alerte-texte">
+                                                <span className="text-xs font-mono text-alerte-texte">
                                                     · Point épinglé
                                                 </span>
                                             )}
                                         </div>
 
-                                        <div className="inline-flex items-center gap-1">
+                                        <div className="inline-flex items-center gap-1.5">
                                             <button
                                                 type="button"
                                                 onClick={() => stepJourAccueil(-1)}
                                                 aria-label={isDailyCurve ? 'Reculer d’un jour sur la courbe' : 'Reculer d’un mois sur la courbe'}
-                                                className="touch-target px-2.5 py-1 rounded-md border border-bordure bg-surface hover:bg-surface-douce text-xs font-mono text-ink-200 hover:text-ink-50 transition-colors duration-100 focus-ring"
+                                                className="touch-target px-3 py-1.5 rounded-lg border border-bordure bg-surface hover:bg-surface-douce text-xs font-mono text-ink-200 hover:text-ink-50 transition-colors duration-100 focus-ring"
                                             >
                                                 {isDailyCurve ? '← J-1' : '← M-1'}
                                             </button>
@@ -2950,7 +2950,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                 type="button"
                                                 onClick={() => stepJourAccueil(1)}
                                                 aria-label={isDailyCurve ? 'Avancer d’un jour sur la courbe' : 'Avancer d’un mois sur la courbe'}
-                                                className="touch-target px-2.5 py-1 rounded-md border border-bordure bg-surface hover:bg-surface-douce text-xs font-mono text-ink-200 hover:text-ink-50 transition-colors duration-100 focus-ring"
+                                                className="touch-target px-3 py-1.5 rounded-lg border border-bordure bg-surface hover:bg-surface-douce text-xs font-mono text-ink-200 hover:text-ink-50 transition-colors duration-100 focus-ring"
                                             >
                                                 {isDailyCurve ? 'J+1 →' : 'M+1 →'}
                                             </button>
@@ -2958,7 +2958,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                 <button
                                                     type="button"
                                                     onClick={() => setPointFige(null)}
-                                                    className="touch-target px-2.5 py-1 rounded-md border border-bordure bg-surface hover:bg-surface-douce text-xs font-mono text-alerte-texte transition-colors duration-100 focus-ring"
+                                                    className="touch-target px-3 py-1.5 rounded-lg border border-bordure bg-surface hover:bg-surface-douce text-xs font-mono text-alerte-texte transition-colors duration-100 focus-ring"
                                                 >
                                                     Aujourd’hui
                                                 </button>
@@ -2967,7 +2967,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     </div>
 
                                     {/* Ventilation exacte par compte au point inspecté */}
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 text-xs font-mono tabular-nums">
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono tabular-nums">
                                         {[
                                             { id: 'nw', label: 'Valeur nette', val: jourActif.NetWorth, dot: couleurSerie('NetWorth') },
                                             { id: 'celi', label: 'CELI', val: jourActif.CELI, dot: couleurSerie('CELI') },
@@ -2978,16 +2978,16 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             { id: 'immo', label: 'Équité immo', val: jourActif.Immobilier, dot: couleurSerie('Immobilier') },
                                             { id: 'dette', label: 'Dettes', val: jourActif.DettesNonImmo, dot: COULEUR_DETTE },
                                         ].map((item) => (
-                                            <div key={item.id} className="rounded-md bg-surface px-2.5 py-1.5 border border-bordure">
-                                                <div className="flex items-center gap-1.5 text-[10px] text-ink-400 truncate">
+                                            <div key={item.id} className="rounded-lg bg-surface px-3.5 py-2.5 border border-bordure space-y-1">
+                                                <div className="flex items-center gap-2 text-xs text-ink-300 truncate">
                                                     <span
-                                                        className="w-2 h-2 rounded-full shrink-0"
+                                                        className="w-2.5 h-2.5 rounded-full shrink-0"
                                                         style={{ backgroundColor: item.dot }}
                                                         aria-hidden="true"
                                                     />
                                                     <span className="truncate">{item.label}</span>
                                                 </div>
-                                                <div className="mt-0.5 font-semibold text-ink-50 truncate">
+                                                <div className="text-sm font-semibold text-ink-50 truncate">
                                                     <PrivateAmount>
                                                         {typeof item.val === 'number' && Number.isFinite(item.val)
                                                             ? formatCompactCAD(item.val)
@@ -3000,20 +3000,20 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 
                                     {/* 4 Jalons patrimoniaux synchronisés avec FutureProjection.tsx */}
                                     {patrimoineKpi && (
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-bordure text-xs">
-                                            <div className="flex items-center justify-between gap-2 px-2 py-1 rounded bg-surface/60">
-                                                <span className="text-[11px] text-ink-400">Aujourd’hui</span>
-                                                <span className="font-mono font-semibold text-ink-100 tabular-nums">
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-bordure text-xs">
+                                            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-surface/60">
+                                                <span className="text-xs text-ink-300">Aujourd’hui</span>
+                                                <span className="font-mono text-sm font-semibold text-ink-100 tabular-nums">
                                                     <PrivateAmount>
                                                         {formatCompactCAD(pointAncre?.NetWorth ?? patrimoineNet)}
                                                     </PrivateAmount>
                                                 </span>
                                             </div>
-                                            <div className="flex items-center justify-between gap-2 px-2 py-1 rounded bg-surface/60">
-                                                <span className="text-[11px] text-ink-400">
+                                            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-surface/60">
+                                                <span className="text-xs text-ink-300">
                                                     {jalonFire ? `FIRE (${jalonFire.year})` : 'Cible FIRE'}
                                                 </span>
-                                                <span className="font-mono font-semibold text-alerte-texte tabular-nums">
+                                                <span className="font-mono text-sm font-semibold text-alerte-texte tabular-nums">
                                                     <PrivateAmount>
                                                         {jalonFire && Number.isFinite(jalonFire.NetWorth)
                                                             ? formatCompactCAD(jalonFire.NetWorth)
@@ -3023,12 +3023,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                     </PrivateAmount>
                                                 </span>
                                             </div>
-                                            <div className="flex items-center justify-between gap-2 px-2 py-1 rounded bg-surface/60">
-                                                <span className="text-[11px] text-ink-400">
+                                            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-surface/60">
+                                                <span className="text-xs text-ink-300">
                                                     {/* NOMBRE-NON-MONETAIRE : âge de la retraite sur la tuile jalon */}
                                                     {pointRetraite ? `Retraite (${pointRetraite.age} ans)` : 'À la retraite'}
                                                 </span>
-                                                <span className="font-mono font-semibold text-ink-100 tabular-nums">
+                                                <span className="font-mono text-sm font-semibold text-ink-100 tabular-nums">
                                                     <PrivateAmount>
                                                         {pointRetraite && Number.isFinite(pointRetraite.NetWorth)
                                                             ? formatCompactCAD(pointRetraite.NetWorth)
@@ -3036,12 +3036,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                     </PrivateAmount>
                                                 </span>
                                             </div>
-                                            <div className="flex items-center justify-between gap-2 px-2 py-1 rounded bg-surface/60">
-                                                <span className="text-[11px] text-ink-400">
+                                            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-surface/60">
+                                                <span className="text-xs text-ink-300">
                                                     {/* NOMBRE-NON-MONETAIRE : âge de fin d'horizon sur la tuile jalon */}
                                                     {dernierPoint ? `Fin (${dernierPoint.age} ans)` : 'Fin d’horizon'}
                                                 </span>
-                                                <span className="font-mono font-semibold text-ink-100 tabular-nums">
+                                                <span className="font-mono text-sm font-semibold text-ink-100 tabular-nums">
                                                     <PrivateAmount>{patrimoineKpi.value}</PrivateAmount>
                                                 </span>
                                             </div>
@@ -3060,20 +3060,20 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(Tab.INVESTMENTS)}
                                 onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
-                                className="touch-target px-4 py-3 text-left hover:bg-surface-douce flex flex-col justify-between gap-1 transition-colors duration-100 focus-ring"
+                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
                             >
-                                <div className="flex items-center justify-between gap-1">
-                                    <span className="text-[11px] uppercase tracking-wider text-ink-400 inline-flex items-center gap-1.5">
-                                        <span className="w-2 h-2 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs text-ink-300 inline-flex items-center gap-2">
+                                        <span className="w-2.5 h-2.5 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
                                         <span>Portefeuille</span>
                                     </span>
-                                    <span className="font-mono text-[10px] text-ink-400 tabular-nums">
+                                    <span className="font-mono text-xs text-ink-400 tabular-nums">
                                         <PrivateAmount>
                                             {`${totalAvoirs > 0 ? Math.round((portefeuillePlacements / totalAvoirs) * 100) : 0} %`}
                                         </PrivateAmount>
                                     </span>
                                 </div>
-                                <span className="font-mono text-sm sm:text-base font-bold text-ink-50 tabular-nums">
+                                <span className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
                                     <PrivateAmount>{formatCompactCAD(portefeuillePlacements)}</PrivateAmount>
                                 </span>
                             </button>
@@ -3082,14 +3082,14 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(Tab.TRANSACTIONS)}
                                 onMouseEnter={() => prefetchTab(Tab.TRANSACTIONS)}
-                                className="touch-target px-4 py-3 text-left hover:bg-surface-douce flex flex-col justify-between gap-1 transition-colors duration-100 focus-ring"
+                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
                             >
-                                <div className="flex items-center justify-between gap-1">
-                                    <span className="text-[11px] uppercase tracking-wider text-ink-400 inline-flex items-center gap-1.5">
-                                        <span className="w-2 h-2 rounded-full gf-alloc-cash shrink-0" aria-hidden="true" />
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs text-ink-300 inline-flex items-center gap-2">
+                                        <span className="w-2.5 h-2.5 rounded-full gf-alloc-cash shrink-0" aria-hidden="true" />
                                         <span>Liquidités</span>
                                     </span>
-                                    <span className="font-mono text-[10px] text-ink-400 tabular-nums">
+                                    <span className="font-mono text-xs text-ink-400 tabular-nums">
                                         {indicateursPouls.moisAutonomie !== null ? (
                                             <PrivateAmount>{`${indicateursPouls.moisAutonomie} mois`}</PrivateAmount>
                                         ) : (
@@ -3097,7 +3097,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         )}
                                     </span>
                                 </div>
-                                <span className="font-mono text-sm sm:text-base font-bold text-ink-50 tabular-nums">
+                                <span className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
                                     <PrivateAmount>{formatCompactCAD(liquidites)}</PrivateAmount>
                                 </span>
                             </button>
@@ -3106,13 +3106,13 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(Tab.BUDGET)}
                                 onMouseEnter={() => prefetchTab(Tab.BUDGET)}
-                                className="touch-target px-4 py-3 text-left hover:bg-surface-douce flex flex-col justify-between gap-1 transition-colors duration-100 focus-ring"
+                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
                             >
-                                <div className="flex items-center justify-between gap-1">
-                                    <span className="text-[11px] uppercase tracking-wider text-ink-400">
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs text-ink-300">
                                         Épargne mensuelle
                                     </span>
-                                    <span className="font-mono text-[10px] text-ink-400 tabular-nums">
+                                    <span className="font-mono text-xs text-ink-400 tabular-nums">
                                         {indicateursPouls.tauxEpargne !== null ? (
                                             <PrivateAmount>{`Taux ${indicateursPouls.tauxEpargne} %`}</PrivateAmount>
                                         ) : (
@@ -3120,7 +3120,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         )}
                                     </span>
                                 </div>
-                                <span className="font-mono text-sm sm:text-base font-bold text-ink-50 tabular-nums">
+                                <span className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
                                     <PrivateAmount>
                                         {`${epargneMensuelle >= 0 ? '+' : ''}${formatCompactCAD(epargneMensuelle)}/mois`}
                                     </PrivateAmount>
@@ -3131,17 +3131,17 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(Tab.DEBT)}
                                 onMouseEnter={() => prefetchTab(Tab.DEBT)}
-                                className="touch-target px-4 py-3 text-left hover:bg-surface-douce flex flex-col justify-between gap-1 transition-colors duration-100 focus-ring"
+                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
                             >
-                                <div className="flex items-center justify-between gap-1">
-                                    <span className="text-[11px] uppercase tracking-wider text-ink-400">
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs text-ink-300">
                                         Passifs & dettes
                                     </span>
-                                    <span className="font-mono text-[10px] text-ink-400 tabular-nums">
+                                    <span className="font-mono text-xs text-ink-400 tabular-nums">
                                         <PrivateAmount>{`Levier ${indicateursPouls.ratioEndettement} %`}</PrivateAmount>
                                     </span>
                                 </div>
-                                <span className="font-mono text-sm sm:text-base font-bold text-ink-200 tabular-nums">
+                                <span className="font-mono text-base sm:text-lg font-bold text-ink-200 tabular-nums">
                                     <PrivateAmount>{formatCompactCAD(totalDettes)}</PrivateAmount>
                                 </span>
                             </button>
@@ -3150,18 +3150,18 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(Tab.RETIREMENT)}
                                 onMouseEnter={() => prefetchTab(Tab.RETIREMENT)}
-                                className="touch-target px-4 py-3 text-left hover:bg-surface-douce flex flex-col justify-between gap-1 transition-colors duration-100 focus-ring"
+                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
                             >
-                                <div className="flex items-center justify-between gap-1">
+                                <div className="flex items-center justify-between gap-2">
                                     {/* NOMBRE-NON-MONETAIRE : âge cible de retraite saisi en réglage */}
-                                    <span className="text-[11px] uppercase tracking-wider text-ink-400">
+                                    <span className="text-xs text-ink-300">
                                         Retraite ({indicateursPouls.ageRetraite} ans)
                                     </span>
-                                    <span className="font-mono text-[10px] text-ink-400 tabular-nums">
+                                    <span className="font-mono text-xs text-ink-400 tabular-nums">
                                         <PrivateAmount>{`${indicateursPouls.pctLiberte} %`}</PrivateAmount>
                                     </span>
                                 </div>
-                                <span className="font-mono text-sm sm:text-base font-bold text-ink-50 tabular-nums">
+                                <span className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
                                     <PrivateAmount>{formatCompactCAD(indicateursPouls.cibleRetraite)}</PrivateAmount>
                                 </span>
                             </button>
@@ -3170,12 +3170,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(Tab.FUTURE)}
                                 onMouseEnter={() => prefetchTab(Tab.FUTURE)}
-                                className="touch-target px-4 py-3 text-left hover:bg-surface-douce flex flex-col justify-between gap-1 transition-colors duration-100 focus-ring"
+                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
                             >
-                                <span className="text-[11px] uppercase tracking-wider text-ink-400">
+                                <span className="text-xs text-ink-300">
                                     Cap {gainHorizon?.anneeMilieu ?? anneeActuelle + 5}
                                 </span>
-                                <span className="font-mono text-sm sm:text-base font-bold text-ink-50 tabular-nums">
+                                <span className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
                                     <PrivateAmount>
                                         {formatCompactCAD(gainHorizon?.milieuValeur ?? patrimoineNet)}
                                     </PrivateAmount>
@@ -3189,11 +3189,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         aria-label="Flux 30 jours et transferts"
                         className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
                     >
-                        <div className="px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+                        <div className="px-5 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3">
                             <div
                                 role="group"
                                 aria-label="Vue détaillée du portefeuille"
-                                className="inline-flex flex-wrap items-center gap-1"
+                                className="inline-flex flex-wrap items-center gap-1.5"
                             >
                                 {SOUS_ONGLETS_CENTRE.map((ong) => (
                                     <button
@@ -3201,7 +3201,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         type="button"
                                         aria-pressed={sousOngletCentre === ong.cle}
                                         onClick={() => setSousOngletCentre(ong.cle)}
-                                        className={`touch-target px-3.5 py-1.5 rounded-full text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 focus-ring ${
+                                        className={`touch-target px-4 py-2 rounded-full text-xs sm:text-sm font-semibold inline-flex items-center gap-2 transition-all duration-150 focus-ring ${
                                             sousOngletCentre === ong.cle
                                                 ? 'gf-subtab-pill-active'
                                                 : 'text-ink-300 hover:text-ink-50 hover:bg-surface-douce'
@@ -3219,7 +3219,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(Tab.BUDGET)}
                                 onMouseEnter={() => prefetchTab(Tab.BUDGET)}
-                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
                             >
                                 <span>Budget & Transferts</span>
                                 <Icon name="chevron-right" size={14} aria-hidden="true" />
@@ -3235,41 +3235,41 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             <button
                                 type="button"
                                 onClick={() => setActiveTab(Tab.TRANSACTIONS)}
-                                className="touch-target px-4 py-3 text-left hover:bg-surface-douce transition-colors focus-ring"
+                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce transition-colors focus-ring space-y-1"
                             >
-                                <div className="text-[11px] uppercase tracking-wider text-ink-400">Entrées (30j)</div>
-                                <div className="font-mono text-sm font-bold text-succes-texte tabular-nums mt-0.5">
+                                <div className="text-xs text-ink-300">Entrées (30j)</div>
+                                <div className="font-mono text-base font-bold text-succes-texte tabular-nums">
                                     <PrivateAmount>{`+${formatCompactCAD(flux30Jours.revenus)}`}</PrivateAmount>
                                 </div>
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setActiveTab(Tab.BUDGET)}
-                                className="touch-target px-4 py-3 text-left hover:bg-surface-douce transition-colors focus-ring"
+                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce transition-colors focus-ring space-y-1"
                             >
-                                <div className="text-[11px] uppercase tracking-wider text-ink-400">Dépenses (30j)</div>
-                                <div className="font-mono text-sm font-bold text-ink-50 tabular-nums mt-0.5">
+                                <div className="text-xs text-ink-300">Dépenses (30j)</div>
+                                <div className="font-mono text-base font-bold text-ink-50 tabular-nums">
                                     <PrivateAmount>{formatCompactCAD(flux30Jours.depenses)}</PrivateAmount>
                                 </div>
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setActiveTab(Tab.BUDGET)}
-                                className="touch-target px-4 py-3 text-left hover:bg-surface-douce transition-colors focus-ring"
+                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce transition-colors focus-ring space-y-1"
                             >
-                                <div className="text-[11px] uppercase tracking-wider text-ink-400">Transferts (30j)</div>
-                                <div className="font-mono text-sm font-bold text-repere tabular-nums mt-0.5">
+                                <div className="text-xs text-ink-300">Transferts (30j)</div>
+                                <div className="font-mono text-base font-bold text-repere tabular-nums">
                                     <PrivateAmount>{formatCompactCAD(flux30Jours.transferts)}</PrivateAmount>
                                 </div>
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setActiveTab(Tab.BUDGET)}
-                                className="touch-target px-4 py-3 text-left hover:bg-surface-douce transition-colors focus-ring"
+                                className="touch-target px-5 py-4 text-left hover:bg-surface-douce transition-colors focus-ring space-y-1"
                             >
-                                <div className="text-[11px] uppercase tracking-wider text-ink-400">Solde net (30j)</div>
+                                <div className="text-xs text-ink-300">Solde net (30j)</div>
                                 <div
-                                    className={`font-mono text-sm font-bold tabular-nums mt-0.5 ${
+                                    className={`font-mono text-base font-bold tabular-nums ${
                                         flux30Jours.fluxNet >= 0 ? 'text-succes-texte' : 'text-erreur-texte'
                                     }`}
                                 >
@@ -3291,23 +3291,23 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     key={cat.categorie}
                                     type="button"
                                     onClick={() => setActiveTab(Tab.BUDGET)}
-                                    className="gf-row touch-target w-full px-4 sm:px-5 py-2.5 flex items-center justify-between gap-3 text-left focus-ring"
+                                    className="gf-row touch-target w-full px-5 sm:px-6 py-3.5 flex items-center justify-between gap-4 text-left focus-ring"
                                 >
-                                    <div className="min-w-0 flex-1 space-y-1">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <span className="text-xs font-semibold text-ink-50 truncate inline-flex items-center gap-1.5">
+                                    <div className="min-w-0 flex-1 space-y-2">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <span className="text-sm font-semibold text-ink-50 truncate inline-flex items-center gap-2">
                                                 <PrivateText quoi="categorie">{cat.categorie}</PrivateText>
                                                 {cat.estTransfert && (
-                                                    <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono bg-repere-fond text-repere">
+                                                    <span className="px-2 py-0.5 rounded-md text-xs font-mono bg-repere-fond text-repere">
                                                         Transfert
                                                     </span>
                                                 )}
                                             </span>
-                                            <PrivateAmount className="font-mono text-xs font-bold text-ink-50 tabular-nums shrink-0">
+                                            <PrivateAmount className="font-mono text-sm font-bold text-ink-50 tabular-nums shrink-0">
                                                 {formatCAD(cat.montant)}
                                             </PrivateAmount>
                                         </div>
-                                        <div className="h-1.5 w-full rounded-full bg-fond overflow-hidden">
+                                        <div className="h-2 w-full rounded-full bg-fond overflow-hidden">
                                             <div
                                                 style={{ width: `${isPrivacyMode ? 35 : cat.pct}%` }}
                                                 className={`h-full rounded-full gf-bar-grow ${
@@ -3326,10 +3326,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         aria-label="Plan d'action par jour, semaine, mois, année et décennie"
                         className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
                     >
-                        <div className="px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                                <Icon name="clipboard" size={15} className="text-repere" aria-hidden="true" />
-                                <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                        <div className="px-5 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5">
+                                <Icon name="clipboard" size={16} className="text-repere" aria-hidden="true" />
+                                <h2 className="text-base font-semibold text-ink-50 tracking-normal">
                                     Plan d’action
                                 </h2>
                             </div>
@@ -3337,7 +3337,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(Tab.FUTURE)}
                                 onMouseEnter={() => prefetchTab(Tab.FUTURE)}
-                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-100 inline-flex items-center gap-1 focus-ring shrink-0"
+                                className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-1.5 focus-ring shrink-0"
                             >
                                 <span>Détails</span>
                                 <Icon name="chevron-right" size={14} aria-hidden="true" />
@@ -3387,15 +3387,15 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     type="button"
                                     onClick={() => setActiveTab(item.tab)}
                                     onMouseEnter={() => prefetchTab(item.tab)}
-                                    className="touch-target p-3 text-left hover:bg-surface-douce flex flex-col justify-between gap-1.5 transition-colors duration-100 focus-ring"
+                                    className="touch-target p-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
                                 >
-                                    <div className="flex items-center justify-between gap-1">
-                                        <span className="text-xs font-bold text-ink-50">{item.horizon}</span>
-                                        <PrivateAmount className="font-mono text-xs font-bold text-succes-texte tabular-nums">
+                                    <div className="flex items-center justify-between gap-1.5">
+                                        <span className="text-xs sm:text-sm font-bold text-ink-50">{item.horizon}</span>
+                                        <PrivateAmount className="font-mono text-xs sm:text-sm font-bold text-succes-texte tabular-nums">
                                             {`+${formatCompactCAD(item.montant)}`}
                                         </PrivateAmount>
                                     </div>
-                                    <span className="text-[11px] text-ink-400 truncate">
+                                    <span className="text-xs text-ink-400 truncate">
                                         {item.action}
                                     </span>
                                 </button>
@@ -3407,19 +3407,19 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 {/* ── COLONNE DROITE (3 COL) : PANNEAU UNIQUE GEMINI (TOUS LES BOUTONS IA REGROUPÉS) + ALLOCATION + ACTIVITÉ ── */}
                 <aside
                     aria-label="Recherche Gemini et indicateurs latéraux"
-                    className="order-2 xl:order-3 xl:col-span-3 space-y-4"
+                    className="order-2 xl:order-3 xl:col-span-3 space-y-6"
                 >
                     {/* Carte 1 : Point d'entrée unique Gemini sur l'Accueil */}
                     <section
                         aria-label="Assistant de recherche financière Gemini"
-                        className="premium-card rounded-xl bg-surface border border-bordure p-3.5 sm:p-5 space-y-3"
+                        className="premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-4"
                     >
-                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-2.5">
-                            <div className="flex items-center gap-2">
-                                <span className="w-6 h-6 rounded-full bg-surface-douce border border-bordure inline-flex items-center justify-center shrink-0">
-                                    <Icon name="sparkles" size={13} className="text-ink-200" aria-hidden="true" />
+                        <div className="flex items-center justify-between gap-3 border-b border-bordure pb-3.5">
+                            <div className="flex items-center gap-2.5">
+                                <span className="w-7 h-7 rounded-full bg-surface-douce border border-bordure inline-flex items-center justify-center shrink-0">
+                                    <Icon name="sparkles" size={14} className="text-ink-200" aria-hidden="true" />
                                 </span>
-                                <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                                <h2 className="text-base font-semibold text-ink-50 tracking-normal">
                                     Conseiller Gemini
                                 </h2>
                             </div>
@@ -3427,26 +3427,26 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setShowGeminiModal(true)}
                                 aria-label="Ouvrir le conseiller financier Gemini"
-                                className="touch-target px-3 py-1 rounded-lg bg-surface-douce hover:bg-surfaceHighlight border border-bordure text-ink-100 text-xs font-medium inline-flex items-center gap-1.5 transition-colors focus-ring"
+                                className="touch-target px-3.5 py-1.5 rounded-lg bg-surface-douce hover:bg-surfaceHighlight border border-bordure text-ink-100 text-xs sm:text-sm font-medium inline-flex items-center gap-1.5 transition-colors focus-ring"
                             >
                                 <span>Discuter</span>
-                                <Icon name="chevron-right" size={12} className="text-ink-400" aria-hidden="true" />
+                                <Icon name="chevron-right" size={13} className="text-ink-400" aria-hidden="true" />
                             </button>
                         </div>
 
                         {/* Questions directes en 1 clic */}
-                        <div className="space-y-1.5">
+                        <div className="space-y-2">
                             {QUESTIONS_GEMINI_SUGGEREES.map((q) => (
                                 <button
                                     key={q}
                                     type="button"
                                     onClick={() => ouvrirQuestionGemini(q)}
-                                    className="gf-prompt-card touch-target w-full px-3 py-2 flex items-center justify-between gap-2 text-left text-xs text-ink-100 focus-ring"
+                                    className="gf-prompt-card touch-target w-full px-4 py-3 flex items-center justify-between gap-3 text-left text-xs sm:text-sm text-ink-100 focus-ring"
                                 >
-                                    <span className="truncate">{q}</span>
+                                    <span className="leading-snug">{q}</span>
                                     <Icon
                                         name="chevron-right"
-                                        size={13}
+                                        size={14}
                                         className="text-ink-400 shrink-0"
                                         aria-hidden="true"
                                     />
@@ -3455,7 +3455,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
 
                         {/* Compositeur direct Gemini */}
-                        <div className="gf-chat-composer p-2.5 flex items-center gap-2">
+                        <div className="gf-chat-composer p-3 flex items-center gap-2.5">
                             <input
                                 type="text"
                                 value={questionComposer}
@@ -3468,7 +3468,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 }}
                                 placeholder="Question rapide à Gemini…"
                                 aria-label="Poser une question financière à Gemini"
-                                className="champ-nu touch-target flex-1 bg-transparent text-xs sm:text-sm text-ink-50 placeholder-ink-400 focus-ring"
+                                className="champ-nu touch-target flex-1 bg-transparent text-sm text-ink-50 placeholder-ink-400 focus-ring"
                             />
                             <button
                                 type="button"
@@ -3477,9 +3477,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     setQuestionComposer('');
                                 }}
                                 aria-label="Envoyer la question à Gemini"
-                                className="gf-send-circle touch-target w-9 h-9 inline-flex items-center justify-center shrink-0 focus-ring"
+                                className="gf-send-circle touch-target w-10 h-10 inline-flex items-center justify-center shrink-0 focus-ring"
                             >
-                                <Icon name="arrow-up" size={15} aria-hidden="true" />
+                                <Icon name="arrow-up" size={16} aria-hidden="true" />
                             </button>
                         </div>
                     </section>
@@ -3487,13 +3487,13 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     {/* Carte 2 : Répartition colorée du portefeuille (visible sous Insights sur mobile, toujours sur bureau) */}
                     <section
                         aria-label="Répartition visuelle des actifs"
-                        className={`premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-4 ${
+                        className={`premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-5 ${
                             sousOngletCentre === 'insights' ? 'block' : 'hidden xl:block'
                         }`}
                     >
-                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
-                            <div>
-                                <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                        <div className="flex items-center justify-between gap-3 border-b border-bordure pb-3.5">
+                            <div className="space-y-0.5">
+                                <h2 className="text-base font-semibold text-ink-50 tracking-normal">
                                     Allocation d’actifs
                                 </h2>
                                 <p className="text-xs text-ink-300">
@@ -3504,7 +3504,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(partSelectionnee.tab)}
                                 onMouseEnter={() => prefetchTab(partSelectionnee.tab)}
-                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
                             >
                                 <span>Détails</span>
                                 <Icon name="chevron-right" size={14} aria-hidden="true" />
@@ -3512,18 +3512,18 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
 
                         {/* Synthèse distincte Portefeuille investi vs Liquidités disponibles */}
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 gap-3">
                             <button
                                 type="button"
                                 onClick={() => setActiveTab(Tab.INVESTMENTS)}
                                 onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
-                                className="touch-target rounded-lg border border-bordure bg-fond hover:bg-surface-douce px-3 py-2 text-left transition-colors focus-ring"
+                                className="touch-target rounded-xl border border-bordure bg-fond hover:bg-surface-douce px-3.5 py-3 text-left transition-colors focus-ring space-y-1"
                             >
-                                <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-ink-400">
-                                    <span className="w-2 h-2 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
+                                <div className="flex items-center gap-2 text-xs font-mono text-ink-300">
+                                    <span className="w-2.5 h-2.5 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
                                     <span className="truncate">Portefeuille</span>
                                 </div>
-                                <div className="font-mono text-xs font-bold text-ink-50 tabular-nums mt-0.5">
+                                <div className="font-mono text-sm font-bold text-ink-50 tabular-nums">
                                     <PrivateAmount>{formatCompactCAD(portefeuillePlacements)}</PrivateAmount>
                                 </div>
                             </button>
@@ -3531,13 +3531,13 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(Tab.TRANSACTIONS)}
                                 onMouseEnter={() => prefetchTab(Tab.TRANSACTIONS)}
-                                className="touch-target rounded-lg border border-bordure bg-fond hover:bg-surface-douce px-3 py-2 text-left transition-colors focus-ring"
+                                className="touch-target rounded-xl border border-bordure bg-fond hover:bg-surface-douce px-3.5 py-3 text-left transition-colors focus-ring space-y-1"
                             >
-                                <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-ink-400">
-                                    <span className="w-2 h-2 rounded-full gf-alloc-cash shrink-0" aria-hidden="true" />
+                                <div className="flex items-center gap-2 text-xs font-mono text-ink-300">
+                                    <span className="w-2.5 h-2.5 rounded-full gf-alloc-cash shrink-0" aria-hidden="true" />
                                     <span className="truncate">Liquidités</span>
                                 </div>
-                                <div className="font-mono text-xs font-bold text-ink-50 tabular-nums mt-0.5">
+                                <div className="font-mono text-sm font-bold text-ink-50 tabular-nums">
                                     <PrivateAmount>{formatCompactCAD(liquidites)}</PrivateAmount>
                                 </div>
                             </button>
@@ -3545,7 +3545,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 
                         {/* Barre de pondération linéaire multicolore */}
                         <div
-                            className="h-2.5 w-full rounded-full bg-fond border border-bordure flex p-0.5 gap-0.5 gf-bar-grow"
+                            className="h-3 w-full rounded-full bg-fond border border-bordure flex p-0.5 gap-0.5 gf-bar-grow"
                             aria-hidden="true"
                         >
                             {partsRepartition.map((part) => (
@@ -3559,7 +3559,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             ))}
                         </div>
 
-                        <div className="relative h-[148px] w-full flex items-center justify-center rounded-lg border border-bordure bg-fond">
+                        <div className="relative h-[168px] w-full flex items-center justify-center rounded-xl border border-bordure bg-fond">
                             <div
                                 key={`${activeTab}-repartition-${lentilleHero}`}
                                 data-testid="recharts-allocation-entrance"
@@ -3577,8 +3577,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             nameKey="label"
                                             cx="50%"
                                             cy="50%"
-                                            innerRadius={42}
-                                            outerRadius={60}
+                                            innerRadius={48}
+                                            outerRadius={68}
                                             paddingAngle={2}
                                             stroke="none"
                                             isAnimationActive={true}
@@ -3604,14 +3604,14 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 </ResponsiveContainer>
                             </div>
 
-                            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-2">
-                                <span className="text-[11px] font-medium text-ink-300 truncate max-w-[84px]">
+                            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-3 space-y-0.5">
+                                <span className="text-xs font-medium text-ink-300 truncate max-w-[96px]">
                                     {partSelectionnee.label}
                                 </span>
-                                <PrivateAmount className="font-mono text-xs font-bold text-ink-50 tabular-nums">
+                                <PrivateAmount className="font-mono text-sm font-bold text-ink-50 tabular-nums">
                                     {formatCompactCAD(partSelectionnee.valeur)}
                                 </PrivateAmount>
-                                <span className="text-[10px] font-mono tabular-nums text-ink-300">
+                                <span className="text-xs font-mono tabular-nums text-ink-300">
                                     <PrivateAmount>{`${partSelectionnee.pct} %`}</PrivateAmount>
                                 </span>
                             </div>
@@ -3620,7 +3620,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         <div
                             role="group"
                             aria-label="Sélection d'une enveloppe d'actifs"
-                            className="rounded-lg border border-bordure divide-y divide-bordure bg-fond overflow-hidden"
+                            className="rounded-xl border border-bordure divide-y divide-bordure bg-fond overflow-hidden"
                         >
                             {partsRepartition.map((part) => (
                                 <button
@@ -3630,22 +3630,22 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     onMouseEnter={() => setSegmentActif(part.id)}
                                     onFocus={() => setSegmentActif(part.id)}
                                     onClick={() => setSegmentActif(part.id)}
-                                    className={`touch-target w-full px-3 py-2 flex items-center justify-between gap-2 text-xs transition-colors duration-100 focus-ring ${
+                                    className={`touch-target w-full px-4 py-3 flex items-center justify-between gap-3 text-sm transition-colors duration-100 focus-ring ${
                                         partSelectionnee.id === part.id
                                             ? 'bg-surface-douce text-ink-50 font-semibold'
                                             : 'text-ink-200 hover:bg-surface-douce'
                                     }`}
                                 >
-                                    <span className="flex items-center gap-2.5 min-w-0 truncate">
+                                    <span className="flex items-center gap-3 min-w-0 truncate">
                                         <span
                                             className={`w-2.5 h-2.5 rounded-full shrink-0 ${part.classeBarre}`}
                                             aria-hidden="true"
                                         />
                                         <span className="truncate">{part.label}</span>
                                     </span>
-                                    <span className="font-mono text-xs text-ink-100 tabular-nums shrink-0">
+                                    <span className="font-mono text-sm text-ink-100 tabular-nums shrink-0">
                                         <PrivateAmount>{formatCompactCAD(part.valeur)}</PrivateAmount>
-                                        <span className="text-ink-400 ml-1.5">
+                                        <span className="text-ink-400 ml-2">
                                             <PrivateAmount>{`${part.pct}%`}</PrivateAmount>
                                         </span>
                                     </span>
@@ -3657,13 +3657,13 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     {/* Carte 3 : Flux d'opérations récentes (visible sous Transactions sur mobile, toujours sur bureau) */}
                     <section
                         aria-label="Opérations récentes"
-                        className={`premium-card rounded-xl bg-surface border border-bordure p-4 sm:p-5 space-y-3.5 ${
+                        className={`premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-4 ${
                             sousOngletCentre === 'transactions' ? 'block' : 'hidden xl:block'
                         }`}
                     >
-                        <div className="flex items-center justify-between gap-2 border-b border-bordure pb-3">
-                            <div>
-                                <h2 className="text-sm sm:text-base font-semibold text-ink-50 tracking-tight">
+                        <div className="flex items-center justify-between gap-3 border-b border-bordure pb-3.5">
+                            <div className="space-y-0.5">
+                                <h2 className="text-base font-semibold text-ink-50 tracking-normal">
                                     Activité récente
                                 </h2>
                                 <p className="text-xs text-ink-300">
@@ -3674,7 +3674,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 type="button"
                                 onClick={() => setActiveTab(Tab.TRANSACTIONS)}
                                 onMouseEnter={() => prefetchTab(Tab.TRANSACTIONS)}
-                                className="touch-target px-3 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
                             >
                                 <span>Journal</span>
                                 <Icon name="chevron-right" size={14} aria-hidden="true" />
@@ -3682,7 +3682,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
 
                         {operationsRecentes.length > 0 ? (
-                            <div className="rounded-lg border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
+                            <div className="rounded-xl border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
                                 {operationsRecentes.map((tx) => {
                                     const estRevenu = tx.amount > 0;
                                     return (
@@ -3690,18 +3690,18 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             key={tx.id}
                                             type="button"
                                             onClick={() => setActiveTab(Tab.TRANSACTIONS)}
-                                            className="gf-row touch-target w-full px-3 py-2 flex items-center justify-between gap-2.5 text-left focus-ring"
+                                            className="gf-row touch-target w-full px-4 py-3.5 flex items-center justify-between gap-3 text-left focus-ring"
                                         >
-                                            <div className="min-w-0 flex-1">
-                                                <div className="text-xs font-medium text-ink-50 truncate">
+                                            <div className="min-w-0 flex-1 space-y-0.5">
+                                                <div className="text-sm font-medium text-ink-50 truncate">
                                                     <PrivateText quoi="marchand">{tx.payee}</PrivateText>
                                                 </div>
-                                                <div className="text-[11px] text-ink-400 truncate font-mono tabular-nums">
+                                                <div className="text-xs text-ink-400 truncate font-mono tabular-nums">
                                                     {tx.date.slice(5)} · <PrivateText quoi="categorie">{tx.category}</PrivateText>
                                                 </div>
                                             </div>
                                             <PrivateAmount
-                                                className={`font-mono text-xs font-semibold tabular-nums shrink-0 ${
+                                                className={`font-mono text-sm font-semibold tabular-nums shrink-0 ${
                                                     estRevenu ? 'text-succes-texte' : 'text-ink-200'
                                                 }`}
                                             >
@@ -3712,12 +3712,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 })}
                             </div>
                         ) : (
-                            <div className="py-6 rounded-lg border border-bordure bg-fond text-center space-y-2">
-                                <p className="text-xs text-ink-300">Aucune opération enregistrée</p>
+                            <div className="py-7 rounded-xl border border-bordure bg-fond text-center space-y-2.5">
+                                <p className="text-sm text-ink-300">Aucune opération enregistrée</p>
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab(Tab.TRANSACTIONS)}
-                                    className="touch-target px-3.5 py-1.5 rounded-full bg-accent text-sur-accent text-xs font-semibold inline-flex items-center gap-1.5 focus-ring"
+                                    className="touch-target px-4 py-2 rounded-full bg-accent text-sur-accent text-xs sm:text-sm font-semibold inline-flex items-center gap-2 focus-ring"
                                 >
                                     <Icon name="plus" size={14} aria-hidden="true" />
                                     <span>Ajouter</span>
@@ -3733,8 +3733,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 aria-label="Accès visuel aux espaces"
                 className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
             >
-                <div className="px-5 py-2.5 flex items-center justify-between gap-2">
-                    <h2 className="text-xs font-mono uppercase tracking-wider text-ink-300">
+                <div className="px-6 py-3.5 flex items-center justify-between gap-3">
+                    <h2 className="text-xs sm:text-sm font-mono text-ink-300">
                         Secteurs & simulateurs
                     </h2>
                 </div>
@@ -3745,22 +3745,22 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             type="button"
                             onClick={() => setActiveTab(tuile.tab)}
                             onMouseEnter={() => prefetchTab(tuile.tab)}
-                            className="touch-target shrink-0 min-w-[136px] sm:min-w-0 px-3.5 py-3 text-left hover:bg-surface-douce flex flex-col justify-between gap-1.5 transition-colors duration-100 focus-ring group"
+                            className="touch-target shrink-0 min-w-[152px] sm:min-w-0 px-4 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring group"
                         >
-                            <div className="flex items-center justify-between gap-1.5">
-                                <span className="text-xs font-semibold text-ink-100 group-hover:text-ink-50 truncate">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm font-semibold text-ink-100 group-hover:text-ink-50 truncate">
                                     {tuile.label}
                                 </span>
                                 <Icon
                                     name={tuile.icon}
-                                    size={14}
+                                    size={15}
                                     className="text-ink-400 group-hover:text-ink-200 shrink-0 transition-colors duration-100"
                                     aria-hidden="true"
                                 />
                             </div>
-                            <div>
-                                <div className="text-[11px] text-ink-400 truncate">{tuile.sousTitre}</div>
-                                <PrivateAmount className="font-mono text-xs font-bold text-ink-50 tabular-nums truncate block mt-0.5">
+                            <div className="space-y-0.5">
+                                <div className="text-xs text-ink-400 truncate">{tuile.sousTitre}</div>
+                                <PrivateAmount className="font-mono text-sm font-bold text-ink-50 tabular-nums truncate block">
                                     {formatCompactCAD(tuile.valeur)}
                                 </PrivateAmount>
                             </div>
@@ -3770,7 +3770,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             </section>
 
             {/* 4. EXÉCUTION BUDGÉTAIRE (6 MOIS) & OBJECTIFS FINANCIERS (affichés sous Insights sur mobile, toujours sur bureau) */}
-            <div className={`space-y-4 ${sousOngletCentre === 'insights' ? 'block' : 'hidden xl:block'}`}>
+            <div className={`space-y-6 ${sousOngletCentre === 'insights' ? 'block' : 'hidden xl:block'}`}>
                 <MonthlySpendingVsBudgetChart
                     transactions={state.transactions}
                     budgetItems={state.budgetItems}
@@ -3876,18 +3876,18 @@ const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({
     const dettesVal = Math.max(0, Math.round(Number(enrichi.DettesNonImmo) || 0));
 
     return (
-        <div className="gf-tooltip-card text-xs font-mono tabular-nums space-y-1.5 min-w-[235px]">
+        <div className="gf-tooltip-card text-xs sm:text-sm font-mono tabular-nums space-y-2 min-w-[260px]">
             <div className="gf-tooltip-header">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2">
                     <span className="font-bold text-ink-50">{enrichi.dateLabel || brut.annee}</span>
                     {typeof enrichi.age === 'number' && Number.isFinite(enrichi.age) && (
-                        <span className="text-[10px] text-ink-300">
+                        <span className="text-xs text-ink-300">
                             {/* NOMBRE-NON-MONETAIRE : âge au point survolé */}
                             {`· ${enrichi.age} ans`}
                         </span>
                     )}
                 </div>
-                <span className="text-[10px] uppercase tracking-wider text-ink-300">{badgePeriode}</span>
+                <span className="text-xs text-ink-300">{badgePeriode}</span>
             </div>
 
             <div className="flex items-center justify-between gap-4">
@@ -3898,7 +3898,7 @@ const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({
             </div>
 
             {typeof brut.portefeuille === 'number' && brut.portefeuille > 0 && (
-                <div className="flex items-center justify-between gap-4 text-[11px]">
+                <div className="flex items-center justify-between gap-4 text-xs">
                     <span className="text-ink-400">Portefeuille investi</span>
                     <span className="font-semibold text-ink-200">
                         <PrivateAmount>{formatCAD(brut.portefeuille)}</PrivateAmount>
@@ -3918,12 +3918,12 @@ const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({
             </div>
 
             {comptesActifs.length > 0 && (
-                <div className="pt-1.5 border-t border-bordure space-y-1">
+                <div className="pt-2 border-t border-bordure space-y-1.5">
                     {comptesActifs.map((c) => (
-                        <div key={c.key} className="flex items-center justify-between gap-3 text-[11px]">
-                            <span className="inline-flex items-center gap-1.5 text-ink-300">
+                        <div key={c.key} className="flex items-center justify-between gap-3 text-xs">
+                            <span className="inline-flex items-center gap-2 text-ink-300">
                                 <span
-                                    className="w-2 h-2 rounded-full shrink-0"
+                                    className="w-2.5 h-2.5 rounded-full shrink-0"
                                     style={{ backgroundColor: c.color }}
                                     aria-hidden="true"
                                 />
@@ -3935,10 +3935,10 @@ const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({
                         </div>
                     ))}
                     {dettesVal > 0 && (
-                        <div className="flex items-center justify-between gap-3 text-[11px]">
-                            <span className="inline-flex items-center gap-1.5 text-erreur-texte">
+                        <div className="flex items-center justify-between gap-3 text-xs">
+                            <span className="inline-flex items-center gap-2 text-erreur-texte">
                                 <span
-                                    className="w-2 h-2 rounded-full shrink-0"
+                                    className="w-2.5 h-2.5 rounded-full shrink-0"
                                     style={{ backgroundColor: COULEUR_DETTE }}
                                     aria-hidden="true"
                                 />
@@ -3956,7 +3956,7 @@ const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({
                 typeof enrichi.P90 === 'number' &&
                 Number.isFinite(enrichi.P10) &&
                 Number.isFinite(enrichi.P90) && (
-                    <div className="pt-1 border-t border-bordure flex items-center justify-between gap-3 text-[10px] text-ink-400">
+                    <div className="pt-1.5 border-t border-bordure flex items-center justify-between gap-3 text-xs text-ink-400">
                         <span>Monte-Carlo P10–P90</span>
                         <span>
                             <PrivateAmount>

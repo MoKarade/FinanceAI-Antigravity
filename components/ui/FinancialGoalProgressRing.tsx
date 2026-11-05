@@ -268,7 +268,7 @@ export const FinancialGoalProgressRing: React.FC<FinancialGoalProgressRingProps>
 
     return (
         <article
-            className="rounded-none bg-surface p-3.5 hover:bg-surface-douce transition-colors duration-100 flex items-center gap-3.5 min-w-0"
+            className="rounded-none bg-surface p-5 hover:bg-surface-douce transition-colors duration-100 flex items-center gap-4 min-w-0"
             data-testid={`goal-card-${metriques.id}`}
             data-urgency={metriques.urgence}
         >
@@ -327,12 +327,12 @@ export const FinancialGoalProgressRing: React.FC<FinancialGoalProgressRingProps>
                 </div>
             </div>
 
-            <div className="flex flex-col gap-1 min-w-0 flex-1">
+            <div className="flex flex-col gap-1.5 min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2 min-w-0">
-                    <h3 className="text-body font-bold text-ink-50 tracking-tight truncate">{metriques.nom}</h3>
+                    <h3 className="text-body font-bold text-ink-50 tracking-normal truncate">{metriques.nom}</h3>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-ink-300">
+                <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-ink-300">
                     <span className={`font-semibold ${configGradient.classeTexte}`}>{metriques.libelleUrgence}</span>
                     <span aria-hidden="true">·</span>
                     <span className="font-mono tabular-nums text-ink-400">
@@ -346,7 +346,7 @@ export const FinancialGoalProgressRing: React.FC<FinancialGoalProgressRingProps>
                     )}
                 </div>
 
-                <div className="mt-0.5 flex items-baseline justify-between gap-2 text-meta font-mono tabular-nums">
+                <div className="mt-0.5 flex items-baseline justify-between gap-2 text-sm font-mono tabular-nums">
                     {metriques.montantActuel !== null && metriques.montantCible !== null ? (
                         <span className="text-ink-200 truncate">
                             <PrivateAmount className="font-bold text-ink-50">{formatCAD(metriques.montantActuel)}</PrivateAmount>
@@ -386,11 +386,11 @@ export const FinancialGoalsProgressSection: React.FC<FinancialGoalsProgressSecti
         <section
             aria-label="Progression des objectifs financiers"
             data-testid="financial-goals-progress-section"
-            className="rounded-md bg-surface border border-bordure divide-y divide-bordure"
+            className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure overflow-hidden"
         >
-            <div className="flex items-baseline justify-between gap-2 px-5 py-3.5">
-                <h2 className="text-base font-semibold text-ink-50 tracking-tight">Objectifs financiers</h2>
-                <span className="font-mono text-xs tabular-nums text-ink-300">
+            <div className="flex items-baseline justify-between gap-3 px-6 py-4">
+                <h2 className="text-base sm:text-lg font-semibold text-ink-50 tracking-normal">Objectifs financiers</h2>
+                <span className="font-mono text-xs sm:text-sm tabular-nums text-ink-300">
                     {objectifsActifs.length} objectif{objectifsActifs.length > 1 ? 's' : ''}
                 </span>
             </div>

@@ -531,8 +531,8 @@ describe('Refonte Google Finance — GoogleFinanceHero & BoutonsPimenterFutur', 
 
         // Vérifie la présence de l'inspecteur quotidien/mensuel et des jalons Futur synchronisés sur Accueil
         expect(screen.getByLabelText(/Inspecteur précis du point et jalons de projection/i)).toBeInTheDocument();
-        const btnAvancerMois = screen.getByRole('button', { name: /Avancer d’un mois sur la courbe/i });
-        fireEvent.click(btnAvancerMois);
+        const btnAvancerPas = screen.getByRole('button', { name: /Avancer d’un (jour|mois) sur la courbe/i });
+        fireEvent.click(btnAvancerPas);
         expect(screen.getByText(/Point épinglé/i)).toBeInTheDocument();
 
         // Changement d'onglet global : tous les graphiques Recharts du tableau de bord reflètent le nouvel onglet
