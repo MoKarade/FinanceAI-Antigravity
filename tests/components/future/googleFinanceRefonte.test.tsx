@@ -501,7 +501,8 @@ describe('Refonte Google Finance — GoogleFinanceHero & BoutonsPimenterFutur', 
 
         // Deux sélecteurs d'assiette coexistent (colonne gauche ≥ xl, pilules mobiles < xl) : un seul
         // est affiché à la fois en CSS. Cliquer l'un doit annoncer l'état actif sur LES DEUX.
-        const btnsLentillePortefeuille = screen.getAllByRole('button', { name: /Portefeuille liquide/i });
+        // Portefeuille et Liquidités sont désormais séparés en deux lentilles distinctes.
+        const btnsLentillePortefeuille = screen.getAllByRole('button', { name: /PORT:CAD|^Portefeuille$/i });
         expect(btnsLentillePortefeuille.length).toBeGreaterThanOrEqual(1);
         fireEvent.click(btnsLentillePortefeuille[0]!);
         for (const btn of btnsLentillePortefeuille) {
@@ -509,6 +510,14 @@ describe('Refonte Google Finance — GoogleFinanceHero & BoutonsPimenterFutur', 
         }
         expect(screen.getByTestId('recharts-trajectory-entrance')).toHaveAttribute('data-chart-lens', 'portefeuille');
         expect(screen.getByTestId('recharts-allocation-entrance')).toHaveAttribute('data-chart-lens', 'portefeuille');
+
+        const btnsLentilleLiquidites = screen.getAllByRole('button', { name: /CASH:CAD|^Liquidités$/i });
+        expect(btnsLentilleLiquidites.length).toBeGreaterThanOrEqual(1);
+        fireEvent.click(btnsLentilleLiquidites[0]!);
+        for (const btn of btnsLentilleLiquidites) {
+            expect(btn).toHaveAttribute('aria-pressed', 'true');
+        }
+        expect(screen.getByTestId('recharts-trajectory-entrance')).toHaveAttribute('data-chart-lens', 'liquidites');
 
         const btnModeAvoirs = screen.getByRole('button', { name: /\+ Avoirs/i });
         fireEvent.click(btnModeAvoirs);

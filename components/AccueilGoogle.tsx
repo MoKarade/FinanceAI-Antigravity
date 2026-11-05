@@ -57,7 +57,7 @@ interface AccueilGoogleProps {
 }
 
 type HorizonCle = '1M' | '1A' | '5A' | '10A' | 'MAX';
-type LentilleHero = 'net' | 'portefeuille' | 'immobilier';
+type LentilleHero = 'net' | 'portefeuille' | 'liquidites' | 'immobilier';
 type ModeCourbe = 'nette' | 'complete';
 type SousOngletCentre = 'avoirs' | 'insights' | 'transactions' | 'evenements';
 
@@ -147,7 +147,8 @@ const HORIZONS: ReadonlyArray<{ cle: HorizonCle; label: string; annees: number; 
 
 const LENTILLES_HERO: ReadonlyArray<{ cle: LentilleHero; label: string; ticker: string }> = [
     { cle: 'net', label: 'Patrimoine net', ticker: 'BILAN:CAD' },
-    { cle: 'portefeuille', label: 'Portefeuille liquide', ticker: 'LIQ:CAD' },
+    { cle: 'portefeuille', label: 'Portefeuille', ticker: 'PORT:CAD' },
+    { cle: 'liquidites', label: 'Liquidités', ticker: 'CASH:CAD' },
     { cle: 'immobilier', label: 'Équité immobilière', ticker: 'IMMO:CAD' },
 ];
 
@@ -284,18 +285,20 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     const patrimoineNet = (Number.isFinite(globalNetWorth) ? globalNetWorth : 0) + realEstateEquity;
     const epargneMensuelle = Number.isFinite(calculatedMonthlySavings) ? calculatedMonthlySavings : 0;
     const liquidites = Number.isFinite(currentLiquidity) ? Math.max(0, currentLiquidity) : 0;
-    const portefeuilleMobilier =
+    const portefeuillePlacements = Math.max(
+        0,
         (assetBreakdown.celi || 0) +
-        (assetBreakdown.reer || 0) +
-        (assetBreakdown.nonReg || 0) +
-        (assetBreakdown.reee || 0) +
-        liquidites;
+            (assetBreakdown.reer || 0) +
+            (assetBreakdown.nonReg || 0) +
+            (assetBreakdown.reee || 0),
+    );
 
     const valeurHeroAffichee = useMemo(() => {
-        if (lentilleHero === 'portefeuille') return portefeuilleMobilier;
+        if (lentilleHero === 'portefeuille') return portefeuillePlacements;
+        if (lentilleHero === 'liquidites') return liquidites;
         if (lentilleHero === 'immobilier') return realEstateEquity;
         return patrimoineNet;
-    }, [lentilleHero, portefeuilleMobilier, realEstateEquity, patrimoineNet]);
+    }, [lentilleHero, portefeuillePlacements, liquidites, realEstateEquity, patrimoineNet]);
 
     const lentilleCourante = useMemo(
         () => LENTILLES_HERO.find((l) => l.cle === lentilleHero) ?? LENTILLES_HERO[0]!,
@@ -574,8 +577,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             serieCash30j[i - 1] = cashCourant;
         }
 
-        // Série des placements sur 30 jours à partir de fintableBrokerHistory (si disponible) ou de la variation 30j
-        const valeurPlacementsActuelle = Math.max(0, portefeuilleMobilier - liquidites);
+        // Série des placements sur 30 jours à partir de fintableBrokerHistory (si disponible) ou de la variation 30j (strictement hors liquidités)
+        const valeurPlacementsActuelle = portefeuillePlacements;
         const seriePlacements30j = (() => {
             const parInstant = new Map<number, number>();
             for (const entree of state.fintableBrokerHistory ?? []) {
@@ -623,6 +626,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         // Reconstruit les 30 points journaliers du patrimoine (J-29 .. Aujourd'hui), ancrés exactement sur valeurActuelle au jour 29
         const seriePatrimoine30j = Array.from({ length: 30 }, (_, idx) => {
             if (idx === 29) return valeurActuelle;
+            if (lentilleHero === 'portefeuille') {
+                return Math.max(0, Math.round(seriePlacements30j[idx] ?? valeurActuelle));
+            }
+            if (lentilleHero === 'liquidites') {
+                return Math.max(0, Math.round(serieCash30j[idx] ?? valeurActuelle));
+            }
             if (lentilleHero === 'immobilier') {
                 const deltaImmo = Math.round(valeurActuelle * 0.003 * ((29 - idx) / 29));
                 return Math.max(0, valeurActuelle - deltaImmo);
@@ -633,14 +642,15 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             return Math.max(0, Math.round(valeurActuelle + (ecartCash + ecartPlacements) * (ratioLentille || 1)));
         });
 
+        const dettesLentille = lentilleHero === 'net' ? dettesReelles : 0;
         const pointAujourdHui: PointTrajectoire = {
             annee: 'Aujourd’hui',
             valeur: valeurActuelle,
             valeurPresent: valeurActuelle,
             valeurFutur: valeurActuelle,
             periode: 'transition',
-            avoirs: Math.max(0, valeurActuelle + dettesReelles),
-            dettes: dettesReelles,
+            avoirs: Math.max(0, valeurActuelle + dettesLentille),
+            dettes: dettesLentille,
         };
 
         const chartData = lastProjection?.chartData ?? [];
@@ -653,15 +663,18 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 return Number.isFinite(pt.NetWorth) ? Math.round(pt.NetWorth) : null;
             }
             if (lentilleHero === 'portefeuille') {
-                const liq = Number(pt.Liquidites) || 0;
                 const celi = Number(pt.CELI) || 0;
                 const celiapp = Number(pt.CELIAPP) || 0;
                 const reer = Number(pt.REER) || 0;
                 const reee = Number(pt.REEE) || 0;
                 const nonreg = Number(pt.NonReg) || 0;
                 const crypto = Number(pt.Crypto) || 0;
-                const totalPortefeuille = liq + celi + celiapp + reer + reee + nonreg + crypto;
+                const totalPortefeuille = celi + celiapp + reer + reee + nonreg + crypto;
                 return Number.isFinite(totalPortefeuille) ? Math.round(totalPortefeuille) : null;
+            }
+            if (lentilleHero === 'liquidites') {
+                const liq = Number(pt.Liquidites);
+                return Number.isFinite(liq) ? Math.round(liq) : 0;
             }
             if (lentilleHero === 'immobilier') {
                 const immo = Number(pt.Immobilier);
@@ -820,7 +833,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         valeurHeroAffichee,
         totalDettes,
         liquidites,
-        portefeuilleMobilier,
+        portefeuillePlacements,
         state.transactions,
         state.fintableBrokerHistory,
         state.assets,
@@ -1053,19 +1066,21 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             }));
         }
 
-        return partsRepartition.map((p) => ({
-            id: `pos-${p.id}`,
-            symbole: p.code,
-            nom: p.label,
-            compte: p.sousTitre,
-            valeur: p.valeur,
-            poidsPct: p.pct,
-            variationPct: null,
-            gainCad: null,
-            positif: true,
-            pointsSparkline: construireSparklineReelle(construireSerie1Mois(p.valeur, [], Math.round(p.valeur * 0.01))),
-            tab: p.tab,
-        }));
+        return partsRepartition
+            .filter((p) => p.id !== 'cash')
+            .map((p) => ({
+                id: `pos-${p.id}`,
+                symbole: p.code,
+                nom: p.label,
+                compte: p.sousTitre,
+                valeur: p.valeur,
+                poidsPct: p.pct,
+                variationPct: null,
+                gainCad: null,
+                positif: true,
+                pointsSparkline: construireSparklineReelle(construireSerie1Mois(p.valeur, [], Math.round(p.valeur * 0.01))),
+                tab: p.tab,
+            }));
     }, [state.assets, state.fxRates, partsRepartition]);
 
     const resultatsOmnibox = useMemo(() => {
@@ -1307,7 +1322,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 // NOMBRE-NON-MONETAIRE : nombre de lignes de titres en portefeuille
                 titre: `Valorisation & coût moyen (${nbActifs} lignes)`,
                 formule: 'Σ (quantité × cours × taux FX BoC) · Gain = valeur − Σ achats DCA',
-                montantNumeric: Math.max(0, portefeuilleMobilier - liquidites),
+                montantNumeric: portefeuillePlacements,
                 badgeTexte: 'Titres CAD',
                 sourceCode: 'utils/assetPurchases.ts · services/portfolio.ts',
                 referenceOfficielle: 'Banque du Canada (Valet API) · Règle 6',
@@ -1363,7 +1378,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         state.budgetItems,
         lastProjection?.chartData,
         patrimoineNet,
-        portefeuilleMobilier,
+        portefeuillePlacements,
         liquidites,
         epargneMensuelle,
         gainHorizon,
@@ -1652,10 +1667,50 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             </div>
 
                             <div>
-                                <div className="text-[11px] text-ink-400">Valeur totale</div>
+                                <div className="text-[11px] text-ink-400">Patrimoine net total</div>
                                 <div className="font-mono text-lg sm:text-xl font-bold text-ink-50 tabular-nums mt-0.5">
                                     <PrivateAmount>{formatCAD(patrimoineNet)}</PrivateAmount>
                                 </div>
+                            </div>
+
+                            {/* Séparation explicite Portefeuille (Placements) vs Liquidités (Encaisse) */}
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    aria-pressed={lentilleHero === 'portefeuille'}
+                                    onClick={() => setLentilleHero('portefeuille')}
+                                    className={`touch-target rounded-lg p-2.5 text-left border transition-colors focus-ring ${
+                                        lentilleHero === 'portefeuille'
+                                            ? 'bg-surface-douce border-bordure-champ'
+                                            : 'bg-surface border-bordure hover:border-bordure-champ'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-ink-400">
+                                        <span className="w-2 h-2 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
+                                        <span className="truncate">Portefeuille</span>
+                                    </div>
+                                    <div className="font-mono text-xs font-bold text-ink-50 tabular-nums mt-1">
+                                        <PrivateAmount>{formatCompactCAD(portefeuillePlacements)}</PrivateAmount>
+                                    </div>
+                                </button>
+                                <button
+                                    type="button"
+                                    aria-pressed={lentilleHero === 'liquidites'}
+                                    onClick={() => setLentilleHero('liquidites')}
+                                    className={`touch-target rounded-lg p-2.5 text-left border transition-colors focus-ring ${
+                                        lentilleHero === 'liquidites'
+                                            ? 'bg-surface-douce border-bordure-champ'
+                                            : 'bg-surface border-bordure hover:border-bordure-champ'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-ink-400">
+                                        <span className="w-2 h-2 rounded-full gf-alloc-cash shrink-0" aria-hidden="true" />
+                                        <span className="truncate">Liquidités</span>
+                                    </div>
+                                    <div className="font-mono text-xs font-bold text-ink-50 tabular-nums mt-1">
+                                        <PrivateAmount>{formatCompactCAD(liquidites)}</PrivateAmount>
+                                    </div>
+                                </button>
                             </div>
 
                             {/* Carte active « Main » façon Google Finance Beta */}
@@ -2255,7 +2310,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             </div>
                         </div>
 
-                        {/* Grille de Statistiques Clés sous le graphique (style Google Finance Key Stats) */}
+                        {/* Grille de Statistiques Clés sous le graphique (Portefeuille et Liquidités séparés en tête) */}
                         <div
                             aria-label="Indicateurs de santé patrimoniale"
                             className="grid grid-cols-2 sm:grid-cols-3 divide-x divide-y divide-bordure bg-fond"
@@ -2266,30 +2321,43 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
                                 className="touch-target px-4 py-3 text-left hover:bg-surface-douce flex flex-col justify-between gap-1 transition-colors duration-100 focus-ring"
                             >
-                                <span className="text-[11px] uppercase tracking-wider text-ink-400">
-                                    Avoirs bruts
-                                </span>
+                                <div className="flex items-center justify-between gap-1">
+                                    <span className="text-[11px] uppercase tracking-wider text-ink-400 inline-flex items-center gap-1.5">
+                                        <span className="w-2 h-2 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
+                                        <span>Portefeuille</span>
+                                    </span>
+                                    <span className="font-mono text-[10px] text-ink-400 tabular-nums">
+                                        <PrivateAmount>
+                                            {`${totalAvoirs > 0 ? Math.round((portefeuillePlacements / totalAvoirs) * 100) : 0} %`}
+                                        </PrivateAmount>
+                                    </span>
+                                </div>
                                 <span className="font-mono text-sm sm:text-base font-bold text-ink-50 tabular-nums">
-                                    <PrivateAmount>{formatCompactCAD(totalAvoirs)}</PrivateAmount>
+                                    <PrivateAmount>{formatCompactCAD(portefeuillePlacements)}</PrivateAmount>
                                 </span>
                             </button>
 
                             <button
                                 type="button"
-                                onClick={() => setActiveTab(Tab.DEBT)}
-                                onMouseEnter={() => prefetchTab(Tab.DEBT)}
+                                onClick={() => setActiveTab(Tab.TRANSACTIONS)}
+                                onMouseEnter={() => prefetchTab(Tab.TRANSACTIONS)}
                                 className="touch-target px-4 py-3 text-left hover:bg-surface-douce flex flex-col justify-between gap-1 transition-colors duration-100 focus-ring"
                             >
                                 <div className="flex items-center justify-between gap-1">
-                                    <span className="text-[11px] uppercase tracking-wider text-ink-400">
-                                        Passifs & dettes
+                                    <span className="text-[11px] uppercase tracking-wider text-ink-400 inline-flex items-center gap-1.5">
+                                        <span className="w-2 h-2 rounded-full gf-alloc-cash shrink-0" aria-hidden="true" />
+                                        <span>Liquidités</span>
                                     </span>
                                     <span className="font-mono text-[10px] text-ink-400 tabular-nums">
-                                        <PrivateAmount>{`Levier ${indicateursPouls.ratioEndettement} %`}</PrivateAmount>
+                                        {indicateursPouls.moisAutonomie !== null ? (
+                                            <PrivateAmount>{`${indicateursPouls.moisAutonomie} mois`}</PrivateAmount>
+                                        ) : (
+                                            <span>—</span>
+                                        )}
                                     </span>
                                 </div>
-                                <span className="font-mono text-sm sm:text-base font-bold text-ink-200 tabular-nums">
-                                    <PrivateAmount>{formatCompactCAD(totalDettes)}</PrivateAmount>
+                                <span className="font-mono text-sm sm:text-base font-bold text-ink-50 tabular-nums">
+                                    <PrivateAmount>{formatCompactCAD(liquidites)}</PrivateAmount>
                                 </span>
                             </button>
 
@@ -2320,24 +2388,20 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 
                             <button
                                 type="button"
-                                onClick={() => setActiveTab(Tab.BUDGET)}
-                                onMouseEnter={() => prefetchTab(Tab.BUDGET)}
+                                onClick={() => setActiveTab(Tab.DEBT)}
+                                onMouseEnter={() => prefetchTab(Tab.DEBT)}
                                 className="touch-target px-4 py-3 text-left hover:bg-surface-douce flex flex-col justify-between gap-1 transition-colors duration-100 focus-ring"
                             >
                                 <div className="flex items-center justify-between gap-1">
                                     <span className="text-[11px] uppercase tracking-wider text-ink-400">
-                                        Réserve liquide
+                                        Passifs & dettes
                                     </span>
                                     <span className="font-mono text-[10px] text-ink-400 tabular-nums">
-                                        {indicateursPouls.moisAutonomie !== null ? (
-                                            <PrivateAmount>{`${indicateursPouls.moisAutonomie} mois`}</PrivateAmount>
-                                        ) : (
-                                            <span>—</span>
-                                        )}
+                                        <PrivateAmount>{`Levier ${indicateursPouls.ratioEndettement} %`}</PrivateAmount>
                                     </span>
                                 </div>
-                                <span className="font-mono text-sm sm:text-base font-bold text-ink-50 tabular-nums">
-                                    <PrivateAmount>{formatCompactCAD(liquidites)}</PrivateAmount>
+                                <span className="font-mono text-sm sm:text-base font-bold text-ink-200 tabular-nums">
+                                    <PrivateAmount>{formatCompactCAD(totalDettes)}</PrivateAmount>
                                 </span>
                             </button>
 
@@ -2703,6 +2767,38 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             >
                                 <span>Détails</span>
                                 <Icon name="chevron-right" size={14} aria-hidden="true" />
+                            </button>
+                        </div>
+
+                        {/* Synthèse distincte Portefeuille investi vs Liquidités disponibles */}
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.INVESTMENTS)}
+                                onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                                className="touch-target rounded-lg border border-bordure bg-fond hover:bg-surface-douce px-3 py-2 text-left transition-colors focus-ring"
+                            >
+                                <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-ink-400">
+                                    <span className="w-2 h-2 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
+                                    <span className="truncate">Portefeuille</span>
+                                </div>
+                                <div className="font-mono text-xs font-bold text-ink-50 tabular-nums mt-0.5">
+                                    <PrivateAmount>{formatCompactCAD(portefeuillePlacements)}</PrivateAmount>
+                                </div>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.TRANSACTIONS)}
+                                onMouseEnter={() => prefetchTab(Tab.TRANSACTIONS)}
+                                className="touch-target rounded-lg border border-bordure bg-fond hover:bg-surface-douce px-3 py-2 text-left transition-colors focus-ring"
+                            >
+                                <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-ink-400">
+                                    <span className="w-2 h-2 rounded-full gf-alloc-cash shrink-0" aria-hidden="true" />
+                                    <span className="truncate">Liquidités</span>
+                                </div>
+                                <div className="font-mono text-xs font-bold text-ink-50 tabular-nums mt-0.5">
+                                    <PrivateAmount>{formatCompactCAD(liquidites)}</PrivateAmount>
+                                </div>
                             </button>
                         </div>
 
