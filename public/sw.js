@@ -10,7 +10,7 @@
 //
 // Note : ce SW est uniquement chargé en PROD (vite import.meta.env.PROD).
 
-const CACHE_NAME = 'financeai-v27'; // v27 : Plan d'action patrimonial ameliore sur Accueil ; v26 : aeration et typographie Accueil ; v25 : parite courbe Accueil/Futur
+const CACHE_NAME = 'financeai-v28'; // v28 : Accueil unifie sans blocs fragmentes et retrait Depenses vs Budget / Secteurs ; v27 : Plan d'action patrimonial ameliore
 const PRECACHE_URLS = ['/manifest.json', '/icon.svg'];
 
 // [CF-ACCESS] Une réponse mettable en cache doit être une réponse DIRECTE de notre origine : ni redirigée (session

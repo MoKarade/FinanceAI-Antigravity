@@ -488,16 +488,13 @@ describe('Refonte Google Finance — GoogleFinanceHero & BoutonsPimenterFutur', 
 
         const trajectoireEntrance = screen.getByTestId('recharts-trajectory-entrance');
         const allocationEntrance = screen.getByTestId('recharts-allocation-entrance');
-        const budgetEntrance = screen.getByTestId('recharts-budget-entrance');
 
         expect(trajectoireEntrance.className).toContain('gf-chart-enter');
         expect(allocationEntrance.className).toContain('gf-chart-enter');
-        expect(budgetEntrance.className).toContain('gf-chart-enter');
 
-        // Vérifie que les sections principales et tuiles portent bien la classe d'élévation premium-card
+        // Vérifie que le conteneur unifié porte bien la classe d'élévation premium-card
         const heroSection = screen.getByLabelText(/Synthèse patrimoniale et recherche rapide/i);
         expect(heroSection.className).toContain('premium-card');
-        expect(screen.getByTestId('monthly-spending-vs-budget-chart').className).toContain('premium-card');
 
         // Deux sélecteurs d'assiette coexistent (colonne gauche ≥ xl, pilules mobiles < xl) : un seul
         // est affiché à la fois en CSS. Cliquer l'un doit annoncer l'état actif sur LES DEUX.
@@ -541,7 +538,8 @@ describe('Refonte Google Finance — GoogleFinanceHero & BoutonsPimenterFutur', 
         });
         expect(screen.getByTestId('recharts-trajectory-entrance')).toHaveAttribute('data-active-tab', Tab.DASHBOARD);
         expect(screen.getByTestId('recharts-allocation-entrance')).toHaveAttribute('data-active-tab', Tab.DASHBOARD);
-        expect(screen.getByTestId('recharts-budget-entrance')).toHaveAttribute('data-active-tab', Tab.DASHBOARD);
+        expect(screen.queryByTestId('monthly-spending-vs-budget-chart')).not.toBeInTheDocument();
+        expect(screen.queryByText(/Secteurs & simulateurs/i)).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /Simulateur/i }));
         expect(setActiveTab).toHaveBeenCalledWith(Tab.FUTURE);

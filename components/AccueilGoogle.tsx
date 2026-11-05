@@ -65,8 +65,6 @@ import { AnimatedNetWorth } from './ui/AnimatedNetWorth';
 import { Icon, type IconName } from './ui/Icon';
 import { FxEstimateBadge } from './ui/FxEstimateBadge';
 import { ChartDataTable, type ChartDataColumn } from './ui/ChartDataTable';
-import { FinancialGoalsProgressSection } from './ui/FinancialGoalProgressRing';
-import { MonthlySpendingVsBudgetChart } from './dashboard/MonthlySpendingVsBudgetChart';
 import { HubConnexionsModal } from './future/HubConnexionsModal';
 import { useFirebaseAuth } from './auth/FirebaseAuthGate';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
@@ -177,14 +175,6 @@ interface PreuveVeracite {
     sourceCode: string;
     referenceOfficielle: string;
     tab: Tab;
-}
-
-interface TuileLanceur {
-    tab: Tab;
-    icon: IconName;
-    label: string;
-    sousTitre: string;
-    valeur: number;
 }
 
 interface JalonPatrimonial {
@@ -1338,83 +1328,6 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         return { pages, titres, operations };
     }, [requete, state.assets, state.transactions]);
 
-    const tuilesLanceur = useMemo<TuileLanceur[]>(() => {
-        const portefeuilleTotal =
-            (assetBreakdown.celi || 0) +
-            (assetBreakdown.reer || 0) +
-            (assetBreakdown.nonReg || 0) +
-            (assetBreakdown.reee || 0);
-
-        return [
-            {
-                tab: Tab.FUTURE,
-                icon: 'future',
-                label: 'Futur',
-                sousTitre: 'Trajectoire',
-                valeur: gainHorizon?.fin ?? patrimoineNet,
-            },
-            {
-                tab: Tab.INVESTMENTS,
-                icon: 'investments',
-                label: 'Placements',
-                sousTitre: 'Portefeuille',
-                valeur: portefeuilleTotal,
-            },
-            {
-                tab: Tab.BUDGET,
-                icon: 'budget',
-                label: 'Budget',
-                sousTitre: 'Épargne / mois',
-                valeur: epargneMensuelle,
-            },
-            {
-                tab: Tab.TRANSACTIONS,
-                icon: 'transactions',
-                label: 'Transactions',
-                sousTitre: 'Liquidités',
-                valeur: liquidites,
-            },
-            {
-                tab: Tab.REAL_ESTATE,
-                icon: 'real-estate',
-                label: 'Immobilier',
-                sousTitre: 'Équité nette',
-                valeur: realEstateEquity,
-            },
-            {
-                tab: Tab.RETIREMENT,
-                icon: 'retirement',
-                label: 'Retraite',
-                sousTitre: 'Rente mensuelle',
-                valeur: state.retirementGoal?.targetMonthlyIncome ?? 4000,
-            },
-            {
-                tab: Tab.DEBT,
-                icon: 'debt',
-                label: 'Dettes',
-                sousTitre: 'Passifs totaux',
-                valeur: totalDettes,
-            },
-            {
-                tab: Tab.TAX,
-                icon: 'tax',
-                label: 'Impôts',
-                sousTitre: 'Revenu brut',
-                valeur: (state.config?.users?.[0]?.grossSalary ?? 0) * 12,
-            },
-        ];
-    }, [
-        assetBreakdown,
-        state.retirementGoal?.targetMonthlyIncome,
-        patrimoineNet,
-        totalDettes,
-        gainHorizon?.fin,
-        epargneMensuelle,
-        liquidites,
-        realEstateEquity,
-        state.config?.users,
-    ]);
-
     const operationsRecentes = useMemo(() => {
         return [...(state.transactions ?? [])]
             .sort((a, b) => b.date.localeCompare(a.date))
@@ -1957,70 +1870,92 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </button>
                     ))}
                 </div>
-            </section>
 
-            {/* 2. ARCHITECTURE 3 COLONNES GOOGLE FINANCE AÉRÉE : LISTES & JALONS (3, BUREAU) · COURBE, AVOIRS & PLAN D'ACTION (6) · RECHERCHE GEMINI, ALLOCATION & ACTIVITÉ (3) */}
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start gf-spring-grid">
-                {/* ── COLONNE GAUCHE (3 COL) : LISTES & PORTEFEUILLES + CALENDRIER & JALONS + PREUVES & SOURCES ── */}
-                <aside
-                    aria-label="Listes et portefeuilles suivis"
-                    className="order-3 xl:order-1 xl:col-span-3 space-y-6"
-                >
-                    <section className="hidden xl:block premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure">
-                        {/* En-tête « Listes » */}
-                        <div className="px-5 py-4 flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                                <h2 className="text-base font-semibold text-ink-50 tracking-normal">
-                                    Listes
-                                </h2>
-                                <span className="text-xs font-mono text-ink-400">
-                                    {/* NOMBRE-NON-MONETAIRE : nombre de lignes suivies */}
-                                    ({positionsSuivies.length})
-                                </span>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.INVESTMENTS)}
-                                onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
-                                aria-label="Gérer les listes et placements"
-                                className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-200 inline-flex items-center gap-1.5 focus-ring"
-                            >
-                                <Icon name="plus" size={14} aria-hidden="true" />
-                                <span>Ajouter</span>
-                            </button>
-                        </div>
-
-                        {/* Bloc « Portefeuilles » avec Valeur totale et carte Main active */}
-                        <div className="p-5 space-y-4 bg-fond">
-                            <div className="flex items-center justify-between">
-                                <span className="text-xs font-semibold text-ink-200 tracking-wide">Portefeuilles</span>
-                                <span className="text-xs font-mono text-ink-400">CAD</span>
+                {/* 2. ESPACE UNIFIÉ 3 COLONNES (SANS BLOCS FRAGMENTÉS, FUSIONNÉ PAR FILETS SUBTILS) */}
+                <div className="grid grid-cols-1 xl:grid-cols-12 divide-y xl:divide-y-0 xl:divide-x divide-bordure items-stretch">
+                    {/* ── COLONNE GAUCHE (3 COL) : PORTEFEUILLES, LISTE SUIVIE, CALENDRIER & PREUVES FUSIONNÉS ── */}
+                    <aside
+                        aria-label="Listes et portefeuilles suivis"
+                        className="order-3 xl:order-1 xl:col-span-3 divide-y divide-bordure bg-surface"
+                    >
+                        <section className="hidden xl:block divide-y divide-bordure">
+                            {/* En-tête « Portefeuilles & Listes » */}
+                            <div className="px-5 py-4 flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                    <h2 className="text-base font-semibold text-ink-50 tracking-normal">
+                                        Portefeuilles & Listes
+                                    </h2>
+                                    <span className="text-xs font-mono text-ink-400">
+                                        {/* NOMBRE-NON-MONETAIRE : nombre de lignes suivies */}
+                                        ({positionsSuivies.length})
+                                    </span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab(Tab.INVESTMENTS)}
+                                    onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                                    aria-label="Gérer les listes et placements"
+                                    className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-200 inline-flex items-center gap-1.5 focus-ring"
+                                >
+                                    <Icon name="plus" size={14} aria-hidden="true" />
+                                    <span>Ajouter</span>
+                                </button>
                             </div>
 
-                            <div className="space-y-1">
-                                <div className="text-xs text-ink-400">Patrimoine net total</div>
-                                <div className="font-mono text-xl sm:text-2xl font-bold text-ink-50 tabular-nums">
-                                    <PrivateAmount>{formatCAD(patrimoineNet)}</PrivateAmount>
+                            {/* Valeur totale et sélecteur d'assiette intégré sans boîtes imbriquées */}
+                            <div className="p-5 space-y-4">
+                                <div className="flex items-baseline justify-between gap-2">
+                                    <div className="space-y-0.5">
+                                        <div className="text-xs text-ink-400">Patrimoine net total</div>
+                                        <div className="font-mono text-xl sm:text-2xl font-bold text-ink-50 tabular-nums">
+                                            <PrivateAmount>{formatCAD(patrimoineNet)}</PrivateAmount>
+                                        </div>
+                                    </div>
+                                    <span className="text-xs font-mono text-ink-400">CAD</span>
+                                </div>
+
+                                {/* Sélecteur d'assiette (Patrimoine net / Portefeuille / Liquidités / Équité immobilière) */}
+                                <div
+                                    role="group"
+                                    aria-label="Lentille d'affichage du patrimoine"
+                                    className="grid grid-cols-1 gap-1"
+                                >
+                                    {LENTILLES_HERO.map((l) => (
+                                        <button
+                                            key={l.cle}
+                                            type="button"
+                                            aria-pressed={lentilleHero === l.cle}
+                                            onClick={() => setLentilleHero(l.cle)}
+                                            className={`touch-target px-3.5 py-2.5 rounded-lg text-sm font-medium flex items-center justify-between gap-2.5 transition-all duration-150 focus-ring ${
+                                                lentilleHero === l.cle
+                                                    ? 'gf-subtab-pill-active'
+                                                    : 'text-ink-300 hover:text-ink-50 hover:bg-surface-douce border border-transparent'
+                                            }`}
+                                        >
+                                            <span className="truncate">{l.label}</span>
+                                            <span className="font-mono text-xs opacity-80">{l.ticker}</span>
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
 
-                            {/* Séparation explicite Portefeuille (Placements) vs Liquidités (Encaisse) */}
-                            <div className="grid grid-cols-2 gap-3">
+                            {/* Séparation directe Portefeuille (Placements) vs Liquidités (Encaisse) par filet vertical */}
+                            <div className="grid grid-cols-2 divide-x divide-bordure bg-fond">
                                 <button
                                     type="button"
                                     aria-pressed={lentilleHero === 'portefeuille'}
                                     onClick={() => setLentilleHero('portefeuille')}
-                                    className={`touch-target rounded-xl p-3.5 text-left border transition-colors focus-ring ${
+                                    className={`touch-target px-4 py-3.5 text-left transition-colors focus-ring ${
                                         lentilleHero === 'portefeuille'
-                                            ? 'bg-surface-douce border-bordure-champ'
-                                            : 'bg-surface border-bordure hover:border-bordure-champ'
+                                            ? 'bg-surface-douce text-ink-50'
+                                            : 'hover:bg-surface-douce text-ink-200'
                                     }`}
                                 >
                                     <div className="flex items-center gap-2 text-xs font-mono text-ink-300">
                                         <span className="w-2.5 h-2.5 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
                                         <span className="truncate">Portefeuille</span>
                                     </div>
-                                    <div className="font-mono text-sm font-bold text-ink-50 tabular-nums mt-1.5">
+                                    <div className="font-mono text-sm font-bold text-ink-50 tabular-nums mt-1">
                                         <PrivateAmount>{formatCompactCAD(portefeuillePlacements)}</PrivateAmount>
                                     </div>
                                 </button>
@@ -2028,445 +1963,394 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     type="button"
                                     aria-pressed={lentilleHero === 'liquidites'}
                                     onClick={() => setLentilleHero('liquidites')}
-                                    className={`touch-target rounded-xl p-3.5 text-left border transition-colors focus-ring ${
+                                    className={`touch-target px-4 py-3.5 text-left transition-colors focus-ring ${
                                         lentilleHero === 'liquidites'
-                                            ? 'bg-surface-douce border-bordure-champ'
-                                            : 'bg-surface border-bordure hover:border-bordure-champ'
+                                            ? 'bg-surface-douce text-ink-50'
+                                            : 'hover:bg-surface-douce text-ink-200'
                                     }`}
                                 >
                                     <div className="flex items-center gap-2 text-xs font-mono text-ink-300">
                                         <span className="w-2.5 h-2.5 rounded-full gf-alloc-cash shrink-0" aria-hidden="true" />
                                         <span className="truncate">Liquidités</span>
                                     </div>
-                                    <div className="font-mono text-sm font-bold text-ink-50 tabular-nums mt-1.5">
+                                    <div className="font-mono text-sm font-bold text-ink-50 tabular-nums mt-1">
                                         <PrivateAmount>{formatCompactCAD(liquidites)}</PrivateAmount>
                                     </div>
                                 </button>
                             </div>
 
-                            {/* Carte active « Main » façon Google Finance Beta */}
-                            <div className="gf-portfolio-active rounded-xl p-4 space-y-2">
-                                <div className="flex items-center justify-between gap-2">
-                                    <span className="text-sm font-bold text-ink-50 truncate">
-                                        Main · {lentilleCourante.label}
-                                    </span>
-                                    <span className="w-2.5 h-2.5 rounded-full gf-alloc-reer gf-pulse-live shrink-0" aria-hidden="true" />
+                            {/* Liste des titres & enveloppes fluide */}
+                            <div className="divide-y divide-bordure">
+                                <div className="px-5 py-2.5 flex items-center justify-between bg-surface-douce">
+                                    <span className="text-xs font-semibold text-ink-200 tracking-wide">Liste suivie</span>
+                                    <span className="text-xs text-ink-400">Variation & Cours</span>
                                 </div>
-                                <div className="flex flex-wrap items-center justify-between gap-2 font-mono tabular-nums">
-                                    <span className="text-sm font-semibold text-ink-100">
-                                        <PrivateAmount>{formatCAD(valeurHeroAffichee)}</PrivateAmount>
-                                    </span>
-                                    {gainHorizon && (
-                                        <span
-                                            className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                                                gainHorizon.diff >= 0 ? 'gf-delta-up' : 'gf-delta-down'
-                                            }`}
-                                        >
-                                            <PrivateAmount>
-                                                {`${gainHorizon.diff >= 0 ? '+' : ''}${formatCompactCAD(gainHorizon.diff)}`}
-                                            </PrivateAmount>
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
 
-                            {/* Sélecteur d'assiette (Patrimoine net / Portefeuille liquide / Équité immobilière) */}
-                            <div
-                                role="group"
-                                aria-label="Lentille d'affichage du patrimoine"
-                                className="grid grid-cols-1 gap-1.5 pt-1"
-                            >
-                                {LENTILLES_HERO.map((l) => (
+                                {positionsSuivies.map((pos) => (
                                     <button
-                                        key={l.cle}
+                                        key={`left-${pos.id}`}
                                         type="button"
-                                        aria-pressed={lentilleHero === l.cle}
-                                        onClick={() => setLentilleHero(l.cle)}
-                                        className={`touch-target px-3.5 py-2.5 rounded-lg text-sm font-medium flex items-center justify-between gap-2.5 transition-all duration-150 focus-ring ${
-                                            lentilleHero === l.cle
-                                                ? 'gf-subtab-pill-active'
-                                                : 'text-ink-300 hover:text-ink-50 hover:bg-surface-douce border border-transparent'
-                                        }`}
+                                        onClick={() => setActiveTab(pos.tab)}
+                                        onMouseEnter={() => prefetchTab(pos.tab)}
+                                        className="gf-row touch-target w-full px-5 py-3.5 flex items-center justify-between gap-3 text-left focus-ring"
                                     >
-                                        <span className="truncate">{l.label}</span>
-                                        <span className="font-mono text-xs opacity-80">{l.ticker}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Liste des titres & enveloppes avec mini-sparklines et pilules colorées */}
-                        <div className="divide-y divide-bordure bg-surface">
-                            <div className="px-5 py-3 flex items-center justify-between bg-surface-douce">
-                                <span className="text-xs font-semibold text-ink-200 tracking-wide">Liste suivie</span>
-                                <span className="text-xs text-ink-400">Variation & Cours</span>
-                            </div>
-
-                            {positionsSuivies.map((pos) => (
-                                <button
-                                    key={`left-${pos.id}`}
-                                    type="button"
-                                    onClick={() => setActiveTab(pos.tab)}
-                                    onMouseEnter={() => prefetchTab(pos.tab)}
-                                    className="gf-row touch-target w-full px-5 py-3.5 flex items-center justify-between gap-3 text-left focus-ring"
-                                >
-                                    <div className="min-w-0 flex-1 space-y-1">
-                                        <div className="font-mono text-sm font-bold text-ink-50 truncate">
-                                            {pos.symbole}
-                                        </div>
-                                        <div className="text-xs text-ink-400 truncate">
-                                            <PrivateAmount>{pos.nom}</PrivateAmount>
-                                        </div>
-                                    </div>
-
-                                    <svg
-                                        width="48"
-                                        height="20"
-                                        viewBox="0 0 48 22"
-                                        aria-hidden="true"
-                                        className="shrink-0 overflow-visible"
-                                    >
-                                        <polyline
-                                            fill="none"
-                                            stroke={pos.variationPct == null ? 'var(--gf-bleu)' : pos.positif ? 'var(--gf-vert)' : 'var(--gf-rouge)'}
-                                            strokeWidth="1.8"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            points={pos.pointsSparkline}
-                                        />
-                                    </svg>
-
-                                    <div className="text-right font-mono tabular-nums shrink-0 space-y-1">
-                                        <div className="text-sm font-bold text-ink-50">
-                                            <PrivateAmount>{formatCompactCAD(pos.valeur)}</PrivateAmount>
-                                        </div>
-                                        <span
-                                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                                pos.variationPct == null
-                                                    ? 'gf-delta-neutral'
-                                                    : pos.positif
-                                                      ? 'gf-delta-up'
-                                                      : 'gf-delta-down'
-                                            }`}
-                                        >
-                                            {pos.variationPct != null ? (
-                                                <PrivateAmount>
-                                                    {`${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)} ${pos.positif ? '↑' : '↓'}`}
-                                                </PrivateAmount>
-                                            ) : (
-                                                <span>—</span>
-                                            )}
-                                        </span>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    </section>
-
-                    {/* Prochains jalons & calendrier patrimonial */}
-                    <section
-                        aria-label="Prochains jalons patrimoniaux"
-                        className="premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-4"
-                    >
-                        <div className="flex items-center justify-between gap-3 border-b border-bordure pb-3.5">
-                            <div className="space-y-0.5">
-                                <h2 className="text-base font-semibold text-ink-50 tracking-normal">
-                                    Calendrier & jalons
-                                </h2>
-                                <p className="text-xs text-ink-300">
-                                    Échéances planifiées
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.LIFE_PROJECTS)}
-                                onMouseEnter={() => prefetchTab(Tab.LIFE_PROJECTS)}
-                                className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
-                            >
-                                <span>Projets</span>
-                                <Icon name="chevron-right" size={14} aria-hidden="true" />
-                            </button>
-                        </div>
-
-                        <div className="rounded-xl border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
-                            {prochainsJalons.map((jalon) => {
-                                const ecartAnnees = jalon.annee - anneeActuelle;
-                                const delaiTexte = isPrivacyMode ? '••' : ecartAnnees <= 0 ? 'Actif' : `Dans ${ecartAnnees} an${ecartAnnees > 1 ? 's' : ''}`;
-                                return (
-                                    <button
-                                        key={jalon.id}
-                                        type="button"
-                                        onClick={() => setActiveTab(jalon.tab)}
-                                        className="gf-row touch-target w-full px-4 py-3.5 flex items-center justify-between gap-3 text-left focus-ring"
-                                    >
-                                        <div className="min-w-0 flex items-center gap-3">
-                                            <span className="px-2.5 py-1 rounded-md gf-delta-amber font-mono tabular-nums text-xs font-bold shrink-0">
-                                                {jalon.annee}
-                                            </span>
-                                            <div className="min-w-0 space-y-0.5">
-                                                <div className="text-sm font-medium text-ink-50 truncate">
-                                                    {jalon.titre}
-                                                </div>
-                                                <div className="text-xs text-ink-400 truncate">
-                                                    {jalon.categorie} · {delaiTexte}
-                                                </div>
+                                        <div className="min-w-0 flex-1 space-y-1">
+                                            <div className="font-mono text-sm font-bold text-ink-50 truncate">
+                                                {pos.symbole}
+                                            </div>
+                                            <div className="text-xs text-ink-400 truncate">
+                                                <PrivateAmount>{pos.nom}</PrivateAmount>
                                             </div>
                                         </div>
-                                        <PrivateAmount className="font-mono tabular-nums text-sm font-semibold text-ink-50 shrink-0">
-                                            {formatCompactCAD(jalon.montant)}
-                                        </PrivateAmount>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </section>
 
-                    {/* Preuves & Sources de véracité (100 % traçable vers le moteur et FISCAL_REFERENCE.md) */}
-                    <section
-                        data-testid="preuves-sources-panel"
-                        aria-label="Preuves et sources de véracité des calculs"
-                        className="premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-4"
-                    >
-                        <div className="flex items-center justify-between gap-3 border-b border-bordure pb-3.5">
-                            <div className="space-y-0.5">
-                                <div className="flex items-center gap-2">
-                                    <h2 className="text-base font-semibold text-ink-50 tracking-normal">
-                                        Preuves & Sources
-                                    </h2>
-                                    <span className="gf-badge-nouvelle">Vérifié</span>
-                                </div>
-                                <p className="text-xs text-ink-300">
-                                    Traçabilité mathématique & fiscale ARC / Revenu Québec
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.TAX)}
-                                onMouseEnter={() => prefetchTab(Tab.TAX)}
-                                className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 focus-ring whitespace-nowrap shrink-0"
-                            >
-                                <span>Audit</span>
-                                <Icon name="chevron-right" size={14} aria-hidden="true" />
-                            </button>
-                        </div>
+                                        <svg
+                                            width="48"
+                                            height="20"
+                                            viewBox="0 0 48 22"
+                                            aria-hidden="true"
+                                            className="shrink-0 overflow-visible"
+                                        >
+                                            <polyline
+                                                fill="none"
+                                                stroke={pos.variationPct == null ? 'var(--gf-bleu)' : pos.positif ? 'var(--gf-vert)' : 'var(--gf-rouge)'}
+                                                strokeWidth="1.8"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                points={pos.pointsSparkline}
+                                            />
+                                        </svg>
 
-                        <div className="rounded-xl border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
-                            {preuvesVeracite.map((preuve) => (
-                                <button
-                                    key={preuve.id}
-                                    type="button"
-                                    onClick={() => setActiveTab(preuve.tab)}
-                                    className="gf-row touch-target w-full px-4 py-3.5 text-left space-y-1.5 focus-ring"
-                                >
-                                    <div className="flex items-center justify-between gap-3">
-                                        <span className="text-sm font-semibold text-ink-50 truncate">
-                                            {preuve.titre}
-                                        </span>
-                                        <span className="px-2.5 py-0.5 rounded-full gf-delta-up font-mono text-xs font-semibold shrink-0">
-                                            {preuve.montantNumeric != null ? (
-                                                <PrivateAmount>{formatCompactCAD(preuve.montantNumeric)}</PrivateAmount>
-                                            ) : (
-                                                <span>{preuve.badgeTexte}</span>
-                                            )}
-                                        </span>
-                                    </div>
-                                    <div className="sr-only">
-                                        {preuve.formule} · {preuve.sourceCode} · {preuve.referenceOfficielle}
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    </section>
-                </aside>
-
-                {/* ── COLONNE CENTRALE (6 COL, EN PREMIER SUR MOBILE) : COTATION « MAIN », COURBE BLEUE & SOUS-ONGLETS ── */}
-                <div className="order-1 xl:order-2 xl:col-span-6 space-y-6">
-                    {/* Fiche principale de cotation & trajectoire Google Finance Beta */}
-                    <section
-                        aria-label="Trajectoire du patrimoine"
-                        className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
-                    >
-                        <div className="p-5 sm:p-7 space-y-5">
-                            {/* Fil d'Ariane « ← Accueil | Main » + bouton Modifier */}
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div className="flex flex-wrap items-center gap-2.5 text-sm text-ink-300">
-                                    <span className="gf-ticker-symbol">{lentilleCourante.ticker}</span>
-                                    <span aria-hidden="true" className="text-ink-400">|</span>
-                                    <h1 className="font-semibold text-ink-100 tracking-normal text-base sm:text-lg">
-                                        {prenom ? `Main · ${prenom} (${lentilleCourante.label})` : `Main · ${lentilleCourante.label}`}
-                                    </h1>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveTab(Tab.INVESTMENTS)}
-                                    onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
-                                    className="touch-target px-4 py-2 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-2 transition-colors duration-100 focus-ring"
-                                >
-                                    <Icon name="edit" size={14} aria-hidden="true" />
-                                    <span>Modifier</span>
-                                </button>
-                            </div>
-
-                            {/* Sélecteur de lentille compact visible sur mobile/tablette (< xl) */}
-                            <div
-                                role="group"
-                                aria-label="Assiette du patrimoine sur mobile"
-                                className="flex xl:hidden items-center gap-2 overflow-x-auto no-scrollbar"
-                            >
-                                {LENTILLES_HERO.map((l) => (
-                                    <button
-                                        key={`mob-${l.cle}`}
-                                        type="button"
-                                        aria-pressed={lentilleHero === l.cle}
-                                        onClick={() => setLentilleHero(l.cle)}
-                                        className={`touch-target shrink-0 px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring ${
-                                            lentilleHero === l.cle
-                                                ? 'gf-subtab-pill-active'
-                                                : 'bg-fond border border-bordure text-ink-300 hover:text-ink-50'
-                                        }`}
-                                    >
-                                        {l.label}
+                                        <div className="text-right font-mono tabular-nums shrink-0 space-y-1">
+                                            <div className="text-sm font-bold text-ink-50">
+                                                <PrivateAmount>{formatCompactCAD(pos.valeur)}</PrivateAmount>
+                                            </div>
+                                            <span
+                                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                                    pos.variationPct == null
+                                                        ? 'gf-delta-neutral'
+                                                        : pos.positif
+                                                          ? 'gf-delta-up'
+                                                          : 'gf-delta-down'
+                                                }`}
+                                            >
+                                                {pos.variationPct != null ? (
+                                                    <PrivateAmount>
+                                                        {`${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)} ${pos.positif ? '↑' : '↓'}`}
+                                                    </PrivateAmount>
+                                                ) : (
+                                                    <span>—</span>
+                                                )}
+                                            </span>
+                                        </div>
                                     </button>
                                 ))}
                             </div>
+                        </section>
 
-                            {/* Montant Héro + Pilule de variation verte/rouge style Google Finance Beta */}
-                            <div className="space-y-2.5">
-                                <div className="flex flex-wrap items-baseline gap-3">
-                                    <AnimatedNetWorth
-                                        value={valeurHeroAffichee}
-                                        as="div"
-                                        testId="animated-global-net-worth"
-                                        className="font-mono tabular-nums text-3xl sm:text-5xl font-bold tracking-normal text-ink-50 leading-tight"
-                                    />
-
-                                    {variation && lentilleHero === 'net' ? (
-                                        <span
-                                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs sm:text-sm font-mono font-semibold tabular-nums ${
-                                                variation.diff >= 0 ? 'gf-delta-up' : 'gf-delta-down'
-                                            }`}
-                                        >
-                                            <span aria-hidden="true">{variation.diff >= 0 ? '↑' : '↓'}</span>
-                                            {variation.pct != null && (
-                                                <PrivateAmount>{`${variation.diff >= 0 ? '+' : ''}${formatPercent(variation.pct)}`}</PrivateAmount>
-                                            )}
-                                            <PrivateAmount>
-                                                {`(${variation.diff >= 0 ? '+' : ''}${formatCompactCAD(variation.diff)})`}
-                                            </PrivateAmount>
-                                        </span>
-                                    ) : (
-                                        gainHorizon && (
-                                            <span
-                                                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs sm:text-sm font-mono font-semibold tabular-nums ${
-                                                    gainHorizon.diff >= 0 ? 'gf-delta-up' : 'gf-delta-down'
-                                                }`}
-                                            >
-                                                <span aria-hidden="true">{gainHorizon.diff >= 0 ? '↑' : '↓'}</span>
-                                                {gainHorizon.pct != null && (
-                                                    <PrivateAmount>{`${gainHorizon.diff >= 0 ? '+' : ''}${formatPercent(gainHorizon.pct)}`}</PrivateAmount>
-                                                )}
-                                                <PrivateAmount>
-                                                    {`(${gainHorizon.diff >= 0 ? '+' : ''}${formatCompactCAD(gainHorizon.diff)}) ${horizon}`}
-                                                </PrivateAmount>
-                                            </span>
-                                        )
-                                    )}
+                        {/* Prochains jalons & calendrier patrimonial intégré en continu */}
+                        <section
+                            aria-label="Prochains jalons patrimoniaux"
+                            className="divide-y divide-bordure"
+                        >
+                            <div className="px-5 py-4 flex items-center justify-between gap-3">
+                                <div className="space-y-0.5">
+                                    <h2 className="text-base font-semibold text-ink-50 tracking-normal">
+                                        Calendrier & jalons
+                                    </h2>
+                                    <p className="text-xs text-ink-300">
+                                        Échéances planifiées
+                                    </p>
                                 </div>
-
-                                <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm font-mono tabular-nums text-ink-300">
-                                    <span>{todayIso} · CAD</span>
-                                    <FxEstimateBadge />
-                                    {gainHorizon && (
-                                        <span className="text-ink-200">
-                                            · Cible {gainHorizon.anneeFin} :{' '}
-                                            <strong className="text-ink-50">
-                                                <PrivateAmount>{formatCompactCAD(gainHorizon.fin)}</PrivateAmount>
-                                            </strong>
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Pilules d'outils au-dessus du graphique : En aires / + Avoirs bruts / Temps forts / Simulateur */}
-                            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-bordure">
-                                <div className="flex flex-wrap items-center gap-2.5">
-                                    <div
-                                        role="group"
-                                        aria-label="Série affichée sur la courbe"
-                                        className="inline-flex items-center p-1 rounded-full border border-bordure bg-fond gap-1"
-                                    >
-                                        <button
-                                            type="button"
-                                            aria-pressed={modeCourbe === 'nette'}
-                                            onClick={() => setModeCourbe('nette')}
-                                            className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring whitespace-nowrap ${
-                                                modeCourbe === 'nette'
-                                                    ? 'gf-subtab-pill-active'
-                                                    : 'text-ink-300 hover:text-ink-50'
-                                            }`}
-                                        >
-                                            En aires · Valeur nette
-                                        </button>
-                                        <button
-                                            type="button"
-                                            aria-pressed={modeCourbe === 'complete'}
-                                            onClick={() => setModeCourbe('complete')}
-                                            className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring whitespace-nowrap ${
-                                                modeCourbe === 'complete'
-                                                    ? 'gf-subtab-pill-active'
-                                                    : 'text-ink-300 hover:text-ink-50'
-                                            }`}
-                                        >
-                                            Par compte · + Avoirs
-                                        </button>
-                                    </div>
-
-                                    <div
-                                        role="group"
-                                        aria-label="Marqueurs des temps forts sur la courbe"
-                                        className="inline-flex items-center"
-                                    >
-                                        <button
-                                            type="button"
-                                            aria-pressed={tempsFortsActifs}
-                                            onClick={() => setTempsFortsActifs((v) => !v)}
-                                            className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium inline-flex items-center gap-2 border transition-all duration-150 focus-ring ${
-                                                tempsFortsActifs
-                                                    ? 'gf-delta-amber'
-                                                    : 'bg-fond text-ink-300 border-bordure hover:text-ink-50'
-                                            }`}
-                                        >
-                                            <span className="gf-amber-dot shrink-0" aria-hidden="true" />
-                                            <span>Temps forts</span>
-                                        </button>
-                                    </div>
-                                </div>
-
                                 <button
                                     type="button"
-                                    onClick={() => setActiveTab(Tab.FUTURE)}
-                                    onMouseEnter={() => prefetchTab(Tab.FUTURE)}
-                                    className="touch-target px-4 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                    onClick={() => setActiveTab(Tab.LIFE_PROJECTS)}
+                                    onMouseEnter={() => prefetchTab(Tab.LIFE_PROJECTS)}
+                                    className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
                                 >
-                                    <span>Simulateur</span>
+                                    <span>Projets</span>
                                     <Icon name="chevron-right" size={14} aria-hidden="true" />
                                 </button>
                             </div>
 
-                            {/* Courbe principale synchronisée sur FutureProjection.tsx : journalier (1M/1A) & mensuel/empilé par compte (5A/10A/MAX) */}
-                            <div
-                                data-testid="recharts-trajectory-entrance"
-                                data-active-tab={activeTab}
-                                data-chart-horizon={horizon}
-                                data-chart-mode={modeCourbe}
-                                data-chart-lens={lentilleHero}
-                                role="img"
-                                aria-label="Graphique combiné du présent et du futur projeté — valeurs détaillées dans le tableau de données."
-                                className="h-[280px] sm:h-[340px] w-full gf-chart-enter rounded-xl bg-fond border border-bordure p-3 cursor-crosshair"
-                            >
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <ComposedChart data={donneesTrajectoire} margin={{ top: 14, right: 10, left: 0, bottom: 0 }}>
+                            <div className="divide-y divide-bordure">
+                                {prochainsJalons.map((jalon) => {
+                                    const ecartAnnees = jalon.annee - anneeActuelle;
+                                    const delaiTexte = isPrivacyMode ? '••' : ecartAnnees <= 0 ? 'Actif' : `Dans ${ecartAnnees} an${ecartAnnees > 1 ? 's' : ''}`;
+                                    return (
+                                        <button
+                                            key={jalon.id}
+                                            type="button"
+                                            onClick={() => setActiveTab(jalon.tab)}
+                                            className="gf-row touch-target w-full px-5 py-3.5 flex items-center justify-between gap-3 text-left focus-ring"
+                                        >
+                                            <div className="min-w-0 flex items-center gap-3">
+                                                <span className="px-2.5 py-1 rounded-md gf-delta-amber font-mono tabular-nums text-xs font-bold shrink-0">
+                                                    {jalon.annee}
+                                                </span>
+                                                <div className="min-w-0 space-y-0.5">
+                                                    <div className="text-sm font-medium text-ink-50 truncate">
+                                                        {jalon.titre}
+                                                    </div>
+                                                    <div className="text-xs text-ink-400 truncate">
+                                                        {jalon.categorie} · {delaiTexte}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <PrivateAmount className="font-mono tabular-nums text-sm font-semibold text-ink-50 shrink-0">
+                                                {formatCompactCAD(jalon.montant)}
+                                            </PrivateAmount>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </section>
+
+                        {/* Preuves & Sources de véracité intégré en continu */}
+                        <section
+                            data-testid="preuves-sources-panel"
+                            aria-label="Preuves et sources de véracité des calculs"
+                            className="divide-y divide-bordure"
+                        >
+                            <div className="px-5 py-4 flex items-center justify-between gap-3">
+                                <div className="space-y-0.5">
+                                    <div className="flex items-center gap-2">
+                                        <h2 className="text-base font-semibold text-ink-50 tracking-normal">
+                                            Preuves & Sources
+                                        </h2>
+                                        <span className="gf-badge-nouvelle">Vérifié</span>
+                                    </div>
+                                    <p className="text-xs text-ink-300">
+                                        Traçabilité mathématique & fiscale ARC / Revenu Québec
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab(Tab.TAX)}
+                                    onMouseEnter={() => prefetchTab(Tab.TAX)}
+                                    className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 focus-ring whitespace-nowrap shrink-0"
+                                >
+                                    <span>Audit</span>
+                                    <Icon name="chevron-right" size={14} aria-hidden="true" />
+                                </button>
+                            </div>
+
+                            <div className="divide-y divide-bordure">
+                                {preuvesVeracite.map((preuve) => (
+                                    <button
+                                        key={preuve.id}
+                                        type="button"
+                                        onClick={() => setActiveTab(preuve.tab)}
+                                        className="gf-row touch-target w-full px-5 py-3.5 text-left space-y-1.5 focus-ring"
+                                    >
+                                        <div className="flex items-center justify-between gap-3">
+                                            <span className="text-sm font-semibold text-ink-50 truncate">
+                                                {preuve.titre}
+                                            </span>
+                                            <span className="px-2.5 py-0.5 rounded-full gf-delta-up font-mono text-xs font-semibold shrink-0">
+                                                {preuve.montantNumeric != null ? (
+                                                    <PrivateAmount>{formatCompactCAD(preuve.montantNumeric)}</PrivateAmount>
+                                                ) : (
+                                                    <span>{preuve.badgeTexte}</span>
+                                                )}
+                                            </span>
+                                        </div>
+                                        <div className="sr-only">
+                                            {preuve.formule} · {preuve.sourceCode} · {preuve.referenceOfficielle}
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+                    </aside>
+
+                    {/* ── COLONNE CENTRALE (6 COL, EN PREMIER SUR MOBILE) : TRAJECTOIRE, JALONS & PLAN D'ACTION FUSIONNÉS ── */}
+                    <div className="order-1 xl:order-2 xl:col-span-6 divide-y divide-bordure bg-surface">
+                        <section
+                            aria-label="Trajectoire du patrimoine"
+                            className="divide-y divide-bordure"
+                        >
+                            <div className="p-5 sm:p-7 space-y-5">
+                                {/* Fil d'Ariane « Main » + bouton Modifier */}
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div className="flex flex-wrap items-center gap-2.5 text-sm text-ink-300">
+                                        <span className="sr-only">Trajectoire</span>
+                                        <span className="gf-ticker-symbol">{lentilleCourante.ticker}</span>
+                                        <span aria-hidden="true" className="text-ink-400">|</span>
+                                        <h1 className="font-semibold text-ink-100 tracking-normal text-base sm:text-lg">
+                                            {prenom ? `Main · ${prenom} (${lentilleCourante.label})` : `Main · ${lentilleCourante.label}`}
+                                        </h1>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveTab(Tab.INVESTMENTS)}
+                                        onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                                        className="touch-target px-4 py-2 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-2 transition-colors duration-100 focus-ring"
+                                    >
+                                        <Icon name="edit" size={14} aria-hidden="true" />
+                                        <span>Modifier</span>
+                                    </button>
+                                </div>
+
+                                {/* Sélecteur de lentille compact visible sur mobile/tablette (< xl) */}
+                                <div
+                                    role="group"
+                                    aria-label="Assiette du patrimoine sur mobile"
+                                    className="flex xl:hidden items-center gap-2 overflow-x-auto no-scrollbar"
+                                >
+                                    {LENTILLES_HERO.map((l) => (
+                                        <button
+                                            key={`mob-${l.cle}`}
+                                            type="button"
+                                            aria-pressed={lentilleHero === l.cle}
+                                            onClick={() => setLentilleHero(l.cle)}
+                                            className={`touch-target shrink-0 px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring ${
+                                                lentilleHero === l.cle
+                                                    ? 'gf-subtab-pill-active'
+                                                    : 'bg-fond border border-bordure text-ink-300 hover:text-ink-50'
+                                            }`}
+                                        >
+                                            {l.label}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Montant Héro + Pilule de variation verte/rouge style Google Finance Beta */}
+                                <div className="space-y-2.5">
+                                    <div className="flex flex-wrap items-baseline gap-3">
+                                        <AnimatedNetWorth
+                                            value={valeurHeroAffichee}
+                                            as="div"
+                                            testId="animated-global-net-worth"
+                                            className="font-mono tabular-nums text-3xl sm:text-5xl font-bold tracking-normal text-ink-50 leading-tight"
+                                        />
+
+                                        {variation && lentilleHero === 'net' ? (
+                                            <span
+                                                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs sm:text-sm font-mono font-semibold tabular-nums ${
+                                                    variation.diff >= 0 ? 'gf-delta-up' : 'gf-delta-down'
+                                                }`}
+                                            >
+                                                <span aria-hidden="true">{variation.diff >= 0 ? '↑' : '↓'}</span>
+                                                {variation.pct != null && (
+                                                    <PrivateAmount>{`${variation.diff >= 0 ? '+' : ''}${formatPercent(variation.pct)}`}</PrivateAmount>
+                                                )}
+                                                <PrivateAmount>
+                                                    {`(${variation.diff >= 0 ? '+' : ''}${formatCompactCAD(variation.diff)})`}
+                                                </PrivateAmount>
+                                            </span>
+                                        ) : (
+                                            gainHorizon && (
+                                                <span
+                                                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs sm:text-sm font-mono font-semibold tabular-nums ${
+                                                        gainHorizon.diff >= 0 ? 'gf-delta-up' : 'gf-delta-down'
+                                                    }`}
+                                                >
+                                                    <span aria-hidden="true">{gainHorizon.diff >= 0 ? '↑' : '↓'}</span>
+                                                    {gainHorizon.pct != null && (
+                                                        <PrivateAmount>{`${gainHorizon.diff >= 0 ? '+' : ''}${formatPercent(gainHorizon.pct)}`}</PrivateAmount>
+                                                    )}
+                                                    <PrivateAmount>
+                                                        {`(${gainHorizon.diff >= 0 ? '+' : ''}${formatCompactCAD(gainHorizon.diff)}) ${horizon}`}
+                                                    </PrivateAmount>
+                                                </span>
+                                            )
+                                        )}
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm font-mono tabular-nums text-ink-300">
+                                        <span>{todayIso} · CAD</span>
+                                        <FxEstimateBadge />
+                                        {gainHorizon && (
+                                            <span className="text-ink-200">
+                                                · Cible {gainHorizon.anneeFin} :{' '}
+                                                <strong className="text-ink-50">
+                                                    <PrivateAmount>{formatCompactCAD(gainHorizon.fin)}</PrivateAmount>
+                                                </strong>
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Pilules d'outils au-dessus du graphique : En aires / + Avoirs bruts / Temps forts / Simulateur */}
+                                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-bordure">
+                                    <div className="flex flex-wrap items-center gap-2.5">
+                                        <div
+                                            role="group"
+                                            aria-label="Série affichée sur la courbe"
+                                            className="inline-flex items-center p-1 rounded-full border border-bordure bg-fond gap-1"
+                                        >
+                                            <button
+                                                type="button"
+                                                aria-pressed={modeCourbe === 'nette'}
+                                                onClick={() => setModeCourbe('nette')}
+                                                className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring whitespace-nowrap ${
+                                                    modeCourbe === 'nette'
+                                                        ? 'gf-subtab-pill-active'
+                                                        : 'text-ink-300 hover:text-ink-50'
+                                                }`}
+                                            >
+                                                En aires · Valeur nette
+                                            </button>
+                                            <button
+                                                type="button"
+                                                aria-pressed={modeCourbe === 'complete'}
+                                                onClick={() => setModeCourbe('complete')}
+                                                className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring whitespace-nowrap ${
+                                                    modeCourbe === 'complete'
+                                                        ? 'gf-subtab-pill-active'
+                                                        : 'text-ink-300 hover:text-ink-50'
+                                                }`}
+                                            >
+                                                Par compte · + Avoirs
+                                            </button>
+                                        </div>
+
+                                        <div
+                                            role="group"
+                                            aria-label="Marqueurs des temps forts sur la courbe"
+                                            className="inline-flex items-center"
+                                        >
+                                            <button
+                                                type="button"
+                                                aria-pressed={tempsFortsActifs}
+                                                onClick={() => setTempsFortsActifs((v) => !v)}
+                                                className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium inline-flex items-center gap-2 border transition-all duration-150 focus-ring ${
+                                                    tempsFortsActifs
+                                                        ? 'gf-delta-amber'
+                                                        : 'bg-fond text-ink-300 border-bordure hover:text-ink-50'
+                                                }`}
+                                            >
+                                                <span className="gf-amber-dot shrink-0" aria-hidden="true" />
+                                                <span>Temps forts</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveTab(Tab.FUTURE)}
+                                        onMouseEnter={() => prefetchTab(Tab.FUTURE)}
+                                        className="touch-target px-4 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                    >
+                                        <span>Simulateur</span>
+                                        <Icon name="chevron-right" size={14} aria-hidden="true" />
+                                    </button>
+                                </div>
+
+                                {/* Courbe principale synchronisée sur FutureProjection.tsx : journalier (1M/1A) & mensuel/empilé par compte (5A/10A/MAX) */}
+                                <div
+                                    data-testid="recharts-trajectory-entrance"
+                                    data-active-tab={activeTab}
+                                    data-chart-horizon={horizon}
+                                    data-chart-mode={modeCourbe}
+                                    data-chart-lens={lentilleHero}
+                                    role="img"
+                                    aria-label="Graphique combiné du présent et du futur projeté — valeurs détaillées dans le tableau de données."
+                                    className="h-[280px] sm:h-[340px] w-full gf-chart-enter py-2 cursor-crosshair"
+                                >
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <ComposedChart data={donneesTrajectoire} margin={{ top: 14, right: 10, left: 0, bottom: 0 }}>
                                         <defs>
                                             <linearGradient id="accueilPresentGrad" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="0%" stopColor="var(--gf-bleu)" stopOpacity={0.38} />
@@ -2931,45 +2815,142 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 </div>
                             </div>
                         </div>
-                    </section>
 
-                    {/* Plan d'action patrimonial amélioré (remplace l'inspecteur dupliqué, la grille tassée et le flux 30j) */}
-                    <section
-                        data-testid="plan-action-ameliore"
-                        aria-label="Plan d'action patrimonial"
-                        className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
-                    >
-                        {/* 1. En-tête du plan d'action & vélocité mensuelle */}
-                        <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div className="space-y-1">
-                                <div className="flex flex-wrap items-center gap-2.5">
-                                    <span className="w-8 h-8 rounded-full bg-fond border border-bordure inline-flex items-center justify-center shrink-0">
-                                        <Icon name="clipboard" size={16} className="text-repere" aria-hidden="true" />
-                                    </span>
-                                    <h2 className="text-base sm:text-lg font-semibold text-ink-50 tracking-normal">
-                                        Plan d’action patrimonial
-                                    </h2>
-                                    <span
-                                        className={`px-2.5 py-0.5 rounded-full font-mono text-xs font-semibold tabular-nums ${
-                                            epargneMensuelle > 0 ? 'gf-delta-up' : 'gf-delta-neutral'
-                                        }`}
-                                    >
-                                        <PrivateAmount>
-                                            {`${epargneMensuelle >= 0 ? '+' : ''}${formatCompactCAD(epargneMensuelle)}/mois`}
-                                        </PrivateAmount>
-                                    </span>
-                                    {indicateursPouls.tauxEpargne !== null && (
-                                        <span className="px-2.5 py-0.5 rounded-full border border-bordure bg-fond font-mono text-xs text-ink-200 tabular-nums">
-                                            <PrivateAmount>{`Taux d’épargne ${indicateursPouls.tauxEpargne} %`}</PrivateAmount>
-                                        </span>
-                                    )}
+                        {/* Bandeau intégré des 4 grands jalons de trajectoire (sans cartes flottantes imbriquées) */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-bordure bg-fond">
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.INVESTMENTS)}
+                                onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                                className="touch-target px-4 sm:px-5 py-4 text-left hover:bg-surface-douce space-y-1 transition-colors focus-ring"
+                            >
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-medium text-ink-300">Aujourd’hui</span>
+                                    <span className="w-2 h-2 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
                                 </div>
-                                <p className="text-xs sm:text-sm text-ink-300">
-                                    Priorités concrètes calculées sur votre portefeuille, vos liquidités et votre projection fiscale Québec / Canada
-                                </p>
-                            </div>
+                                <div className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
+                                    <PrivateAmount>
+                                        {formatCompactCAD(pointAncre?.NetWorth ?? patrimoineNet)}
+                                    </PrivateAmount>
+                                </div>
+                                <div className="text-xs text-ink-400">
+                                    Bilan net actuel
+                                </div>
+                            </button>
 
-                            <div className="flex items-center gap-2 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.FUTURE)}
+                                onMouseEnter={() => prefetchTab(Tab.FUTURE)}
+                                className="touch-target px-4 sm:px-5 py-4 text-left hover:bg-surface-douce space-y-1 transition-colors focus-ring"
+                            >
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-medium text-ink-300">
+                                        {jalonFire ? `Jalon FIRE (${jalonFire.year})` : 'Cible FIRE'}
+                                    </span>
+                                    <span className="w-2 h-2 rounded-full gf-alloc-immo shrink-0" aria-hidden="true" />
+                                </div>
+                                <div className="font-mono text-base sm:text-lg font-bold text-alerte-texte tabular-nums">
+                                    <PrivateAmount>
+                                        {jalonFire && Number.isFinite(jalonFire.NetWorth)
+                                            ? formatCompactCAD(jalonFire.NetWorth)
+                                            : Number.isFinite(fireNumber) && fireNumber > 0
+                                              ? formatCompactCAD(fireNumber)
+                                              : '—'}
+                                    </PrivateAmount>
+                                </div>
+                                <div className="text-xs text-ink-400">
+                                    <PrivateAmount>{`${indicateursPouls.pctLiberte} % accompli`}</PrivateAmount>
+                                </div>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.RETIREMENT)}
+                                onMouseEnter={() => prefetchTab(Tab.RETIREMENT)}
+                                className="touch-target px-4 sm:px-5 py-4 text-left hover:bg-surface-douce space-y-1 transition-colors focus-ring"
+                            >
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-medium text-ink-300">
+                                        {/* NOMBRE-NON-MONETAIRE : âge de la retraite sur la carte jalon */}
+                                        {pointRetraite ? `Retraite (${pointRetraite.age} ans)` : `Retraite (${indicateursPouls.ageRetraite} ans)`}
+                                    </span>
+                                    <span className="w-2 h-2 rounded-full gf-alloc-reer shrink-0" aria-hidden="true" />
+                                </div>
+                                <div className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
+                                    <PrivateAmount>
+                                        {pointRetraite && Number.isFinite(pointRetraite.NetWorth)
+                                            ? formatCompactCAD(pointRetraite.NetWorth)
+                                            : formatCompactCAD(indicateursPouls.cibleRetraite)}
+                                    </PrivateAmount>
+                                </div>
+                                <div className="text-xs text-ink-400">
+                                    Patrimoine projeté
+                                </div>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.FUTURE)}
+                                onMouseEnter={() => prefetchTab(Tab.FUTURE)}
+                                className="touch-target px-4 sm:px-5 py-4 text-left hover:bg-surface-douce space-y-1 transition-colors focus-ring"
+                            >
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-medium text-ink-300">
+                                        {/* NOMBRE-NON-MONETAIRE : âge de fin d'horizon sur la carte jalon */}
+                                        {dernierPoint ? `Fin d’horizon (${dernierPoint.age} ans)` : 'Fin d’horizon'}
+                                    </span>
+                                    <span className="w-2 h-2 rounded-full gf-alloc-nonreg shrink-0" aria-hidden="true" />
+                                </div>
+                                <div className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
+                                    <PrivateAmount>
+                                        {patrimoineKpi?.value ??
+                                            (dernierPoint && Number.isFinite(dernierPoint.NetWorth)
+                                                ? formatCompactCAD(dernierPoint.NetWorth)
+                                                : formatCompactCAD(patrimoineNet))}
+                                    </PrivateAmount>
+                                </div>
+                                <div className="text-xs text-ink-400">
+                                    Capital final simulé
+                                </div>
+                            </button>
+                        </div>
+                        </section>
+
+                        {/* Plan d'action patrimonial fusionné en continu dans la colonne centrale */}
+                        <section
+                            data-testid="plan-action-ameliore"
+                            aria-label="Plan d'action patrimonial"
+                            className="divide-y divide-bordure"
+                        >
+                            {/* 1. En-tête du plan d'action & vélocité mensuelle */}
+                            <div className="px-5 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-douce">
+                                <div className="space-y-1">
+                                    <div className="flex flex-wrap items-center gap-2.5">
+                                        <h2 className="text-base font-semibold text-ink-50 tracking-normal">
+                                            Plan d’action patrimonial
+                                        </h2>
+                                        <span className="sr-only">Actions prioritaires recommandées</span>
+                                        <span
+                                            className={`px-2.5 py-0.5 rounded-full font-mono text-xs font-semibold tabular-nums ${
+                                                epargneMensuelle > 0 ? 'gf-delta-up' : 'gf-delta-neutral'
+                                            }`}
+                                        >
+                                            <PrivateAmount>
+                                                {`${epargneMensuelle >= 0 ? '+' : ''}${formatCompactCAD(epargneMensuelle)}/mois`}
+                                            </PrivateAmount>
+                                        </span>
+                                        {indicateursPouls.tauxEpargne !== null && (
+                                            <span className="px-2.5 py-0.5 rounded-full border border-bordure bg-fond font-mono text-xs text-ink-200 tabular-nums">
+                                                <PrivateAmount>{`Taux d’épargne ${indicateursPouls.tauxEpargne} %`}</PrivateAmount>
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-ink-300">
+                                        Priorités calculées sur votre portefeuille, vos liquidités et votre fiscalité Québec / Canada
+                                    </p>
+                                </div>
+
                                 <button
                                     type="button"
                                     onClick={() =>
@@ -2977,648 +2958,482 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             'Quelles sont les 3 meilleures actions concrètes à exécuter ce mois-ci sur mon portefeuille et mon budget ?',
                                         )
                                     }
-                                    className="touch-target px-3.5 py-2 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-2 transition-colors focus-ring whitespace-nowrap"
+                                    className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-2 transition-colors focus-ring whitespace-nowrap self-start sm:self-auto shrink-0"
                                 >
                                     <Icon name="sparkles" size={14} className="text-repere" aria-hidden="true" />
                                     <span>Analyser avec Gemini</span>
                                 </button>
                             </div>
-                        </div>
 
-                        {/* 2. Les 4 grands jalons de trajectoire aérés (sans troncature) */}
-                        <div className="p-5 sm:p-6 bg-fond space-y-3">
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-semibold text-ink-200 tracking-wide">
-                                    Cap & jalons de la trajectoire
-                                </span>
-                                <span className="text-xs font-mono text-ink-400">
-                                    Synchronisé avec Futur
-                                </span>
+                            {/* 2. Les 4 priorités fusionnées en grille 2×2 par filets continus (zéro sous-boîte) */}
+                            <div className="divide-y divide-bordure">
+                                {[prioritesPlanAction.slice(0, 2), prioritesPlanAction.slice(2, 4)].map(
+                                    (paire, rowIdx) => (
+                                        <div
+                                            key={`prio-row-${rowIdx}`}
+                                            className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-bordure"
+                                        >
+                                            {paire.map((prio) => (
+                                                <button
+                                                    key={prio.id}
+                                                    type="button"
+                                                    onClick={() => setActiveTab(prio.tab)}
+                                                    onMouseEnter={() => prefetchTab(prio.tab)}
+                                                    className="touch-target p-5 sm:p-6 text-left hover:bg-surface-douce flex flex-col justify-between gap-4 transition-colors duration-150 focus-ring group"
+                                                >
+                                                    <div className="space-y-2 w-full">
+                                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                                            <span className="text-xs font-mono font-semibold text-ink-300">
+                                                                {prio.rang}
+                                                            </span>
+                                                            <span
+                                                                className={`px-2.5 py-0.5 rounded-full font-mono text-xs font-semibold tabular-nums ${prio.statutClasse}`}
+                                                            >
+                                                                <PrivateAmount>{prio.statutLabel}</PrivateAmount>
+                                                            </span>
+                                                        </div>
+
+                                                        <div className="text-sm sm:text-base font-semibold text-ink-50 leading-snug">
+                                                            {prio.titre}
+                                                        </div>
+
+                                                        <p className="text-xs sm:text-sm text-ink-300 leading-relaxed">
+                                                            <PrivateAmount>{prio.description}</PrivateAmount>
+                                                        </p>
+                                                    </div>
+
+                                                    <div className="space-y-2.5 w-full pt-2">
+                                                        <div className="flex items-baseline justify-between gap-3 font-mono text-xs tabular-nums">
+                                                            <span className="text-ink-300">
+                                                                Actuel :{' '}
+                                                                <strong className="text-ink-50">
+                                                                    <PrivateAmount>
+                                                                        {prio.montantPrincipal !== null
+                                                                            ? formatCompactCAD(prio.montantPrincipal)
+                                                                            : '—'}
+                                                                    </PrivateAmount>
+                                                                </strong>
+                                                            </span>
+                                                            {prio.cibleMontant !== null && (
+                                                                <span className="text-ink-400">
+                                                                    Cible :{' '}
+                                                                    <strong className="text-ink-200">
+                                                                        <PrivateAmount>
+                                                                            {formatCompactCAD(prio.cibleMontant)}
+                                                                        </PrivateAmount>
+                                                                    </strong>
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="h-1.5 w-full rounded-full bg-fond overflow-hidden">
+                                                            <div
+                                                                style={{ width: `${isPrivacyMode ? 50 : prio.progressionPct}%` }}
+                                                                className={`h-full rounded-full gf-bar-grow ${prio.classeBarre}`}
+                                                            />
+                                                        </div>
+
+                                                        <div className="flex items-center justify-between gap-2 pt-0.5 text-xs font-medium text-repere group-hover:underline">
+                                                            <span>{prio.ctaLabel}</span>
+                                                            <Icon name="chevron-right" size={14} aria-hidden="true" />
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ),
+                                )}
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                            {/* 3. Cadence d'exécution programmée en bandeau continu */}
+                            <div className="divide-y divide-bordure bg-fond">
+                                <div className="px-5 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2 bg-surface-douce">
+                                    <h3 className="text-xs font-semibold text-ink-200 tracking-wide">
+                                        Cadence d’exécution programmée
+                                    </h3>
+                                    <span className="text-xs text-ink-400">
+                                        Rythme d’accumulation selon votre épargne actuelle
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-bordure">
+                                    {[
+                                        {
+                                            id: 'cadence-mois',
+                                            periode: 'Ce mois-ci',
+                                            montant: Math.max(0, Math.round(epargneMensuelle)),
+                                            action: 'Virement automatique & DCA indiciel',
+                                            tab: Tab.BUDGET,
+                                        },
+                                        {
+                                            id: 'cadence-trimestre',
+                                            periode: 'Par trimestre',
+                                            montant: Math.max(0, Math.round(epargneMensuelle * 3)),
+                                            action: 'Rééquilibrage CELI / REER & coussin',
+                                            tab: Tab.INVESTMENTS,
+                                        },
+                                        {
+                                            id: 'cadence-annee',
+                                            periode: 'Sur 12 mois',
+                                            montant: Math.max(0, Math.round(epargneMensuelle * 12)),
+                                            action: 'Optimisation fiscale ARC & Revenu Québec',
+                                            tab: Tab.TAX,
+                                        },
+                                        {
+                                            id: 'cadence-5ans',
+                                            periode: 'Cap 5 ans',
+                                            montant: Math.max(0, Math.round(epargneMensuelle * 60)),
+                                            action: 'Apport projet & croissance composée',
+                                            tab: Tab.FUTURE,
+                                        },
+                                    ].map((etape) => (
+                                        <button
+                                            key={etape.id}
+                                            type="button"
+                                            onClick={() => setActiveTab(etape.tab)}
+                                            onMouseEnter={() => prefetchTab(etape.tab)}
+                                            className="touch-target px-4 sm:px-5 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-1.5 transition-colors duration-100 focus-ring"
+                                        >
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="text-xs font-semibold text-ink-200">
+                                                    {etape.periode}
+                                                </span>
+                                                <PrivateAmount className="font-mono text-sm font-bold text-succes-texte tabular-nums">
+                                                    {`+${formatCompactCAD(etape.montant)}`}
+                                                </PrivateAmount>
+                                            </div>
+                                            <p className="text-xs text-ink-400 leading-snug">
+                                                {etape.action}
+                                            </p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    {/* ── COLONNE DROITE (3 COL) : CONSEILLER GEMINI, ALLOCATION & ACTIVITÉ FUSIONNÉS ── */}
+                    <aside
+                        aria-label="Recherche Gemini et indicateurs latéraux"
+                        className="order-2 xl:order-3 xl:col-span-3 divide-y divide-bordure bg-surface"
+                    >
+                        {/* Section 1 : Conseiller Gemini intégré */}
+                        <section
+                            aria-label="Assistant de recherche financière Gemini"
+                            className="divide-y divide-bordure"
+                        >
+                            <div className="px-5 py-4 flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2.5">
+                                    <span className="w-7 h-7 rounded-full bg-surface-douce border border-bordure inline-flex items-center justify-center shrink-0">
+                                        <Icon name="sparkles" size={14} className="text-ink-200" aria-hidden="true" />
+                                    </span>
+                                    <h2 className="text-base font-semibold text-ink-50 tracking-normal">
+                                        Conseiller Gemini
+                                    </h2>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowGeminiModal(true)}
+                                    aria-label="Ouvrir le conseiller financier Gemini"
+                                    className="touch-target px-3.5 py-1.5 rounded-full bg-fond hover:bg-surface-douce border border-bordure text-ink-100 text-xs font-medium inline-flex items-center gap-1.5 transition-colors focus-ring"
+                                >
+                                    <span>Discuter</span>
+                                    <Icon name="chevron-right" size={13} className="text-ink-400" aria-hidden="true" />
+                                </button>
+                            </div>
+
+                            {/* Questions directes en lignes continues */}
+                            <div className="divide-y divide-bordure">
+                                {QUESTIONS_GEMINI_SUGGEREES.map((q) => (
+                                    <button
+                                        key={q}
+                                        type="button"
+                                        onClick={() => ouvrirQuestionGemini(q)}
+                                        className="gf-row touch-target w-full px-5 py-3 flex items-center justify-between gap-3 text-left text-xs sm:text-sm text-ink-100 focus-ring"
+                                    >
+                                        <span className="leading-snug">{q}</span>
+                                        <Icon
+                                            name="chevron-right"
+                                            size={14}
+                                            className="text-ink-400 shrink-0"
+                                            aria-hidden="true"
+                                        />
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Compositeur direct Gemini */}
+                            <div className="px-5 py-3 bg-fond flex items-center gap-2.5">
+                                <input
+                                    type="text"
+                                    value={questionComposer}
+                                    onChange={(e) => setQuestionComposer(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            ouvrirQuestionGemini(questionComposer.trim() || QUESTIONS_GEMINI_SUGGEREES[0]!);
+                                            setQuestionComposer('');
+                                        }
+                                    }}
+                                    placeholder="Question rapide à Gemini…"
+                                    aria-label="Poser une question financière à Gemini"
+                                    className="champ-nu touch-target flex-1 bg-transparent text-sm text-ink-50 placeholder-ink-400 focus-ring"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        ouvrirQuestionGemini(questionComposer.trim() || QUESTIONS_GEMINI_SUGGEREES[0]!);
+                                        setQuestionComposer('');
+                                    }}
+                                    aria-label="Envoyer la question à Gemini"
+                                    className="gf-send-circle touch-target w-9 h-9 inline-flex items-center justify-center shrink-0 focus-ring"
+                                >
+                                    <Icon name="arrow-up" size={15} aria-hidden="true" />
+                                </button>
+                            </div>
+                        </section>
+
+                        {/* Section 2 : Répartition colorée du portefeuille fusionnée */}
+                        <section
+                            aria-label="Répartition visuelle des actifs"
+                            className="divide-y divide-bordure"
+                        >
+                            <div className="px-5 py-4 flex items-center justify-between gap-3">
+                                <div className="space-y-0.5">
+                                    <h2 className="text-base font-semibold text-ink-50 tracking-normal">
+                                        Allocation d’actifs
+                                    </h2>
+                                    <p className="text-xs text-ink-300">
+                                        Pondération par enveloppe
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab(partSelectionnee.tab)}
+                                    onMouseEnter={() => prefetchTab(partSelectionnee.tab)}
+                                    className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                >
+                                    <span>Détails</span>
+                                    <Icon name="chevron-right" size={14} aria-hidden="true" />
+                                </button>
+                            </div>
+
+                            {/* Synthèse distincte Portefeuille investi vs Liquidités disponibles par filet */}
+                            <div className="grid grid-cols-2 divide-x divide-bordure bg-fond">
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab(Tab.INVESTMENTS)}
                                     onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
-                                    className="touch-target rounded-xl bg-surface border border-bordure hover:border-bordure-champ p-4 text-left space-y-1.5 transition-colors focus-ring"
+                                    className="touch-target px-4 py-3.5 text-left hover:bg-surface-douce transition-colors focus-ring space-y-1"
                                 >
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="text-xs font-medium text-ink-300">Aujourd’hui</span>
-                                        <span className="w-2 h-2 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
+                                    <div className="flex items-center gap-2 text-xs font-mono text-ink-300">
+                                        <span className="w-2.5 h-2.5 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
+                                        <span className="truncate">Portefeuille</span>
                                     </div>
-                                    <div className="font-mono text-lg sm:text-xl font-bold text-ink-50 tabular-nums">
-                                        <PrivateAmount>
-                                            {formatCompactCAD(pointAncre?.NetWorth ?? patrimoineNet)}
-                                        </PrivateAmount>
-                                    </div>
-                                    <div className="text-xs text-ink-400">
-                                        Bilan net actuel
+                                    <div className="font-mono text-sm font-bold text-ink-50 tabular-nums">
+                                        <PrivateAmount>{formatCompactCAD(portefeuillePlacements)}</PrivateAmount>
                                     </div>
                                 </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveTab(Tab.FUTURE)}
-                                    onMouseEnter={() => prefetchTab(Tab.FUTURE)}
-                                    className="touch-target rounded-xl bg-surface border border-bordure hover:border-bordure-champ p-4 text-left space-y-1.5 transition-colors focus-ring"
-                                >
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="text-xs font-medium text-ink-300">
-                                            {jalonFire ? `Jalon FIRE (${jalonFire.year})` : 'Cible FIRE'}
-                                        </span>
-                                        <span className="w-2 h-2 rounded-full gf-alloc-immo shrink-0" aria-hidden="true" />
-                                    </div>
-                                    <div className="font-mono text-lg sm:text-xl font-bold text-alerte-texte tabular-nums">
-                                        <PrivateAmount>
-                                            {jalonFire && Number.isFinite(jalonFire.NetWorth)
-                                                ? formatCompactCAD(jalonFire.NetWorth)
-                                                : Number.isFinite(fireNumber) && fireNumber > 0
-                                                  ? formatCompactCAD(fireNumber)
-                                                  : '—'}
-                                        </PrivateAmount>
-                                    </div>
-                                    <div className="text-xs text-ink-400">
-                                        <PrivateAmount>{`${indicateursPouls.pctLiberte} % accompli`}</PrivateAmount>
-                                    </div>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveTab(Tab.RETIREMENT)}
-                                    onMouseEnter={() => prefetchTab(Tab.RETIREMENT)}
-                                    className="touch-target rounded-xl bg-surface border border-bordure hover:border-bordure-champ p-4 text-left space-y-1.5 transition-colors focus-ring"
-                                >
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="text-xs font-medium text-ink-300">
-                                            {/* NOMBRE-NON-MONETAIRE : âge de la retraite sur la carte jalon */}
-                                            {pointRetraite ? `Retraite (${pointRetraite.age} ans)` : `Retraite (${indicateursPouls.ageRetraite} ans)`}
-                                        </span>
-                                        <span className="w-2 h-2 rounded-full gf-alloc-reer shrink-0" aria-hidden="true" />
-                                    </div>
-                                    <div className="font-mono text-lg sm:text-xl font-bold text-ink-50 tabular-nums">
-                                        <PrivateAmount>
-                                            {pointRetraite && Number.isFinite(pointRetraite.NetWorth)
-                                                ? formatCompactCAD(pointRetraite.NetWorth)
-                                                : formatCompactCAD(indicateursPouls.cibleRetraite)}
-                                        </PrivateAmount>
-                                    </div>
-                                    <div className="text-xs text-ink-400">
-                                        Patrimoine projeté
-                                    </div>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveTab(Tab.FUTURE)}
-                                    onMouseEnter={() => prefetchTab(Tab.FUTURE)}
-                                    className="touch-target rounded-xl bg-surface border border-bordure hover:border-bordure-champ p-4 text-left space-y-1.5 transition-colors focus-ring"
-                                >
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="text-xs font-medium text-ink-300">
-                                            {/* NOMBRE-NON-MONETAIRE : âge de fin d'horizon sur la carte jalon */}
-                                            {dernierPoint ? `Fin d’horizon (${dernierPoint.age} ans)` : 'Fin d’horizon'}
-                                        </span>
-                                        <span className="w-2 h-2 rounded-full gf-alloc-nonreg shrink-0" aria-hidden="true" />
-                                    </div>
-                                    <div className="font-mono text-lg sm:text-xl font-bold text-ink-50 tabular-nums">
-                                        <PrivateAmount>
-                                            {patrimoineKpi?.value ??
-                                                (dernierPoint && Number.isFinite(dernierPoint.NetWorth)
-                                                    ? formatCompactCAD(dernierPoint.NetWorth)
-                                                    : formatCompactCAD(patrimoineNet))}
-                                        </PrivateAmount>
-                                    </div>
-                                    <div className="text-xs text-ink-400">
-                                        Capital final simulé
-                                    </div>
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* 3. Priorités concrètes personnalisées (4 cartes spacieuses avec barres de progression et actions directes) */}
-                        <div className="p-5 sm:p-6 space-y-4">
-                            <div className="flex items-center justify-between gap-2">
-                                <h3 className="text-sm sm:text-base font-semibold text-ink-50">
-                                    Actions prioritaires recommandées
-                                </h3>
-                                <span className="text-xs text-ink-400">
-                                    Cliquez sur une priorité pour agir
-                                </span>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {prioritesPlanAction.map((prio) => (
-                                    <button
-                                        key={prio.id}
-                                        type="button"
-                                        onClick={() => setActiveTab(prio.tab)}
-                                        onMouseEnter={() => prefetchTab(prio.tab)}
-                                        className="touch-target rounded-xl border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ p-5 text-left flex flex-col justify-between gap-4 transition-all duration-150 focus-ring group"
-                                    >
-                                        <div className="space-y-2.5 w-full">
-                                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                                <span className="text-xs font-mono font-semibold text-ink-300">
-                                                    {prio.rang}
-                                                </span>
-                                                <span
-                                                    className={`px-2.5 py-0.5 rounded-full font-mono text-xs font-semibold tabular-nums ${prio.statutClasse}`}
-                                                >
-                                                    <PrivateAmount>{prio.statutLabel}</PrivateAmount>
-                                                </span>
-                                            </div>
-
-                                            <div className="text-sm sm:text-base font-semibold text-ink-50 leading-snug">
-                                                {prio.titre}
-                                            </div>
-
-                                            <p className="text-xs sm:text-sm text-ink-300 leading-relaxed">
-                                                <PrivateAmount>{prio.description}</PrivateAmount>
-                                            </p>
-                                        </div>
-
-                                        <div className="space-y-3 w-full pt-2 border-t border-bordure">
-                                            <div className="flex items-baseline justify-between gap-3 font-mono text-xs sm:text-sm tabular-nums">
-                                                <span className="text-ink-300">
-                                                    Actuel :{' '}
-                                                    <strong className="text-ink-50">
-                                                        <PrivateAmount>
-                                                            {prio.montantPrincipal !== null
-                                                                ? formatCompactCAD(prio.montantPrincipal)
-                                                                : '—'}
-                                                        </PrivateAmount>
-                                                    </strong>
-                                                </span>
-                                                {prio.cibleMontant !== null && (
-                                                    <span className="text-ink-400">
-                                                        Cible :{' '}
-                                                        <strong className="text-ink-200">
-                                                            <PrivateAmount>
-                                                                {formatCompactCAD(prio.cibleMontant)}
-                                                            </PrivateAmount>
-                                                        </strong>
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            <div className="h-2 w-full rounded-full bg-surface border border-bordure overflow-hidden">
-                                                <div
-                                                    style={{ width: `${isPrivacyMode ? 50 : prio.progressionPct}%` }}
-                                                    className={`h-full rounded-full gf-bar-grow ${prio.classeBarre}`}
-                                                />
-                                            </div>
-
-                                            <div className="flex items-center justify-between gap-2 pt-0.5 text-xs sm:text-sm font-medium text-repere group-hover:underline">
-                                                <span>{prio.ctaLabel}</span>
-                                                <Icon name="chevron-right" size={14} aria-hidden="true" />
-                                            </div>
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* 4. Cadence d'exécution multi-horizons (Mensuel · Trimestriel · Annuel · Décennal) */}
-                        <div className="p-5 sm:p-6 bg-fond space-y-3.5">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <h3 className="text-xs sm:text-sm font-semibold text-ink-200 tracking-wide">
-                                    Cadence d’exécution programmée
-                                </h3>
-                                <span className="text-xs text-ink-400">
-                                    Rythme d’accumulation selon votre épargne actuelle
-                                </span>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-                                {[
-                                    {
-                                        id: 'cadence-mois',
-                                        periode: 'Ce mois-ci',
-                                        montant: Math.max(0, Math.round(epargneMensuelle)),
-                                        action: 'Virement automatique & DCA indiciel',
-                                        tab: Tab.BUDGET,
-                                    },
-                                    {
-                                        id: 'cadence-trimestre',
-                                        periode: 'Par trimestre',
-                                        montant: Math.max(0, Math.round(epargneMensuelle * 3)),
-                                        action: 'Rééquilibrage CELI / REER & coussin',
-                                        tab: Tab.INVESTMENTS,
-                                    },
-                                    {
-                                        id: 'cadence-annee',
-                                        periode: 'Sur 12 mois',
-                                        montant: Math.max(0, Math.round(epargneMensuelle * 12)),
-                                        action: 'Optimisation fiscale ARC & Revenu Québec',
-                                        tab: Tab.TAX,
-                                    },
-                                    {
-                                        id: 'cadence-5ans',
-                                        periode: 'Cap 5 ans',
-                                        montant: Math.max(0, Math.round(epargneMensuelle * 60)),
-                                        action: 'Apport projet & croissance composée',
-                                        tab: Tab.FUTURE,
-                                    },
-                                ].map((etape) => (
-                                    <button
-                                        key={etape.id}
-                                        type="button"
-                                        onClick={() => setActiveTab(etape.tab)}
-                                        onMouseEnter={() => prefetchTab(etape.tab)}
-                                        className="touch-target rounded-xl bg-surface border border-bordure hover:border-bordure-champ p-4 text-left flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring"
-                                    >
-                                        <div className="flex items-center justify-between gap-2">
-                                            <span className="text-xs sm:text-sm font-semibold text-ink-100">
-                                                {etape.periode}
-                                            </span>
-                                            <PrivateAmount className="font-mono text-sm sm:text-base font-bold text-succes-texte tabular-nums">
-                                                {`+${formatCompactCAD(etape.montant)}`}
-                                            </PrivateAmount>
-                                        </div>
-                                        <p className="text-xs text-ink-300 leading-snug">
-                                            {etape.action}
-                                        </p>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </section>
-                </div>
-
-                {/* ── COLONNE DROITE (3 COL) : PANNEAU UNIQUE GEMINI (TOUS LES BOUTONS IA REGROUPÉS) + ALLOCATION + ACTIVITÉ ── */}
-                <aside
-                    aria-label="Recherche Gemini et indicateurs latéraux"
-                    className="order-2 xl:order-3 xl:col-span-3 space-y-6"
-                >
-                    {/* Carte 1 : Point d'entrée unique Gemini sur l'Accueil */}
-                    <section
-                        aria-label="Assistant de recherche financière Gemini"
-                        className="premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-4"
-                    >
-                        <div className="flex items-center justify-between gap-3 border-b border-bordure pb-3.5">
-                            <div className="flex items-center gap-2.5">
-                                <span className="w-7 h-7 rounded-full bg-surface-douce border border-bordure inline-flex items-center justify-center shrink-0">
-                                    <Icon name="sparkles" size={14} className="text-ink-200" aria-hidden="true" />
-                                </span>
-                                <h2 className="text-base font-semibold text-ink-50 tracking-normal">
-                                    Conseiller Gemini
-                                </h2>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowGeminiModal(true)}
-                                aria-label="Ouvrir le conseiller financier Gemini"
-                                className="touch-target px-3.5 py-1.5 rounded-lg bg-surface-douce hover:bg-surfaceHighlight border border-bordure text-ink-100 text-xs sm:text-sm font-medium inline-flex items-center gap-1.5 transition-colors focus-ring"
-                            >
-                                <span>Discuter</span>
-                                <Icon name="chevron-right" size={13} className="text-ink-400" aria-hidden="true" />
-                            </button>
-                        </div>
-
-                        {/* Questions directes en 1 clic */}
-                        <div className="space-y-2">
-                            {QUESTIONS_GEMINI_SUGGEREES.map((q) => (
-                                <button
-                                    key={q}
-                                    type="button"
-                                    onClick={() => ouvrirQuestionGemini(q)}
-                                    className="gf-prompt-card touch-target w-full px-4 py-3 flex items-center justify-between gap-3 text-left text-xs sm:text-sm text-ink-100 focus-ring"
-                                >
-                                    <span className="leading-snug">{q}</span>
-                                    <Icon
-                                        name="chevron-right"
-                                        size={14}
-                                        className="text-ink-400 shrink-0"
-                                        aria-hidden="true"
-                                    />
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Compositeur direct Gemini */}
-                        <div className="gf-chat-composer p-3 flex items-center gap-2.5">
-                            <input
-                                type="text"
-                                value={questionComposer}
-                                onChange={(e) => setQuestionComposer(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        ouvrirQuestionGemini(questionComposer.trim() || QUESTIONS_GEMINI_SUGGEREES[0]!);
-                                        setQuestionComposer('');
-                                    }
-                                }}
-                                placeholder="Question rapide à Gemini…"
-                                aria-label="Poser une question financière à Gemini"
-                                className="champ-nu touch-target flex-1 bg-transparent text-sm text-ink-50 placeholder-ink-400 focus-ring"
-                            />
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    ouvrirQuestionGemini(questionComposer.trim() || QUESTIONS_GEMINI_SUGGEREES[0]!);
-                                    setQuestionComposer('');
-                                }}
-                                aria-label="Envoyer la question à Gemini"
-                                className="gf-send-circle touch-target w-10 h-10 inline-flex items-center justify-center shrink-0 focus-ring"
-                            >
-                                <Icon name="arrow-up" size={16} aria-hidden="true" />
-                            </button>
-                        </div>
-                    </section>
-
-                    {/* Carte 2 : Répartition colorée du portefeuille */}
-                    <section
-                        aria-label="Répartition visuelle des actifs"
-                        className="premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-5"
-                    >
-                        <div className="flex items-center justify-between gap-3 border-b border-bordure pb-3.5">
-                            <div className="space-y-0.5">
-                                <h2 className="text-base font-semibold text-ink-50 tracking-normal">
-                                    Allocation d’actifs
-                                </h2>
-                                <p className="text-xs text-ink-300">
-                                    Pondération par enveloppe
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(partSelectionnee.tab)}
-                                onMouseEnter={() => prefetchTab(partSelectionnee.tab)}
-                                className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
-                            >
-                                <span>Détails</span>
-                                <Icon name="chevron-right" size={14} aria-hidden="true" />
-                            </button>
-                        </div>
-
-                        {/* Synthèse distincte Portefeuille investi vs Liquidités disponibles */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.INVESTMENTS)}
-                                onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
-                                className="touch-target rounded-xl border border-bordure bg-fond hover:bg-surface-douce px-3.5 py-3 text-left transition-colors focus-ring space-y-1"
-                            >
-                                <div className="flex items-center gap-2 text-xs font-mono text-ink-300">
-                                    <span className="w-2.5 h-2.5 rounded-full gf-alloc-celi shrink-0" aria-hidden="true" />
-                                    <span className="truncate">Portefeuille</span>
-                                </div>
-                                <div className="font-mono text-sm font-bold text-ink-50 tabular-nums">
-                                    <PrivateAmount>{formatCompactCAD(portefeuillePlacements)}</PrivateAmount>
-                                </div>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.TRANSACTIONS)}
-                                onMouseEnter={() => prefetchTab(Tab.TRANSACTIONS)}
-                                className="touch-target rounded-xl border border-bordure bg-fond hover:bg-surface-douce px-3.5 py-3 text-left transition-colors focus-ring space-y-1"
-                            >
-                                <div className="flex items-center gap-2 text-xs font-mono text-ink-300">
-                                    <span className="w-2.5 h-2.5 rounded-full gf-alloc-cash shrink-0" aria-hidden="true" />
-                                    <span className="truncate">Liquidités</span>
-                                </div>
-                                <div className="font-mono text-sm font-bold text-ink-50 tabular-nums">
-                                    <PrivateAmount>{formatCompactCAD(liquidites)}</PrivateAmount>
-                                </div>
-                            </button>
-                        </div>
-
-                        {/* Barre de pondération linéaire multicolore */}
-                        <div
-                            className="h-3 w-full rounded-full bg-fond border border-bordure flex p-0.5 gap-0.5 gf-bar-grow"
-                            aria-hidden="true"
-                        >
-                            {partsRepartition.map((part) => (
-                                <div
-                                    key={`bar-${part.id}`}
-                                    style={{ width: `${isPrivacyMode ? 20 : Math.max(4, part.pct)}%` }}
-                                    className={`h-full rounded-full transition-opacity duration-150 ${part.classeBarre} ${
-                                        segmentActif === null || segmentActif === part.id ? 'opacity-100' : 'opacity-30'
-                                    }`}
-                                />
-                            ))}
-                        </div>
-
-                        <div className="relative h-[168px] w-full flex items-center justify-center rounded-xl border border-bordure bg-fond">
-                            <div
-                                key={`${activeTab}-repartition-${lentilleHero}`}
-                                data-testid="recharts-allocation-entrance"
-                                data-active-tab={activeTab}
-                                data-chart-lens={lentilleHero}
-                                role="img"
-                                aria-label="Anneau de répartition des avoirs par classe d'actifs — détail chiffré dans le tableau de données."
-                                className="h-full w-full gf-chart-enter"
-                            >
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={partsRepartition}
-                                            dataKey="valeur"
-                                            nameKey="label"
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={48}
-                                            outerRadius={68}
-                                            paddingAngle={2}
-                                            stroke="none"
-                                            isAnimationActive={true}
-                                            animationBegin={30}
-                                            animationDuration={360}
-                                            animationEasing="ease-out"
-                                            onMouseEnter={(_, idx) => {
-                                                const item = partsRepartition[idx];
-                                                if (item) setSegmentActif(item.id);
-                                            }}
-                                        >
-                                            {partsRepartition.map((entry) => (
-                                                <Cell
-                                                    key={entry.id}
-                                                    fill={entry.couleur}
-                                                    opacity={
-                                                        segmentActif === null || segmentActif === entry.id ? 1 : 0.35
-                                                    }
-                                                />
-                                            ))}
-                                        </Pie>
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-
-                            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-3 space-y-0.5">
-                                <span className="text-xs font-medium text-ink-300 truncate max-w-[96px]">
-                                    {partSelectionnee.label}
-                                </span>
-                                <PrivateAmount className="font-mono text-sm font-bold text-ink-50 tabular-nums">
-                                    {formatCompactCAD(partSelectionnee.valeur)}
-                                </PrivateAmount>
-                                <span className="text-xs font-mono tabular-nums text-ink-300">
-                                    <PrivateAmount>{`${partSelectionnee.pct} %`}</PrivateAmount>
-                                </span>
-                            </div>
-                        </div>
-
-                        <div
-                            role="group"
-                            aria-label="Sélection d'une enveloppe d'actifs"
-                            className="rounded-xl border border-bordure divide-y divide-bordure bg-fond overflow-hidden"
-                        >
-                            {partsRepartition.map((part) => (
-                                <button
-                                    key={part.id}
-                                    type="button"
-                                    aria-pressed={partSelectionnee.id === part.id}
-                                    onMouseEnter={() => setSegmentActif(part.id)}
-                                    onFocus={() => setSegmentActif(part.id)}
-                                    onClick={() => setSegmentActif(part.id)}
-                                    className={`touch-target w-full px-4 py-3 flex items-center justify-between gap-3 text-sm transition-colors duration-100 focus-ring ${
-                                        partSelectionnee.id === part.id
-                                            ? 'bg-surface-douce text-ink-50 font-semibold'
-                                            : 'text-ink-200 hover:bg-surface-douce'
-                                    }`}
-                                >
-                                    <span className="flex items-center gap-3 min-w-0 truncate">
-                                        <span
-                                            className={`w-2.5 h-2.5 rounded-full shrink-0 ${part.classeBarre}`}
-                                            aria-hidden="true"
-                                        />
-                                        <span className="truncate">{part.label}</span>
-                                    </span>
-                                    <span className="font-mono text-sm text-ink-100 tabular-nums shrink-0">
-                                        <PrivateAmount>{formatCompactCAD(part.valeur)}</PrivateAmount>
-                                        <span className="text-ink-400 ml-2">
-                                            <PrivateAmount>{`${part.pct}%`}</PrivateAmount>
-                                        </span>
-                                    </span>
-                                </button>
-                            ))}
-                        </div>
-                    </section>
-
-                    {/* Carte 3 : Flux d'opérations récentes */}
-                    <section
-                        aria-label="Opérations récentes"
-                        className="premium-card rounded-xl bg-surface border border-bordure p-5 sm:p-6 space-y-4"
-                    >
-                        <div className="flex items-center justify-between gap-3 border-b border-bordure pb-3.5">
-                            <div className="space-y-0.5">
-                                <h2 className="text-base font-semibold text-ink-50 tracking-normal">
-                                    Activité récente
-                                </h2>
-                                <p className="text-xs text-ink-300">
-                                    Dernières écritures au journal
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab(Tab.TRANSACTIONS)}
-                                onMouseEnter={() => prefetchTab(Tab.TRANSACTIONS)}
-                                className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
-                            >
-                                <span>Journal</span>
-                                <Icon name="chevron-right" size={14} aria-hidden="true" />
-                            </button>
-                        </div>
-
-                        {operationsRecentes.length > 0 ? (
-                            <div className="rounded-xl border border-bordure divide-y divide-bordure bg-fond overflow-hidden">
-                                {operationsRecentes.map((tx) => {
-                                    const estRevenu = tx.amount > 0;
-                                    return (
-                                        <button
-                                            key={tx.id}
-                                            type="button"
-                                            onClick={() => setActiveTab(Tab.TRANSACTIONS)}
-                                            className="gf-row touch-target w-full px-4 py-3.5 flex items-center justify-between gap-3 text-left focus-ring"
-                                        >
-                                            <div className="min-w-0 flex-1 space-y-0.5">
-                                                <div className="text-sm font-medium text-ink-50 truncate">
-                                                    <PrivateText quoi="marchand">{tx.payee}</PrivateText>
-                                                </div>
-                                                <div className="text-xs text-ink-400 truncate font-mono tabular-nums">
-                                                    {tx.date.slice(5)} · <PrivateText quoi="categorie">{tx.category}</PrivateText>
-                                                </div>
-                                            </div>
-                                            <PrivateAmount
-                                                className={`font-mono text-sm font-semibold tabular-nums shrink-0 ${
-                                                    estRevenu ? 'text-succes-texte' : 'text-ink-200'
-                                                }`}
-                                            >
-                                                {`${estRevenu ? '+' : '−'}${formatCAD(Math.abs(tx.amount))}`}
-                                            </PrivateAmount>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <div className="py-7 rounded-xl border border-bordure bg-fond text-center space-y-2.5">
-                                <p className="text-sm text-ink-300">Aucune opération enregistrée</p>
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab(Tab.TRANSACTIONS)}
-                                    className="touch-target px-4 py-2 rounded-full bg-accent text-sur-accent text-xs sm:text-sm font-semibold inline-flex items-center gap-2 focus-ring"
+                                    onMouseEnter={() => prefetchTab(Tab.TRANSACTIONS)}
+                                    className="touch-target px-4 py-3.5 text-left hover:bg-surface-douce transition-colors focus-ring space-y-1"
                                 >
-                                    <Icon name="plus" size={14} aria-hidden="true" />
-                                    <span>Ajouter</span>
+                                    <div className="flex items-center gap-2 text-xs font-mono text-ink-300">
+                                        <span className="w-2.5 h-2.5 rounded-full gf-alloc-cash shrink-0" aria-hidden="true" />
+                                        <span className="truncate">Liquidités</span>
+                                    </div>
+                                    <div className="font-mono text-sm font-bold text-ink-50 tabular-nums">
+                                        <PrivateAmount>{formatCompactCAD(liquidites)}</PrivateAmount>
+                                    </div>
                                 </button>
                             </div>
-                        )}
-                    </section>
-                </aside>
-            </div>
 
-            {/* 3. BARRE DES SECTEURS & MODULES DU PATRIMOINE (8 ACCÈS DIRECTS EN RUBAN SUR MOBILE) */}
-            <section
-                aria-label="Accès visuel aux espaces"
-                className="premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure"
-            >
-                <div className="px-6 py-3.5 flex items-center justify-between gap-3">
-                    <h2 className="text-xs sm:text-sm font-mono text-ink-300">
-                        Secteurs & simulateurs
-                    </h2>
-                </div>
-                <div className="flex overflow-x-auto no-scrollbar sm:grid sm:grid-cols-4 lg:grid-cols-8 divide-x divide-bordure bg-fond">
-                    {tuilesLanceur.map((tuile) => (
-                        <button
-                            key={tuile.tab}
-                            type="button"
-                            onClick={() => setActiveTab(tuile.tab)}
-                            onMouseEnter={() => prefetchTab(tuile.tab)}
-                            className="touch-target shrink-0 min-w-[152px] sm:min-w-0 px-4 py-4 text-left hover:bg-surface-douce flex flex-col justify-between gap-2 transition-colors duration-100 focus-ring group"
-                        >
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="text-sm font-semibold text-ink-100 group-hover:text-ink-50 truncate">
-                                    {tuile.label}
-                                </span>
-                                <Icon
-                                    name={tuile.icon}
-                                    size={15}
-                                    className="text-ink-400 group-hover:text-ink-200 shrink-0 transition-colors duration-100"
+                            <div className="px-5 py-4 space-y-3">
+                                {/* Barre de pondération linéaire multicolore */}
+                                <div
+                                    className="h-2.5 w-full rounded-full bg-fond flex gap-0.5 gf-bar-grow overflow-hidden"
                                     aria-hidden="true"
-                                />
+                                >
+                                    {partsRepartition.map((part) => (
+                                        <div
+                                            key={`bar-${part.id}`}
+                                            style={{ width: `${isPrivacyMode ? 20 : Math.max(4, part.pct)}%` }}
+                                            className={`h-full rounded-full transition-opacity duration-150 ${part.classeBarre} ${
+                                                segmentActif === null || segmentActif === part.id ? 'opacity-100' : 'opacity-30'
+                                            }`}
+                                        />
+                                    ))}
+                                </div>
+
+                                <div className="relative h-[160px] w-full flex items-center justify-center">
+                                    <div
+                                        key={`${activeTab}-repartition-${lentilleHero}`}
+                                        data-testid="recharts-allocation-entrance"
+                                        data-active-tab={activeTab}
+                                        data-chart-lens={lentilleHero}
+                                        role="img"
+                                        aria-label="Anneau de répartition des avoirs par classe d'actifs — détail chiffré dans le tableau de données."
+                                        className="h-full w-full gf-chart-enter"
+                                    >
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie
+                                                    data={partsRepartition}
+                                                    dataKey="valeur"
+                                                    nameKey="label"
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    innerRadius={48}
+                                                    outerRadius={68}
+                                                    paddingAngle={2}
+                                                    stroke="none"
+                                                    isAnimationActive={true}
+                                                    animationBegin={30}
+                                                    animationDuration={360}
+                                                    animationEasing="ease-out"
+                                                    onMouseEnter={(_, idx) => {
+                                                        const item = partsRepartition[idx];
+                                                        if (item) setSegmentActif(item.id);
+                                                    }}
+                                                >
+                                                    {partsRepartition.map((entry) => (
+                                                        <Cell
+                                                            key={entry.id}
+                                                            fill={entry.couleur}
+                                                            opacity={
+                                                                segmentActif === null || segmentActif === entry.id ? 1 : 0.35
+                                                            }
+                                                        />
+                                                    ))}
+                                                </Pie>
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-3 space-y-0.5">
+                                        <span className="text-xs font-medium text-ink-300 truncate max-w-[96px]">
+                                            {partSelectionnee.label}
+                                        </span>
+                                        <PrivateAmount className="font-mono text-sm font-bold text-ink-50 tabular-nums">
+                                            {formatCompactCAD(partSelectionnee.valeur)}
+                                        </PrivateAmount>
+                                        <span className="text-xs font-mono tabular-nums text-ink-300">
+                                            <PrivateAmount>{`${partSelectionnee.pct} %`}</PrivateAmount>
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="space-y-0.5">
-                                <div className="text-xs text-ink-400 truncate">{tuile.sousTitre}</div>
-                                <PrivateAmount className="font-mono text-sm font-bold text-ink-50 tabular-nums truncate block">
-                                    {formatCompactCAD(tuile.valeur)}
-                                </PrivateAmount>
+
+                            <div
+                                role="group"
+                                aria-label="Sélection d'une enveloppe d'actifs"
+                                className="divide-y divide-bordure"
+                            >
+                                {partsRepartition.map((part) => (
+                                    <button
+                                        key={part.id}
+                                        type="button"
+                                        aria-pressed={partSelectionnee.id === part.id}
+                                        onMouseEnter={() => setSegmentActif(part.id)}
+                                        onFocus={() => setSegmentActif(part.id)}
+                                        onClick={() => setSegmentActif(part.id)}
+                                        className={`touch-target w-full px-5 py-3 flex items-center justify-between gap-3 text-sm transition-colors duration-100 focus-ring ${
+                                            partSelectionnee.id === part.id
+                                                ? 'bg-surface-douce text-ink-50 font-semibold'
+                                                : 'text-ink-200 hover:bg-surface-douce'
+                                        }`}
+                                    >
+                                        <span className="flex items-center gap-3 min-w-0 truncate">
+                                            <span
+                                                className={`w-2.5 h-2.5 rounded-full shrink-0 ${part.classeBarre}`}
+                                                aria-hidden="true"
+                                            />
+                                            <span className="truncate">{part.label}</span>
+                                        </span>
+                                        <span className="font-mono text-sm text-ink-100 tabular-nums shrink-0">
+                                            <PrivateAmount>{formatCompactCAD(part.valeur)}</PrivateAmount>
+                                            <span className="text-ink-400 ml-2">
+                                                <PrivateAmount>{`${part.pct}%`}</PrivateAmount>
+                                            </span>
+                                        </span>
+                                    </button>
+                                ))}
                             </div>
-                        </button>
-                    ))}
+                        </section>
+
+                        {/* Section 3 : Flux d'opérations récentes intégré */}
+                        <section
+                            aria-label="Opérations récentes"
+                            className="divide-y divide-bordure"
+                        >
+                            <div className="px-5 py-4 flex items-center justify-between gap-3">
+                                <div className="space-y-0.5">
+                                    <h2 className="text-base font-semibold text-ink-50 tracking-normal">
+                                        Activité récente
+                                    </h2>
+                                    <p className="text-xs text-ink-300">
+                                        Dernières écritures au journal
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab(Tab.TRANSACTIONS)}
+                                    onMouseEnter={() => prefetchTab(Tab.TRANSACTIONS)}
+                                    className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
+                                >
+                                    <span>Journal</span>
+                                    <Icon name="chevron-right" size={14} aria-hidden="true" />
+                                </button>
+                            </div>
+
+                            {operationsRecentes.length > 0 ? (
+                                <div className="divide-y divide-bordure">
+                                    {operationsRecentes.map((tx) => {
+                                        const estRevenu = tx.amount > 0;
+                                        return (
+                                            <button
+                                                key={tx.id}
+                                                type="button"
+                                                onClick={() => setActiveTab(Tab.TRANSACTIONS)}
+                                                className="gf-row touch-target w-full px-5 py-3.5 flex items-center justify-between gap-3 text-left focus-ring"
+                                            >
+                                                <div className="min-w-0 flex-1 space-y-0.5">
+                                                    <div className="text-sm font-medium text-ink-50 truncate">
+                                                        <PrivateText quoi="marchand">{tx.payee}</PrivateText>
+                                                    </div>
+                                                    <div className="text-xs text-ink-400 truncate font-mono tabular-nums">
+                                                        {tx.date.slice(5)} · <PrivateText quoi="categorie">{tx.category}</PrivateText>
+                                                    </div>
+                                                </div>
+                                                <PrivateAmount
+                                                    className={`font-mono text-sm font-semibold tabular-nums shrink-0 ${
+                                                        estRevenu ? 'text-succes-texte' : 'text-ink-200'
+                                                    }`}
+                                                >
+                                                    {`${estRevenu ? '+' : '−'}${formatCAD(Math.abs(tx.amount))}`}
+                                                </PrivateAmount>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="px-5 py-7 text-center space-y-2.5">
+                                    <p className="text-sm text-ink-300">Aucune opération enregistrée</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveTab(Tab.TRANSACTIONS)}
+                                        className="touch-target px-4 py-2 rounded-full bg-accent text-sur-accent text-xs sm:text-sm font-semibold inline-flex items-center gap-2 focus-ring"
+                                    >
+                                        <Icon name="plus" size={14} aria-hidden="true" />
+                                        <span>Ajouter</span>
+                                    </button>
+                                </div>
+                            )}
+                        </section>
+                    </aside>
                 </div>
             </section>
-
-            {/* 4. EXÉCUTION BUDGÉTAIRE (6 MOIS) & OBJECTIFS FINANCIERS */}
-            <div className="space-y-6">
-                <MonthlySpendingVsBudgetChart
-                    transactions={state.transactions}
-                    budgetItems={state.budgetItems}
-                    isPrivacyMode={isPrivacyMode}
-                />
-
-                <FinancialGoalsProgressSection
-                    goals={state.financialGoals ?? []}
-                    todayIso={todayIso}
-                />
-            </div>
 
             {/* Alternatives textuelles accessibles pour les deux graphiques Recharts */}
             <ChartDataTable
