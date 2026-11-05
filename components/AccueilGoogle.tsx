@@ -1,9 +1,10 @@
-import React, { Suspense, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useMemo, useRef, useState } from 'react';
 import {
     ComposedChart,
     CartesianGrid,
     Area,
     Line,
+    ReferenceArea,
     ReferenceLine,
     ReferenceDot,
     PieChart,
@@ -15,9 +16,42 @@ import {
     ResponsiveContainer,
 } from 'recharts';
 import { Tab, type AppState } from '../types';
+import type { ProjectionChartPoint } from '../services/projection/types';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { useNetWorthVariation } from '../hooks/useNetWorthVariation';
-import { useTodayIsoLocal } from '../hooks/useSimulationParams';
+import { useSimulationParams, useTodayIsoLocal } from '../hooks/useSimulationParams';
+import { buildPastPrefix } from '../services/history/buildPastPrefix';
+import { buildDailyPastLedger } from '../services/history/dailyPastLedger';
+import { reconstructRealEstateEquityByYear } from '../services/history/reconstructRealEstateEquity';
+import { computePrivateBusinessValue } from '../services/projection/privateBusinessValue';
+import { buildDailyLedger } from '../services/projection/dailyLedger';
+import {
+    isoDate,
+    finiteAnchorRun,
+    calendarFromMonthIndex,
+    axisXForIso,
+} from '../services/projection/dailyRefine';
+import {
+    mergeDailyRealPoint,
+    sliceDailyRangeByX,
+    decimateForRender,
+    realOnlyMonthPoints,
+    buildEnrichedMonth,
+} from '../services/projection/dailyCurve';
+import { buildLockedByMonth } from '../utils/lockedCurveOverlay';
+import { reperesRonds } from '../utils/reperesRonds';
+import { GF_CROSSHAIR_CURSOR, GF_ACTIVE_DOT, resolvePointByX } from '../utils/chartTooltip';
+import { kpiPatrimoine } from './projection/kpiPatrimoine';
+import { RefLineLabel, TodayValueBadge } from './projection/ProjectionTooltip';
+import { couleurSerie } from './future/seriesConfig';
+import {
+    detteSousZero,
+    COULEUR_DETTE,
+    detteLevierSousZero,
+    COULEUR_LEVIER,
+    LIBELLE_LEVIER,
+} from './future/detteSerie';
+import { indexAujourdhui } from './future/panneauPas';
 import { presentTermesOfGoal, monthsSince } from '../services/projection/pastPurchaseInit';
 import { assetValueCad, computeMonthlyBudgetAggregates, toCurrencyFactor } from '../services/portfolio';
 import { computePurchaseStats } from '../utils/assetPurchases';
@@ -38,6 +72,17 @@ import { HubConnexionsModal } from './future/HubConnexionsModal';
 import { useFirebaseAuth } from './auth/FirebaseAuthGate';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { prefetchTab } from '../utils/tabPrefetch';
+
+const EMPTY_CHART_POINTS: ProjectionChartPoint[] = [];
+const X_AXIS_DOMAIN: ['dataMin', 'dataMax'] = ['dataMin', 'dataMax'];
+const RENDER_MAX_POINTS = 700;
+const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'] as const;
+
+const CURVE_FIELDS: ReadonlySet<string> = new Set([
+    'Liquidites', 'CELI', 'CELIAPP', 'REER', 'REEE', 'NonReg', 'Crypto', 'Immobilier', 'Entreprise',
+    'ImpotLatent', 'FluxImpots', 'P10', 'P50', 'P90', 'NetWorth', 'lockedNetWorth',
+    'DettesNonImmo', 'DetteLevierSmith', 'year', 'age', 'isPast',
+]);
 
 const GeminiAssistantModal = lazyWithRetry(
     () => import('./aiChat/GeminiAssistantModal').then((m) => ({ default: m.GeminiAssistantModal })),
@@ -61,7 +106,7 @@ type LentilleHero = 'net' | 'portefeuille' | 'liquidites' | 'immobilier';
 type ModeCourbe = 'nette' | 'complete';
 type SousOngletCentre = 'avoirs' | 'insights' | 'transactions' | 'evenements';
 
-interface PointTrajectoire {
+type PointTrajectoire = ProjectionChartPoint & {
     annee: string;
     valeur: number | null;
     valeurPresent: number | null;
@@ -69,7 +114,8 @@ interface PointTrajectoire {
     periode: 'present' | 'transition' | 'futur';
     avoirs: number | null;
     dettes: number;
-}
+    portefeuille: number | null;
+};
 
 interface PartRepartition {
     id: string;
@@ -250,8 +296,19 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 }) => {
     const variation = useNetWorthVariation();
     const lastProjection = useFinanceStore((s) => s.lastProjection);
+    const runMC = useFinanceStore((s) => s.projectionRunMC);
+    const lockedProjection = useFinanceStore((s) => s.lockedProjection);
+    const isProjectionLocked = useFinanceStore((s) => s.isProjectionLocked);
+    const fintableSyncAt = useFinanceStore((s) => s.fintableSyncReport?.at);
     const activeTab = useFinanceStore((s) => s.activeTab);
     const todayIso = useTodayIsoLocal();
+    const {
+        pastHistory,
+        calculatedStartingCash,
+        startYear,
+        startMonth,
+        todayMonthIndex,
+    } = useSimulationParams(calculatedMonthlySavings);
     const { syncStatus, syncWorkspaceNow } = useFirebaseAuth();
 
     const [requete, setRequete] = useState('');
@@ -265,6 +322,10 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     const [segmentActif, setSegmentActif] = useState<string | null>(null);
     const [showConnexionsModal, setShowConnexionsModal] = useState(false);
     const [showGeminiModal, setShowGeminiModal] = useState(false);
+    const [pointSurvole, setPointSurvole] = useState<ProjectionChartPoint | null>(null);
+    const [pointFige, setPointFige] = useState<ProjectionChartPoint | null>(null);
+    const chartContainerRef = useRef<HTMLDivElement | null>(null);
+    const lastHoverPointRef = useRef<ProjectionChartPoint | null>(null);
 
     // Calcul immobilier cohérent avec FutureKpiStrip (avoirs − dettes = patrimoine net)
     const { realEstateEquity, realEstateValeur, realEstateHypotheque } = useMemo(() => {
@@ -544,328 +605,506 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         epargneMensuelle,
     ]);
 
-    const donneesTrajectoire = useMemo<PointTrajectoire[]>(() => {
-        const ratioLentille =
-            lentilleHero === 'net'
-                ? 1
-                : patrimoineNet > 0
-                  ? Math.max(0, Math.min(1.5, valeurHeroAffichee / patrimoineNet))
-                  : 0;
-
-        const dettesReelles = Math.max(0, Math.round(totalDettes));
-        const valeurActuelle = Math.round(valeurHeroAffichee);
-
-        // 1. Reconstitution fidèle des 30 derniers jours (Présent : 1 mois d'historique)
-        // Combine les flux quotidiens réels d'encaisse (hors doublons/transferts) et l'historique daté des placements
-        const aujMs = Date.parse(`${todayIso}T12:00:00Z`) || Date.now();
-        const flux30j = new Array<number>(30).fill(0);
-        for (const tx of state.transactions ?? []) {
-            if (tx.isDuplicate || tx.isTransfer || !Number.isFinite(tx.amount)) continue;
-            const txMs = Date.parse(`${tx.date.slice(0, 10)}T12:00:00Z`);
-            if (!Number.isFinite(txMs)) continue;
-            const diffJ = Math.floor((aujMs - txMs) / 86_400_000);
-            if (diffJ >= 0 && diffJ < 30) {
-                flux30j[29 - diffJ] = (flux30j[29 - diffJ] ?? 0) + tx.amount;
-            }
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PIPELINE DE COURBE IDENTIQUE À FUTUR (FutureProjection.tsx) :
+    // buildPastPrefix + lastProjection.chartData → buildDailyPastLedger + buildDailyLedger
+    // → mergeDailyRealPoint + realOnlyMonthPoints → sliceDailyRangeByX + decimateForRender
+    // ═══════════════════════════════════════════════════════════════════════════
+    const chartDataMoteur = useMemo<ProjectionChartPoint[]>(() => {
+        if (lastProjection?.chartData && lastProjection.chartData.length >= 2) {
+            return lastProjection.chartData;
         }
-
-        // Série d'encaisse sur 30 jours (ancrée sur la liquidité actuelle au jour 29)
-        const serieCash30j = new Array<number>(30).fill(liquidites);
-        let cashCourant = liquidites;
-        for (let i = 29; i >= 1; i--) {
-            cashCourant = cashCourant - (flux30j[i] ?? 0);
-            serieCash30j[i - 1] = cashCourant;
-        }
-
-        // Série des placements sur 30 jours à partir de fintableBrokerHistory (si disponible) ou de la variation 30j (strictement hors liquidités)
-        const valeurPlacementsActuelle = portefeuillePlacements;
-        const seriePlacements30j = (() => {
-            const parInstant = new Map<number, number>();
-            for (const entree of state.fintableBrokerHistory ?? []) {
-                const t = Number(entree.at) || 0;
-                const v = Number(entree.balanceCad) || 0;
-                if (t > 0 && Number.isFinite(v)) {
-                    parInstant.set(t, (parInstant.get(t) ?? 0) + v);
-                }
-            }
-            const instantsTries = [...parInstant.entries()]
-                .sort((a, b) => a[0] - b[0])
-                .map(([, somme]) => somme);
-            if (instantsTries.length >= 2) {
-                return construireSerie1Mois(
-                    valeurPlacementsActuelle,
-                    [...instantsTries, valeurPlacementsActuelle],
-                    0,
-                );
-            }
-            const seriesActifs30j = (state.assets ?? [])
-                .map((a) => {
-                    const fxFactor = toCurrencyFactor(state.fxRates, a.currency || 'CAD');
-                    const hist = (a.priceHistory ?? [])
-                        .map((p) => p.price * (a.quantity || 1) * fxFactor)
-                        .filter((v) => Number.isFinite(v) && v > 0);
-                    if (hist.length >= 2) {
-                        return construireSerie1Mois(assetValueCad(a, state.fxRates), hist, 0);
-                    }
-                    return [];
-                })
-                .filter((s) => s.length === 30);
-            if (seriesActifs30j.length > 0) {
-                const sommeBrute = Array.from({ length: 30 }, (_, idx) =>
-                    seriesActifs30j.reduce((acc, s) => acc + (s[idx] ?? 0), 0),
-                );
-                return construireSerie1Mois(valeurPlacementsActuelle, sommeBrute, 0);
-            }
-            const deltaPlacements =
-                variation && Number.isFinite(variation.diff) && variation.diff !== 0
-                    ? variation.diff - (serieCash30j[29]! - serieCash30j[0]!)
-                    : Math.round(epargneMensuelle * 0.65);
-            return construireSerie1Mois(valeurPlacementsActuelle, [], deltaPlacements);
-        })();
-
-        // Reconstruit les 30 points journaliers du patrimoine (J-29 .. Aujourd'hui), ancrés exactement sur valeurActuelle au jour 29
-        const seriePatrimoine30j = Array.from({ length: 30 }, (_, idx) => {
-            if (idx === 29) return valeurActuelle;
-            if (lentilleHero === 'portefeuille') {
-                return Math.max(0, Math.round(seriePlacements30j[idx] ?? valeurActuelle));
-            }
-            if (lentilleHero === 'liquidites') {
-                return Math.max(0, Math.round(serieCash30j[idx] ?? valeurActuelle));
-            }
-            if (lentilleHero === 'immobilier') {
-                const deltaImmo = Math.round(valeurActuelle * 0.003 * ((29 - idx) / 29));
-                return Math.max(0, valeurActuelle - deltaImmo);
-            }
-            const ecartCash = (serieCash30j[idx] ?? liquidites) - liquidites;
-            const ecartPlacements =
-                (seriePlacements30j[idx] ?? valeurPlacementsActuelle) - valeurPlacementsActuelle;
-            return Math.max(0, Math.round(valeurActuelle + (ecartCash + ecartPlacements) * (ratioLentille || 1)));
-        });
-
-        const dettesLentille = lentilleHero === 'net' ? dettesReelles : 0;
-        const pointAujourdHui: PointTrajectoire = {
-            annee: 'Aujourd’hui',
-            valeur: valeurActuelle,
-            valeurPresent: valeurActuelle,
-            valeurFutur: valeurActuelle,
-            periode: 'transition',
-            avoirs: Math.max(0, valeurActuelle + dettesLentille),
-            dettes: dettesLentille,
+        // Repli honnête (ex: avant la 1re passe de ProjectionEngine ou en test unitaire isolé) :
+        // point présent réel à todayMonthIndex construit à partir des soldes réels du bilan
+        const ageCourant = state.config?.users?.[0]?.age ?? 35;
+        const pointPresent: ProjectionChartPoint = {
+            name: `${startYear}`,
+            monthIndex: todayMonthIndex,
+            year: startYear,
+            age: ageCourant,
+            dateLabel: todayIso,
+            NetWorth: patrimoineNet,
+            Liquidites: liquidites,
+            CELI: Math.max(0, Math.round(assetBreakdown.celi || 0)),
+            CELIAPP: 0,
+            REER: Math.max(0, Math.round(assetBreakdown.reer || 0)),
+            REEE: Math.max(0, Math.round(assetBreakdown.reee || 0)),
+            NonReg: Math.max(0, Math.round(assetBreakdown.nonReg || 0)),
+            Crypto: 0,
+            Immobilier: realEstateEquity,
+            Entreprise: 0,
+            DettesNonImmo: Math.max(0, Math.round(Number.isFinite(dettesHorsImmo) ? dettesHorsImmo : 0)),
         };
-
-        const chartData = lastProjection?.chartData ?? [];
-        const pointsFutursMoteur = chartData.filter((pt) => typeof pt.monthIndex === 'number' && pt.monthIndex > 0);
-
-        // Extraction exacte des grandeurs projetées par le moteur selon la lentille sélectionnée (no-fake-data)
-        const extraireValeurMoteur = (pt: (typeof pointsFutursMoteur)[number] | undefined): number | null => {
-            if (!pt) return null;
-            if (lentilleHero === 'net') {
-                return Number.isFinite(pt.NetWorth) ? Math.round(pt.NetWorth) : null;
-            }
-            if (lentilleHero === 'portefeuille') {
-                const celi = Number(pt.CELI) || 0;
-                const celiapp = Number(pt.CELIAPP) || 0;
-                const reer = Number(pt.REER) || 0;
-                const reee = Number(pt.REEE) || 0;
-                const nonreg = Number(pt.NonReg) || 0;
-                const crypto = Number(pt.Crypto) || 0;
-                const totalPortefeuille = celi + celiapp + reer + reee + nonreg + crypto;
-                return Number.isFinite(totalPortefeuille) ? Math.round(totalPortefeuille) : null;
-            }
-            if (lentilleHero === 'liquidites') {
-                const liq = Number(pt.Liquidites);
-                return Number.isFinite(liq) ? Math.round(liq) : 0;
-            }
-            if (lentilleHero === 'immobilier') {
-                const immo = Number(pt.Immobilier);
-                return Number.isFinite(immo) ? Math.round(immo) : 0;
-            }
-            return Number.isFinite(pt.NetWorth) ? Math.round(pt.NetWorth) : null;
+        const calSuivant = calendarFromMonthIndex(startYear, startMonth, todayMonthIndex + 1);
+        const pointMoisSuivant: ProjectionChartPoint = {
+            ...pointPresent,
+            name: `${calSuivant.year}`,
+            monthIndex: todayMonthIndex + 1,
+            year: calSuivant.year,
+            age: Number((ageCourant + 1 / 12).toFixed(2)),
+            dateLabel: `${MOIS_COURTS[calSuivant.month] ?? ''} ${calSuivant.year}`,
+            NetWorth: patrimoineNet + epargneMensuelle,
+            Liquidites: Math.max(0, liquidites + epargneMensuelle),
         };
-
-        // Mode par défaut 1M : courbe précise sur 1 mois d'historique (14 jalons + Aujourd'hui) et 1 mois projeté (+2j .. +1M)
-        if (horizon === '1M') {
-            const indicesJoursPasses = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28];
-            const pointsPresent1MoisDetail: PointTrajectoire[] = indicesJoursPasses.map((idxJour) => {
-                const joursAvant = 30 - idxJour;
-                const val = seriePatrimoine30j[idxJour] ?? valeurActuelle;
-                return {
-                    annee: `J-${joursAvant}`,
-                    valeur: val,
-                    valeurPresent: val,
-                    valeurFutur: null,
-                    periode: 'present' as const,
-                    avoirs: Math.max(0, val + dettesReelles),
-                    dettes: dettesReelles,
-                };
-            });
-
-            const premierMois = pointsFutursMoteur.find((p) => p.monthIndex === 1) ?? pointsFutursMoteur[0];
-            const cibleMoteur = extraireValeurMoteur(premierMois);
-
-            const etapesFuturesJours = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
-            const pointsFutur1Mois: PointTrajectoire[] = etapesFuturesJours.map((jour) => {
-                if (cibleMoteur === null) {
-                    return {
-                        annee: jour === 30 ? '+1M' : `+${jour}j`,
-                        valeur: null,
-                        valeurPresent: null,
-                        valeurFutur: null,
-                        periode: 'futur' as const,
-                        avoirs: null,
-                        dettes: dettesReelles,
-                    };
-                }
-                const frac = jour / 30;
-                const val = Math.round(valeurActuelle + (cibleMoteur - valeurActuelle) * frac);
-                return {
-                    annee: jour === 30 ? '+1M' : `+${jour}j`,
-                    valeur: val,
-                    valeurPresent: null,
-                    valeurFutur: val,
-                    periode: 'futur' as const,
-                    avoirs: Math.max(0, val + dettesReelles),
-                    dettes: dettesReelles,
-                };
-            });
-
-            return [...pointsPresent1MoisDetail, pointAujourdHui, ...pointsFutur1Mois];
-        }
-
-        // Horizons > 1M (1A, 5A, 10A, MAX) : durées et nombres de jalons STRICTEMENT symétriques entre Présent (gauche) et Futur (droite)
-        const moisEtapesSymetriques: number[] =
-            horizon === '1A'
-                ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-                : horizon === '5A'
-                  ? [6, 12, 18, 24, 30, 36, 42, 48, 54, 60]
-                  : horizon === '10A'
-                    ? [12, 24, 36, 48, 60, 72, 84, 96, 108, 120]
-                    : [36, 72, 108, 144, 180, 216, 252, 288, 324, 360];
-
-        const formaterLabelMois = (mois: number, signe: '-' | '+'): string => {
-            if (horizon === '1A') return `${signe}${mois}m`;
-            if (horizon === '5A') {
-                if (mois < 12) return `${signe}${mois}m`;
-                const ans = mois / 12;
-                return Number.isInteger(ans) ? `${signe}${ans}A` : `${signe}${ans.toFixed(1).replace('.', ',')}A`;
-            }
-            return `${signe}${Math.round(mois / 12)}A`;
-        };
-
-        const epargneRef = Math.max(500, Math.round(epargneMensuelle * (ratioLentille || 1)));
-        const fluxNetParMois = new Map<string, number>();
-        for (const tx of state.transactions ?? []) {
-            if (!tx || tx.isDuplicate || tx.isTransfer || !Number.isFinite(tx.amount)) continue;
-            const ym = (tx.date ?? '').slice(0, 7);
-            if (ym.length === 7) {
-                fluxNetParMois.set(ym, (fluxNetParMois.get(ym) ?? 0) + tx.amount);
-            }
-        }
-
-        const dateRef = new Date(`${todayIso}T00:00:00Z`);
-        const pointsPresentSymetriques: PointTrajectoire[] = [...moisEtapesSymetriques]
-            .reverse()
-            .map((moisRecul) => {
-                // Reconstruction fidèle du patrimoine à -moisRecul mois : flux réels sur les mois couverts + épargne/rendement composés
-                let deltaCumule = 0;
-                for (let m = 0; m < moisRecul; m++) {
-                    const d = new Date(Date.UTC(dateRef.getUTCFullYear(), dateRef.getUTCMonth() - m, 1));
-                    const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-                    const fluxMois = fluxNetParMois.get(ym);
-                    const apportMois =
-                        fluxMois !== undefined
-                            ? Math.max(-epargneRef * 2, Math.min(epargneRef * 3, Math.round(fluxMois * (ratioLentille || 1))))
-                            : epargneRef;
-                    const rendementMois = Math.round(Math.max(10_000, valeurActuelle - deltaCumule) * 0.0042);
-                    deltaCumule += apportMois + rendementMois;
-                }
-                const val = Math.max(0, Math.round(valeurActuelle - deltaCumule));
-                return {
-                    annee: formaterLabelMois(moisRecul, '-'),
-                    valeur: val,
-                    valeurPresent: val,
-                    valeurFutur: null,
-                    periode: 'present' as const,
-                    avoirs: Math.max(0, val + dettesReelles),
-                    dettes: dettesReelles,
-                };
-            });
-
-        const trouverPointMoteur = (moisCible: number) => {
-            if (pointsFutursMoteur.length === 0) return null;
-            let meilleur = pointsFutursMoteur[0]!;
-            let meilleurEcart = Math.abs(meilleur.monthIndex - moisCible);
-            for (const pt of pointsFutursMoteur) {
-                const ecart = Math.abs(pt.monthIndex - moisCible);
-                if (ecart < meilleurEcart) {
-                    meilleur = pt;
-                    meilleurEcart = ecart;
-                }
-            }
-            return meilleur;
-        };
-
-        const pointsFuturSymetriques: PointTrajectoire[] = moisEtapesSymetriques.map((moisAvance) => {
-            const ptMoteur = trouverPointMoteur(moisAvance);
-            const valReelle = extraireValeurMoteur(ptMoteur ?? undefined);
-            const dettesPt =
-                ptMoteur && Number.isFinite(Number(ptMoteur.DettesNonImmo))
-                    ? Math.max(0, Math.round(Number(ptMoteur.DettesNonImmo)))
-                    : dettesReelles;
-            return {
-                annee: formaterLabelMois(moisAvance, '+'),
-                valeur: valReelle,
-                valeurPresent: null,
-                valeurFutur: valReelle,
-                periode: 'futur' as const,
-                avoirs: valReelle !== null ? Math.max(0, valReelle + dettesPt) : null,
-                dettes: dettesPt,
-            };
-        });
-
-        return [...pointsPresentSymetriques, pointAujourdHui, ...pointsFuturSymetriques];
+        return lastProjection?.chartData?.length === 1
+            ? [lastProjection.chartData[0]!, pointMoisSuivant]
+            : [pointPresent, pointMoisSuivant];
     }, [
+        lastProjection?.chartData,
+        state.config?.users,
+        startYear,
+        startMonth,
+        todayMonthIndex,
         todayIso,
-        horizon,
-        lentilleHero,
-        lastProjection,
         patrimoineNet,
-        valeurHeroAffichee,
-        totalDettes,
         liquidites,
-        portefeuillePlacements,
-        state.transactions,
-        state.fintableBrokerHistory,
-        state.assets,
-        state.fxRates,
-        variation,
+        assetBreakdown,
+        realEstateEquity,
+        dettesHorsImmo,
         epargneMensuelle,
     ]);
 
-    // Domaine Y dynamique façon Google Finance : cadre la variation réelle sans écraser la courbe à 0 $
-    const domaineYTrajectoire = useMemo<[number, number]>(() => {
+    const fireNumber = lastProjection?.fireNumber ?? indicateursPouls.cibleRetraite;
+    const rawDebtNonImmo = chartDataMoteur[0]?.DettesNonImmo;
+    const currentDebtNonImmo = Number(rawDebtNonImmo) || Math.max(0, Math.round(Number.isFinite(dettesHorsImmo) ? dettesHorsImmo : 0));
+    const storeDebts = useMemo(() => state.debts ?? [], [state.debts]);
+    const privateBusinessValue = useMemo(
+        () => computePrivateBusinessValue(state.privateBusinesses),
+        [state.privateBusinesses],
+    );
+
+    const pastPrefix = useMemo(() => {
+        const built = buildPastPrefix({
+            pastHistoryPoints: pastHistory.points,
+            transactions: state.transactions ?? [],
+            calculatedStartingCash: calculatedStartingCash || liquidites,
+            realEstateGoals: state.realEstateGoals ?? [],
+            startYear,
+            startMonth,
+            todayIso,
+            currentDebtNonImmo,
+            debts: storeDebts,
+            privateBusinessValue,
+        });
+        return {
+            points: (built.points.length ? built.points : EMPTY_CHART_POINTS) as unknown as ProjectionChartPoint[],
+            fluxPeriodeAnnulee: built.fluxPeriodeAnnulee,
+        };
+    }, [
+        pastHistory.points,
+        state.transactions,
+        calculatedStartingCash,
+        liquidites,
+        state.realEstateGoals,
+        startYear,
+        startMonth,
+        todayIso,
+        currentDebtNonImmo,
+        storeDebts,
+        privateBusinessValue,
+    ]);
+
+    const pastPrefixPoints = pastPrefix.points;
+
+    const lockedByMonth = useMemo(
+        () => buildLockedByMonth(lockedProjection, isProjectionLocked, (p) => p.NetWorth ?? NaN),
+        [isProjectionLocked, lockedProjection],
+    );
+
+    const displayData = useMemo<ProjectionChartPoint[]>(() => {
+        const base: ProjectionChartPoint[] = pastPrefixPoints.length
+            ? [...pastPrefixPoints, ...chartDataMoteur]
+            : chartDataMoteur;
+        if (!lockedByMonth) return base;
+        return base.map((d) => ({ ...d, lockedNetWorth: lockedByMonth.get(d.monthIndex) }));
+    }, [pastPrefixPoints, chartDataMoteur, lockedByMonth]);
+
+    const pastStartIndex = pastPrefixPoints.length ? pastPrefixPoints[0]!.monthIndex : (displayData[0]?.monthIndex ?? 0);
+    const lastMonthIndex = chartDataMoteur.length > 0 ? chartDataMoteur[chartDataMoteur.length - 1]!.monthIndex : todayMonthIndex;
+
+    const dailyAnchors = useMemo(
+        () => finiteAnchorRun(displayData, startYear, startMonth),
+        [displayData, startYear, startMonth],
+    );
+
+    const todayAxisX = useMemo(
+        () => axisXForIso(startYear, startMonth, todayIso),
+        [startYear, startMonth, todayIso],
+    );
+
+    const syncConfirmedUntilIso = useMemo(() => {
+        if (!Number.isFinite(fintableSyncAt)) return null;
+        const d = new Date(fintableSyncAt as number);
+        return isoDate(d.getFullYear(), d.getMonth(), d.getDate());
+    }, [fintableSyncAt]);
+
+    const dailyPastFrom = useMemo(() => {
+        const first = dailyAnchors[0];
+        if (!first) return null;
+        const firstIso = isoDate(first.year, first.month, 1);
+        return firstIso < todayIso ? firstIso : null;
+    }, [dailyAnchors, todayIso]);
+
+    const dailyPastByDate = useMemo(() => {
+        if (!dailyPastFrom) return null;
+        const built = buildDailyPastLedger({
+            from: dailyPastFrom,
+            to: todayIso,
+            today: todayIso,
+            transactions: state.transactions ?? [],
+            currentCash: calculatedStartingCash || liquidites,
+            assets: state.assets ?? [],
+            fx: state.fxRates ?? {},
+            equityByYear: reconstructRealEstateEquityByYear(state.realEstateGoals ?? [], startYear),
+            currentDebtNonImmo,
+            debts: storeDebts,
+            privateBusinessValue,
+        });
+        return built.rows.length ? new Map(built.rows.map((r) => [r.date, r])) : null;
+    }, [
+        dailyPastFrom,
+        todayIso,
+        state.transactions,
+        calculatedStartingCash,
+        liquidites,
+        state.assets,
+        state.fxRates,
+        state.realEstateGoals,
+        startYear,
+        currentDebtNonImmo,
+        storeDebts,
+        privateBusinessValue,
+    ]);
+
+    const dailyDated = useMemo(() => {
+        const monthlyNetSalary = (state.config?.users ?? []).reduce((s, u) => s + (Number(u?.netSalary) || 0), 0);
+        const monthlyDebtPayment = (state.debts ?? []).reduce((acc, d) => acc + (Number(d?.minimumPayment) || 0), 0);
+        return {
+            recurring: state.subscriptions ?? [],
+            monthlyNetSalary,
+            monthlyDebtPayment,
+        };
+    }, [state.config?.users, state.debts, state.subscriptions]);
+
+    const dailyAll = useMemo<ProjectionChartPoint[]>(() => {
+        if (dailyAnchors.length < 2) return EMPTY_CHART_POINTS;
+        const keep = new Set(dailyAnchors.map((a) => a.monthIndex));
+        const months = displayData.filter((p) => keep.has(p.monthIndex));
+        if (months.length < 2) return EMPTY_CHART_POINTS;
+
+        const days = buildDailyLedger({
+            months,
+            startYear,
+            startMonth,
+            dated: dailyDated,
+            fields: CURVE_FIELDS,
+        });
+        if (days.length === 0) return EMPTY_CHART_POINTS;
+
+        const points = days
+            .map((d) =>
+                mergeDailyRealPoint(
+                    d,
+                    startYear,
+                    startMonth,
+                    dailyPastByDate,
+                    CURVE_FIELDS,
+                    syncConfirmedUntilIso,
+                    todayIso,
+                ),
+            )
+            .filter((p): p is ProjectionChartPoint => p !== null);
+        if (points.length === 0) return EMPTY_CHART_POINTS;
+
+        const anchorHost = months[0]!.monthIndex;
+        const anchorDays = realOnlyMonthPoints(
+            anchorHost,
+            startYear,
+            startMonth,
+            dailyPastByDate,
+            CURVE_FIELDS,
+            syncConfirmedUntilIso,
+        );
+        if (anchorDays.length > 0) return [...anchorDays, ...points];
+        const { FluxImpots: _anchorFlux, ...anchorRest } = months[0] as ProjectionChartPoint & { FluxImpots?: number };
+        return [anchorRest as ProjectionChartPoint, ...points];
+    }, [dailyAnchors, displayData, startYear, startMonth, dailyDated, dailyPastByDate, syncConfirmedUntilIso, todayIso]);
+
+    const enrichCache = useMemo(
+        () => ({
+            byHost: new Map<number, Map<string, ProjectionChartPoint>>(),
+        }),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [displayData, dailyDated, dailyPastByDate, startYear, startMonth, syncConfirmedUntilIso, todayIso],
+    );
+
+    const enrichDailyPoint = useCallback(
+        (p: ProjectionChartPoint | null): ProjectionChartPoint | null => {
+            if (!p) return null;
+            const host = p.hostMonthIndex;
+            const iso = p.dayIso;
+            if (typeof host !== 'number' || typeof iso !== 'string') return p;
+            const cached = enrichCache.byHost.get(host);
+            if (cached) return cached.get(iso) ?? p;
+
+            const byIso = buildEnrichedMonth(
+                displayData,
+                host,
+                startYear,
+                startMonth,
+                dailyPastByDate,
+                dailyDated,
+                buildDailyLedger as never,
+                syncConfirmedUntilIso,
+                todayIso,
+            );
+            if (!byIso) return p;
+            enrichCache.byHost.set(host, byIso);
+            return byIso.get(iso) ?? p;
+        },
+        [displayData, startYear, startMonth, dailyDated, dailyPastByDate, enrichCache, syncConfirmedUntilIso, todayIso],
+    );
+
+    // Bornes temporelles de la fenêtre selon l'horizon sélectionné (1M, 1A, 5A, 10A, MAX = Tout)
+    const xAuj = todayAxisX ?? todayMonthIndex;
+    const bornesHorizonMois = useMemo<[number, number]>(() => {
+        const minMois = Math.min(pastStartIndex, xAuj);
+        const maxMois = Math.max(lastMonthIndex, xAuj);
+        if (horizon === '1M') {
+            return [Math.max(minMois, xAuj - 1), Math.min(maxMois, xAuj + 1)];
+        }
+        if (horizon === '1A') {
+            return [Math.max(minMois, xAuj - 12), Math.min(maxMois, xAuj + 12)];
+        }
+        if (horizon === '5A') {
+            return [minMois, Math.min(maxMois, xAuj + 60)];
+        }
+        if (horizon === '10A') {
+            return [minMois, Math.min(maxMois, xAuj + 120)];
+        }
+        return [minMois, maxMois];
+    }, [horizon, pastStartIndex, lastMonthIndex, xAuj]);
+
+    const dailyWindowRange = useMemo<[number, number]>(() => {
+        if (dailyAll.length === 0) return [0, 0];
+        return sliceDailyRangeByX(dailyAll, bornesHorizonMois[0], bornesHorizonMois[1]);
+    }, [dailyAll, bornesHorizonMois]);
+
+    const daysInWindow = useMemo<ProjectionChartPoint[]>(
+        () => dailyAll.slice(dailyWindowRange[0], dailyWindowRange[1]),
+        [dailyAll, dailyWindowRange],
+    );
+
+    const isDailyCurve = daysInWindow.length >= 2;
+
+    const chartSeriesBrute = useMemo<ProjectionChartPoint[]>(() => {
+        if (isDailyCurve) {
+            return decimateForRender(daysInWindow, dailyWindowRange[0], RENDER_MAX_POINTS);
+        }
+        const filtree = displayData.filter(
+            (p) => p.monthIndex >= bornesHorizonMois[0] && p.monthIndex <= bornesHorizonMois[1],
+        );
+        return filtree.length >= 2 ? filtree : displayData;
+    }, [isDailyCurve, daysInWindow, dailyWindowRange, displayData, bornesHorizonMois]);
+
+    const extraireValeurLentillePoint = useCallback(
+        (pt: ProjectionChartPoint | null | undefined): number | null => {
+            if (!pt) return null;
+            const celi = Number(pt.CELI) || 0;
+            const celiapp = Number(pt.CELIAPP) || 0;
+            const reer = Number(pt.REER) || 0;
+            const reee = Number(pt.REEE) || 0;
+            const nonreg = Number(pt.NonReg) || 0;
+            const crypto = Number(pt.Crypto) || 0;
+            const portefeuillePt = celi + celiapp + reer + reee + nonreg + crypto;
+            if (lentilleHero === 'portefeuille') {
+                return Number.isFinite(portefeuillePt) ? Math.round(portefeuillePt) : null;
+            }
+            if (lentilleHero === 'liquidites') {
+                const liq = Number(pt.Liquidites);
+                return Number.isFinite(liq) ? Math.round(liq) : null;
+            }
+            if (lentilleHero === 'immobilier') {
+                const immo = Number(pt.Immobilier);
+                return Number.isFinite(immo) ? Math.round(immo) : null;
+            }
+            return typeof pt.NetWorth === 'number' && Number.isFinite(pt.NetWorth)
+                ? Math.round(pt.NetWorth)
+                : null;
+        },
+        [lentilleHero],
+    );
+
+    const donneesTrajectoire = useMemo<PointTrajectoire[]>(() => {
+        return chartSeriesBrute.map((pt) => {
+            const celi = Number(pt.CELI) || 0;
+            const celiapp = Number(pt.CELIAPP) || 0;
+            const reer = Number(pt.REER) || 0;
+            const reee = Number(pt.REEE) || 0;
+            const nonreg = Number(pt.NonReg) || 0;
+            const crypto = Number(pt.Crypto) || 0;
+            const liq = Number(pt.Liquidites) || 0;
+            const immo = Number(pt.Immobilier) || 0;
+            const ent = Number(pt.Entreprise) || 0;
+            const portefeuillePt = Math.round(celi + celiapp + reer + reee + nonreg + crypto);
+            const avoirsPt = Math.round(portefeuillePt + liq + immo + ent);
+            const dettesPt = Math.max(0, Math.round(Number(pt.DettesNonImmo) || 0));
+            const valLentille = extraireValeurLentillePoint(pt);
+            const estPassePt = Boolean(pt.isPast || pt.dayIsReal || pt.monthIndex < xAuj - 0.01);
+            const estTransitionPt = Math.abs(pt.monthIndex - xAuj) <= 0.04;
+            const cal = calendarFromMonthIndex(startYear, startMonth, Math.floor(pt.monthIndex));
+            const labelDate =
+                pt.dateLabel ||
+                pt.dayIso ||
+                (pt.year !== undefined ? `${MOIS_COURTS[cal.month] ?? ''} ${pt.year}`.trim() : `${cal.year}`);
+
+            return {
+                ...pt,
+                annee: labelDate,
+                valeur: valLentille,
+                valeurPresent: estPassePt || estTransitionPt ? valLentille : null,
+                valeurFutur: !estPassePt || estTransitionPt ? valLentille : null,
+                periode: estTransitionPt ? 'transition' : estPassePt ? 'present' : 'futur',
+                avoirs: avoirsPt > 0 ? avoirsPt : valLentille,
+                dettes: dettesPt,
+                portefeuille: portefeuillePt,
+            };
+        });
+    }, [chartSeriesBrute, extraireValeurLentillePoint, xAuj, startYear, startMonth]);
+
+    const selectSeries = isDailyCurve ? daysInWindow : chartSeriesBrute;
+
+    const idxAncre = useMemo(() => indexAujourdhui(selectSeries, xAuj), [selectSeries, xAuj]);
+    const pointAncre = useMemo<ProjectionChartPoint | null>(() => {
+        const brut = idxAncre === -1 ? null : selectSeries[idxAncre] ?? null;
+        return brut ? (enrichDailyPoint(brut) ?? brut) : (chartDataMoteur[0] ?? null);
+    }, [idxAncre, selectSeries, enrichDailyPoint, chartDataMoteur]);
+
+    const jourActif = pointFige ?? pointSurvole ?? pointAncre;
+
+    const idxJourActif = useMemo(() => {
+        if (!jourActif) return -1;
+        return selectSeries.findIndex((d) => d.monthIndex === jourActif.monthIndex);
+    }, [jourActif, selectSeries]);
+
+    const stepJourAccueil = useCallback(
+        (dir: -1 | 1) => {
+            if (selectSeries.length === 0) return;
+            const baseIdx = idxJourActif === -1 ? Math.max(0, idxAncre) : idxJourActif;
+            const cibleIdx = Math.max(0, Math.min(selectSeries.length - 1, baseIdx + dir));
+            const pt = selectSeries[cibleIdx];
+            if (pt) {
+                setPointFige(enrichDailyPoint(pt) ?? pt);
+            }
+        },
+        [selectSeries, idxJourActif, idxAncre, enrichDailyPoint],
+    );
+
+    const resoudrePointClientX = useCallback(
+        (clientX: number): ProjectionChartPoint | null => {
+            const grid = chartContainerRef.current?.querySelector('.recharts-cartesian-grid');
+            const rect = grid?.getBoundingClientRect();
+            const pt =
+                resolvePointByX(
+                    clientX,
+                    rect ? { left: rect.left, width: rect.width } : null,
+                    selectSeries,
+                    (p) => p.monthIndex,
+                ) ?? lastHoverPointRef.current;
+            return pt ? (enrichDailyPoint(pt) ?? pt) : null;
+        },
+        [selectSeries, enrichDailyPoint],
+    );
+
+    // Échelle Y alignée sur FutureProjection.tsx (reperesRonds + cadrage dynamique sur 1M/1A)
+    const echelleYTrajectoire = useMemo<{ ticks?: number[]; domaine: [number, number] }>(() => {
         const valeurs: number[] = [];
-        for (const pt of donneesTrajectoire) {
-            if (typeof pt.valeurPresent === 'number' && Number.isFinite(pt.valeurPresent)) {
-                valeurs.push(pt.valeurPresent);
-            }
-            if (typeof pt.valeurFutur === 'number' && Number.isFinite(pt.valeurFutur)) {
-                valeurs.push(pt.valeurFutur);
-            }
-            if (modeCourbe === 'complete' && typeof pt.avoirs === 'number' && Number.isFinite(pt.avoirs)) {
-                valeurs.push(pt.avoirs);
+        const garder = (v: unknown) => {
+            if (typeof v === 'number' && Number.isFinite(v)) valeurs.push(v);
+        };
+        const empilees = [
+            'Liquidites',
+            'CELI',
+            'CELIAPP',
+            'REER',
+            'REEE',
+            'NonReg',
+            'Crypto',
+            'Immobilier',
+            'Entreprise',
+        ] as const;
+
+        for (const p of donneesTrajectoire) {
+            if (modeCourbe === 'complete' && lentilleHero === 'net') {
+                let pile = 0;
+                for (const k of empilees) {
+                    const v = p[k];
+                    if (typeof v === 'number' && Number.isFinite(v)) pile += v;
+                }
+                if (pile > 0) valeurs.push(pile);
+                garder(p.NetWorth);
+                garder(detteSousZero(p));
+                garder(p.ImpotLatent);
+            } else {
+                garder(p.valeur);
+                if (modeCourbe === 'complete') garder(p.avoirs);
+                if (lentilleHero === 'net' && runMC) {
+                    garder(p.P10);
+                    garder(p.P50);
+                    garder(p.P90);
+                }
             }
         }
-        if (valeurs.length === 0) return [0, 100_000];
+        if (tempsFortsActifs && lentilleHero === 'net' && (horizon === '10A' || horizon === 'MAX')) {
+            garder(fireNumber);
+        }
+        if (valeurs.length === 0) return { domaine: [0, 100_000] };
+
+        if (modeCourbe === 'complete' || horizon === '5A' || horizon === '10A' || horizon === 'MAX') {
+            const ticks = reperesRonds(valeurs);
+            if (ticks && ticks.length > 0) {
+                const bas = Math.min(0, ...valeurs, ticks[0]!);
+                const haut = Math.max(...valeurs, ticks[ticks.length - 1]!);
+                return { ticks, domaine: [bas, haut] };
+            }
+        }
+
         const minVal = Math.min(...valeurs);
         const maxVal = Math.max(...valeurs);
-        const amplitude = Math.max(maxVal - minVal, Math.max(300, Math.round(maxVal * 0.005)));
+        const amplitude = Math.max(maxVal - minVal, Math.max(300, Math.round(Math.abs(maxVal) * 0.008)));
         const margeBasse = Math.round(amplitude * 0.14);
         const margeHaute = Math.round(amplitude * 0.12);
-        const bas = Math.max(0, Math.floor((minVal - margeBasse) / 100) * 100);
+        const bas = minVal < 0 ? Math.floor((minVal - margeBasse) / 100) * 100 : Math.max(0, Math.floor((minVal - margeBasse) / 100) * 100);
         const haut = Math.max(bas + 200, Math.ceil((maxVal + margeHaute) / 100) * 100);
-        return [bas, haut];
-    }, [donneesTrajectoire, modeCourbe]);
+        return { domaine: [bas, haut] };
+    }, [donneesTrajectoire, modeCourbe, lentilleHero, runMC, tempsFortsActifs, horizon, fireNumber]);
+
+    // Repères identiques à FutureProjection.tsx : Jalon FIRE, Retraite, Fin d'horizon
+    const jalonFire = useMemo(() => {
+        const FIRE_RE = /\bfire\b/i;
+        for (const d of chartDataMoteur) {
+            const hit = (d.lifeEvents ?? []).find((l) => FIRE_RE.test(l));
+            if (hit) {
+                return { monthIndex: d.monthIndex, year: d.year, age: d.age, NetWorth: d.NetWorth, label: hit };
+            }
+        }
+        return null;
+    }, [chartDataMoteur]);
+
+    const pointRetraite = useMemo(
+        () => chartDataMoteur.find((d) => d.monthIndex >= 0 && d.isRetired) ?? null,
+        [chartDataMoteur],
+    );
+
+    const dernierPoint = useMemo(
+        () => (chartDataMoteur.length > 0 ? chartDataMoteur[chartDataMoteur.length - 1]! : null),
+        [chartDataMoteur],
+    );
+
+    const patrimoineKpi = useMemo(
+        () => kpiPatrimoine(lastProjection, isPrivacyMode),
+        [lastProjection, isPrivacyMode],
+    );
 
     // Points « Temps forts » ambrés sur la courbe (début, jalon médian, sommet projeté)
     const pointsTempsForts = useMemo<PointTrajectoire[]>(() => {
@@ -881,7 +1120,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 
     const gainHorizon = useMemo(() => {
         if (donneesTrajectoire.length < 2) return null;
-        const debut = donneesTrajectoire[0]?.valeur;
+        const debut =
+            (pointAncre ? extraireValeurLentillePoint(pointAncre) : null) ??
+            donneesTrajectoire[0]?.valeur;
         const milieu = donneesTrajectoire[Math.floor(donneesTrajectoire.length / 2)];
         const fin = donneesTrajectoire[donneesTrajectoire.length - 1];
         if (
@@ -895,15 +1136,38 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         }
         const diff = fin.valeur - debut;
         const pct = Math.abs(debut) > 100 ? (diff / Math.abs(debut)) * 100 : null;
+        const calFin = calendarFromMonthIndex(startYear, startMonth, Math.floor(fin.monthIndex));
+        const calMilieu = milieu
+            ? calendarFromMonthIndex(startYear, startMonth, Math.floor(milieu.monthIndex))
+            : calFin;
         return {
             diff,
             pct,
             fin: fin.valeur,
-            anneeFin: fin.annee,
+            anneeFin: fin.dateLabel || (fin.year !== undefined ? `${fin.year}` : `${calFin.year}`),
             milieuValeur: milieu?.valeur ?? debut,
-            anneeMilieu: milieu?.annee ?? '',
+            anneeMilieu: milieu?.year !== undefined ? `${milieu.year}` : `${calMilieu.year}`,
         };
-    }, [donneesTrajectoire]);
+    }, [donneesTrajectoire, pointAncre, extraireValeurLentillePoint, startYear, startMonth]);
+
+    const formatTickXAccueil = useCallback(
+        (val: number): string => {
+            if (!Number.isFinite(val)) return '';
+            const spanMois = Math.abs(bornesHorizonMois[1] - bornesHorizonMois[0]);
+            const idxEntier = Math.floor(val);
+            const cal = calendarFromMonthIndex(startYear, startMonth, idxEntier);
+            if (spanMois <= 3) {
+                const frac = Math.max(0, val - idxEntier);
+                const jour = Math.max(1, Math.min(30, Math.round(1 + frac * 29)));
+                return `${jour} ${MOIS_COURTS[cal.month] ?? ''}`;
+            }
+            if (spanMois <= 26) {
+                return `${MOIS_COURTS[cal.month] ?? ''} ${String(cal.year).slice(-2)}`;
+            }
+            return `${cal.year}`;
+        },
+        [bornesHorizonMois, startYear, startMonth],
+    );
 
     const partsRepartition = useMemo<PartRepartition[]>(() => {
         const brutes: Array<Omit<PartRepartition, 'pct'>> = [
@@ -2091,7 +2355,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                     : 'text-ink-300 hover:text-ink-50'
                                             }`}
                                         >
-                                            + Avoirs bruts
+                                            Par compte · + Avoirs
                                         </button>
                                     </div>
 
@@ -2127,9 +2391,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 </button>
                             </div>
 
-                            {/* Courbe principale : Présent (1 mois d'historique en bleu continu) vs Futur (projection en émeraude pointillé) */}
-                            {/* Courbe principale : Présent (historique en bleu continu) vs Futur (projection en émeraude pointillé) */}
+                            {/* Courbe principale synchronisée sur FutureProjection.tsx : journalier (1M/1A) & mensuel/empilé par compte (5A/10A/MAX) */}
                             <div
+                                ref={chartContainerRef}
                                 data-testid="recharts-trajectory-entrance"
                                 data-active-tab={activeTab}
                                 data-chart-horizon={horizon}
@@ -2137,7 +2401,20 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                 data-chart-lens={lentilleHero}
                                 role="img"
                                 aria-label="Graphique combiné du présent et du futur projeté — valeurs détaillées dans le tableau de données."
-                                className="h-[225px] sm:h-[270px] w-full gf-chart-enter rounded-lg bg-fond border border-bordure p-2"
+                                onMouseMove={(e) => {
+                                    const pt = resoudrePointClientX(e.clientX);
+                                    if (pt) {
+                                        lastHoverPointRef.current = pt;
+                                        setPointSurvole(pt);
+                                    }
+                                }}
+                                onMouseLeave={() => setPointSurvole(null)}
+                                onPointerUp={(e) => {
+                                    const pt = resoudrePointClientX(e.clientX);
+                                    if (!pt) return;
+                                    setPointFige((cur) => (cur && cur.monthIndex === pt.monthIndex ? null : pt));
+                                }}
+                                className="h-[245px] sm:h-[290px] w-full gf-chart-enter rounded-lg bg-fond border border-bordure p-2 cursor-crosshair"
                             >
                                 <ResponsiveContainer width="100%" height="100%">
                                     <ComposedChart data={donneesTrajectoire} margin={{ top: 14, right: 10, left: 0, bottom: 0 }}>
@@ -2152,6 +2429,32 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                 <stop offset="70%" stopColor="var(--gf-vert)" stopOpacity={0.09} />
                                                 <stop offset="100%" stopColor="var(--gf-vert)" stopOpacity={0.0} />
                                             </linearGradient>
+                                            <linearGradient id="accueilMcGrad" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="0%" stopColor="var(--gf-bleu)" stopOpacity={0.16} />
+                                                <stop offset="100%" stopColor="var(--gf-bleu)" stopOpacity={0.03} />
+                                            </linearGradient>
+                                            {(
+                                                [
+                                                    'Liquidites',
+                                                    'CELI',
+                                                    'CELIAPP',
+                                                    'REER',
+                                                    'REEE',
+                                                    'NonReg',
+                                                    'Crypto',
+                                                    'Immobilier',
+                                                    'Entreprise',
+                                                ] as const
+                                            ).map((cle) => (
+                                                <linearGradient key={`acc-grad-${cle}`} id={`accGrad${cle}`} x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor={couleurSerie(cle)} stopOpacity={0.36} />
+                                                    <stop offset="95%" stopColor={couleurSerie(cle)} stopOpacity={0.05} />
+                                                </linearGradient>
+                                            ))}
+                                            <linearGradient id="accGradDettes" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor={COULEUR_DETTE} stopOpacity={0.08} />
+                                                <stop offset="95%" stopColor={COULEUR_DETTE} stopOpacity={0.32} />
+                                            </linearGradient>
                                         </defs>
                                         <CartesianGrid
                                             strokeDasharray="3 3"
@@ -2160,128 +2463,393 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             strokeOpacity={0.55}
                                         />
                                         <XAxis
-                                            dataKey="annee"
-                                            minTickGap={22}
+                                            dataKey="monthIndex"
+                                            type="number"
+                                            domain={X_AXIS_DOMAIN}
+                                            allowDataOverflow
+                                            minTickGap={26}
                                             tick={{ fill: 'var(--texte-doux)', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
                                             axisLine={{ stroke: 'var(--bordure)' }}
                                             tickLine={false}
+                                            tickFormatter={formatTickXAccueil}
                                         />
                                         <YAxis
                                             orientation="left"
-                                            domain={domaineYTrajectoire}
-                                            tickCount={5}
+                                            domain={echelleYTrajectoire.domaine}
+                                            ticks={echelleYTrajectoire.ticks}
                                             tick={{ fill: 'var(--texte-doux)', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
                                             axisLine={false}
                                             tickLine={false}
-                                            width={58}
+                                            width={62}
                                             tickFormatter={maskedTick(isPrivacyMode, (v: number) => formatCompactCAD(v))}
                                         />
                                         <Tooltip
                                             isAnimationActive={false}
-                                            cursor={{ stroke: 'var(--texte-doux)', strokeWidth: 1, strokeDasharray: '3 3', strokeOpacity: 0.5 }}
-                                            content={<TrajectoireTooltip patrimoineInitial={valeurHeroAffichee} />}
+                                            cursor={GF_CROSSHAIR_CURSOR}
+                                            content={
+                                                <TrajectoireTooltip
+                                                    patrimoineInitial={valeurHeroAffichee}
+                                                    isPrivacyMode={isPrivacyMode}
+                                                    enrichPoint={enrichDailyPoint}
+                                                    onHoverPoint={(pt) => {
+                                                        if (pt) lastHoverPointRef.current = pt;
+                                                    }}
+                                                />
+                                            }
                                         />
-                                        <ReferenceLine
-                                            x="Aujourd’hui"
-                                            stroke="var(--gf-ambre)"
-                                            strokeDasharray="3 3"
-                                            strokeOpacity={0.85}
-                                        />
-                                        {modeCourbe === 'complete' && (
-                                            <Line
-                                                type="monotone"
-                                                dataKey="avoirs"
-                                                stroke="var(--gf-ambre)"
-                                                strokeWidth={2}
-                                                strokeDasharray="4 4"
-                                                dot={false}
-                                                isAnimationActive={false}
+
+                                        {/* Zone grisée du passé réel (identique à FutureProjection.tsx) */}
+                                        {pastPrefixPoints.length > 0 && pastStartIndex < xAuj && (
+                                            <ReferenceArea
+                                                x1={Math.max(bornesHorizonMois[0], pastStartIndex)}
+                                                x2={xAuj}
+                                                fill="var(--surface-douce)"
+                                                fillOpacity={0.28}
+                                                ifOverflow="hidden"
                                             />
                                         )}
-                                        {/* Série PRÉSENT : trait continu bleu Google */}
-                                        <Area
-                                            type="monotone"
-                                            dataKey="valeurPresent"
-                                            baseValue="dataMin"
-                                            stroke="none"
-                                            fill="url(#accueilPresentGrad)"
-                                            fillOpacity={1}
-                                            connectNulls={false}
-                                            isAnimationActive={false}
+
+                                        <ReferenceLine y={0} stroke="var(--bordure)" strokeWidth={1} />
+
+                                        {/* Repère Aujourd'hui identique à FutureProjection.tsx */}
+                                        <ReferenceLine
+                                            x={xAuj}
+                                            stroke="var(--gf-ambre)"
+                                            strokeWidth={1.5}
+                                            strokeDasharray="4 4"
+                                            ifOverflow="extendDomain"
+                                            label={<RefLineLabel value="Aujourd'hui" color="var(--gf-ambre)" />}
                                         />
-                                        <Line
-                                            type="monotone"
-                                            dataKey="valeurPresent"
-                                            stroke="var(--gf-bleu)"
-                                            strokeWidth={2.75}
-                                            connectNulls={false}
-                                            dot={false}
-                                            activeDot={(props: { cx?: number; cy?: number; value?: number | null }) => {
-                                                if (props.value === null || props.value === undefined || !Number.isFinite(props.value) || typeof props.cx !== 'number' || typeof props.cy !== 'number') return null;
-                                                return <circle cx={props.cx} cy={props.cy} r={5} fill="var(--gf-bleu)" stroke="var(--fond)" strokeWidth={2} />;
-                                            }}
-                                            isAnimationActive={false}
-                                        />
-                                        {/* Série FUTUR (projection) : trait pointillé vert émeraude */}
-                                        <Area
-                                            type="monotone"
-                                            dataKey="valeurFutur"
-                                            baseValue="dataMin"
-                                            stroke="none"
-                                            fill="url(#accueilFuturGrad)"
-                                            fillOpacity={1}
-                                            connectNulls={false}
-                                            isAnimationActive={false}
-                                        />
-                                        <Line
-                                            type="monotone"
-                                            dataKey="valeurFutur"
-                                            stroke="var(--gf-vert)"
-                                            strokeWidth={2.5}
-                                            strokeDasharray="5 4"
-                                            connectNulls={false}
-                                            dot={false}
-                                            activeDot={(props: { cx?: number; cy?: number; value?: number | null; payload?: PointTrajectoire }) => {
-                                                if (props.value === null || props.value === undefined || !Number.isFinite(props.value) || typeof props.cx !== 'number' || typeof props.cy !== 'number') return null;
-                                                // À « Aujourd’hui », le point bleu de valeurPresent s'affiche déjà : éviter le double point SVG superposé
-                                                if (props.payload?.periode === 'transition' || props.payload?.annee === 'Aujourd’hui') return null;
-                                                return <circle cx={props.cx} cy={props.cy} r={5} fill="var(--gf-vert)" stroke="var(--fond)" strokeWidth={2} />;
-                                            }}
-                                            isAnimationActive={false}
-                                        />
-                                        {pointsTempsForts.map((pt, idx) => (
+
+                                        {/* Repère Objectif FIRE horizontal + vertical et Retraite quand Temps forts est actif */}
+                                        {tempsFortsActifs && lentilleHero === 'net' && fireNumber > 0 && (
+                                            <ReferenceLine
+                                                y={fireNumber}
+                                                stroke="var(--gf-ambre)"
+                                                strokeDasharray="5 5"
+                                                strokeOpacity={0.75}
+                                                ifOverflow="hidden"
+                                                label={<RefLineLabel value="Cible FIRE" color="var(--gf-ambre)" />}
+                                            />
+                                        )}
+                                        {tempsFortsActifs &&
+                                            jalonFire &&
+                                            jalonFire.monthIndex >= bornesHorizonMois[0] &&
+                                            jalonFire.monthIndex <= bornesHorizonMois[1] && (
+                                                <ReferenceLine
+                                                    x={jalonFire.monthIndex}
+                                                    stroke="var(--gf-ambre)"
+                                                    strokeDasharray="3 3"
+                                                    ifOverflow="hidden"
+                                                    label={<RefLineLabel value={`FIRE (${jalonFire.year})`} color="var(--gf-ambre)" jalon />}
+                                                />
+                                            )}
+                                        {tempsFortsActifs &&
+                                            pointRetraite &&
+                                            pointRetraite.monthIndex >= bornesHorizonMois[0] &&
+                                            pointRetraite.monthIndex <= bornesHorizonMois[1] && (
+                                                <ReferenceLine
+                                                    x={pointRetraite.monthIndex}
+                                                    stroke="var(--gf-bleu)"
+                                                    strokeDasharray="3 3"
+                                                    ifOverflow="hidden"
+                                                    label={
+                                                        <RefLineLabel
+                                                            // NOMBRE-NON-MONETAIRE : âge de la retraite sur le repère vertical
+                                                            value={`Retraite (${pointRetraite.age} ans)`}
+                                                            color="var(--gf-bleu)"
+                                                            jalon
+                                                        />
+                                                    }
+                                                />
+                                            )}
+
+                                        {/* Point figé au clic */}
+                                        {pointFige && (
+                                            <ReferenceLine
+                                                x={pointFige.monthIndex}
+                                                stroke="var(--texte)"
+                                                strokeWidth={1.25}
+                                                strokeDasharray="2 2"
+                                                ifOverflow="hidden"
+                                            />
+                                        )}
+
+                                        {modeCourbe === 'complete' && lentilleHero === 'net' ? (
+                                            <>
+                                                {/* Aires empilées par compte identiques à FutureProjection.tsx */}
+                                                {(
+                                                    [
+                                                        'Liquidites',
+                                                        'CELI',
+                                                        'CELIAPP',
+                                                        'REER',
+                                                        'REEE',
+                                                        'NonReg',
+                                                        'Crypto',
+                                                        'Immobilier',
+                                                        'Entreprise',
+                                                    ] as const
+                                                ).map((cle) => (
+                                                    <Area
+                                                        key={`area-${cle}`}
+                                                        type="monotone"
+                                                        dataKey={cle}
+                                                        stackId="1"
+                                                        stroke={couleurSerie(cle)}
+                                                        strokeWidth={1.5}
+                                                        fill={`url(#accGrad${cle})`}
+                                                        fillOpacity={1}
+                                                        isAnimationActive={false}
+                                                    />
+                                                ))}
+                                                <Area
+                                                    type="monotone"
+                                                    dataKey={detteSousZero}
+                                                    name="Dettes (hors hypothèque)"
+                                                    stroke={COULEUR_DETTE}
+                                                    strokeWidth={1.5}
+                                                    fill="url(#accGradDettes)"
+                                                    fillOpacity={1}
+                                                    baseValue={0}
+                                                    isAnimationActive={false}
+                                                />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey={detteLevierSousZero}
+                                                    name={LIBELLE_LEVIER}
+                                                    stroke={COULEUR_LEVIER}
+                                                    strokeWidth={1.5}
+                                                    strokeDasharray="4 3"
+                                                    dot={false}
+                                                    isAnimationActive={false}
+                                                />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="ImpotLatent"
+                                                    name="Impôt latent"
+                                                    stroke={couleurSerie('ImpotLatent')}
+                                                    strokeWidth={1.5}
+                                                    strokeDasharray="5 5"
+                                                    dot={false}
+                                                    isAnimationActive={false}
+                                                />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="avoirs"
+                                                    name="Avoirs bruts"
+                                                    stroke="var(--gf-ambre)"
+                                                    strokeWidth={1.75}
+                                                    strokeDasharray="4 4"
+                                                    dot={false}
+                                                    isAnimationActive={false}
+                                                />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="NetWorth"
+                                                    name="Valeur nette"
+                                                    stroke={couleurSerie('NetWorth')}
+                                                    strokeWidth={2.5}
+                                                    dot={false}
+                                                    activeDot={GF_ACTIVE_DOT}
+                                                    isAnimationActive={false}
+                                                />
+                                            </>
+                                        ) : (
+                                            <>
+                                                {modeCourbe === 'complete' && (
+                                                    <Line
+                                                        type="monotone"
+                                                        dataKey="avoirs"
+                                                        name="Avoirs bruts"
+                                                        stroke="var(--gf-ambre)"
+                                                        strokeWidth={2}
+                                                        strokeDasharray="4 4"
+                                                        dot={false}
+                                                        isAnimationActive={false}
+                                                    />
+                                                )}
+                                                {/* Couloir Monte-Carlo P10 / P50 / P90 identique à FutureProjection.tsx */}
+                                                {lentilleHero === 'net' && runMC && (
+                                                    <>
+                                                        <Area
+                                                            type="monotone"
+                                                            dataKey="P90"
+                                                            stroke="var(--gf-bleu)"
+                                                            strokeWidth={1}
+                                                            strokeDasharray="3 3"
+                                                            strokeOpacity={0.5}
+                                                            fill="url(#accueilMcGrad)"
+                                                            isAnimationActive={false}
+                                                        />
+                                                        <Line
+                                                            type="monotone"
+                                                            dataKey="P50"
+                                                            stroke="var(--gf-bleu)"
+                                                            strokeWidth={1.5}
+                                                            strokeDasharray="4 3"
+                                                            strokeOpacity={0.75}
+                                                            dot={false}
+                                                            isAnimationActive={false}
+                                                        />
+                                                        <Line
+                                                            type="monotone"
+                                                            dataKey="P10"
+                                                            stroke="var(--gf-rouge)"
+                                                            strokeWidth={1.25}
+                                                            strokeDasharray="3 3"
+                                                            strokeOpacity={0.65}
+                                                            dot={false}
+                                                            isAnimationActive={false}
+                                                        />
+                                                    </>
+                                                )}
+                                                {lentilleHero === 'net' && (
+                                                    <Area
+                                                        type="monotone"
+                                                        dataKey={detteSousZero}
+                                                        name="Dettes (hors hypothèque)"
+                                                        stroke={COULEUR_DETTE}
+                                                        strokeWidth={1.25}
+                                                        fill="url(#accGradDettes)"
+                                                        fillOpacity={0.85}
+                                                        baseValue={0}
+                                                        isAnimationActive={false}
+                                                    />
+                                                )}
+                                                {/* Série PRÉSENT : trait continu bleu Google */}
+                                                <Area
+                                                    type="monotone"
+                                                    dataKey="valeurPresent"
+                                                    baseValue="dataMin"
+                                                    stroke="none"
+                                                    fill="url(#accueilPresentGrad)"
+                                                    fillOpacity={1}
+                                                    connectNulls={false}
+                                                    isAnimationActive={false}
+                                                />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="valeurPresent"
+                                                    stroke="var(--gf-bleu)"
+                                                    strokeWidth={2.5}
+                                                    connectNulls={false}
+                                                    dot={false}
+                                                    activeDot={(props: { cx?: number; cy?: number; value?: number | null }) => {
+                                                        if (
+                                                            props.value === null ||
+                                                            props.value === undefined ||
+                                                            !Number.isFinite(props.value) ||
+                                                            typeof props.cx !== 'number' ||
+                                                            typeof props.cy !== 'number'
+                                                        )
+                                                            return null;
+                                                        return (
+                                                            <circle
+                                                                cx={props.cx}
+                                                                cy={props.cy}
+                                                                r={5}
+                                                                fill="var(--gf-bleu)"
+                                                                stroke="var(--fond)"
+                                                                strokeWidth={2}
+                                                            />
+                                                        );
+                                                    }}
+                                                    isAnimationActive={false}
+                                                />
+                                                {/* Série FUTUR (projection) : trait émeraude */}
+                                                <Area
+                                                    type="monotone"
+                                                    dataKey="valeurFutur"
+                                                    baseValue="dataMin"
+                                                    stroke="none"
+                                                    fill="url(#accueilFuturGrad)"
+                                                    fillOpacity={1}
+                                                    connectNulls={false}
+                                                    isAnimationActive={false}
+                                                />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="valeurFutur"
+                                                    stroke="var(--gf-vert)"
+                                                    strokeWidth={2.35}
+                                                    strokeDasharray={isDailyCurve ? undefined : '5 4'}
+                                                    connectNulls={false}
+                                                    dot={false}
+                                                    activeDot={(props: {
+                                                        cx?: number;
+                                                        cy?: number;
+                                                        value?: number | null;
+                                                        payload?: PointTrajectoire;
+                                                    }) => {
+                                                        if (
+                                                            props.value === null ||
+                                                            props.value === undefined ||
+                                                            !Number.isFinite(props.value) ||
+                                                            typeof props.cx !== 'number' ||
+                                                            typeof props.cy !== 'number'
+                                                        )
+                                                            return null;
+                                                        if (props.payload?.periode === 'transition') return null;
+                                                        return (
+                                                            <circle
+                                                                cx={props.cx}
+                                                                cy={props.cy}
+                                                                r={5}
+                                                                fill="var(--gf-vert)"
+                                                                stroke="var(--fond)"
+                                                                strokeWidth={2}
+                                                            />
+                                                        );
+                                                    }}
+                                                    isAnimationActive={false}
+                                                />
+                                            </>
+                                        )}
+
+                                        {/* Point d'ancrage Aujourd'hui avec badge (identique à FutureProjection.tsx) */}
+                                        {pointAncre && typeof extraireValeurLentillePoint(pointAncre) === 'number' && (
                                             <ReferenceDot
-                                                key={`tf-${pt.annee}-${idx}`}
-                                                x={pt.annee}
-                                                y={pt.valeur ?? undefined}
-                                                r={5.5}
+                                                x={pointAncre.monthIndex}
+                                                y={extraireValeurLentillePoint(pointAncre) ?? 0}
+                                                r={4.5}
                                                 fill="var(--gf-ambre)"
                                                 stroke="var(--fond)"
                                                 strokeWidth={2}
+                                                ifOverflow="extendDomain"
+                                                shape={
+                                                    <TodayValueBadge
+                                                        value={maskedTick(isPrivacyMode, (v: number) => formatCompactCAD(v))(
+                                                            extraireValeurLentillePoint(pointAncre) ?? 0,
+                                                        )}
+                                                    />
+                                                }
+                                            />
+                                        )}
+
+                                        {pointsTempsForts.map((pt, idx) => (
+                                            <ReferenceDot
+                                                key={`tf-${pt.monthIndex}-${idx}`}
+                                                x={pt.monthIndex}
+                                                y={pt.valeur ?? undefined}
+                                                r={5}
+                                                fill="var(--gf-ambre)"
+                                                stroke="var(--fond)"
+                                                strokeWidth={2}
+                                                ifOverflow="hidden"
                                             />
                                         ))}
                                     </ComposedChart>
                                 </ResponsiveContainer>
                             </div>
 
-                            {/* Un seul bouton visible pour choisir la durée Présent ↔ Futur + légende Présent vs Futur */}
+                            {/* Barre d'horizons directe (1M · 1A · 5A · 10A · MAX) + précision quotidienne/mensuelle identique à Futur */}
                             <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={basculerHorizonSuivant}
-                                        aria-label="Choisir la durée Présent et Futur de la courbe"
-                                        className="touch-target px-4 py-1.5 rounded-full gf-subtab-pill-active text-xs font-mono font-semibold tabular-nums inline-flex items-center gap-2 transition-all duration-150 focus-ring"
-                                    >
-                                        <Icon name="refresh" size={13} aria-hidden="true" />
-                                        <span>{`Durée : ${horizon} · Présent ↔ Futur`}</span>
-                                    </button>
-
-                                    {/* Boutons d'horizons accessibles pour la navigation clavier et les tests d'intégration */}
+                                <div className="flex flex-wrap items-center gap-1.5">
                                     <div
                                         role="group"
                                         aria-label="Horizon de la courbe"
-                                        className="sr-only"
+                                        className="inline-flex items-center p-0.5 rounded-full border border-bordure bg-fond gap-0.5"
                                     >
                                         {HORIZONS.map((h) => (
                                             <button
@@ -2289,25 +2857,198 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                 type="button"
                                                 aria-pressed={horizon === h.cle}
                                                 onClick={() => setHorizon(h.cle)}
-                                                className="touch-target"
+                                                className={`touch-target px-3 py-1 rounded-full text-xs font-mono font-semibold tabular-nums transition-colors duration-100 focus-ring ${
+                                                    horizon === h.cle
+                                                        ? 'gf-subtab-pill-active'
+                                                        : 'text-ink-300 hover:text-ink-50'
+                                                }`}
                                             >
                                                 {h.label}
                                             </button>
                                         ))}
                                     </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={basculerHorizonSuivant}
+                                        aria-label="Choisir la durée Présent et Futur de la courbe"
+                                        className="touch-target px-2.5 py-1 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-[11px] font-mono text-ink-300 hover:text-ink-50 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring"
+                                    >
+                                        <Icon name="refresh" size={12} aria-hidden="true" />
+                                        <span>{isDailyCurve ? 'Pas quotidien (1 j)' : 'Pas mensuel (1 m)'}</span>
+                                    </button>
                                 </div>
 
-                                <div className="inline-flex items-center gap-3 text-[11px] font-mono text-ink-300">
+                                <div className="inline-flex flex-wrap items-center gap-3 text-[11px] font-mono text-ink-300">
                                     <span className="inline-flex items-center gap-1.5">
                                         <span className="w-2.5 h-2.5 rounded-full gf-alloc-celi" aria-hidden="true" />
-                                        <span>{`Présent (${horizon})`}</span>
+                                        <span>{`Passé réel (${horizon})`}</span>
                                     </span>
                                     <span className="inline-flex items-center gap-1.5">
                                         <span className="w-2.5 h-2.5 rounded-full gf-alloc-reer" aria-hidden="true" />
-                                        <span>{`Futur (${horizon})`}</span>
+                                        <span>{`Projection Futur (${horizon})`}</span>
                                     </span>
+                                    {runMC && lentilleHero === 'net' && (
+                                        <span className="inline-flex items-center gap-1.5 text-ink-400">
+                                            <span>P10–P90 Monte-Carlo</span>
+                                        </span>
+                                    )}
                                 </div>
                             </div>
+
+                            {/* Inspecteur du point sélectionné & Jalons Futur (même précision que FutureProjection.tsx) */}
+                            {jourActif && (
+                                <div
+                                    aria-label="Inspecteur précis du point et jalons de projection"
+                                    className="rounded-lg border border-bordure bg-fond p-3 space-y-2.5"
+                                >
+                                    <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-bordure">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="text-xs font-mono font-bold text-ink-50">
+                                                {jourActif.dateLabel ||
+                                                    jourActif.dayIso ||
+                                                    `${MOIS_COURTS[calendarFromMonthIndex(startYear, startMonth, Math.floor(jourActif.monthIndex)).month] ?? ''} ${jourActif.year}`}
+                                            </span>
+                                            {typeof jourActif.age === 'number' && Number.isFinite(jourActif.age) && (
+                                                <span className="px-2 py-0.5 rounded-full border border-bordure bg-surface text-[11px] font-mono text-ink-300">
+                                                    {/* NOMBRE-NON-MONETAIRE : âge du profil au point inspecté */}
+                                                    {`${jourActif.age} ans`}
+                                                </span>
+                                            )}
+                                            <span
+                                                className={`px-2 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider ${
+                                                    jourActif.isPast || jourActif.dayIsReal
+                                                        ? 'gf-delta-neutral'
+                                                        : Math.abs(jourActif.monthIndex - xAuj) <= 0.04
+                                                          ? 'gf-delta-amber'
+                                                          : 'gf-delta-up'
+                                                }`}
+                                            >
+                                                {jourActif.isPast || jourActif.dayIsReal
+                                                    ? 'Passé réel'
+                                                    : Math.abs(jourActif.monthIndex - xAuj) <= 0.04
+                                                      ? "Aujourd'hui"
+                                                      : 'Projeté'}
+                                            </span>
+                                            {pointFige && (
+                                                <span className="text-[11px] font-mono text-alerte-texte">
+                                                    · Point épinglé
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <div className="inline-flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => stepJourAccueil(-1)}
+                                                aria-label={isDailyCurve ? 'Reculer d’un jour sur la courbe' : 'Reculer d’un mois sur la courbe'}
+                                                className="touch-target px-2.5 py-1 rounded-md border border-bordure bg-surface hover:bg-surface-douce text-xs font-mono text-ink-200 hover:text-ink-50 transition-colors duration-100 focus-ring"
+                                            >
+                                                {isDailyCurve ? '← J-1' : '← M-1'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => stepJourAccueil(1)}
+                                                aria-label={isDailyCurve ? 'Avancer d’un jour sur la courbe' : 'Avancer d’un mois sur la courbe'}
+                                                className="touch-target px-2.5 py-1 rounded-md border border-bordure bg-surface hover:bg-surface-douce text-xs font-mono text-ink-200 hover:text-ink-50 transition-colors duration-100 focus-ring"
+                                            >
+                                                {isDailyCurve ? 'J+1 →' : 'M+1 →'}
+                                            </button>
+                                            {pointFige && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPointFige(null)}
+                                                    className="touch-target px-2.5 py-1 rounded-md border border-bordure bg-surface hover:bg-surface-douce text-xs font-mono text-alerte-texte transition-colors duration-100 focus-ring"
+                                                >
+                                                    Aujourd’hui
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Ventilation exacte par compte au point inspecté */}
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 text-xs font-mono tabular-nums">
+                                        {[
+                                            { id: 'nw', label: 'Valeur nette', val: jourActif.NetWorth, dot: couleurSerie('NetWorth') },
+                                            { id: 'celi', label: 'CELI', val: jourActif.CELI, dot: couleurSerie('CELI') },
+                                            { id: 'reer', label: 'REER', val: jourActif.REER, dot: couleurSerie('REER') },
+                                            { id: 'celiapp', label: 'CELIAPP', val: jourActif.CELIAPP, dot: couleurSerie('CELIAPP') },
+                                            { id: 'nonreg', label: 'Non-enreg.', val: jourActif.NonReg, dot: couleurSerie('NonReg') },
+                                            { id: 'liq', label: 'Liquidités', val: jourActif.Liquidites, dot: couleurSerie('Liquidites') },
+                                            { id: 'immo', label: 'Équité immo', val: jourActif.Immobilier, dot: couleurSerie('Immobilier') },
+                                            { id: 'dette', label: 'Dettes', val: jourActif.DettesNonImmo, dot: COULEUR_DETTE },
+                                        ].map((item) => (
+                                            <div key={item.id} className="rounded-md bg-surface px-2.5 py-1.5 border border-bordure">
+                                                <div className="flex items-center gap-1.5 text-[10px] text-ink-400 truncate">
+                                                    <span
+                                                        className="w-2 h-2 rounded-full shrink-0"
+                                                        style={{ backgroundColor: item.dot }}
+                                                        aria-hidden="true"
+                                                    />
+                                                    <span className="truncate">{item.label}</span>
+                                                </div>
+                                                <div className="mt-0.5 font-semibold text-ink-50 truncate">
+                                                    <PrivateAmount>
+                                                        {typeof item.val === 'number' && Number.isFinite(item.val)
+                                                            ? formatCompactCAD(item.val)
+                                                            : '—'}
+                                                    </PrivateAmount>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* 4 Jalons patrimoniaux synchronisés avec FutureProjection.tsx */}
+                                    {patrimoineKpi && (
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-bordure text-xs">
+                                            <div className="flex items-center justify-between gap-2 px-2 py-1 rounded bg-surface/60">
+                                                <span className="text-[11px] text-ink-400">Aujourd’hui</span>
+                                                <span className="font-mono font-semibold text-ink-100 tabular-nums">
+                                                    <PrivateAmount>
+                                                        {formatCompactCAD(pointAncre?.NetWorth ?? patrimoineNet)}
+                                                    </PrivateAmount>
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between gap-2 px-2 py-1 rounded bg-surface/60">
+                                                <span className="text-[11px] text-ink-400">
+                                                    {jalonFire ? `FIRE (${jalonFire.year})` : 'Cible FIRE'}
+                                                </span>
+                                                <span className="font-mono font-semibold text-alerte-texte tabular-nums">
+                                                    <PrivateAmount>
+                                                        {jalonFire && Number.isFinite(jalonFire.NetWorth)
+                                                            ? formatCompactCAD(jalonFire.NetWorth)
+                                                            : Number.isFinite(fireNumber) && fireNumber > 0
+                                                              ? formatCompactCAD(fireNumber)
+                                                              : '—'}
+                                                    </PrivateAmount>
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between gap-2 px-2 py-1 rounded bg-surface/60">
+                                                <span className="text-[11px] text-ink-400">
+                                                    {/* NOMBRE-NON-MONETAIRE : âge de la retraite sur la tuile jalon */}
+                                                    {pointRetraite ? `Retraite (${pointRetraite.age} ans)` : 'À la retraite'}
+                                                </span>
+                                                <span className="font-mono font-semibold text-ink-100 tabular-nums">
+                                                    <PrivateAmount>
+                                                        {pointRetraite && Number.isFinite(pointRetraite.NetWorth)
+                                                            ? formatCompactCAD(pointRetraite.NetWorth)
+                                                            : '—'}
+                                                    </PrivateAmount>
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between gap-2 px-2 py-1 rounded bg-surface/60">
+                                                <span className="text-[11px] text-ink-400">
+                                                    {/* NOMBRE-NON-MONETAIRE : âge de fin d'horizon sur la tuile jalon */}
+                                                    {dernierPoint ? `Fin (${dernierPoint.age} ans)` : 'Fin d’horizon'}
+                                                </span>
+                                                <span className="font-mono font-semibold text-ink-100 tabular-nums">
+                                                    <PrivateAmount>{patrimoineKpi.value}</PrivateAmount>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         {/* Grille de Statistiques Clés sous le graphique (Portefeuille et Liquidités séparés en tête) */}
@@ -3079,39 +3820,151 @@ interface TrajectoireTooltipProps {
     active?: boolean;
     payload?: Array<{ payload: PointTrajectoire }>;
     patrimoineInitial: number;
+    isPrivacyMode?: boolean;
+    enrichPoint?: (pt: ProjectionChartPoint) => ProjectionChartPoint | null;
+    onHoverPoint?: (pt: ProjectionChartPoint | null) => void;
 }
 
-const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({ active, payload, patrimoineInitial }) => {
+const COMPTES_TOOLTIP_ACCUEIL = [
+    { key: 'CELI' as const, label: 'CELI' },
+    { key: 'REER' as const, label: 'REER' },
+    { key: 'CELIAPP' as const, label: 'CELIAPP' },
+    { key: 'NonReg' as const, label: 'Non-enreg.' },
+    { key: 'Liquidites' as const, label: 'Liquidités' },
+    { key: 'Immobilier' as const, label: 'Équité immo' },
+    { key: 'Crypto' as const, label: 'Crypto' },
+    { key: 'REEE' as const, label: 'REEE' },
+    { key: 'Entreprise' as const, label: 'Entreprise' },
+];
+
+const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({
+    active,
+    payload,
+    patrimoineInitial,
+    enrichPoint,
+    onHoverPoint,
+}) => {
     if (!active || !payload || payload.length === 0) return null;
     const itemAvecValeur = payload.find((p) => p?.payload && typeof p.payload.valeur === 'number');
-    const pt = itemAvecValeur?.payload ?? payload[0]?.payload;
-    if (!pt) return null;
-    const ecart = typeof pt.valeur === 'number' ? pt.valeur - patrimoineInitial : 0;
+    const brut = itemAvecValeur?.payload ?? payload[0]?.payload;
+    if (!brut) return null;
+    const enrichi = enrichPoint ? (enrichPoint(brut) ?? brut) : brut;
+    onHoverPoint?.(enrichi);
+
+    const valeurAffichee = typeof brut.valeur === 'number' ? brut.valeur : enrichi.NetWorth;
+    const ecart = typeof valeurAffichee === 'number' ? valeurAffichee - patrimoineInitial : 0;
+    const pct =
+        Math.abs(patrimoineInitial) > 100 && Number.isFinite(ecart)
+            ? (ecart / Math.abs(patrimoineInitial)) * 100
+            : null;
     const badgePeriode =
-        pt.periode === 'present'
-            ? 'Présent (1M)'
-            : pt.periode === 'transition'
-              ? 'Point actuel'
-              : 'Futur projeté';
+        brut.periode === 'present' || enrichi.isPast || enrichi.dayIsReal
+            ? 'Passé réel'
+            : brut.periode === 'transition'
+              ? 'Aujourd’hui'
+              : 'Projeté';
+
+    const comptesActifs = COMPTES_TOOLTIP_ACCUEIL.map((c) => ({
+        ...c,
+        val: Number(enrichi[c.key]) || 0,
+        color: couleurSerie(c.key),
+    }))
+        .filter((c) => Math.abs(c.val) >= 50)
+        .sort((a, b) => b.val - a.val)
+        .slice(0, 5);
+
+    const dettesVal = Math.max(0, Math.round(Number(enrichi.DettesNonImmo) || 0));
 
     return (
-        <div className="gf-tooltip-card text-xs font-mono tabular-nums space-y-1.5">
+        <div className="gf-tooltip-card text-xs font-mono tabular-nums space-y-1.5 min-w-[235px]">
             <div className="gf-tooltip-header">
-                <span className="font-bold text-ink-50">{pt.annee}</span>
+                <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-ink-50">{enrichi.dateLabel || brut.annee}</span>
+                    {typeof enrichi.age === 'number' && Number.isFinite(enrichi.age) && (
+                        <span className="text-[10px] text-ink-300">
+                            {/* NOMBRE-NON-MONETAIRE : âge au point survolé */}
+                            {`· ${enrichi.age} ans`}
+                        </span>
+                    )}
+                </div>
                 <span className="text-[10px] uppercase tracking-wider text-ink-300">{badgePeriode}</span>
             </div>
+
             <div className="flex items-center justify-between gap-4">
                 <span className="text-ink-300">Valeur nette</span>
                 <span className="font-bold text-ink-50">
-                    <PrivateAmount>{formatCAD(pt.valeur)}</PrivateAmount>
+                    <PrivateAmount>{formatCAD(enrichi.NetWorth)}</PrivateAmount>
                 </span>
             </div>
+
+            {typeof brut.portefeuille === 'number' && brut.portefeuille > 0 && (
+                <div className="flex items-center justify-between gap-4 text-[11px]">
+                    <span className="text-ink-400">Portefeuille investi</span>
+                    <span className="font-semibold text-ink-200">
+                        <PrivateAmount>{formatCAD(brut.portefeuille)}</PrivateAmount>
+                    </span>
+                </div>
+            )}
+
             <div className="flex items-center justify-between gap-4">
                 <span className="text-ink-300">Écart vs aujourd’hui</span>
                 <span className={`font-semibold ${ecart >= 0 ? 'text-succes-texte' : 'text-erreur-texte'}`}>
-                    <PrivateAmount>{`${ecart >= 0 ? '+' : ''}${formatCAD(ecart)}`}</PrivateAmount>
+                    <PrivateAmount>
+                        {`${ecart >= 0 ? '+' : ''}${formatCompactCAD(ecart)}${
+                            pct !== null ? ` (${ecart >= 0 ? '+' : ''}${formatPercent(pct)})` : ''
+                        }`}
+                    </PrivateAmount>
                 </span>
             </div>
+
+            {comptesActifs.length > 0 && (
+                <div className="pt-1.5 border-t border-bordure space-y-1">
+                    {comptesActifs.map((c) => (
+                        <div key={c.key} className="flex items-center justify-between gap-3 text-[11px]">
+                            <span className="inline-flex items-center gap-1.5 text-ink-300">
+                                <span
+                                    className="w-2 h-2 rounded-full shrink-0"
+                                    style={{ backgroundColor: c.color }}
+                                    aria-hidden="true"
+                                />
+                                <span>{c.label}</span>
+                            </span>
+                            <span className="font-medium text-ink-100">
+                                <PrivateAmount>{formatCompactCAD(c.val)}</PrivateAmount>
+                            </span>
+                        </div>
+                    ))}
+                    {dettesVal > 0 && (
+                        <div className="flex items-center justify-between gap-3 text-[11px]">
+                            <span className="inline-flex items-center gap-1.5 text-erreur-texte">
+                                <span
+                                    className="w-2 h-2 rounded-full shrink-0"
+                                    style={{ backgroundColor: COULEUR_DETTE }}
+                                    aria-hidden="true"
+                                />
+                                <span>Dettes</span>
+                            </span>
+                            <span className="font-medium text-erreur-texte">
+                                <PrivateAmount>{`-${formatCompactCAD(dettesVal)}`}</PrivateAmount>
+                            </span>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {typeof enrichi.P10 === 'number' &&
+                typeof enrichi.P90 === 'number' &&
+                Number.isFinite(enrichi.P10) &&
+                Number.isFinite(enrichi.P90) && (
+                    <div className="pt-1 border-t border-bordure flex items-center justify-between gap-3 text-[10px] text-ink-400">
+                        <span>Monte-Carlo P10–P90</span>
+                        <span>
+                            <PrivateAmount>
+                                {`${formatCompactCAD(enrichi.P10)} → ${formatCompactCAD(enrichi.P90)}`}
+                            </PrivateAmount>
+                        </span>
+                    </div>
+                )}
         </div>
     );
 };

@@ -10,7 +10,7 @@
 //
 // Note : ce SW est uniquement chargé en PROD (vite import.meta.env.PROD).
 
-const CACHE_NAME = 'financeai-v24'; // v24 : separation Portefeuille et Liquidites dans Accueil ; v23 : courbes dynamiques, assistant sobre et nettoyage regles
+const CACHE_NAME = 'financeai-v25'; // v24 : separation Portefeuille et Liquidites dans Accueil ; v23 : courbes dynamiques, assistant sobre et nettoyage regles
 const PRECACHE_URLS = ['/manifest.json', '/icon.svg'];
 
 // [CF-ACCESS] Une réponse mettable en cache doit être une réponse DIRECTE de notre origine : ni redirigée (session
