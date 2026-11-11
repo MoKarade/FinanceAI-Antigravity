@@ -114,12 +114,13 @@ describe('PH4-FUT-B — profil de rendement dans le moteur (déterministe, 30 an
         // déduites l'année même au lieu d'être effacées par le reset de janvier (impôt à vie
         // 49 647,55 → 48 486,22 $ en conservateur, −1 161,33 $) → NW ↑ +1 248,78 / +1 246,15 /
         // +1 266,74 $ (étaient 1 677 701,29 / 2 031 418,55 / 3 181 268,10). Dérive VOULUE, décidée
-        // (Marc 2026-09-05, réponse 15) ; chez un RETRAITÉ le même lot fait l'inverse (retraits imposés).
-        expect(finalNetWorth('conservative')).toBeCloseTo(1_678_950.07, 1);
-        expect(finalNetWorth('balanced')).toBeCloseTo(2_032_664.71, 1);
-        expect(finalNetWorth('aggressive')).toBeCloseTo(3_182_534.84, 1);
+        // RE-CALIBRÉ 2026-11-05 (Jalon 1 Itération 2, +109,58 $) : intégration de la RRQ bonifiée Volets 1 et 2 (Loi 149)
+        // augmentant le ratio RRQ individuel au prorata des années de cotisation post-2019/2024.
+        expect(finalNetWorth('conservative')).toBeCloseTo(1_679_059.66, 1);
+        expect(finalNetWorth('balanced')).toBeCloseTo(2_032_774.29, 1);
+        expect(finalNetWorth('aggressive')).toBeCloseTo(3_182_644.42, 1);
         // Le run historique (champ absent) est pinné sur la valeur 'balanced'.
-        expect(finalNetWorth(undefined)).toBeCloseTo(2_032_664.71, 1);
+        expect(finalNetWorth(undefined)).toBeCloseTo(2_032_774.29, 1);
     });
 
     it("'aggressive' + asset location > 'aggressive' seul (le bonus 0.4pp s'empile sur le preset)", () => {

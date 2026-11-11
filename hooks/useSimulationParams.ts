@@ -11,10 +11,12 @@ import { useMemo, useSyncExternalStore } from 'react';
 import { computeCashLedgerDetailed } from '../services/startingCash';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { useShallow } from 'zustand/shallow';
-import { buildSimulationParams } from '../services/projection/buildSimulationParams';
+import { buildSimulationParams, derivePortfolioStartingACBs } from '../services/projection/buildSimulationParams';
 import { avecHorizonEsperanceDeVie } from '../services/projection/horizon';
+import { buildBehavioralProfileFromTransactions } from '../services/projection/behavioralProfile';
+import { computeAccountReturnRatesForMode } from '../services/assetFundamentals';
 import type { SimulationParams } from '../services/projection';
-import type { Transaction } from '../types';
+import type { Transaction, User } from '../types';
 import { usePastPortfolioHistory } from './usePastPortfolioHistory';
 import { deriveStartingBalancesFromHistory } from '../services/history/startingBalancesFromHistory';
 import { todayIsoLocal } from '../services/projection/dailyRefine';
@@ -98,7 +100,7 @@ interface SimulationParamsBundle {
  */
 export function useSimulationParams(calculatedMonthlySavings: number): SimulationParamsBundle {
     const {
-        projection, config, realEstateGoals, debts, childGoals, travelGoals, lifeEvents,
+        projection: storeProjection, config, realEstateGoals, debts, childGoals, travelGoals, lifeEvents,
         retirementGoal, financialGoals, budgetItems, initialBalances, transactions,
         insurancePolicies, vehicleReplacements, majorRenovations, charitableGoals,
         rentalProperties, privateBusinesses,
@@ -204,38 +206,81 @@ export function useSimulationParams(calculatedMonthlySavings: number): Simulatio
     }, [startYear, startMonth]);
 
     // Lot 0 — assemblage AppState → SimulationParams = fonction PURE (réutilisable hors React).
-    const params = useMemo<SimulationParams>(() => buildSimulationParams({
-        // [HORIZON-ESPERANCE-DE-VIE] Durée = jusqu'à l'espérance de vie de la personne 1 (source
-        // unique, même règle que deriveSimulationInputsFromState).
-        projection: avecHorizonEsperanceDeVie(projection, config, retirementGoal),
-        config,
-        liveCSVBalances,
-        calculatedStartingCash,
-        termesFautifsCash: ledgerCash.termesFautifs,
-        realEstateGoals,
-        debts,
-        // [DETTE-VIREMENTS-REELS] Les virements qui remboursent une dette liée à un marchand.
-        transactions: transactions as Transaction[],
-        // [DETTE-SOLDE-INSTANTANE-FIGE] Le JOUR, pas seulement le mois : un solde DATÉ se ramène à
-        // aujourd'hui au prélèvement près. Même horloge partagée que `startYear`/`startMonth`
-        // (`useTodayIsoLocal` lit le même store externe), donc aucune seconde source de temps.
-        aujourdhuiIso: todayIsoPourDettes,
-        childGoals,
-        travelGoals,
-        lifeEvents,
-        retirementGoal,
-        financialGoals,
-        budgetItems,
-        calculatedMonthlySavings,
-        startYear,
-        startMonth,
-        insurancePolicies,
-        vehicleReplacements,
-        majorRenovations,
-        charitableGoals,
-        rentalProperties,
-        privateBusinesses,
-    }), [projection, calculatedStartingCash, ledgerCash.termesFautifs, liveCSVBalances, realEstateGoals, debts, childGoals, travelGoals, lifeEvents, retirementGoal, config, budgetItems, calculatedMonthlySavings, insurancePolicies, vehicleReplacements, majorRenovations, charitableGoals, rentalProperties, privateBusinesses, financialGoals, startYear, startMonth, todayIsoPourDettes, transactions]);
+    const params = useMemo<SimulationParams>(() => {
+        const retMode = storeProjection?.returnAssumptionsMode;
+        const projection = retMode === 'iqpf' || retMode === 'real_holdings'
+            ? {
+                ...storeProjection,
+                returnRates: computeAccountReturnRatesForMode(
+                    retMode,
+                    storeProjection.returnRates,
+                    assetsPourRegime ?? EMPTY_ARRAY,
+                    fxPourRegime ?? {},
+                ),
+            }
+            : storeProjection;
+
+        const expMode = projection?.expenseProjectionMode;
+        const behavioralProfile = expMode === 'real' || expMode === 'hybrid'
+            ? (() => {
+                const users = (config?.users ?? []) as unknown as User[];
+                const netMonthly = users.reduce((s, u) => s + ((u?.netSalary || u?.salary || 0) as number), 0);
+                const budgetTarget = Math.max(0, netMonthly - calculatedMonthlySavings);
+                return buildBehavioralProfileFromTransactions(
+                    transactions as Transaction[],
+                    budgetTarget,
+                    todayIsoPourDettes,
+                    expMode,
+                );
+            })()
+            : undefined;
+
+        const acbOverrides = retMode === 'real_holdings' && (assetsPourRegime?.length ?? 0) > 0
+            ? (() => {
+                const acbs = derivePortfolioStartingACBs(
+                    assetsPourRegime ?? EMPTY_ARRAY,
+                    fxPourRegime ?? {},
+                    { nonReg: liveCSVBalances.NON_ENREG, crypto: liveCSVBalances.CRYPTO },
+                );
+                return { initialNonRegACB: acbs.nonRegACB, initialCryptoACB: acbs.cryptoACB };
+            })()
+            : {};
+
+        return buildSimulationParams({
+            // [HORIZON-ESPERANCE-DE-VIE] Durée = jusqu'à l'espérance de vie de la personne 1 (source
+            // unique, même règle que deriveSimulationInputsFromState).
+            projection: avecHorizonEsperanceDeVie(projection, config, retirementGoal),
+            config,
+            liveCSVBalances,
+            calculatedStartingCash,
+            termesFautifsCash: ledgerCash.termesFautifs,
+            realEstateGoals,
+            debts,
+            // [DETTE-VIREMENTS-REELS] Les virements qui remboursent une dette liée à un marchand.
+            transactions: transactions as Transaction[],
+            // [DETTE-SOLDE-INSTANTANE-FIGE] Le JOUR, pas seulement le mois : un solde DATÉ se ramène à
+            // aujourd'hui au prélèvement près. Même horloge partagée que `startYear`/`startMonth`
+            // (`useTodayIsoLocal` lit le même store externe), donc aucune seconde source de temps.
+            aujourdhuiIso: todayIsoPourDettes,
+            childGoals,
+            travelGoals,
+            lifeEvents,
+            retirementGoal,
+            financialGoals,
+            budgetItems,
+            calculatedMonthlySavings,
+            startYear,
+            startMonth,
+            insurancePolicies,
+            vehicleReplacements,
+            majorRenovations,
+            charitableGoals,
+            rentalProperties,
+            privateBusinesses,
+            behavioralProfile,
+            ...acbOverrides,
+        });
+    }, [storeProjection, calculatedStartingCash, ledgerCash.termesFautifs, liveCSVBalances, realEstateGoals, debts, childGoals, travelGoals, lifeEvents, retirementGoal, config, budgetItems, calculatedMonthlySavings, insurancePolicies, vehicleReplacements, majorRenovations, charitableGoals, rentalProperties, privateBusinesses, financialGoals, startYear, startMonth, todayIsoPourDettes, transactions, assetsPourRegime, fxPourRegime]);
 
     return {
         params, pastHistory, liveCSVBalances, calculatedStartingCash,

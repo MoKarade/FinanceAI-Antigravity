@@ -159,6 +159,10 @@ export interface User {
   celiContributed?: number;
   rrspContributed?: number;
   facteurEquivalence?: number;
+  /** Âge de début souhaité pour la rente RRQ de ce conjoint (60-72, défaut repli sur retirementGoal.rrqStartAge). */
+  rrqStartAge?: number;
+  /** Âge de début souhaité pour la PSV de ce conjoint (65-70, défaut repli sur retirementGoal.psvStartAge). */
+  psvStartAge?: number;
   /** [MIGRATE-GROSS-PROPOSER] L'utilisateur a confirmé que son brut est bien le sien (ou a
    *  accepté le brut recalculé). Éteint l'avis « brut fabriqué par l'ancienne version » du Profil
    *  — un avertissement permanent est un avertissement mort. Champ additif optionnel. */
@@ -407,6 +411,14 @@ export interface ProjectionConfig {
   // Union littérale = sous-ensemble d'AllocationStrategy ayant une ScenarioDefinition
   // (cf services/projection/scenarios.ts). Défaut : AUTO_MARGINAL (« Le Plan de Base »).
   withdrawalStrategy?: 'AUTO_MARGINAL' | 'PRIO_REER' | 'PRIO_CELI' | 'MELTDOWN_REER' | 'PRIO_CELI_NO_RAP';
+
+  // Futur 2.0 — Bandeau de commande de simulation (champs additifs optionnels, zéro migration requise)
+  /** Base de projection des dépenses : budget cible, comportement réel observé (transactions), ou hybride (0-12m réel → budget). */
+  expenseProjectionMode?: 'budget' | 'real' | 'hybrid';
+  /** Source des hypothèses de rendement : normes IQPF 2026, dérivé des actions/FNB réels détenus, ou personnalisé. */
+  returnAssumptionsMode?: 'iqpf' | 'real_holdings' | 'custom';
+  /** Niveau de puissance Monte Carlo : éclair (250), standard (1 000), approfondi (5 000) ou deep_search (10 000). */
+  mcPowerTier?: 'eclair' | 'standard' | 'approfondi' | 'deep_search';
 }
 
 // ────────────────────────────────────────────────────────────────────

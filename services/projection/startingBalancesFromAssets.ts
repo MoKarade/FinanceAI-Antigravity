@@ -21,6 +21,12 @@ import {
 } from '../history/reconstructPortfolioHistory';
 import { deriveStartingBalancesFromHistory } from '../history/startingBalancesFromHistory';
 import { getEffectivePurchases } from '../../utils/assetPurchases';
+import { assetValueCad, toCurrencyFactor } from '../portfolio';
+
+export interface PortfolioStartingACBs {
+    nonRegACB: number;
+    cryptoACB: number;
+}
 
 /**
  * Dérive les soldes de placement de départ (`liveCSVBalances`) PUREMENT depuis
@@ -52,3 +58,55 @@ export function derivePortfolioStartingBalances(
     const history = reconstructPortfolioHistory(minimal, fxRates ?? {});
     return deriveStartingBalancesFromHistory(history.points);
 }
+
+/**
+ * F15 — Dérive les prix de base rajustés (PBR / ACB) initiaux des comptes imposables
+ * (Non-Enregistré et Crypto) au mois zéro depuis l'historique d'achats `Asset.purchases[]`.
+ * En l'absence totale d'achats documentés, repli No-fake-data sur le solde du compte.
+ */
+export function derivePortfolioStartingACBs(
+    assets: readonly Asset[],
+    fxRates: Record<string, number>,
+    startingBalances?: { nonReg?: number; crypto?: number },
+): PortfolioStartingACBs {
+    let nonRegAcbSum = 0;
+    let nonRegValueSum = 0;
+    let cryptoAcbSum = 0;
+    let cryptoValueSum = 0;
+
+    for (const a of assets ?? []) {
+        const type = (a.accountType || '').toUpperCase();
+        if (type !== 'NON-ENREG' && type !== 'CRYPTO') continue;
+
+        const valCad = assetValueCad(a, fxRates);
+        const purchases = getEffectivePurchases(a);
+        const fxFactor = toCurrencyFactor(fxRates, a.currency || 'CAD');
+
+        let acbCad = valCad; // Fallback no-fake-data si aucun achat
+        if (purchases && purchases.length > 0) {
+            const costNative = purchases.reduce((sum, p) => sum + (Math.max(0, p.quantity) * Math.max(0, p.price)), 0);
+            acbCad = costNative * fxFactor;
+        }
+
+        if (type === 'CRYPTO') {
+            cryptoAcbSum += acbCad;
+            cryptoValueSum += valCad;
+        } else {
+            nonRegAcbSum += acbCad;
+            nonRegValueSum += valCad;
+        }
+    }
+
+    // Gestion de l'encaisse ou du reliquat non alloué en compte
+    const nonRegTarget = startingBalances?.nonReg ?? nonRegValueSum;
+    const cryptoTarget = startingBalances?.crypto ?? cryptoValueSum;
+
+    const nonRegUnallocated = Math.max(0, nonRegTarget - nonRegValueSum);
+    const cryptoUnallocated = Math.max(0, cryptoTarget - cryptoValueSum);
+
+    return {
+        nonRegACB: nonRegAcbSum + nonRegUnallocated,
+        cryptoACB: cryptoAcbSum + cryptoUnallocated,
+    };
+}
+

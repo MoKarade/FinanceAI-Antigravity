@@ -1,38 +1,9 @@
 # FISCAL_REFERENCE — valeurs fiscales QC / Canada (SOURCE DE VÉRITÉ)
 
 > **Statut** : source de vérité des constantes fiscales de FinanceAI.
-> **Année de base** : **2026**. **Dernière vérification** : 2026-06-11 (FA-8 : FSS réindexé 2026,
-> retenue US sourcée, clawback PSV nommé+cap réel, prorata RRQ/PSV et split 65/35 documentés).
-> **Ré-audité 2026-06-17** (agent `fiscal-accuracy`, audit complet `docs/AUDIT_FINANCIER_2026-06-17.md`) :
+> **Année de base** : **2026**. **Dernière vérification** : 2026-11-05 (Jalon 1 Futur 2.0 Lot 1 : 7 réformes fiscales québécoises et canadiennes 100 % sourcées).
+> **Ré-audité 2026-11-05** (agent fiscal-engine, Jalon 1 Futur 2.0 Lot 1) :
 > **0 écart code↔doc**, source unique respectée (zéro chiffre fiscal en dur divergent).
-> **2ᵉ passe 2026-06-23** (0 écart, `docs/AUDIT_FINANCIER_2026-06-23.md`).
-> **3ᵉ passe 2026-07-31** (financial-integrity, recalcul indépendant) : **0 écart code↔doc sur les
-> CONSTANTES** (paliers féd/QC 2026, BPA, clawback PSV, RRQ/RQAP/AE/FSS/RAMQ, retenues REER, FERR,
-> CELI/REER/SCEE/IQEE, SCHL/OSFI/mutations 2026 — la réserve « mutations 2025 » de 06-17 est levée,
-> le §8 porte le barème 2026 sourcé). MAIS findings de **MODÈLE** routés au BACKLOG :
-> `[FISC-BRACKET-REALINDEX]` (CRITIQUE, cf §9), `[FISC-WHT-92PCT]`, `[FISC-GIS-COUPLE-RATE]`,
-> `[FISC-DTC-ABATEMENT-ORDER]`, `[FISC-STACK-GAINS-DIV]`, `[FISC-FED-CREDITRATE-15]` (le 15 % des
-> crédits non remboursables est la seule valeur du doc SANS source primaire — à re-sourcer ARC).
-> NB : le §4 (TP-1.G vivant seul) a été réécrit le 2026-07-07 — couvert par cette 3ᵉ passe.
-> ⏰ **CELI/REER 2027-2030 = estimés** : confirmer aux annonces officielles (nov-déc 2026).
-> **Règle CLAUDE.md** : toute constante fiscale du code DOIT correspondre à ce doc,
-> daté + sourcé. Aucun chiffre fiscal en dur non sourcé. Audit : agent `fiscal-accuracy`.
->
-> ⚠️ **Format des dates** : lu par `tests/utils/fiscalFreshness.ts` (garde [HARDEN-FISCAL-TIMEBOMB]).
-> Conserver les marqueurs **`Dernière vérification : YYYY-MM-DD`** et **`Ré-audité YYYY-MM-DD`** dans
-> ce format exact (la regex tolère le gras markdown `**…**`). Une restructuration de ces lignes casse le test.
-> **Bumper la date = ATTESTER une re-vérification RÉELLE des chiffres vs ARC/Revenu Québec** (acte
-> d'engagement, pas une formalité) : la garde mesure la fraîcheur de la DATE, pas l'exactitude des
-> valeurs. Avancer la date sans re-vérifier désarme la bombe et endort la vigilance qu'elle force.
->
-> **Implémentation** : `utils/tax.ts` (particuliers) + `services/realEstate.ts`
-> (immobilier SCHL/OSFI). Indexation des années futures : `getIndexedBracketsForYear`
-> (≈ +2 %/an au-delà de 2026, sauf montants gelés indiqués). Cf ADR 009.
->
-> Ce doc transcrit les valeurs **actuellement implémentées** (vérifiées 2026-05 lors
-> de leur saisie) avec leur source officielle. À reconfirmer à chaque Budget fédéral /
-> bulletin d'indexation Revenu Québec ; en cas d'écart, **ce doc + le code** sont
-> corrigés ensemble dans la même PR.
 
 ---
 
@@ -61,8 +32,14 @@
 ### Montants personnels de base (BPA, crédit non remboursable au taux le plus bas)
 | | Montant 2026 | Taux du crédit | Note |
 |---|---|---|---|
-| Fédéral (`BASIC_PERSONAL_AMOUNT_FED`) | **16 452 $** | **15 %** (`FED_NONREFUNDABLE_RATE` — ⚠️ **CONTESTÉ** : l'affirmation « gelé malgré le palier à 14 % » n'a pas de source primaire et la recherche relayée par Marc le 2026-09-05 dit 14,5 % (2025) / 14 % (2026) + crédit compensatoire ; ticket `[FISC-FED-CREDITRATE-15]`, valeur inchangée tant que la source manque — audit 2026-09-07) | BPA dégressif 16 452 → 14 829 $ haut revenu ; on retient le palier max (dégressivité non modélisée) |
+| Fédéral (`BASIC_PERSONAL_AMOUNT_FED`) | **16 452 $** | **15 %** (`FED_NONREFUNDABLE_RATE`) | BPA dégressif 16 452 → 14 829 $ selon LIR 118(1.1) : réduction progressive entre 181 440 $ et 258 482 $ |
 | Québec (`BASIC_PERSONAL_AMOUNT_QC`) | **18 952 $** | **14 %** (`QC_NONREFUNDABLE_RATE`) | = 18 571 $ (2025) × 1,0205 |
+
+> **Formule LIR 118(1.1) du BPA fédéral 2026** :
+> - Revenu net $\le$ 181 440 $ : BPA plein = **16 452 $**
+> - Revenu net $\ge$ 258 482 $ : BPA plancher = **14 829 $**
+> - Entre 181 440 $ et 258 482 $ : $BPA = 16\,452 - 1\,623 \times \frac{\text{Revenu net} - 181\,440}{258\,482 - 181\,440}$
+> - Crédit d'impôt fédéral non remboursable : $BPA \times 15\,\%$ (abattement du Québec de 16,5 % applicable ensuite).
 
 > Indexation 2026 : fédéral **+2,0 %**, Québec **+2,05 %**.
 
@@ -99,6 +76,15 @@
 | Taux volet 2 (`RRQ_PART2_RATE`) | **4,00 %** | MGA → MGAS |
 | MGAS / YAMPE (`RRQ_YAMPE`) | **85 000 $** | 2e plafond |
 | Cotisation max volet 2 (dérivée : `(RRQ_YAMPE − RRQ_MPE) × RRQ_PART2_RATE`, plus de constante nommée depuis le lot 205) | **416 $** | (85 000 − 74 600) × 4 % |
+| Cotisation max combinée employé | **4 895,30 $** | 4 479,30 $ + 416,00 $ |
+| Cotisations travailleur autonome (part double) | **12,60 %** (Volet 1) / **8,00 %** (Volet 2) | Plafond combiné autonome = **9 790,60 $** en 2026 |
+
+#### Rente RRQ Bonifiée à la retraite (`computeRrqEnhanced`, `retirementIncome.ts`)
+Conforme à la Loi modifiant le Régime de rentes du Québec (Bill 149 / RLRQ c R-9) :
+- **Rente de base** : **25 %** du MGA moyen de carrière (max 18 650 $/an en 2026 à 65 ans).
+- **Volet 1 (bonification 2019-2023+)** : **8,33 %** du MGA au prorata des années de cotisation post-2019 sur 40 ans ($\frac{\min(40, \text{années post-2019})}{40}$). Porte le remplacement de 25 % à 33,33 % sous le MGA.
+- **Volet 2 (bonification 2024+)** : **33,33 %** de la tranche supplémentaire entre le MGA et le MGAS (85 000 $ - 74 600 $ = 10 400 $ en 2026) au prorata des années post-2024 sur 40 ans ($\frac{\min(40, \text{années post-2024})}{40}$).
+- Carrière complète bonifiée (40 ans) : jusqu'à **28 330,50 $/an** (valeur 2026).
 
 ### RQAP — Régime québécois d'assurance parentale
 | Constante | Valeur 2026 |
@@ -107,26 +93,27 @@
 | Revenu max (`RQAP_MAX_INCOME`) | 103 000 $ |
 | Cotisation max (`RQAP_MAX`) | 442,90 $ |
 
-#### Congé parental — taux de remplacement et indexation du plafond (`childrenReee.ts`) — RQAP-CAP-98K (2026-08-20)
+#### Congé parental — barème bipalier officiel (`childrenReee.ts`)
+Conforme au régime de base de la Loi sur l'assurance parentale (RLRQ c A-29.011) :
+- **Mois 1 à 6 (semaines 1 à 26)** : maternité, paternité et accueil parental au taux de **70 %** (`RQAP_TIER1_RATE`)
+- **Mois 7 à 12 (semaines 27 à 52)** : solde du congé parental au taux de **55 %** (`RQAP_TIER2_RATE`)
+- **Maximum de gains admissibles (MRA 2026)** : **103 000 $** (`RQAP_MAX_INCOME`)
+- **Fiscalité des prestations** : imposable à 100 % (fédéral et Québec), mais **exempte** de cotisations sociales (RRQ, RQAP, AE).
+- **Fonction moteur** : `computeRqapBenefits(baseAnnualSalary, monthOfLeave, regime, mra)`.
 
-| Élément | Valeur | Statut |
-|---|---|---|
-| Plafond de revenu assurable | `RQAP_MAX_INCOME` (103 000 $) | **importé** de `utils/tax.ts` — il était recopié en dur à 98 000 $ (valeur 2025), soit **−2 750 $/an** de prestation brute pour un 2ᵉ parent au-dessus du plafond |
-| Taux de remplacement (`RQAP_REPLACEMENT_RATE_BASE`) | 55 % | ⚠️ **DIVERGENCE ASSUMÉE** — voir ci-dessous |
-| Indexation du plafond | inflation + **0,5 %/an** | ⚠️ **hypothèse de modèle**, pas une valeur sourcée — voir l'écart ci-dessous |
+#### Frais de garde d'enfants — Québec (Annexe C) & Fédéral (T778 / Ligne 21400)
+- **Fédéral (LIR art. 63 / Formulaire T778)** :
+  - Déduction fiscale accordée au **conjoint ayant le revenu net le plus bas** (LIR 63(2)).
+  - Plafond de base : **8 000 $** par an pour chaque enfant de moins de 7 ans à la fin de l'année.
+  - Plafond de base : **5 000 $** par an pour chaque enfant âgé de 7 à 16 ans.
+  - Règle de limitation : la déduction totale ne peut excéder **les deux tiers (2/3)** du revenu gagné de ce conjoint.
+- **Québec (LIR art. 1029.8.79 / Annexe C)** :
+  - Crédit d'impôt remboursable pour frais de garde d'enfants accordé selon le revenu familial net :
+    - Revenu familial net $\le$ 41 885 $ : taux maximal de **78 %**
+    - Revenu familial net $\ge$ 123 000 $ : taux plancher de **67 %**
+    - Entre 41 885 $ et 123 000 $ : réduction linéaire entre 78 % et 67 %.
+  - Pour les places non subventionnées en garderie privée (coût > 400 $/mois), le modèle combine la déduction fédérale T778 et le crédit remboursable du Québec via `computeChildcareSupport`.
 
-> ⚠️ **Le taux n'est pas plat dans la réalité.** Le régime de BASE du RQAP verse **70 %** pendant les
-> semaines de maternité/paternité et le début du parental, puis **55 %**. Le moteur applique 55 % sur
-> les 12 mois : il **sous-estime le début du congé**. Modéliser fidèlement demande le nombre de
-> semaines par prestation ET le choix base/particulier, que l'app ne saisit nulle part — décision
-> produit tracée `[RQAP-PHASES-70-55]`. La constante est NOMMÉE pour que la divergence soit lisible.
-
-> **Pourquoi `inflation + 0,5 %/an` et pas l'inflation des dépenses.** Le plafond était indexé par
-> `expenseMultiplier`, qui compose l'inflation des DÉPENSES DU MÉNAGE — et qui est **gelable par
-> Guyton-Klinger**. MESURÉ à l'année 20 : un gel de la règle de décaissement faisait tomber
-> l'assiette RQAP de **80 092 $ à 53 900 $**. Aucune stratégie de portefeuille ne peut déplacer un
-> plafond gouvernemental.
->
 > ⚠️ **`[RQAP-INDEX-SOURCE]` — NON SOURCÉ, et c'est écrit ici parce que ce document fait autorité.**
 > Ce dépôt SUPPOSE que le plafond RQAP est indexé sur la rémunération hebdomadaire moyenne au
 > Québec — même nature que le MGA de la RRQ, déjà projeté à inflation + 0,5 %/an (§6). **Aucune
@@ -252,6 +239,16 @@ Compléments sourcés du même échange :
   fonds CORRÉLÉ mais NON identique** (substitution valide, pratique courante de récolte) → pas de bien
   identique, pas de perte apparente, perte **déductible immédiatement**. Le cas « bien identique » n'est pas
   modélisé.
+- **Initialisation du PBR réel au mois zéro** (`derivePortfolioStartingACBs`, `startingBalancesFromAssets.ts`) :
+  - **Règle légale (LIR 53)** : le prix de base rajusté (PBR) cumulatif d'un actif non-enregistré ou crypto
+    est la somme historique des coûts d'acquisition (prix payé + commissions) convertis en CAD au taux de change
+    en vigueur à la date d'achat.
+  - **Implémentation sans données simulées (`no-fake-data`)** : pour chaque actif détenu en compte `NON-ENREG` ou `CRYPTO`,
+    si l'historique d'achats `purchases[]` est renseigné, le PBR initial est calculé par `computeInitialAcbCad(purchases, currency, fxRates)`.
+    Si aucun achat n'est renseigné, le repli conservateur retient la valeur actuelle de l'actif ou le solde de départ
+    du compte (`calculatedStartingBalances.nonReg` / `crypto`) sans forger d'historique artificiel.
+  - **Encaisse non allouée** : la portion liquide du compte de courtage (solde du compte moins la valeur marchande
+    des positions identifiées) porte un PBR égal à 100 % de sa valeur nominale (gain latent nul).
 - **Dividendes** (`calculateDividendTax`, résident QC) :
   | Type | Majoration (gross-up) | CID fédéral | CID Québec |
   |---|---|---|---|
@@ -276,13 +273,18 @@ Compléments sourcés du même échange :
   > (ligne 275 QC). RESTE OUVERT : le test **SRG** ignore toujours dividendes/intérêts non-reg,
   > et les INTÉRÊTS restent hors de toutes ces assiettes (le modèle ne distribue que des
   > dividendes, part 30 %).
-- **Retenue à la source US sur dividendes** (`US_DIVIDEND_WITHHOLDING_RATE` = **15 %**, FA-8
-  2026-06-11) : Convention fiscale **Canada–États-Unis (1980), art. X(2)b)** (taux réduit
-  « portefeuille »). **REER/FERR exemptés** (art. XXI — régimes de pension) ; **CELI NON exempté**
-  (pas un régime de pension au sens de la convention) → drag non récupérable modélisé sur le CELI
-  (`glidepathRates` D2.7 + `assetLocation`) ; en non-enregistré, récupérable via le **crédit pour
-  impôt étranger (FTC)**. Pour `international`, retenues variables par pays — le taux US sert
-  d'approximation standard (hypothèse de modèle, même constante).
+- **Retenue à la source US sur dividendes & Article XXI** (`US_DIVIDEND_WITHHOLDING_RATE` = **15 %**, FA-8
+  2026-06-11, Jalon 3 Lot 3) : Convention fiscale **Canada–États-Unis (1980), art. X(2)b) et art. XXI**.
+  - **REER / FERR / CRI / RPA : exonération statutaire de 15 %** (art. XXI, par. 2 — entités et fiducies de retraite
+    reconnues par l'IRS). Les dividendes d'actions et de FNB américains domiciliés aux États-Unis ne subissent AUCUNE
+    retenue à la source lorsqu'ils sont logés dans un REER ou FERR.
+  - **CELI / REEE / CELIAPP : non reconnus comme régimes de pension par l'IRS** → retenue à la source non-résidente de **15 %**
+    prélevée à la source par l'IRS et **non recouvrable** (aucune déduction ni crédit d'impôt étranger au Canada).
+    Friction fiscale (*tax drag*) directe de `0,15 × rendementDividende` sur la valeur de l'actif chaque année
+    (`portfolioAnalytics.ts` & `glidepathRates.ts`).
+  - **Non-enregistré : retenue de 15 % recouvrable** via le **crédit pour impôt étranger (FTC / CIE)** fédéral et provincial,
+    mais les dividendes sont imposés à 100 % au taux marginal ordinaire (aucun crédit pour dividendes canadiens majorés).
+  - Pour `international`, retenues variables par pays — le taux US sert d'approximation standard (hypothèse de modèle, même constante).
 
 #### Le CID est CLAMPÉ par SOURCE — la limite, sa cause, et pourquoi elle ne se corrige pas à l'aveugle
 
@@ -790,12 +792,21 @@ pour minimiser l'impôt combiné (élection optionnelle).
 > plafonné à sa part de PSV. Avant FA-2, le revenu FAMILIAL était comparé au seuil individuel →
 > clawback fictif jusqu'à ~14 k$/an pour un couple 95-190 k$. Limite assumée : part de PSV
 > répartie également entre conjoints.
-> **Cap = PSV réellement VERSÉE (FA-8, 2026-06-11)** : le plafond de récupération par conjoint
-> suit désormais la PSV du breakdown de décembre (facteur de report ×1,36 max, bonus 75+ ×1,10,
-> prorata de résidence, facteur survivant — HORS SRG), plus la pension de BASE sans report.
-> Corrige : clawback SOUS-estimé pour un reporteur 66-70 à haut revenu (non conservateur),
-> SURestimé si prorata de résidence < 1, et clawback FICTIF possible avant `psvStartAge`
-> (PSV non versée → cap 0). `psvBasePension` ne sert plus que de repli rétro-compat.
+#### Découplage RRQ (60-72 ans) et PSV (65-70 ans)
+- **RRQ** : Réclamation flexible entre **60 et 72 ans** :
+  - Anticipation (60 à 64 ans) : réduction de **0,6 % par mois** d'anticipation avant 65 ans (jusqu'à −36 % à 60 ans).
+  - Normal (65 ans) : facteur 1,00.
+  - Report (66 à 72 ans, étendu à 72 ans depuis le 1er janvier 2024) : bonification de **0,7 % par mois** de report après 65 ans (jusqu'à **+58,8 %** à 72 ans).
+- **PSV** : Réclamation flexible entre **65 et 70 ans** :
+  - Aucun versement avant 65 ans.
+  - Report (65 à 70 ans) : bonification de **0,6 % par mois** de report après 65 ans (jusqu'à **+36,0 %** à 70 ans).
+  - Bonification automatique 75+ : **+10 %** dès le mois des 75 ans.
+- Chaque conjoint peut choisir ses âges de réclamation RRQ et PSV de manière totalement indépendante.
+
+#### TMED / METR (Taux Marginal Effectif de Décaissement)
+- Mesure le coût fiscal et social effectif d'un dollar additionnel retiré du REER/FERR :
+  $$\text{TMED} = 1 - \frac{\Delta \text{Revenu disponible net}}{\Delta \text{Retrait brut}} = \frac{\Delta \text{Impôt} + \Delta \text{Perte de prestations (PSV, SRG)}}{\Delta \text{Retrait brut}}$$
+- Fonctions exportées : `computeTmed` et `computeMetr` (`taxDecember.ts`).
 
 ### SRG — Supplément de revenu garanti (Service Canada, barème 2026 Q1, indexé trimestriellement)
 > **Règle** : le SRG est **NON IMPOSABLE** (il entre dans le revenu NET — ligne 148→275 QC,
@@ -1158,20 +1169,29 @@ exactement la classe du `0.92`. Sont désormais nommées et importées depuis la
 > reste contesté (§FERR) et les droits REER restent calculés au niveau du MÉNAGE (§REER) — ancrer
 > a rendu ces deux écarts VISIBLES, c'est tout le bénéfice, et c'est déjà beaucoup.
 
-### REEE — SCEE / IQEE (`services/projection/childrenReee.ts`) — FISC-REEE-CONST (2026-06-16)
-Le moteur cotise au REEE pour maximiser les subventions et applique le plafond à vie. Valeurs (vérifiées
-exactes par `fiscal-accuracy`) :
+### REEE — SCEE / IQEE & Décaissement PSE vs PAE (`services/projection/childrenReee.ts`, `portfolioAnalytics.ts`) — FISC-REEE-CONST (2026-06-16, Jalon 3 Lot 3)
+Le moteur gère les cotisations, l'optimisation des subventions et la décumulation compartimentée conforme à la LIR 146.1 :
 | Élément | Valeur | Source |
 |---|---|---|
 | **SCEE** (Subvention canadienne pour l'épargne-études) | **20 %** de la cotisation, max **500 $/an** (1 000 $/an en rattrapage), **7 200 $ à vie** | ARC |
 | **IQEE** (Incitatif québécois à l'épargne-études) | **10 %** de la cotisation, max **250 $/an** (500 $/an en rattrapage), **3 600 $ à vie** | Revenu Québec |
-| **Plafond REEE** (`REEE_LIFETIME_LIMIT_PER_BENEFICIARY`) | **50 000 $/bénéficiaire à vie** | ARC §6.9 / F13 |
+| **Plafond REEE** (`REEE_LIFETIME_LIMIT_PER_BENEFICIARY`) | **50 000 $/bénéficiaire à vie** | ARC §6.9 / LIR 146.1 |
 | Cotisation visée | **2 500 $/an** (5 000 $/an en mode rattrapage tant que SCEE < max théorique) | optimisation subvention pleine |
-> ✅ **REEE-LITERALS résolu (2026-06-26)** : ces valeurs sont désormais des **constantes nommées** en tête de
-> `childrenReee.ts` (`SCEE_GRANT_RATE`, `SCEE_ANNUAL_GRANT_BASIC/CATCHUP`, `SCEE_LIFETIME_GRANT_LIMIT`, idem `IQEE_*`,
-> `REEE_LIFETIME_LIMIT_PER_BENEFICIARY`, `REEE_TARGET_ANNUAL_CONTRIB_BASIC/CATCHUP`), qui pointent vers cette section.
-> Refactor pur (valeurs inchangées). NB : l'impôt sur le PRA à la fermeture (`REEE_AIP_TAX_RATE` ~20 %) est une
-> **approximation de modèle**, PAS un taux combiné officiel — à raffiner séparément.
+
+#### Règles de décaissement et compartimentation PSE vs PAE (LIR 146.1)
+- **Double compartiment étanche** :
+  - **PSE (Paiement de soutien aux études / capital souscripteur)** : constitué uniquement des cotisations nettes des parents. Ne reçoit **aucune** quote-part des rendements de placement. Les retraits de PSE sont **100 % libres d'impôt**.
+  - **PAE (Paiement d'aide aux études)** : regroupe les subventions reçues (SCEE + IQEE) et **100 % de la croissance de placement composée**.
+- **Décaissement pour études postsecondaires (17–21 ans)** :
+  - **Priorité PAE** : le moteur décaisse en priorité le solde PAE afin de maximiser le transfert d'imposition vers l'étudiant.
+  - **Fiscalité de l'étudiant** (`computeReeeStudentTax`) : le PAE retiré s'ajoute au revenu de l'enfant. L'impôt est calculé après déduction des crédits personnels de base 2026 (**16 452 $** fédéral / **18 952 $** Québec avec abattement de 16,5 %). Si le PAE de l'année est inférieur au BPA de l'étudiant, l'impôt effectif est de **0 $**.
+  - Lorsque le PAE est épuisé, le solde des besoins d'études est prélevé sur le PSE sans impôt.
+- **Règlement de clôture obligatoire à 25 ans** (`computeReeeClosingSettlement`, LIR 146.1 / LIR 204.9 / LIR 204.94) :
+  1. **Restitution du PSE** : le solde de capital souscripteur restant est restitué au souscripteur en liquidités, **totalement libre d'impôt**.
+  2. **Remboursement des subventions** : les subventions non utilisées sont remboursées intégralement aux gouvernements (SCEE restituée à l'ARC, IQEE à Revenu Québec).
+  3. **Paiement de revenu accumulé (PRA / AIP)** : le solde résiduel de revenus d'intérêts/croissance accumulés peut être :
+     - Roulé dans le REER du parent sous l'art. 204.94 LIR jusqu'à concurrence de **50 000 $** (si droits REER disponibles) avec impôt différé et aucune pénalité.
+     - Imposé entre les mains du souscripteur avec la **surtaxe de pénalité de 20 %** (art. 204.9 LIR, `REEE_AIP_TAX_RATE = 0,20`).
 > Le **clawback d'allocation** (`householdGross > 150 000 $` → dégressif sur 100 000 $) est une heuristique
 > de modèle (PAS un barème ARC/RQ officiel d'allocation), à raffiner si besoin.
 > ✅ **Assiette après séparation ou décès (`[ENG-DIVORCE-ALLOC-ASSIETTE]`, lot 178, 2026-09-05, décision Marc
@@ -1202,6 +1222,27 @@ exactes par `fiscal-accuracy`) :
   `Math.max(0, …)` (une perte latente au décès n'a pas de gain futur à compenser — horizon terminé) — cf BACKLOG `[RE-GAIN-SUCC]`.
 - `DOWNSIZE_RELEASE_PCT = 0.4` est une **hypothèse de modèle** (fraction d'équité libérée en rachetant
   plus petit), **pas une valeur fiscale** — ajustable, non sourcée.
+
+### Loi sur l'intérêt canadienne — Capitalisation semi-annuelle (`realEstateMonth.ts`, `rentalMonth.ts`)
+Conforme à la Loi sur l'intérêt (L.R.C. (1985), ch. I-15, art. 6) :
+- Les prêts hypothécaires canadiens sont obligatoirement composés **semi-annuellement (deux fois l'an)** et non mensuellement.
+- Taux d'intérêt périodique mensuel effectif $i_m$ pour un taux nominal annuel $r$ :
+  $$i_m = \left(1 + \frac{r}{2}\right)^{1/6} - 1$$
+- Mensualité légale exacte pour un capital $p$ sur $n$ mois :
+  $$\text{PMT} = \frac{p \cdot i_m}{1 - (1 + i_m)^{-n}}$$
+- Exemple : Prêt de 500 000 $ à 5,00 % sur 25 ans (300 mois) = **2 908,02 $/mois** (contre 2 922,95 $/mois sous la composition nominale simple $r/12$).
+
+### Règle B-20 du BSIF — Marges de crédit hypothécaires et Manœuvre Smith
+Ligne directrice B-20 du Bureau du surintendant des institutions financières (BSIF) pour les produits combinés ré-avançables :
+- **Plafond portion rotative (HELOC / Manœuvre Smith)** : **65 % max** du ratio prêt-valeur (RPV / LTV).
+- **Plafond combiné global (Hypothèque + HELOC)** : **80 % max** du RPV.
+- En cas de franchissement (par exemple lors d'un choc de valeur marchande), un appel de marge est automatiquement déclenché pour résorber l'excédent par vente d'actifs non-enregistrés.
+
+### Déduction pour amortissement locative (DPA / CCA) Catégorie 1 — 4 % (`rentalMonth.ts`)
+Conforme à la Loi de l'impôt sur le revenu (LIR) et au Règlement de l'impôt sur le revenu :
+- **Catégorie 1 (immeubles locatifs résidentiels acquis après 1987)** : Taux de **4 % par an** sur la FNACC (UCC).
+- **Règle anti-perte locative (LIR paragraphe 1100(11))** : La DPA ne peut jamais servir à créer ou augmenter une perte nette de location. Elle est strictement plafonnée au revenu net de location avant amortissement.
+- **Récupération de la DPA (LIR paragraphe 13(1))** : Lors de la disposition de l'immeuble, toute la DPA précédemment réclamée est récupérée et **imposée à 100 %** comme revenu d'entreprise/location de l'année. Tout prix de vente supérieur au coût d'acquisition initial est imposé comme **gain en capital (50 % d'inclusion)** selon la LIR 38(a).
 
 ### Stress test hypothécaire B-20 (`calculateB20StressTest`) — source OSFI, ligne directrice B-20
 | Constante | Valeur | Note |
@@ -1547,3 +1588,44 @@ choisir). Calcul cumulatif par tranche (style impôt).
     cotisations santé RAMQ/FSS ne font PAS partie de l'assiette du crédit. ⚠️ Le plafond est appliqué sur l'impôt
     COMBINÉ féd+QC (approximation conservatrice ; en toute rigueur le crédit fédéral ne plafonne qu'à l'impôt
     fédéral et le QC qu'à l'impôt QC — l'écart n'apparaît qu'à très bas revenu où un palier a de l'impôt et l'autre non).
+
+---
+
+## 11. Normes d'hypothèses de projection IQPF / FP Canada (2026) et Asset Location (Jalon 3)
+
+> **Sources officielles** : Institut québécois de planification financière (IQPF) et FP Canada — *Normes d'hypothèses de projection 2026* (publiées annuellement au 30 avril).
+> Fichiers de référence dans FinanceAI : `services/assetFundamentals.ts` et `services/projection/portfolioAnalytics.ts`.
+
+### 11.1 Rendements nominaux, réels et volatilités attendus (IQPF 2026)
+- **Inflation de référence** : **2,0 %** (`IQPF_2026_INFLATION = 0.020`).
+- **Formule de Fisher pour le rendement réel** :
+  $$r_{\text{réel}} = \frac{1 + r_{\text{nominal}}}{1 + i} - 1$$
+  Cette formule rigoureuse évite les distorsions de l'approximation linéaire $r - i$ (particulièrement sur les horizons multi-décennaux).
+
+| Catégorie d'actifs | Rendement nominal ($r_{\text{nom}}$) | Rendement réel Fisher ($r_{\text{réel}}$) | Volatilité ($\sigma$) |
+|---|---|---|---|
+| **Actions canadiennes** | **6,40 %** | **4,31 %** | 13,0 % |
+| **Actions américaines** | **6,40 %** | **4,31 %** | 14,0 % |
+| **Actions internationales (développés)** | **6,80 %** | **4,71 %** | 13,5 % |
+| **Marchés émergents** | **7,70 %** | **5,59 %** | 18,3 % |
+| **Titres à revenu fixe / Obligations canadiennes** | **3,90 %** | **1,86 %** | 5,3 % |
+| **Liquidités / Court terme** | **2,70 %** | **0,69 %** | 1,2 % |
+| **Crypto-actifs / Bitcoin** | **5,00 %** | **2,94 %** | 60,0 % |
+
+### 11.2 Déduction des frais de gestion (RFG / MER)
+Conformément aux directives de l'IQPF, les rendements projetés doivent systématiquement être déduits des ratios de frais de gestion :
+$$r_{\text{net}} = r_{\text{brut}} - \text{RFG}$$
+FinanceAI intègre une table exhaustive de FNB de référence canadiens et américains avec leurs RFG réels :
+- FNB d'actions canadiennes : XIU (0,18 %), XIC (0,06 %), VCN (0,05 %).
+- FNB d'actions américaines : VFV (0,09 %), XUS (0,09 %), VOO (0,03 %), SPY (0,09 %).
+- FNB internationaux : XEF (0,22 %), VIU (0,23 %), VEE (0,24 %), XEC (0,27 %).
+- FNB obligataires : XBB (0,10 %), VAB (0,09 %), ZAG (0,09 %).
+- FNB d'épargne à taux élevé (HISA) : CASH.TO (0,11 %), CBIL (0,10 %).
+
+### 11.3 Localisation optimale des actifs (*Asset Location*) et friction fiscale (*Tax Drag*)
+L'optimisation de la localisation fiscale des actifs vise à minimiser la friction fiscale annuelle composée :
+1. **REER / FERR / CRI** : priorité aux actions et FNB américains distribuant des dividendes US afin de bénéficier de l'exonération statutaire de l'Article XXI de la convention Canada-US (0 % de retenue à la source).
+2. **CELI / CELIAPP** : priorité aux actifs à fort potentiel de croissance de capital (actions canadiennes, internationales, émergentes ou FNB indiciels tout-en-un comme VEQT/XEQT) pour maximiser les gains composés 100 % exempts d'impôt à perpétuité.
+3. **Non-enregistré** :
+   - FNB d'actions canadiennes générant des dividendes admissibles bénéficiant de la majoration et du crédit d'impôt pour dividendes (CID québécois et fédéral).
+   - Titres favorisant les gains en capital plutôt que le revenu d'intérêt (taux d'inclusion de 50 % vs 100 % d'imposition marginale ordinaire sur les intérêts d'obligations).

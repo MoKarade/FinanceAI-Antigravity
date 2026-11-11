@@ -195,7 +195,8 @@ async function computeProjectionAsync(
         // FIX cycle 3 silent-failure (MEDIUM): timeout + messageerror.
         // Sans timeout, un worker qui hang ou poste un message sans __requestId
         // laisse la Promise pendante indéfiniment.
-        const TIMEOUT_MS = 30_000;
+        const isDeepTier = params.projection?.mcPowerTier === 'approfondi' || params.projection?.mcPowerTier === 'deep_search';
+        const TIMEOUT_MS = isDeepTier ? 300_000 : 30_000;
         const cleanup = () => {
             worker.removeEventListener('message', onMessage);
             worker.removeEventListener('error', onError);
@@ -235,6 +236,7 @@ async function computeProjectionAsync(
 export interface StrategySearchProgress {
     done: number;
     total: number;
+    simPerSec?: number;
 }
 
 /** Découpe `items` en `n` tranches contiguës aussi équilibrées que possible. Exporté pour test. */
@@ -275,6 +277,7 @@ export async function runStrategySearchAsync(
     configs: ReadonlyArray<StrategyConfig>,
     opts: {
         iterations?: number;
+        allowDeepIterations?: boolean;
         maxWorkers?: number;
         onProgress?: (p: StrategySearchProgress) => void;
         /** Annulation : terminer les workers et rejeter avec SEARCH_CANCELLED. */
@@ -283,6 +286,8 @@ export async function runStrategySearchAsync(
 ): Promise<StrategySearchResult> {
     const { signal } = opts;
     const total = configs.length;
+    const startMs = Date.now();
+    const effIters = opts.iterations ?? 1000;
 
     // Détermine le parallélisme effectif (borné par le nb de configs).
     const hardware = typeof navigator !== 'undefined' && navigator.hardwareConcurrency
@@ -298,7 +303,12 @@ export async function runStrategySearchAsync(
         const { calculateStrategySearch } = await import('../projection');
         return calculateStrategySearch(params, configs, {
             iterations: opts.iterations,
-            onProgress: (done) => opts.onProgress?.({ done, total }),
+            allowDeepIterations: opts.allowDeepIterations,
+            onProgress: (done) => {
+                const elapsedSec = Math.max(0.001, (Date.now() - startMs) / 1000);
+                const simPerSec = Math.round((done * effIters) / elapsedSec);
+                opts.onProgress?.({ done, total, simPerSec });
+            },
         });
     }
 
@@ -310,7 +320,9 @@ export async function runStrategySearchAsync(
 
     const emitProgress = () => {
         const done = perShardDone.reduce((s, d) => s + d, 0);
-        opts.onProgress?.({ done, total });
+        const elapsedSec = Math.max(0.001, (Date.now() - startMs) / 1000);
+        const simPerSec = Math.round((done * effIters) / elapsedSec);
+        opts.onProgress?.({ done, total, simPerSec });
     };
 
     return new Promise<StrategySearchResult>((resolve, reject) => {
@@ -394,7 +406,120 @@ export async function runStrategySearchAsync(
                 mode: 'strategySearch',
                 configs: shard,
                 iterations: opts.iterations,
+                allowDeepIterations: opts.allowDeepIterations,
             });
         });
     });
+}
+
+/**
+ * Exécute le Tournoi Multi-Phases (Successive Halving + CRN + Attribution de Shapley)
+ * sur un pool de Web Workers en parallélisant chacune des 3 manches.
+ */
+export async function runTournamentStrategySearchAsync(
+    params: SimulationParams,
+    configs: ReadonlyArray<StrategyConfig>,
+    opts: {
+        round1Iterations?: number;
+        round2Iterations?: number;
+        round3Iterations?: number;
+        round2TopK?: number;
+        round3TopK?: number;
+        maxWorkers?: number;
+        baselineConfig?: StrategyConfig;
+        onProgress?: (p: StrategySearchProgress & { round?: 1 | 2 | 3 }) => void;
+        signal?: AbortSignal;
+    } = {},
+): Promise<StrategySearchResult> {
+    if (configs.length === 0) {
+        return { results: [], iterations: 0, shapleyAttribution: [], roundsSummary: [] };
+    }
+    const r1Iters = opts.round1Iterations ?? 100;
+    const r2Iters = opts.round2Iterations ?? 1000;
+    const r3Iters = opts.round3Iterations ?? 5000;
+    const top2K = Math.max(1, opts.round2TopK ?? 120);
+    const top3K = Math.max(1, Math.min(top2K, opts.round3TopK ?? 20));
+
+    const { computeTournamentCompositeScore } = await import('./strategySearch');
+    const rankPool = (pool: ConfigResult[], keepCount: number): ConfigResult[] => {
+        const survivors = pool.filter(c => c.successRate > 0);
+        const eligible = survivors.length > 0 ? survivors : pool;
+        const maxP50 = Math.max(1, ...eligible.map(c => Math.max(0, c.finalNWp50)));
+        const maxCvar = Math.max(1, ...eligible.map(c => Math.max(0, c.cvar95 ?? c.finalNWp10)));
+        return [...eligible]
+            .sort((a, b) => computeTournamentCompositeScore(b, maxP50, maxCvar) - computeTournamentCompositeScore(a, maxP50, maxCvar))
+            .slice(0, keepCount);
+    };
+
+    const n1 = configs.length;
+    const estN2 = Math.min(n1, top2K);
+    const estN3 = Math.min(estN2, top3K);
+    const totalBudget = n1 * r1Iters + estN2 * r2Iters + estN3 * r3Iters;
+    const startMs = Date.now();
+    let accSims = 0;
+
+    const makeRoundProgress = (round: 1 | 2 | 3, iters: number) => (p: StrategySearchProgress) => {
+        const doneSims = Math.min(totalBudget, accSims + p.done * iters);
+        const elapsedSec = Math.max(0.001, (Date.now() - startMs) / 1000);
+        opts.onProgress?.({
+            done: doneSims,
+            total: totalBudget,
+            simPerSec: Math.round(doneSims / elapsedSec),
+            round,
+        });
+    };
+
+    // Manche 1
+    const r1 = await runStrategySearchAsync(params, configs, {
+        iterations: r1Iters,
+        allowDeepIterations: true,
+        maxWorkers: opts.maxWorkers,
+        signal: opts.signal,
+        onProgress: makeRoundProgress(1, r1Iters),
+    });
+    accSims += n1 * r1Iters;
+    const q2 = rankPool(r1.results, top2K);
+
+    // Manche 2
+    const r2Configs = q2.map(x => x.config);
+    const r2 = await runStrategySearchAsync(params, r2Configs, {
+        iterations: r2Iters,
+        allowDeepIterations: true,
+        maxWorkers: opts.maxWorkers,
+        signal: opts.signal,
+        onProgress: makeRoundProgress(2, r2Iters),
+    });
+    accSims += r2Configs.length * r2Iters;
+    const q3 = rankPool(r2.results, top3K);
+
+    // Manche 3
+    const r3Configs = q3.map(x => x.config);
+    const r3 = await runStrategySearchAsync(params, r3Configs, {
+        iterations: r3Iters,
+        allowDeepIterations: true,
+        maxWorkers: opts.maxWorkers,
+        signal: opts.signal,
+        onProgress: makeRoundProgress(3, r3Iters),
+    });
+    const finalRanked = rankPool(r3.results, r3Configs.length);
+
+    const { calculateShapleyAttribution } = await import('../projection');
+    const { LEVER_LIBRARY } = await import('./strategyConfig');
+    const defaultBaseline = opts.baselineConfig ?? (Object.fromEntries(
+        LEVER_LIBRARY.map(l => [l.key, l.default]),
+    ) as unknown as StrategyConfig);
+    const shapleyAttribution = finalRanked[0]
+        ? calculateShapleyAttribution(params, defaultBaseline, finalRanked[0].config)
+        : [];
+
+    return {
+        results: finalRanked,
+        iterations: r3Iters,
+        shapleyAttribution,
+        roundsSummary: [
+            { round: 1, candidatesIn: n1, candidatesOut: q2.length, iterationsPerCandidate: r1Iters },
+            { round: 2, candidatesIn: r2Configs.length, candidatesOut: q3.length, iterationsPerCandidate: r2Iters },
+            { round: 3, candidatesIn: r3Configs.length, candidatesOut: finalRanked.length, iterationsPerCandidate: r3Iters },
+        ],
+    };
 }

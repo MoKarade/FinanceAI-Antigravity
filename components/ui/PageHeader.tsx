@@ -30,10 +30,12 @@ const TICKER_PAR_TITRE: Record<string, { code: string; bourse: string }> = {
     Budget: { code: 'BUDG:MENS', bourse: 'FLUX MENSUELS · CAD' },
     Placements: { code: 'PORTF:CAD', bourse: 'TSX / NYSE · CAD' },
     Immobilier: { code: 'IMMO:QC', bourse: 'FONCIER · QUÉBEC' },
+    'Projets immo': { code: 'IMMO:PRJ', bourse: 'ACQUISITION · QUÉBEC' },
     Dettes: { code: 'PASSIF:DET', bourse: 'AMORTISSEMENT · CAD' },
     Impôts: { code: 'FISC:QC', bourse: 'ARC & REVENU QC · CAD' },
     Retraite: { code: 'RETR:VIE', bourse: 'PROJECTION RENTE · CAD' },
     Projets: { code: 'PROJ:VIE', bourse: 'JALONS DE VIE · CAD' },
+    'Projets de vie': { code: 'PROJ:VIE', bourse: 'JALONS DE VIE · CAD' },
     Enfants: { code: 'FAM:REEE', bourse: 'SUBVENTIONS & REEE · CAD' },
     Profil: { code: 'DOSSIER:ID', bourse: 'MÉNAGE & REVENUS · CAD' },
     Réglages: { code: 'SYS:CFG', bourse: 'SYNCHRONISATION · CAD' },
@@ -46,30 +48,17 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
 }) => {
     const ticker = TICKER_PAR_TITRE[title] ?? { code: 'COTE:CAD', bourse: 'DOSSIER PERSONNEL · CAD' };
     return (
-        <header className={`gf-page-header flex flex-wrap items-center justify-between gap-2 sm:gap-3 lg:pb-5 lg:border-b border-white/6 ${className}`}>
-            <div className="basis-full flex items-center justify-between gap-2 pb-1 border-b border-bordure">
-                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+        <header className={`gf-page-header flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 ${className}`}>
+            <div className={`min-w-0 flex-1 ${nav ? 'lg:flex-none' : ''}`}>
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 sm:gap-x-3 sm:gap-y-2">
                     <span className="gf-ticker-symbol shrink-0" aria-hidden="true">
-                        <span className="w-1.5 h-1.5 rounded-full bg-current gf-pulse-live" />
                         {ticker.code}
                     </span>
-                    <span className="font-mono text-[9px] sm:text-[10px] tracking-wider uppercase text-ink-400 truncate">
-                        {ticker.bourse}
-                    </span>
-                </div>
-                <span className="hidden sm:inline-flex items-center gap-1.5 font-mono text-[10px] text-ink-400 shrink-0" aria-hidden="true">
-                    <span>Cote en direct</span>
-                    <span>·</span>
-                    <span className="text-ink-300">CAD ($)</span>
-                </span>
-            </div>
-            <div className={`min-w-0 flex-1 ${nav ? 'lg:flex-none' : ''}`}>
-                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 sm:gap-x-4 sm:gap-y-2.5">
-                    <h1 className="text-xl sm:text-[26px] leading-7 sm:leading-8 font-bold tracking-tight text-ink-50">{title}</h1>
+                    <h1 className="text-xl sm:text-[24px] leading-7 sm:leading-8 font-bold tracking-tight text-ink-50">{title}</h1>
                     {badge && <div className="gf-quote-badge text-xs max-w-full">{badge}</div>}
                 </div>
                 {subtitle && (
-                    <p className="text-xs sm:text-[13px] leading-4 sm:leading-5 text-ink-400 mt-0.5 sm:mt-1 max-w-2xl">{subtitle}</p>
+                    <p className="text-xs sm:text-[13px] leading-4 sm:leading-5 text-ink-400 mt-1 max-w-2xl">{subtitle}</p>
                 )}
             </div>
             {/* Sous-onglets : à côté du titre (bureau) ; au téléphone, pleine largeur SOUS le titre et
@@ -83,4 +72,5 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         </header>
     );
 };
+
 

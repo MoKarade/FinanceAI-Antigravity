@@ -15,8 +15,10 @@
 import {
     calculateFutureProjection,
     calculateStrategySearch,
+    calculateTournamentStrategySearch,
     type SimulationParams,
     type StrategyConfig,
+    type TournamentSearchOptions,
 } from './projection';
 import type { ProjectionResult } from './projection/types';
 import type { StrategySearchResult } from './projection/strategySearch';
@@ -29,17 +31,19 @@ interface RunMessage {
     selectedIdx?: number;
     // [UI-SCEN] — types de scénarios demandés explicitement (panneau stress-tests).
     onlyStratTypes?: string[];
-    mode?: 'projection' | 'strategySearch';
+    mode?: 'projection' | 'strategySearch' | 'tournamentSearch';
     // G21 C5 commit 4 — mode 'strategySearch' : ce worker traite SA part de configs
     // (sharding fait côté main thread). iterations = sims MC par config.
     configs?: StrategyConfig[];
     iterations?: number;
+    allowDeepIterations?: boolean;
+    tournamentOptions?: Omit<TournamentSearchOptions, 'onProgress'>;
 }
 
 // Payloads sortants du worker vers le main thread.
 interface WorkerProgressMessage {
     __requestId: string | undefined;
-    __progress: { done: number; total: number; current?: string };
+    __progress: { done: number; total: number; simPerSec?: number; current?: string };
 }
 
 interface WorkerResultMessage {
@@ -63,11 +67,19 @@ self.onmessage = (e: MessageEvent<RunMessage>) => {
     // FIX silent-failure cycle 2 (HIGH): requestId obligatoire pour corréler
     // chaque réponse à son appel — évite les résultats croisés entre appels concurrents.
     const requestId = e.data.__requestId;
-    const { params, runMC = false, selectedIdx = 0, onlyStratTypes, mode = 'projection', configs, iterations } = e.data;
+    const { params, runMC = false, selectedIdx = 0, onlyStratTypes, mode = 'projection', configs, iterations, allowDeepIterations, tournamentOptions } = e.data;
     try {
-        if (mode === 'strategySearch') {
+        if (mode === 'tournamentSearch') {
+            const result = calculateTournamentStrategySearch(params, configs ?? [], {
+                ...tournamentOptions,
+                onProgress: (done, total, simPerSec) =>
+                    workerSelf.postMessage({ __requestId: requestId, __progress: { done, total, simPerSec } }),
+            });
+            workerSelf.postMessage({ __requestId: requestId, result });
+        } else if (mode === 'strategySearch') {
             const result = calculateStrategySearch(params, configs ?? [], {
                 iterations,
+                allowDeepIterations,
                 onProgress: (done, total) =>
                     workerSelf.postMessage({ __requestId: requestId, __progress: { done, total } }),
             });

@@ -659,14 +659,6 @@ export const Investments: React.FC<InvestmentsProps> = ({
             <div className="space-y-6 stagger-in pb-10 relative">
                 <PageHeader
                     title={TAB_LABELS[TabEnum.INVESTMENTS]}
-                    subtitle={
-                        <span className="inline-flex flex-wrap items-center gap-2">
-                            <span className="gf-ticker-symbol">
-                                <span className="w-1.5 h-1.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
-                                PORTFOLIO:CAD · MARCHÉS
-                            </span>
-                        </span>
-                    }
                 />
                 <div className="gf-terminal-card premium-card p-6">
                     <div className="text-center py-12 px-4 space-y-4">
@@ -781,10 +773,11 @@ export const Investments: React.FC<InvestmentsProps> = ({
         : diversificationScore >= 40 ? 'gf-delta-amber' : 'gf-delta-down';
     const badgeScore = (
         <span
-            className={`h-[30px] lg:h-9 px-3 lg:px-4 rounded-full border text-meta lg:text-[13px] font-semibold flex items-center whitespace-nowrap ${scoreClasses}`}
+            className={`h-[30px] lg:h-9 px-3 lg:px-4 rounded-full border text-meta lg:text-[13px] font-semibold flex items-center gap-1 whitespace-nowrap ${scoreClasses}`}
             title="Sous-mesure : diversification du portefeuille + tendance vs marché (le score de santé financière GLOBAL est sur l'Accueil)"
         >
-            Diversification <PrivateAmount>{diversificationScore}</PrivateAmount>/100
+            <span>{'Diversification '}</span>
+            <span><PrivateAmount>{diversificationScore}</PrivateAmount>/100</span>
         </span>
     );
     const lienFutur = (
@@ -803,14 +796,6 @@ export const Investments: React.FC<InvestmentsProps> = ({
             <ProjectionStaleBanner />
             <PageHeader
                 title={TAB_LABELS[TabEnum.INVESTMENTS]}
-                subtitle={
-                    <span className="inline-flex flex-wrap items-center gap-2">
-                        <span className="gf-ticker-symbol">
-                            <span className="w-1.5 h-1.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
-                            PORTFOLIO:CAD · MARCHÉS
-                        </span>
-                    </span>
-                }
                 nav={
                     <SubTabs<'overview' | 'allocation' | 'detail'>
                         idPrefix="placements"

@@ -600,4 +600,48 @@ describe('Refonte Google Finance — GoogleFinanceHero & BoutonsPimenterFutur', 
             { timeout: 1500 },
         );
     });
+
+    it('synchronise window.location.hash lors du changement d’onglet sans jamais revenir à l’ancien onglet (anti-race useTabNavigation)', async () => {
+        const { useTabNavigation } = await import('../../../hooks/useTabNavigation');
+        const { Tab } = await import('../../../types');
+
+        window.location.hash = `#${Tab.DASHBOARD}`;
+        useFinanceStore.setState({ activeTab: Tab.DASHBOARD });
+
+        const TestHarness = () => {
+            const activeTab = useFinanceStore((s) => s.activeTab);
+            const setActiveTab = useFinanceStore((s) => s.setActiveTab);
+            useTabNavigation(activeTab, setActiveTab);
+            return (
+                <div>
+                    <span data-testid="current-tab">{activeTab}</span>
+                    <button type="button" onClick={() => setActiveTab(Tab.TRANSACTIONS)}>
+                        Aller aux transactions
+                    </button>
+                    <button type="button" onClick={() => setActiveTab(Tab.DEBT)}>
+                        Aller aux dettes
+                    </button>
+                </div>
+            );
+        };
+
+        render(<TestHarness />);
+        expect(screen.getByTestId('current-tab')).toHaveTextContent(Tab.DASHBOARD);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Aller aux transactions' }));
+        expect(screen.getByTestId('current-tab')).toHaveTextContent(Tab.TRANSACTIONS);
+        expect(window.location.hash).toBe(`#${Tab.TRANSACTIONS}`);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Aller aux dettes' }));
+        expect(screen.getByTestId('current-tab')).toHaveTextContent(Tab.DEBT);
+        expect(window.location.hash).toBe(`#${Tab.DEBT}`);
+
+        // Retour navigateur vers l'URL racine sans hash (#) → revient bien sur l'Accueil (DASHBOARD)
+        act(() => {
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+            window.dispatchEvent(new HashChangeEvent('hashchange'));
+        });
+        expect(screen.getByTestId('current-tab')).toHaveTextContent(Tab.DASHBOARD);
+    });
 });
+

@@ -10,7 +10,7 @@
 //
 // Note : ce SW est uniquement chargé en PROD (vite import.meta.env.PROD).
 
-const CACHE_NAME = 'financeai-v28'; // v28 : Accueil unifie sans blocs fragmentes et retrait Depenses vs Budget / Secteurs ; v27 : Plan d'action patrimonial ameliore
+const CACHE_NAME = 'financeai-v29'; // v29 : Moteur Futur 2.0 (fiscalite 2026, profil comportemental, actions, MC 10k, optimiseur profond, conseiller prescriptif) + harmonisation UI 14 pages ; v28 : Accueil unifie
 const PRECACHE_URLS = ['/manifest.json', '/icon.svg'];
 
 // [CF-ACCESS] Une réponse mettable en cache doit être une réponse DIRECTE de notre origine : ni redirigée (session

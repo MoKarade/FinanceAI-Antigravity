@@ -11,7 +11,6 @@ import { BackupReminder } from './BackupReminder';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { isCoupleMode } from '../services/couple/netWorthByOwner';
 import { HubConnexionsModal } from './future/HubConnexionsModal';
-import { GoogleFinanceTickerBar } from './app/GoogleFinanceTickerBar';
 import { prefetchTab, getAdjacentTabs } from '../utils/tabPrefetch';
 
 const BandeauModeTest = lazyWithRetry(() => import('./test/BandeauModeTest').then(m => ({ default: m.BandeauModeTest })), 'BandeauModeTest');
@@ -41,10 +40,10 @@ export const Layout: React.FC<LayoutProps> = ({
   isLoading: _isLoading,
   isPrivacyMode,
   togglePrivacyMode,
-  netWorth,
-  monthlySavings = 0,
+  netWorth: _netWorth,
+  monthlySavings: _monthlySavings = 0,
   financialGoals: _financialGoals = [],
-  currentValues = { celi: 0, reer: 0, liquidity: 0 },
+  currentValues: _currentValues = { celi: 0, reer: 0, liquidity: 0 },
   onOpenGuide: _onOpenGuide,
   onGeneratePDF: _onGeneratePDF
 }) => {
@@ -63,7 +62,18 @@ export const Layout: React.FC<LayoutProps> = ({
     const precedent = ongletPrecedent.current;
     ongletPrecedent.current = activeTab;
     if (precedent === null || precedent === activeTab) return;
-    document.getElementById('main')?.focus({ preventScroll: true });
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function' && !/jsdom/i.test(navigator.userAgent)) {
+      try {
+        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      } catch {
+        // Environnement sans implémentation native de scrollTo
+      }
+    }
+    const mainEl = document.getElementById('main');
+    if (mainEl) {
+      mainEl.scrollTop = 0;
+      mainEl.focus({ preventScroll: true });
+    }
     setAnnonceRoute(TAB_LABELS[activeTab]);
   }, [activeTab]);
 
@@ -117,7 +127,7 @@ export const Layout: React.FC<LayoutProps> = ({
       return;
     }
     showToast('Définis d\'abord ton conjoint (nom + âge) dans Profil pour passer en couple.', 'info');
-    useFinanceStore.getState().setActiveTab(Tab.PROFILE);
+    setActiveTab(Tab.PROFILE);
   };
 
   const prenoms = ((coupleConfig?.users ?? []) as User[])
@@ -313,9 +323,9 @@ export const Layout: React.FC<LayoutProps> = ({
       <main
         id="main"
         tabIndex={-1}
-        className={`flex-1 ${margeMain} px-2.5 sm:px-4 lg:px-6 pb-20 lg:pb-6 ${isTestMode ? 'pt-12 sm:pt-14' : 'pt-2 sm:pt-3 lg:pt-4'} overflow-y-auto min-h-dvh relative z-0 scroll-smooth focus:outline-hidden`}
+        className={`flex-1 ${margeMain} px-2.5 sm:px-4 lg:px-6 pb-20 lg:pb-6 ${isTestMode ? 'pt-12 sm:pt-14' : 'pt-2 sm:pt-3 lg:pt-4'} min-h-dvh relative z-0 focus:outline-hidden`}
       >
-        <div className="max-w-7xl mx-auto space-y-2.5 sm:space-y-3.5 lg:space-y-4 animate-premium-in">
+        <div className="max-w-7xl mx-auto space-y-2.5 sm:space-y-3.5 lg:space-y-4">
           {/* Barre supérieure unique : fil d'Ariane + barre de recherche directe (masquée sur Accueil qui possède déjà son Omnibox) */}
           {activeTab !== Tab.DASHBOARD && (
           <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-bordure">
@@ -417,17 +427,6 @@ export const Layout: React.FC<LayoutProps> = ({
               )}
             </div>
           </div>
-          )}
-
-          {activeTab !== Tab.DASHBOARD && (
-            <GoogleFinanceTickerBar
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              netWorth={netWorth}
-              monthlySavings={monthlySavings}
-              currentValues={currentValues}
-              isPrivacyMode={isPrivacyMode}
-            />
           )}
 
           <BackupReminder onNavigateToSettings={() => setActiveTab(Tab.SETTINGS)} />

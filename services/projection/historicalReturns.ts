@@ -17,6 +17,9 @@ export interface YearReturn {
     bondReturn: number;         // 10Y Treasury return nominal (%)
     inflationRate: number;      // CPI US (%)
     canadianCpi?: number;       // CPI Canada (%) — Statistique Canada série v41690973
+    tsxTotalReturn?: number;    // Rendement total composé S&P/TSX en CAD (%)
+    canadianBondReturn?: number;// Rendement obligations gouvernementales CA 10 ans (%)
+    usdCadReturn?: number;      // Variation annuelle du taux de change USD/CAD (%)
 }
 
 // Données 1928-2024 (rendements en %). Source: Aswath Damodaran (NYU Stern).
@@ -121,6 +124,20 @@ const HISTORICAL_RETURNS_US: YearReturn[] = [
     { year: 2024, sp500TotalReturn: 25.02, bondReturn:  0.58, inflationRate:  2.95 },
 ];
 
+function enrichYearReturn(y: YearReturn): YearReturn {
+    const canadianCpi = CANADIAN_CPI[y.year] ?? y.inflationRate;
+    const tsxTotalReturn = CANADIAN_TSX_RETURN[y.year] ?? Number((y.sp500TotalReturn * 0.85 + 1.2).toFixed(2));
+    const canadianBondReturn = CANADIAN_BOND_RETURN[y.year] ?? y.bondReturn;
+    const usdCadReturn = USD_CAD_FX_CHANGE[y.year] ?? 0;
+    return {
+        ...y,
+        canadianCpi,
+        tsxTotalReturn,
+        canadianBondReturn,
+        usdCadReturn,
+    };
+}
+
 /**
  * Échantillonne un bloc de N années consécutives parmi l'historique.
  * Si le bloc dépasse la fin du dataset, on wrap-around (concat début).
@@ -133,7 +150,7 @@ function sampleHistoricalBlock(
     const start = Math.floor(rng() * n);
     const block: YearReturn[] = [];
     for (let i = 0; i < blockYears; i++) {
-        block.push(HISTORICAL_RETURNS_US[(start + i) % n]);
+        block.push(enrichYearReturn(HISTORICAL_RETURNS_US[(start + i) % n]));
     }
     return block;
 }
@@ -166,10 +183,10 @@ export function buildReplaySequence(
     totalYears: number,
 ): YearReturn[] {
     const idx = HISTORICAL_RETURNS_US.findIndex(y => y.year === startYear);
-    if (idx === -1) return HISTORICAL_RETURNS_US.slice(0, totalYears);
+    if (idx === -1) return HISTORICAL_RETURNS_US.slice(0, totalYears).map(enrichYearReturn);
     const seq: YearReturn[] = [];
     for (let i = 0; i < totalYears; i++) {
-        seq.push(HISTORICAL_RETURNS_US[(idx + i) % HISTORICAL_RETURNS_US.length]);
+        seq.push(enrichYearReturn(HISTORICAL_RETURNS_US[(idx + i) % HISTORICAL_RETURNS_US.length]));
     }
     return seq;
 }
@@ -212,4 +229,89 @@ const CANADIAN_CPI: Record<number, number> = {
  */
 export function canadianInflationFor(year: number, fallbackUsCpi: number): number {
     return CANADIAN_CPI[year] ?? fallbackUsCpi;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// S&P/TSX Composite Total Return (CAD, %) 1928-2024
+// Sources : CIA / Institut canadien des actuaires (Rapport sur les statistiques
+// économiques canadiennes 1924-2024) & Banque du Canada.
+// ───────────────────────────────────────────────────────────────────────────
+const CANADIAN_TSX_RETURN: Record<number, number> = {
+    1928: 31.5, 1929: -11.2, 1930: -28.4, 1931: -34.6, 1932: -10.8,
+    1933: 48.2, 1934: 12.4,  1935: 27.8,  1936: 24.5,  1937: -18.9,
+    1938: 8.4,  1939: -2.1,  1940: -18.5, 1941: -1.4,  1942: 14.8,
+    1943: 24.1, 1944: 13.5,  1945: 33.2,  1946: -1.8,  1947: 2.9,
+    1948: 9.8,  1949: 19.4,  1950: 42.1,  1951: 24.3,  1952: -1.5,
+    1953: 2.1,  1954: 39.4,  1955: 27.2,  1956: 12.3,  1957: -20.6,
+    1958: 31.3, 1959: 4.6,   1960: 1.8,   1961: 32.7,  1962: -7.1,
+    1963: 15.6, 1964: 25.4,  1965: 6.7,   1966: -7.1,  1967: 18.1,
+    1968: 22.5, 1969: -0.8,  1970: -3.6,  1971: 8.0,   1972: 27.4,
+    1973: 0.3,  1974: -25.9, 1975: 18.5,  1976: 11.0,  1977: 10.7,
+    1978: 29.7, 1979: 44.8,  1980: 30.1,  1981: -10.2, 1982: 5.5,
+    1983: 35.5, 1984: -2.4,  1985: 25.1,  1986: 8.9,   1987: 5.9,
+    1988: 11.1, 1989: 21.4,  1990: -14.8, 1991: 12.0,  1992: -1.4,
+    1993: 32.5, 1994: -0.2,  1995: 14.5,  1996: 28.3,  1997: 15.0,
+    1998: -1.6, 1999: 31.7,  2000: 7.4,   2001: -12.6, 2002: -12.4,
+    2003: 26.7, 2004: 14.5,  2005: 24.1,  2006: 17.3,  2007: 9.8,
+    2008: -33.0,2009: 35.1,  2010: 17.6,  2011: -8.7,  2012: 7.2,
+    2013: 13.0, 2014: 10.6,  2015: -8.3,  2016: 21.1,  2017: 9.1,
+    2018: -8.9, 2019: 22.9,  2020: 5.6,   2021: 25.1,  2022: -5.8,
+    2023: 11.8, 2024: 21.7,
+};
+
+// Variation annuelle USD/CAD (%) — > 0 signifie appréciation de l'USD face au CAD
+// (amortit les krachs boursiers mondiaux pour un investisseur canadien non couvert, ex: 2008 +22.1 %).
+const USD_CAD_FX_CHANGE: Record<number, number> = {
+    1970: -5.6, 1971: -0.9, 1972: -0.7, 1973: 0.0,  1974: -0.9,
+    1975: 2.6,  1976: -0.7, 1977: 8.5,  1978: 8.4,  1979: -1.5,
+    1980: 2.3,  1981: -0.8, 1982: 3.6,  1983: 1.2,  1984: 6.2,
+    1985: 5.8,  1986: -1.2, 1987: -5.9, 1988: -8.2, 1989: -3.0,
+    1990: 0.2,  1991: -0.4, 1992: 10.0, 1993: 4.2,  1994: 5.9,
+    1995: -2.7, 1996: 0.4,  1997: 4.3,  1998: 7.1,  1999: -5.8,
+    2000: 3.9,  2001: 6.2,  2002: -1.0, 2003: -18.0,2004: -7.5,
+    2005: -3.4, 2006: 0.0,  2007: -14.8,2008: 22.1, 2009: -13.7,
+    2010: -5.4, 2011: 2.3,  2012: -2.2, 2013: 6.9,  2014: 9.1,
+    2015: 19.3, 2016: -2.9, 2017: -6.4, 2018: 8.5,  2019: -4.8,
+    2020: -1.9, 2021: -0.7, 2022: 7.0,  2023: -2.3, 2024: 8.6,
+};
+
+const CANADIAN_BOND_RETURN: Record<number, number> = {
+    2000: 10.3, 2001: 8.1,  2002: 8.7,  2003: 6.7,  2004: 7.1,
+    2005: 6.5,  2006: 4.1,  2007: 3.7,  2008: 6.4,  2009: 5.4,
+    2010: 6.7,  2011: 9.7,  2012: 3.6,  2013: -1.2, 2014: 8.8,
+    2015: 3.5,  2016: 1.7,  2017: 2.5,  2018: 1.4,  2019: 6.9,
+    2020: 8.7,  2021: -2.5, 2022: -11.7,2023: 6.7,  2024: 4.2,
+};
+
+export function tsxReturnFor(year: number, fallbackSp500: number): number {
+    return CANADIAN_TSX_RETURN[year] ?? Number((fallbackSp500 * 0.85 + 1.2).toFixed(2));
+}
+
+export function usdCadReturnFor(year: number): number {
+    return USD_CAD_FX_CHANGE[year] ?? 0;
+}
+
+export function canadianBondReturnFor(year: number, fallbackUsBond: number): number {
+    return CANADIAN_BOND_RETURN[year] ?? fallbackUsBond;
+}
+
+/**
+ * Convertit un rendement en devise étrangère (ex. USD) en rendement CAD :
+ * (1 + r_US) * (1 + r_FX) - 1
+ */
+export function convertUsdReturnToCad(rUsdDecimal: number, rFxDecimal: number): number {
+    return (1 + rUsdDecimal) * (1 + rFxDecimal) - 1;
+}
+
+/**
+ * Calcule le rendement réel après déflation de l'inflation (formule de Fisher) :
+ * (1 + r_nominal) / (1 + inflation) - 1
+ */
+export function computeRealReturnFromInflation(nominalDecimal: number, inflationDecimal: number): number {
+    if (inflationDecimal <= -1) return nominalDecimal;
+    return (1 + nominalDecimal) / (1 + inflationDecimal) - 1;
+}
+
+export function getHistoricalReturnsDataset(): ReadonlyArray<YearReturn> {
+    return HISTORICAL_RETURNS_US.map(enrichYearReturn);
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     processRealEstate,
+    computeCanadianMortgagePayment,
     type RealEstateState,
     type RealEstateCtx,
     type PropertyStateMutable,
@@ -179,16 +180,17 @@ describe('[ENG-PROPGROWTH-ZERO-INEXPRIMABLE] un 0 explicite reste 0', () => {
 describe('realEstateMonth — amortissement (propriété détenue)', () => {
     it('sépare intérêt et capital : intérêt = solde × taux mensuel, capital = PMT − intérêt', () => {
         const state = makeState();
-        // taux 6 %/an → 0,5 %/mois ; solde 300 000 → intérêt 1 500 ; PMT 2 000 → capital 500.
+        // taux canadien 6 %/an composé semi-annuellement : im = (1 + 0.03)^(1/6) - 1 ≈ 0.004938622
+        // solde 300 000 → intérêt 1 481,59 $ ; PMT 2 000 → capital 518,41 $ ; nouveau solde 299 481,59 $.
         const goal = makeGoal({ mortgageRate: 6, isPrimaryResidence: false, propertyGrowthRate: 0 });
         const prop = makeProp({ isBought: true, mortgage: 300000, currentValue: 600000, calculatedPmt: 2000 });
 
         // m=12 (pas un multiple de 60 → aucun renouvellement déclenché).
         processRealEstate(state, makeCtx({ m: 12 }), [goal], [prop], offset0, noWelcomeTax);
 
-        expect(state.immoInterest).toBeCloseTo(1500, 6);
-        expect(state.immoPrincipal).toBeCloseTo(500, 6);
-        expect(prop.mortgage).toBeCloseTo(299500, 6);
+        expect(state.immoInterest).toBeCloseTo(1481.59, 2);
+        expect(state.immoPrincipal).toBeCloseTo(518.41, 2);
+        expect(prop.mortgage).toBeCloseTo(299481.59, 2);
     });
 
     it('rembourse à 100 % quand le capital dépasse le solde : clamp à 0, isPaidOff, PMT remis à 0', () => {
@@ -246,10 +248,9 @@ describe('realEstateMonth — achat', () => {
         expect(state.withdrawalLiquid).toBeCloseTo(105000, 6);
         expect(state.hasPurchasedPrimary).toBe(true);
 
-        const r = 0.05 / 12;
-        const n = 25 * 12;
-        const expectedPmt = (400000 * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+        const expectedPmt = computeCanadianMortgagePayment(400000, 5, 25 * 12);
         expect(prop.calculatedPmt).toBeCloseTo(expectedPmt, 2);
+        expect(prop.calculatedPmt).toBeCloseTo(2326.42, 2);
     });
 
     it("reporte l'achat quand les liquidités (et comptes) sont insuffisants", () => {
@@ -343,20 +344,21 @@ describe('realEstateMonth — chemins-bords', () => {
     it('Smith Manoeuvre : le capital remboursé est réemprunté en non-enregistré + intérêts capitalisés', () => {
         const state = makeState();
         const goal = makeGoal({ mortgageRate: 6, isPrimaryResidence: true, propertyGrowthRate: 0 });
-        // solde 300 000 @ 6 % → intérêt 1 500 ; PMT 2 000 → capital 500. Valeur haute → pas d'appel de marge.
+        // solde 300 000 @ 6 % semi-annuel → intérêt 1 481,59 $ ; PMT 2 000 → capital 518,41 $. Valeur haute → pas d'appel de marge.
         const prop = makeProp({ isBought: true, mortgage: 300000, currentValue: 1000000, calculatedPmt: 2000 });
 
         processRealEstate(state, makeCtx({ m: 12, useSmithManoeuvre: true }), [goal], [prop], offset0, noWelcomeTax);
 
-        expect(state.nonReg).toBeCloseTo(500, 6);
-        expect(state.nonRegACB).toBeCloseTo(500, 6);
-        // dette Smith = capital 500 + intérêt capitalisé.
+        expect(state.nonReg).toBeCloseTo(518.41, 2);
+        expect(state.nonRegACB).toBeCloseTo(518.41, 2);
+        // dette Smith = capital 518,41 + intérêt capitalisé (8 % / 12).
         // ⚠️ [SMITH-HELOC-TAUX-FIGE] (2026-08-24) : le taux de la marge n'est plus figé à 5 %, il SUIT
         // celui du prêt du bien (ici 6 %) + l'écart de 2 points ⇒ 8 %. Le littéral reste écrit en
         // toutes lettres — c'est le RATCHET : si le modèle de taux change encore, ce test doit rougir
         // et être relu, pas suivre en silence.
-        const smithInterest = 500 * (0.08 / 12);
-        expect(state.smithManoeuvreDebt).toBeCloseTo(500 + smithInterest, 4);
+        const principal = 2000 - (300000 * (Math.pow(1 + 0.03, 1 / 6) - 1));
+        const smithInterest = principal * (0.08 / 12);
+        expect(state.smithManoeuvreDebt).toBeCloseTo(principal + smithInterest, 4);
         expect(state.smithInterestDeductibleYear).toBeCloseTo(smithInterest, 4);
     });
 
@@ -396,11 +398,10 @@ describe('realEstateMonth — chemins-bords', () => {
 
         processRealEstate(state, makeCtx({ m: 60 }), [goal], [prop], offset0, noWelcomeTax);
 
-        // 240 mois restants @ 6 % sur 280 000.
-        const nr = 0.06 / 12;
-        const rem = 240;
-        const expectedPmt = (280000 * nr * Math.pow(1 + nr, rem)) / (Math.pow(1 + nr, rem) - 1);
+        // 240 mois restants @ 6 % semi-annuel sur 280 000.
+        const expectedPmt = computeCanadianMortgagePayment(280000, 6, 240);
         expect(prop.calculatedPmt).toBeCloseTo(expectedPmt, 2);
+        expect(prop.calculatedPmt).toBeCloseTo(1994.13, 2);
         expect(state.lifeEventLogs.some((l) => l.includes('Renouvellement'))).toBe(true);
     });
 });
@@ -460,5 +461,46 @@ describe('realEstateMonth — downsizing à la retraite (PH4-FUT-B-4)', () => {
         processRealEstate(state, makeCtx({ m: 12, downsizeThisMonth: true }), [goal], [prop], offset0, noWelcomeTax);
 
         expect(state.lifeEventLogs.some((l) => l.includes('Downsizing'))).toBe(false);
+    });
+});
+
+describe('realEstateMonth — B-20 et ré-avancement Smith Manoeuvre', () => {
+    it('l’appel de marge B-20 n’est évalué QUE sur la résidence principale (pas d’appel sur bien locatif)', () => {
+        const state = makeState({
+            smithManoeuvreDebt: 50_000,
+            nonReg: 100_000,
+            nonRegACB: 100_000,
+        });
+        // Immeuble locatif avec dette élevée qui dépasserait 80 % si combinée à smithManoeuvreDebt
+        const rentalGoal = makeGoal({ id: 'loc1', isPrimaryResidence: false, propertyGrowthRate: 0 });
+        const rentalProp = makeProp({ id: 'loc1', isBought: true, mortgage: 180_000, currentValue: 200_000, calculatedPmt: 1500 });
+
+        processRealEstate(state, makeCtx({ m: 1 }), [rentalGoal], [rentalProp], offset0, noWelcomeTax);
+
+        // Aucun appel de marge déclenché car ce n'est pas la résidence principale
+        expect(state.flowEventLogs.some((l) => l.includes('Appel de marge'))).toBe(false);
+        // Le nonReg reste intact (aucune vente forcée)
+        expect(state.nonReg).toBe(100_000);
+    });
+
+    it('le ré-avancement Smith est borné en amont sous le plafond combiné de 80 %', () => {
+        const propertyValue = 500_000;
+        const state = makeState({
+            smithManoeuvreDebt: 100_000,
+            nonReg: 0,
+            nonRegACB: 0,
+        });
+        // Hypothèque à 320 000 $. Total combiné initial = 420 000 $ (> 400 000 $)
+        const goal = makeGoal({ isPrimaryResidence: true, mortgageRate: 5, propertyGrowthRate: 0 });
+        const prop = makeProp({ isBought: true, mortgage: 320_000, currentValue: propertyValue, calculatedPmt: 3000 });
+
+        const smithDebtBefore = state.smithManoeuvreDebt;
+        processRealEstate(state, makeCtx({ m: 1, useSmithManoeuvre: true }), [goal], [prop], offset0, noWelcomeTax);
+
+        // Le principal remboursé (~1681 $) ne peut pas être ré-avancé car le combiné (318k + 100k = 418k) dépasse 400k.
+        // La dette Smith ne peut que croître des seuls intérêts capitalisés (~583 $), sans ré-avancement
+        expect(state.nonReg).toBe(0);
+        expect(state.smithManoeuvreDebt).toBeGreaterThan(smithDebtBefore);
+        expect(state.smithManoeuvreDebt).toBeLessThan(smithDebtBefore + 1000); // Uniquement l'intérêt capitalisé
     });
 });

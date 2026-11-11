@@ -189,16 +189,8 @@ export const Planning: React.FC<PlanningProps> = ({ transactions, apiKey }) => {
 
     return (
         <div className="space-y-6 animate-fade-in pb-20">
-            <div className="gf-page-header flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-surface p-5 md:p-6 rounded-card border border-bordure">
-                <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className="gf-ticker-symbol">
-                            <span className="w-1.5 h-1.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
-                            <span>ABOS:CAD · CHARGES FIXES</span>
-                        </span>
-                    </div>
-                    <h2 className="text-[17px] lg:text-[18px] font-semibold text-ink-50">Charges fixes et abonnements</h2>
-                </div>
+            <div className="gf-terminal-card flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-surface p-5 md:p-6 rounded-card border border-bordure">
+                <h2 className="text-[17px] lg:text-[18px] font-semibold text-ink-50">Charges fixes et abonnements</h2>
                 <div className="gf-quote-strip w-full md:w-auto grid grid-cols-2 rounded-xl border border-bordure bg-fond">
                     <div className="gf-quote-cell text-right px-4 py-2.5">
                         <div className="text-tiny uppercase text-ink-400 font-bold">Fixe Mensuel</div>

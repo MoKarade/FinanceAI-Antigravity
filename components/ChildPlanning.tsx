@@ -282,12 +282,6 @@ export const ChildPlanning: React.FC<ChildPlanningProps> = ({ goals = [], setGoa
                 <PageHeader
                     title={TITRE}
                     subtitle={CHILD_SUBTITLE}
-                    badge={
-                        <span className="gf-ticker-symbol">
-                            <span className="w-1.5 h-1.5 rounded-full bg-current gf-pulse-live" aria-hidden="true" />
-                            FAMILLE:QC · REEE &amp; ALLOC
-                        </span>
-                    }
                     actions={<VieCurveLink />}
                 />
                 <EmptyState
@@ -329,15 +323,6 @@ export const ChildPlanning: React.FC<ChildPlanningProps> = ({ goals = [], setGoa
             />
             <PageHeader
                 title={TITRE}
-                badge={
-                    <span className="inline-flex flex-wrap items-center gap-2">
-                        <span className="gf-ticker-symbol">
-                            <span className="w-1.5 h-1.5 rounded-full bg-current gf-pulse-live" aria-hidden="true" />
-                            FAMILLE:QC · REEE &amp; ALLOC
-                        </span>
-                        <span className="lg:hidden">{coutTotal}</span>
-                    </span>
-                }
                 nav={
                     <div role="group" aria-label="Enfants" className="gf-subtab-bar overflow-x-auto no-scrollbar flex items-center gap-1">
                         {goals.map((g, idx) => (
@@ -363,70 +348,8 @@ export const ChildPlanning: React.FC<ChildPlanningProps> = ({ goals = [], setGoa
                         </button>
                     </div>
                 }
-                actions={<span className="hidden lg:flex items-center gap-3">{coutTotal}<VieCurveLink /></span>}
+                actions={<span className="flex items-center gap-3">{coutTotal}<span className="hidden lg:inline-flex"><VieCurveLink /></span></span>}
             />
-
-            {/* Bandeau de cotation Enfants & REEE (style Google Finance) */}
-            <section aria-label="Cote des coûts de l'enfant et du REEE" className="gf-quote-strip">
-                <div className="gf-quote-cell">
-                    <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
-                            Coût net total (0–25 ans)
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-amber">
-                            {nomEnfant}
-                        </span>
-                    </div>
-                    <PrivateAmount as="div" className="font-mono text-[20px] font-bold text-ink-50 tabular-nums">
-                        {fmt(costTimeline.totalCost)}
-                    </PrivateAmount>
-                </div>
-                <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => useFinanceStore.getState().setActiveTab(TabEnum.INVESTMENTS)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); useFinanceStore.getState().setActiveTab(TabEnum.INVESTMENTS); } }}
-                    className="touch-target gf-quote-cell cursor-pointer hover:bg-surface-douce transition-colors focus-ring"
-                >
-                    <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
-                            Épargne REEE actuelle
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-up">
-                            REEE ↗
-                        </span>
-                    </div>
-                    <PrivateAmount as="div" className="font-mono text-[20px] font-bold text-succes-texte tabular-nums">
-                        {fmt(currentRESP)}
-                    </PrivateAmount>
-                </div>
-                <div className="gf-quote-cell">
-                    <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
-                            Versement REEE / an
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-neutral">
-                            SCEE + IQEE
-                        </span>
-                    </div>
-                    <PrivateAmount as="div" className="font-mono text-[20px] font-bold text-ink-50 tabular-nums">
-                        {fmt(respContribution)}
-                    </PrivateAmount>
-                </div>
-                <div className="gf-quote-cell">
-                    <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
-                            Cible études ({uniInfo.label})
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-neutral">
-                            Études
-                        </span>
-                    </div>
-                    <PrivateAmount as="div" className="font-mono text-[20px] font-bold text-ink-50 tabular-nums">
-                        {fmt(totalStudiesCost)}
-                    </PrivateAmount>
-                </div>
-            </section>
 
             <div className="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-5 items-start">
                 <div className="min-w-0 flex flex-col gap-4 order-2 xl:order-none">

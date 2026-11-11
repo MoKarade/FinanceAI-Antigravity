@@ -27,6 +27,10 @@ export interface W5Context {
      *  sort déjà en dépense dans `processRentalMonth`. Absent → 0 (appelants historiques, tests
      *  unitaires) : NOI imposé brut, comme avant le lot 188. */
     rentalInterestMensuelParImmeuble?: Readonly<Record<string, number>>;
+    /** [W5-RENTAL-INTERET-DPA] DPA admissible du MOIS par immeuble locatif (clé `rentalStateId`,
+     *  produite par `rentalCcaParImmeuble` sur l'état AVANT le mois locatif). Déduite de la base imposable
+     *  du NOI sans créer de perte (LIR 1100(11)). Absent → calculée automatiquement sur `rp.currentValue`. */
+    rentalCcaMensuelParImmeuble?: Readonly<Record<string, number>>;
 }
 
 export interface W5Mutator {
@@ -159,7 +163,11 @@ export function applyW5Effects(
         const noi = annualRent - annualExpenses;
         const interetBrut = ctx.rentalInterestMensuelParImmeuble?.[rentalStateId(rp)];
         const interetMensuel = Number.isFinite(interetBrut) ? Math.max(0, interetBrut as number) : 0;
-        const noiImposableMensuel = noi / 12 - interetMensuel;
+        const ccaBrut = ctx.rentalCcaMensuelParImmeuble?.[rentalStateId(rp)];
+        const ccaMensuel = Number.isFinite(ccaBrut) ? Math.max(0, ccaBrut as number) : 0;
+        const netBeforeCca = noi / 12 - interetMensuel;
+        const actualCca = Math.min(ccaMensuel, Math.max(0, netBeforeCca));
+        const noiImposableMensuel = netBeforeCca - actualCca;
         rentalPropertyNoiMonthly += noi / 12;
         rentalNoiImposableMonthly += noiImposableMensuel;
         ajouterParProprietaire(noiParProprietaire, rp.owner, noiImposableMensuel);

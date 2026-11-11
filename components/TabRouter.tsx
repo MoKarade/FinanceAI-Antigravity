@@ -81,12 +81,12 @@ export const TabRouter: React.FC<TabRouterProps> = ({
     return (
         <Suspense fallback={<TabLoader />}>
             <ErrorBoundary resetKey={activeTab} label={TAB_LABELS[activeTab]}>
-                {/* ANIM — fondu d'entrée, cascade fluide et révélation des graphiques Recharts à chaque changement d'onglet */}
+                {/* Transition d'onglet sans double cascade stagger-in (chaque page gère déjà sa propre grille) */}
                 <div
                     key={activeTab}
                     data-testid="tab-transition-container"
                     data-active-tab={activeTab}
-                    className="animate-tab-in stagger-in gf-chart-enter motion-reduce:animate-none"
+                    className="motion-reduce:animate-none"
                 >
                 {activeTab === Tab.DASHBOARD && (
                     <>

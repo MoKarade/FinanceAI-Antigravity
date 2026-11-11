@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { calculateFutureProjection, __runScenarioForTests, type SimulationParams } from '../../services/projection';
 import {
-    initRentalStates, processRentalMonth, rentalMonthlyPayment, DEFAULT_RENTAL_GROWTH_PCT,
+    initRentalStates, processRentalMonth, rentalMonthlyPayment, rentalCcaParImmeuble, DEFAULT_RENTAL_GROWTH_PCT,
     DEFAULT_RENTAL_AMORTIZATION_YEARS,
 } from '../../services/projection/rentalMonth';
 import type { ProjectionResult, ProjectionChartPoint } from '../../services/projection/types';
@@ -96,8 +96,8 @@ describe('[ENG-W5-RENTAL-OFFBALANCE] l’immeuble locatif entre au bilan — les
 
 describe('[ENG-W5-RENTAL-OFFBALANCE] le module pur', () => {
     it('la mensualité est une annuité constante, et le taux 0 ne divise pas par zéro', () => {
-        // 500 k$ à 5 % sur 25 ans ≈ 2 923 $/mois (formule d'annuité standard).
-        expect(rentalMonthlyPayment(500_000, 5, 25)).toBeCloseTo(2_922.95, 1);
+        // 500 k$ à 5 % sur 25 ans ≈ 2 908 $/mois (formule canadienne semi-annuelle légale).
+        expect(rentalMonthlyPayment(500_000, 5, 25)).toBeCloseTo(2_908.02, 1);
         // Taux 0 : amortissement linéaire, pas un NaN ni un Infinity.
         expect(rentalMonthlyPayment(120_000, 0, 10)).toBeCloseTo(1_000, 6);
         // Solde nul ou négatif : aucun paiement (un immeuble payé ne se sert pas).
@@ -270,5 +270,47 @@ describe('[ENG-W5-RENTAL-OFFBALANCE] l’immeuble se PARTAGE au divorce comme le
         expect(states[0].monthlyPayment).toBeCloseTo(pmtInitial * keep, 6);
         // Le service payé reste proportionné à la dette conservée.
         expect(r.debtService).toBeCloseTo(pmtInitial * keep, 6);
+    });
+});
+
+describe('[W5-RENTAL-DPA-FNACC] DPA locative et suivi FNACC', () => {
+    it('rentalCcaParImmeuble calcule la DPA admissible plafonnée au revenu net avant DPA', () => {
+        const states = initRentalStates([IMMEUBLE]);
+        expect(states[0].ucc).toBe(800_000);
+        expect(states[0].totalCcaClaimed).toBe(0);
+
+        // Revenu net avant DPA = monthlyNoi - interestPaid
+        const ccaTable = rentalCcaParImmeuble(states);
+        expect(ccaTable.r1).toBeGreaterThan(0);
+        // Ne peut pas dépasser 4 % / 12 de 800 000 $ = 2 666.67 $
+        expect(ccaTable.r1).toBeLessThanOrEqual((800_000 * 0.04) / 12);
+    });
+
+    it('processRentalMonth amortit la FNACC et cumule totalCcaClaimed', () => {
+        const states = initRentalStates([IMMEUBLE]);
+        const initialUcc = states[0].ucc;
+        const res = processRentalMonth(states, ['Duplex']);
+
+        expect(res.ccaClaimed).toBeGreaterThan(0);
+        expect(states[0].ucc).toBe(initialUcc - res.ccaClaimed);
+        expect(states[0].totalCcaClaimed).toBe(res.ccaClaimed);
+        expect(res.totalUcc).toBe(states[0].ucc);
+    });
+
+    it('une perte locative entraîne une DPA strictement nulle (LIR 1100(11))', () => {
+        // Immeuble avec loyer 0 et grosses dépenses -> perte locative
+        const deficitImmeuble: RentalProperty = {
+            ...IMMEUBLE,
+            monthlyRent: 0,
+            monthlyExpenses: 2000,
+        };
+        const states = initRentalStates([deficitImmeuble]);
+        const ccaTable = rentalCcaParImmeuble(states);
+        expect(ccaTable.r1).toBe(0);
+
+        const res = processRentalMonth(states, ['Déficitaire']);
+        expect(res.ccaClaimed).toBe(0);
+        expect(states[0].ucc).toBe(800_000); // FNACC non amortie
+        expect(states[0].totalCcaClaimed).toBe(0);
     });
 });

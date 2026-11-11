@@ -109,14 +109,8 @@ export const LifeProjects: React.FC<LifeProjectsProps> = ({
             <PageHeader
                 title={TAB_LABELS[Tab.LIFE_PROJECTS]}
                 badge={
-                    <span className="inline-flex flex-wrap items-center gap-2">
-                        <span className="gf-ticker-symbol">
-                            <span className="w-1.5 h-1.5 rounded-full bg-current gf-pulse-live" aria-hidden="true" />
-                            PROJETS:VIE · HORIZON
-                        </span>
-                        <span className="text-meta lg:text-body text-ink-400">
-                            {pluriel(tous.length, 'projet', 'projets')} · {pluriel(nbVoyages, 'voyage', 'voyages')} · {pluriel(nbEvenements, 'événement', 'événements')}
-                        </span>
+                    <span className="text-meta lg:text-body text-ink-400">
+                        {pluriel(tous.length, 'projet', 'projets')} · {pluriel(nbVoyages, 'voyage', 'voyages')} · {pluriel(nbEvenements, 'événement', 'événements')}
                     </span>
                 }
                 actions={
@@ -134,75 +128,6 @@ export const LifeProjects: React.FC<LifeProjectsProps> = ({
                     </span>
                 }
             />
-
-            {tous.length > 0 && (
-                <section aria-label="Cote des projets de vie" className="gf-quote-strip">
-                    <div className="gf-quote-cell">
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
-                                Budget total engagé
-                            </span>
-                            <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-amber">
-                                {tous.length} projet{tous.length > 1 ? 's' : ''}
-                            </span>
-                        </div>
-                        <PrivateAmount as="div" className="font-mono text-[20px] font-bold text-ink-50 tabular-nums">
-                            {formatCAD(tous.reduce((s, p) => s + p.cout, 0))}
-                        </PrivateAmount>
-                        <div className="mt-1.5 h-1.5 w-full rounded-full bg-surface-douce overflow-hidden flex" aria-hidden="true">
-                            <div
-                                className="h-full bg-repere"
-                                // NOMBRE-NON-MONETAIRE : BARRE-DECORATIVE accompagnant le budget sous PrivateAmount
-                                style={{ width: `${Math.round((tous.filter((p) => p.genre === 'voyage').reduce((s, p) => s + p.cout, 0) / Math.max(1, tous.reduce((s, p) => s + p.cout, 0))) * 100)}%` }}
-                            />
-                            <div className="h-full bg-alerte-texte" style={{ flex: 1 }} />
-                        </div>
-                    </div>
-                    <div className="gf-quote-cell">
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
-                                Voyages planifiés
-                            </span>
-                            <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-neutral">
-                                Voyages
-                            </span>
-                        </div>
-                        <PrivateAmount as="div" className="font-mono text-[20px] font-bold text-ink-50 tabular-nums">
-                            {formatCAD(tous.filter((p) => p.genre === 'voyage').reduce((s, p) => s + p.cout, 0))}
-                        </PrivateAmount>
-                    </div>
-                    <div className="gf-quote-cell">
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
-                                Événements majeurs
-                            </span>
-                            <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-neutral">
-                                Jalons
-                            </span>
-                        </div>
-                        <PrivateAmount as="div" className="font-mono text-[20px] font-bold text-ink-50 tabular-nums">
-                            {formatCAD(tous.filter((p) => p.genre === 'evenement').reduce((s, p) => s + p.cout, 0))}
-                        </PrivateAmount>
-                    </div>
-                    <div className="gf-quote-cell">
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
-                                Projet sélectionné
-                            </span>
-                            <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-up">
-                                Actif
-                            </span>
-                        </div>
-                        {choisi ? (
-                            <PrivateAmount as="div" className="font-mono text-[20px] font-bold text-ink-50 tabular-nums truncate">
-                                {formatCAD(choisi.cout)}
-                            </PrivateAmount>
-                        ) : (
-                            <div className="font-mono text-[20px] font-bold text-ink-400">—</div>
-                        )}
-                    </div>
-                </section>
-            )}
 
             <FinancialGoalsProgressSection goals={financialGoals} todayIso={aujourdhui} />
 

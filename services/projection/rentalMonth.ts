@@ -20,6 +20,8 @@
 // contraire : ces manques sont nommés ici plutôt que d'être découverts plus tard comme des défauts.
 
 import type { RentalProperty } from '../../types';
+import { CAPITAL_GAINS_INCLUSION_STANDARD } from '../../utils/tax';
+import { computeCanadianMonthlyMortgageRate } from './realEstateMonth';
 
 /**
  * Amortissement par DÉFAUT quand `RentalProperty.amortizationYears` est absent.
@@ -43,7 +45,7 @@ export const DEFAULT_RENTAL_AMORTIZATION_YEARS = 25;
 export const DEFAULT_RENTAL_GROWTH_PCT = 3;
 
 /** État MUTABLE d'un immeuble locatif au fil des mois (valeur et solde évoluent). */
-interface RentalState {
+export interface RentalState {
     id: string;
     /** Valeur marchande courante, croissant au taux immobilier. */
     currentValue: number;
@@ -59,6 +61,20 @@ interface RentalState {
      *  un repli), même raison d'être dans l'état que `ratePct`. */
     growthRatePct: number;
     isPaidOff: boolean;
+    /** Fraction non amortie du coût en capital (FNACC / UCC) pour la DPA. */
+    ucc: number;
+    /** Coût en capital initial du bien. */
+    initialCost: number;
+    /** Cumul de la DPA déduite à ce jour. */
+    totalCcaClaimed: number;
+    /** Loyer mensuel brut. */
+    monthlyRent?: number;
+    /** Taux d'inoccupation (0-100). */
+    vacancyPct?: number;
+    /** Dépenses mensuelles d'exploitation (taxes, entretien, assurance, gestion). */
+    monthlyExpenses?: number;
+    /** NOI mensuel brut lissé = (Loyer * (1 - vacance/100) - dépenses). */
+    monthlyNoi?: number;
 }
 
 const num = (v: unknown, fallback = 0): number => {
@@ -66,16 +82,118 @@ const num = (v: unknown, fallback = 0): number => {
     return Number.isFinite(n) ? n : fallback;
 };
 
+/** Taux officiel DPA Catégorie 1 (immeubles résidentiels après 1987) : 4 % (Règlement de l'impôt sur le revenu art. 1100(1)(a)(i)). */
+export const CCA_CLASS_1_RATE = 0.04;
+
+export interface CcaRentalCalculation {
+    /** FNACC avant amortissement de l'année. */
+    openingUcc: number;
+    /** Amortissement maximal théorique admissible (FNACC * taux). */
+    allowableCca: number;
+    /** Amortissement effectif déduit (plafonné pour ne pas créer de perte selon LIR 1100(11)). */
+    claimedCca: number;
+    /** Nouvelle FNACC après déduction. */
+    closingUcc: number;
+    /** Revenu net de location après DPA. */
+    netRentalIncomeAfterCca: number;
+}
+
 /**
- * Mensualité d'un prêt à annuités constantes. Taux 0 ⇒ amortissement linéaire (la formule générale
- * divise par 0). Solde ≤ 0 ⇒ 0 : un immeuble payé ne se sert pas.
+ * Calcule l'amortissement DPA admissible (Catégorie 1 - 4 %) selon la LIR paragraphe 1100(11).
+ * La DPA ne peut jamais créer ni augmenter une perte locative.
  */
-export function rentalMonthlyPayment(balance: number, annualRatePct: number, years: number): number {
+export function computeCcaAllowance(
+    ucc: number,
+    netRentalIncomeBeforeCca: number,
+    rate: number = CCA_CLASS_1_RATE,
+    applyHalfYearRule: boolean = false,
+): CcaRentalCalculation {
+    const openingUcc = Math.max(0, num(ucc));
+    const effectiveRate = applyHalfYearRule ? rate / 2 : rate;
+    const allowableCca = openingUcc * effectiveRate;
+    // Règle LIR 1100(11) : plafonné au revenu net avant DPA (aucun déficit créé par DPA)
+    const claimedCca = netRentalIncomeBeforeCca > 0
+        ? Math.min(allowableCca, netRentalIncomeBeforeCca)
+        : 0;
+    const closingUcc = Math.max(0, openingUcc - claimedCca);
+    const netRentalIncomeAfterCca = netRentalIncomeBeforeCca - claimedCca;
+
+    return {
+        openingUcc,
+        allowableCca,
+        claimedCca,
+        closingUcc,
+        netRentalIncomeAfterCca,
+    };
+}
+
+export interface CcaRecaptureResult {
+    /** Récupération de la DPA imposable à 100 % (LIR 13(1)). */
+    recapture100Pct: number;
+    /** Gain en capital brut (avant inclusion 50 %) pour le prix excédant le coût d'origine. */
+    capitalGainGross: number;
+    /** Gain en capital imposable (LIR 38(a) : 50 %). */
+    taxableCapitalGain50Pct: number;
+    /** Perte finale admissible (si vente sous la FNACC sans autre bien dans la catégorie). */
+    terminalLoss: number;
+}
+
+/**
+ * Calcule la récupération de DPA et le gain en capital lors de la disposition d'un bien locatif.
+ */
+export function computeCcaRecapture(
+    sellingPrice: number,
+    initialCost: number,
+    currentUcc: number,
+): CcaRecaptureResult {
+    const price = Math.max(0, num(sellingPrice));
+    const cost = Math.max(0, num(initialCost));
+    const ucc = Math.max(0, num(currentUcc));
+
+    // Si le produit de vente est inférieur à la FNACC
+    if (price < ucc) {
+        return {
+            recapture100Pct: 0,
+            capitalGainGross: 0,
+            taxableCapitalGain50Pct: 0,
+            terminalLoss: ucc - price,
+        };
+    }
+
+    // Récupération de DPA = min(prix, coût) - FNACC
+    const proceedsAttributedToCca = Math.min(price, cost);
+    const recapture100Pct = Math.max(0, proceedsAttributedToCca - ucc);
+
+    // Gain en capital = max(0, prix - coût)
+    const capitalGainGross = Math.max(0, price - cost);
+    const taxableCapitalGain50Pct = capitalGainGross * CAPITAL_GAINS_INCLUSION_STANDARD;
+
+    return {
+        recapture100Pct,
+        capitalGainGross,
+        taxableCapitalGain50Pct,
+        terminalLoss: 0,
+    };
+}
+
+/**
+ * Mensualité d'un prêt à annuités constantes.
+ * Supporte la capitalisation semi-annuelle canadienne im = (1 + r/2)^(1/6) - 1.
+ */
+export function rentalMonthlyPayment(
+    balance: number,
+    annualRatePct: number,
+    years: number,
+    isCanadianSemiAnnual: boolean = true,
+): number {
     const b = Math.max(0, num(balance));
     if (b <= 0) return 0;
     const n = Math.max(1, Math.round(num(years, DEFAULT_RENTAL_AMORTIZATION_YEARS) * 12));
-    const r = num(annualRatePct) / 100 / 12;
-    if (r <= 0) return b / n;
+    const rPct = num(annualRatePct);
+    if (rPct <= 0) return b / n;
+    const r = isCanadianSemiAnnual
+        ? computeCanadianMonthlyMortgageRate(rPct)
+        : (rPct / 100) / 12;
     const f = Math.pow(1 + r, n);
     return (b * r * f) / (f - 1);
 }
@@ -86,12 +204,18 @@ export const rentalStateId = (rp: Pick<RentalProperty, 'id'>): string => rp.id |
 
 /**
  * [W5-RENTAL-INTERET-DPA] Intérêt hypothécaire du MOIS d'un immeuble, sur le solde de DÉBUT de mois.
- * SOURCE UNIQUE : `processRentalMonth` (qui l'encaisse et amortit) et `applyW5Effects` (qui le
- * DÉDUIT de la base imposable du NOI, T4036) lisent la même formule — un `mortgage × taux / 12`
- * recopié chez l'un aurait divergé de l'autre au premier arrondi. Immeuble payé → 0.
+ * Supporte la composition semi-annuelle canadienne (par défaut true).
  */
-const rentalInterestOfMonth = (s: Pick<RentalState, 'mortgage' | 'ratePct'>): number =>
-    s.mortgage > 0 ? s.mortgage * (s.ratePct / 100 / 12) : 0;
+export const rentalInterestOfMonth = (
+    s: Pick<RentalState, 'mortgage' | 'ratePct'>,
+    isCanadianSemiAnnual: boolean = true,
+): number => {
+    if (s.mortgage <= 0) return 0;
+    const rate = isCanadianSemiAnnual
+        ? computeCanadianMonthlyMortgageRate(s.ratePct)
+        : (s.ratePct / 100 / 12);
+    return s.mortgage * rate;
+};
 
 /**
  * [W5-RENTAL-INTERET-DPA] Intérêt du mois PAR immeuble (clé = `rentalStateId`), lu AVANT
@@ -99,9 +223,33 @@ const rentalInterestOfMonth = (s: Pick<RentalState, 'mortgage' | 'ratePct'>): nu
  * locatif, et l'intérêt se calcule sur le solde de début de mois dans les deux cas : la somme de cette
  * table vaut EXACTEMENT `processRentalMonth(...).interest` du même mois (garde de chaîne).
  */
-export function rentalInterestParImmeuble(states: readonly RentalState[]): Record<string, number> {
+export function rentalInterestParImmeuble(
+    states: readonly RentalState[],
+    isCanadianSemiAnnual: boolean = true,
+): Record<string, number> {
     const out: Record<string, number> = {};
-    for (const s of states) out[s.id] = (out[s.id] ?? 0) + rentalInterestOfMonth(s);
+    for (const s of states) out[s.id] = (out[s.id] ?? 0) + rentalInterestOfMonth(s, isCanadianSemiAnnual);
+    return out;
+}
+
+/**
+ * [W5-RENTAL-INTERET-DPA] DPA admissible du MOIS par immeuble (clé = `rentalStateId`),
+ * calculée sur la FNACC résiduelle via computeCcaAllowance(s.ucc, netBeforeCca, 0.04 / 12).
+ * LIR 1100(11) : la DPA ne peut excéder le revenu net avant DPA (NOI mensuel - intérêt).
+ */
+export function rentalCcaParImmeuble(
+    states: readonly RentalState[],
+    isCanadianSemiAnnual: boolean = true,
+): Record<string, number> {
+    const out: Record<string, number> = {};
+    const monthlyRate = CCA_CLASS_1_RATE / 12;
+    for (const s of states) {
+        const interest = rentalInterestOfMonth(s, isCanadianSemiAnnual);
+        const netBeforeCca = (s.monthlyNoi ?? 0) - interest;
+        const currentUcc = s.ucc ?? s.currentValue;
+        const ccaRes = computeCcaAllowance(currentUcc, netBeforeCca, monthlyRate);
+        out[s.id] = ccaRes.claimedCca;
+    }
     return out;
 }
 
@@ -109,23 +257,36 @@ export function rentalInterestParImmeuble(states: readonly RentalState[]): Recor
 export function initRentalStates(rentals: readonly RentalProperty[] | undefined): RentalState[] {
     return (rentals ?? []).filter(Boolean).map((rp) => {
         const mortgage = Math.max(0, num(rp.mortgageBalance));
+        const val = Math.max(0, num(rp.currentValue));
+        const rent = Math.max(0, num(rp.monthlyRent));
+        const vacancy = Math.max(0, Math.min(100, num(rp.vacancyPct)));
+        const expenses = Math.max(0, num(rp.monthlyExpenses));
+        const monthlyNoi = rent * (1 - vacancy / 100) - expenses;
         return {
             id: rentalStateId(rp),
-            currentValue: Math.max(0, num(rp.currentValue)),
+            currentValue: val,
             mortgage,
             monthlyPayment: rentalMonthlyPayment(
                 mortgage,
                 num(rp.mortgageRate),
                 num(rp.amortizationYears, DEFAULT_RENTAL_AMORTIZATION_YEARS),
+                true,
             ),
             ratePct: num(rp.mortgageRate),
             growthRatePct: num(rp.propertyGrowthRate, DEFAULT_RENTAL_GROWTH_PCT),
             isPaidOff: mortgage <= 0,
+            ucc: val,
+            initialCost: val,
+            totalCcaClaimed: 0,
+            monthlyRent: rent,
+            vacancyPct: vacancy,
+            monthlyExpenses: expenses,
+            monthlyNoi,
         };
     });
 }
 
-interface RentalMonthResult {
+export interface RentalMonthResult {
     /** Équité TOTALE des immeubles locatifs (valeur − hypothèque), déjà NETTE. */
     equity: number;
     /** Solde hypothécaire TOTAL restant. */
@@ -136,13 +297,17 @@ interface RentalMonthResult {
     interest: number;
     /** Part CAPITAL du service. */
     principal: number;
+    /** DPA déduite ce mois-ci sur l'ensemble des immeubles. */
+    ccaClaimed: number;
+    /** FNACC résiduelle totale après amortissement du mois. */
+    totalUcc: number;
     /** Messages à journaliser (hypothèque d'un immeuble remboursée). */
     logs: string[];
 }
 
 /**
  * Un mois de vie des immeubles locatifs : croissance de la valeur, amortissement de l'hypothèque,
- * service de dette. MUTE `states` (comme le chemin des buts immobiliers) et rend les agrégats.
+ * service de dette, DPA et mise à jour de la FNACC. MUTE `states` (comme le chemin des buts immobiliers) et rend les agrégats.
  *
  * ⚠️ `equity` est NETTE d'hypothèque — même convention que `realEstateEquity` du moteur. Ne JAMAIS
  * re-soustraire `mortgageBalance` du patrimoine après avoir ajouté `equity` : c'est le double
@@ -157,7 +322,10 @@ export function processRentalMonth(
     let debtService = 0;
     let interest = 0;
     let principal = 0;
+    let ccaClaimed = 0;
+    let totalUcc = 0;
     const logs: string[] = [];
+    const monthlyRate = CCA_CLASS_1_RATE / 12;
 
     for (let i = 0; i < states.length; i++) {
         const s = states[i];
@@ -185,9 +353,18 @@ export function processRentalMonth(
             }
         }
 
+        // --- DPA / CCA mensuelle et mise à jour de la FNACC / UCC ---
+        const netBeforeCca = (s.monthlyNoi ?? 0) - interestPaid;
+        const currentUcc = s.ucc ?? s.currentValue;
+        const ccaRes = computeCcaAllowance(currentUcc, netBeforeCca, monthlyRate);
+        s.ucc = ccaRes.closingUcc;
+        s.totalCcaClaimed = (s.totalCcaClaimed ?? 0) + ccaRes.claimedCca;
+        ccaClaimed += ccaRes.claimedCca;
+        totalUcc += s.ucc;
+
         equity += s.currentValue - s.mortgage;
         mortgageBalance += s.mortgage;
     }
 
-    return { equity, mortgageBalance, debtService, interest, principal, logs };
+    return { equity, mortgageBalance, debtService, interest, principal, ccaClaimed, totalUcc, logs };
 }

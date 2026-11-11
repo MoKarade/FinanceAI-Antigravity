@@ -59,6 +59,14 @@ interface ActiveIncomeResult {
      *  ([Marc, Anna]) — Σ == accGrossAdd (invariant testé). La règle ARC calcule les droits
      *  REER PAR PERSONNE : l'agrégat ménage ne suffit plus. */
     accGrossAddByUser: [number, number];
+    /** Bonus brut mensuel par conjoint [Marc, Anna] */
+    bonusMonthlyByUser: [number, number];
+    /** RSU brut mensuel par conjoint [Marc, Anna] */
+    rsuMonthlyByUser: [number, number];
+    /** Side income brut mensuel par conjoint [Marc, Anna] */
+    sideMonthlyByUser: [number, number];
+    /** Retenue à la source mensuelle provisoire sur le revenu variable par conjoint [Marc, Anna] */
+    withheldVariableMonthlyByUser: [number, number];
     newUnemployedMonths: number;
     newLtdMonths: number;
     ltdLogged: boolean;
@@ -200,12 +208,24 @@ export function computeActiveIncome(
     const accGrossAdd = (currentGrossMarcAnnual + currentGrossAnnaAnnual) / 12;
     const accGrossAddByUser: [number, number] = [currentGrossMarcAnnual / 12, currentGrossAnnaAnnual / 12];
 
+    const bonusMonthlyByUser: [number, number] = [bonusMonthly1, bonusMonthly2];
+    const rsuMonthlyByUser: [number, number] = [rsuMonthly1, rsuMonthly2];
+    const sideMonthlyByUser: [number, number] = [sideMonthly1, sideMonthly2];
+    const withheldVariableMonthlyByUser: [number, number] = [
+        (bonusMonthly1 + rsuMonthly1 + sideMonthly1) * 0.45,
+        (bonusMonthly2 + rsuMonthly2 + sideMonthly2) * 0.45,
+    ];
+
     return {
         incomeMarc,
         incomeAnna,
         monthlyIncome,
         accGrossAdd,
         accGrossAddByUser,
+        bonusMonthlyByUser,
+        rsuMonthlyByUser,
+        sideMonthlyByUser,
+        withheldVariableMonthlyByUser,
         newUnemployedMonths: jobLossResult.newMonthsRemaining,
         newLtdMonths: ltdResult.newMonthsRemaining,
         ltdLogged,

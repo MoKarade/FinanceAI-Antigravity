@@ -15,6 +15,9 @@ import { FuturePeriodSelector } from './future/FuturePeriodSelector';
 import { GoogleFinanceHero } from './future/GoogleFinanceHero';
 import { BoutonsPimenterFutur } from './future/BoutonsPimenterFutur';
 import { HubConnexionsModal } from './future/HubConnexionsModal';
+import { FutureSimulationControls } from './future/FutureSimulationControls';
+import { FutureYearAnatomyModal } from './future/FutureYearAnatomyModal';
+import { FuturePrescriptiveAdvisorCard } from './future/FuturePrescriptiveAdvisorCard';
 import { prefetchTab } from '../utils/tabPrefetch';
 import { PageHeader } from './ui/PageHeader';
 import { Drawer } from './ui/Drawer';
@@ -643,6 +646,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     // pas de flash). ⚠️ Si un de ces set devenait async, ce flux re-cacherait la courbe (revue PH4-FUT).
     const [revealAfterApply, setRevealAfterApply] = useState(false);
     const [showConnexionsModal, setShowConnexionsModal] = useState(false);
+    const [anatomyOpen, setAnatomyOpen] = useState(false);
     const [modeCourbe, setModeCourbe] = useState<ModeAffichageCourbe>('empilee');
     const [modeComparaison, setModeComparaison] = useState(false);
     const [comparaisonPoints, setComparaisonPoints] = useState<{ a: ProjectionChartPoint | null; b: ProjectionChartPoint | null }>({ a: null, b: null });
@@ -1651,45 +1655,12 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     const outils = <OutilsProjection tiroirOuvert={tiroirOuvert} onOuvrir={setTiroirOuvert} />;
 
     return (
-        <div className="space-y-4 lg:space-y-6 animate-fade-in pb-24">
-            <div className="gf-page-header space-y-2.5">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-2">
-                        <span className="gf-ticker-symbol">FUTUR:CAD · MONTE CARLO</span>
-                    </div>
-                    <div className="gf-subtab-bar overflow-x-auto no-scrollbar max-w-full">
-                        <button
-                            type="button"
-                            onClick={() => setModeCourbe('nette')}
-                            aria-pressed={modeCourbe === 'nette'}
-                            className={`touch-target gf-subtab-pill shrink-0 ${modeCourbe === 'nette' ? 'gf-subtab-pill-active' : ''}`}
-                        >
-                            Vue trajectoire
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setModeCourbe('empilee')}
-                            aria-pressed={modeCourbe === 'empilee'}
-                            className={`touch-target gf-subtab-pill shrink-0 ${modeCourbe === 'empilee' ? 'gf-subtab-pill-active' : ''}`}
-                        >
-                            Comptes empilés
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setRunMC(!runMC)}
-                            aria-pressed={runMC}
-                            className={`touch-target gf-subtab-pill shrink-0 ${runMC ? 'gf-subtab-pill-active' : ''}`}
-                        >
-                            Bande P10–P90
-                        </button>
-                    </div>
-                </div>
-                <PageHeader
-                    title="Projection"
-                    badge={insolvencyBadge}
-                    actions={<FutureHealthSummary />}
-                />
-            </div>
+        <div className="space-y-4 lg:space-y-6 pb-24">
+            <PageHeader
+                title="Projection"
+                badge={insolvencyBadge}
+                actions={<FutureHealthSummary />}
+            />
 
             {/* [REFONTE-NAV Lot 1] Chiffres de tête (ex-Accueil), fournis par l'hôte (TabRouter) :
                 le bandeau reste un module chargé à part — il tire l'historique du portefeuille. */}
@@ -1807,6 +1778,14 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             )}
 
             {/* [S5-REFONTE-FUTUR] Carte « La courbe de vie » (maquette F-bureau) ; habillage Google Finance Beta. */}
+            <FutureSimulationControls
+                projection={projection}
+                runMC={runMC}
+                setRunMC={setRunMC}
+                onUpdateProjection={(nextProj) => handleInstantScenarioUpdate(nextProj)}
+                onOpenYearAnatomy={() => setAnatomyOpen(true)}
+                selectedYear={jourAffiche?.point?.year ?? startYear}
+            />
             <section aria-labelledby="courbe-vie-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure px-3 py-3.5 sm:px-5 sm:py-4 lg:px-6 lg:pt-5 lg:pb-6 space-y-4">
                 <GoogleFinanceHero
                     jourAffiche={jourAffiche?.point ?? null}
@@ -2331,6 +2310,25 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             )}
 
             <FinancialGoalsProgressSection goals={financialGoals} todayIso={todayIso} />
+
+            <FuturePrescriptiveAdvisorCard
+                params={params}
+                projectionResult={allResults[0] ?? results}
+                assets={storeAssets}
+                fxRates={fxRates}
+                projection={projection}
+                retirementGoal={retirementGoal}
+                onApplyLever={handleInstantScenarioUpdate}
+            />
+
+            <FutureYearAnatomyModal
+                isOpen={anatomyOpen}
+                onClose={() => setAnatomyOpen(false)}
+                chartData={chartData}
+                initialYear={jourAffiche?.point?.year ?? startYear}
+                userName1={config.users[0]?.name}
+                userName2={config.users[1]?.name}
+            />
 
             {/* [S5-REFONTE-FUTUR] Jalons + Leviers équilibrés côte à côte (h-full), Outils pleine largeur et Plan d'action complet intégré. */}
             <div className="grid gap-4 lg:gap-6 lg:grid-cols-2 items-stretch">

@@ -8,7 +8,17 @@
 
 import { formatCAD } from '../../utils/format';
 import type { ChildGoal } from '../../types';
-import { RQAP_MAX_INCOME, type FiscalReport } from '../../utils/tax';
+import {
+    RQAP_MAX_INCOME,
+    QC_FEDERAL_ABATEMENT_RATE,
+    FED_NONREFUNDABLE_RATE,
+    BASIC_PERSONAL_AMOUNT_FED,
+    BASIC_PERSONAL_AMOUNT_QC,
+    FED_BRACKETS,
+    QC_BRACKETS,
+    type FiscalReport,
+} from '../../utils/tax';
+
 import {
     DAYCARE_INFO, SCHOOL_INFO, ACTIVITIES_INFO, UNI_INFO, CAR_INFO,
     type DaycareType, type SchoolType, type ActivitiesLevel,
@@ -43,19 +53,99 @@ const REEE_AIP_TAX_RATE = 0.20;
 
 // ── RQAP — congé parental ───────────────────────────────────────────────────────
 // Source de vérité du PLAFOND : `RQAP_MAX_INCOME` (`utils/tax.ts`, FISCAL_REFERENCE §2).
-// Il était RECOPIÉ ici en dur à 98 000 $ — la valeur 2025 — pendant que la source unique portait
-// 103 000 $. Écart MESURÉ : 2 750 $/an de prestation brute manquante pour un 2e parent au-dessus
-// du plafond (`[RQAP-CAP-98K]`).
-//
-// ⚠️ TAUX DE REMPLACEMENT — DIVERGENCE ASSUMÉE ET DOCUMENTÉE, pas une valeur à « sourcer ».
-// Le régime de BASE du RQAP ne verse pas un taux plat : il verse 70 % pendant les semaines de
-// maternité/paternité et le début du parental, puis 55 % pour le reste. Le moteur applique 55 %
-// sur les 12 mois, donc il SOUS-ESTIME le début du congé.
-// Le corriger fidèlement demanderait de modéliser le nombre de semaines par prestation ET le choix
-// entre régime de base et régime particulier — que l'app ne saisit nulle part. C'est une décision
-// PRODUIT, pas un correctif : ticket `[RQAP-PHASES-70-55]`. En attendant, la constante est NOMMÉE
-// pour que la divergence soit lisible plutôt que noyée dans un `* 0.55`.
-const RQAP_REPLACEMENT_RATE_BASE = 0.55;
+// Taux de remplacement officiel bipalier du Régime de base du RQAP (Loi sur l'assurance parentale) :
+// - Palier 1 : 70 % pendant les 6 premiers mois (semaines 1 à 26)
+// - Palier 2 : 55 % pour les 6 mois suivants (semaines 27 à 52)
+export const RQAP_TIER1_RATE = 0.70;
+export const RQAP_TIER2_RATE = 0.55;
+
+export function computeRqapBenefits(
+    baseAnnualSalary: number,
+    monthOfLeave: number,
+    regime: 'base' | 'particulier' = 'base',
+    mra: number = RQAP_MAX_INCOME,
+): { replacementRate: number; grossMonthlyBenefit: number } {
+    const salary = Math.max(0, Number(baseAnnualSalary) || 0);
+    const insurable = Math.min(salary, mra);
+    let replacementRate = RQAP_TIER1_RATE;
+    if (regime === 'particulier') {
+        replacementRate = 0.75;
+    } else {
+        replacementRate = monthOfLeave < 6 ? RQAP_TIER1_RATE : RQAP_TIER2_RATE;
+    }
+    const grossMonthlyBenefit = (insurable * replacementRate) / 12;
+    return { replacementRate, grossMonthlyBenefit };
+}
+
+export function computeQuebecChildcareCreditRate(familyNetIncome: number): number {
+    const income = Math.max(0, Number(familyNetIncome) || 0);
+    if (income <= 41885) return 0.78;
+    if (income >= 123000) return 0.67;
+    const slope = (0.67 - 0.78) / (123000 - 41885);
+    return 0.78 + slope * (income - 41885);
+}
+
+export function computeFederalChildcareDeduction(
+    expenses: number,
+    childAge: number,
+    lowerSpouseEarnedIncome: number,
+): number {
+    const annualCap = childAge < 7 ? 8000 : 5000;
+    const twoThirdsLimit = (2 / 3) * Math.max(0, lowerSpouseEarnedIncome);
+    return Math.max(0, Math.min(expenses, annualCap, twoThirdsLimit));
+}
+
+export function computeChildcareSupport(
+    totalCareCostAnnual: number,
+    familyNetIncome: number,
+    numChildren: number = 1,
+    ages: number[] = [3],
+    lowerSpouseEarnedIncome?: number,
+): {
+    qcRefundableCredit: number;
+    fedTaxRelief: number;
+    totalSupport: number;
+    netCostAnnual: number;
+    netCostMonthly: number;
+} {
+    const careAnnual = Math.max(0, Number(totalCareCostAnnual) || 0);
+    if (careAnnual <= 0) {
+        return { qcRefundableCredit: 0, fedTaxRelief: 0, totalSupport: 0, netCostAnnual: 0, netCostMonthly: 0 };
+    }
+
+    const effectiveAges = ages.length > 0 ? ages : [3];
+    const n = Math.max(1, numChildren || effectiveAges.length);
+    const costPerChild = careAnnual / n;
+
+    const qcRate = computeQuebecChildcareCreditRate(familyNetIncome);
+    let qcEligibleTotal = 0;
+    for (let i = 0; i < n; i++) {
+        const age = effectiveAges[i] ?? effectiveAges[0] ?? 3;
+        const qcCap = age < 7 ? 11965 : 5545;
+        qcEligibleTotal += Math.min(costPerChild, qcCap);
+    }
+    const qcRefundableCredit = qcEligibleTotal * qcRate;
+
+    const lowerIncome = lowerSpouseEarnedIncome !== undefined ? lowerSpouseEarnedIncome : Math.max(0, familyNetIncome / 2);
+    let fedDeductionTotal = 0;
+    for (let i = 0; i < n; i++) {
+        const age = effectiveAges[i] ?? effectiveAges[0] ?? 3;
+        fedDeductionTotal += computeFederalChildcareDeduction(costPerChild, age, lowerIncome / n);
+    }
+    const fedTaxRelief = fedDeductionTotal * (FED_NONREFUNDABLE_RATE * (1 - QC_FEDERAL_ABATEMENT_RATE));
+
+    const totalSupport = Math.min(careAnnual, qcRefundableCredit + fedTaxRelief);
+    const netCostAnnual = Math.max(0, careAnnual - totalSupport);
+    const netCostMonthly = netCostAnnual / 12;
+
+    return {
+        qcRefundableCredit,
+        fedTaxRelief,
+        totalSupport,
+        netCostAnnual,
+        netCostMonthly,
+    };
+}
 
 /**
  * Indexation du plafond de revenu assurable RQAP.
@@ -128,6 +218,18 @@ export interface ChildProcessCtx {
      *  permises (mais la croissance continue). */
     trackerReeeContribLifetime: number;
     enableMonteCarlo: boolean;
+    /** Solde PSE (capital souscripteur, non imposable). */
+    pseBalance?: number;
+    /** Solde PAE (subventions + rendements accumulés, imposable étudiant). */
+    paeBalance?: number;
+    /** Subventions fédérales SCEE restantes non encore décaissées. */
+    remainingSceeGrants?: number;
+    /** Subventions québécoises IQEE restantes non encore décaissées. */
+    remainingIqeeGrants?: number;
+    /** Droits de cotisation REER parentaux disponibles pour roulement AIP (LIR 204.94, max 50 000 $). */
+    parentRrspRoom?: number;
+    /** Taux marginal du parent pour calcul de l'impôt ordinaire AIP à la fermeture. */
+    parentMarginalRate?: number;
     /**
      * [ENG-DIVORCE-REEE-COTISATIONS] Part des COTISATIONS REEE qui reste à la charge du déclarant.
      *
@@ -163,7 +265,7 @@ export interface ChildProcessCtx {
     childCustodyShare?: number;
 }
 
-interface ChildTickResult {
+export interface ChildTickResult {
     liquidDelta: number;
     /**
      * [ENG-DIVORCE-CHILDREN-REEE] `liquidDelta` VENTILÉ par CLÉ DE PARTAGE, parce que les deux
@@ -182,6 +284,13 @@ interface ChildTickResult {
     newIncomeAnna: number | null;
     accGrossDelta: number;
     reeeNewBalance: number;
+    newPseBalance: number;
+    newPaeBalance: number;
+    remainingSceeGrants: number;
+    remainingIqeeGrants: number;
+    withdrawalPseAdd: number;
+    withdrawalPaeAdd: number;
+    studentTaxAdd: number;
     taxDiversAdd: number;
 
     newTrackerScee: number;
@@ -204,6 +313,7 @@ interface ChildTickResult {
     lifeEventLogs: string[];
     flowEventLogs: string[];
 }
+
 
 /**
  * Traite un enfant pour le mois courant.
@@ -238,6 +348,23 @@ export function processOneChild(
     let newIncomeAnna: number | null = null;
     let accGrossDelta = 0;
     let reeeNewBalance = reee;
+    let currentPse = ctx.pseBalance !== undefined ? Math.max(0, ctx.pseBalance) : 0;
+    let currentPae = ctx.paeBalance !== undefined ? Math.max(0, ctx.paeBalance) : 0;
+    if (ctx.pseBalance === undefined && ctx.paeBalance === undefined && reee > 0) {
+        if (trackerReeeContribLifetime > 0) {
+            currentPse = Math.min(reee, trackerReeeContribLifetime);
+            currentPae = Math.max(0, reee - currentPse);
+        } else {
+            currentPse = reee;
+            currentPae = 0;
+        }
+    }
+    let remainingScee = ctx.remainingSceeGrants !== undefined ? Math.max(0, ctx.remainingSceeGrants) : trackerScee;
+    let remainingIqee = ctx.remainingIqeeGrants !== undefined ? Math.max(0, ctx.remainingIqeeGrants) : trackerIqee;
+    let withdrawalPseAdd = 0;
+    let withdrawalPaeAdd = 0;
+    let studentTaxAdd = 0;
+
     let taxDiversAdd = 0;
     let newTrackerScee = trackerScee;
     let newTrackerIqee = trackerIqee;
@@ -253,6 +380,7 @@ export function processOneChild(
     let contribLiquidAdd = 0;
     const lifeEventLogs: string[] = [];
     const flowEventLogs: string[] = [];
+
 
     // Résolution des choix UI (defaults alignés avec ChildPlanning.tsx)
     const daycareType: DaycareType = (child.daycareType as DaycareType) || 'cpe';
@@ -329,8 +457,9 @@ export function processOneChild(
             // argument, `calculateFiscalReport` retombe sur `grossIncome` et la prestation payait
             // RRQ + RQAP + AE : MESURÉ, 4 328,50 $/an de cotisations fantômes sur une prestation
             // au plafond (56 650 $ → net 42 366,76 au lieu de 46 695,26).
+            const { replacementRate } = computeRqapBenefits(eligibleSalary, childAgeMonths, 'base', rqapCap);
             const rqapNetInfo = calculateFiscalReport(
-                eligibleSalary * RQAP_REPLACEMENT_RATE_BASE, 0, 0, loopYear, enableMonteCarlo,
+                eligibleSalary * replacementRate, 0, 0, loopYear, enableMonteCarlo,
                 undefined, 0);
             const rqapNetMonthly = rqapNetInfo.netIncome / 12;
 
@@ -346,12 +475,15 @@ export function processOneChild(
             careMonthly = 0;
         }
 
-        // Frais garderie nets : au-delà de 400 $/mois, il RESTE ~30 % du coût à charge
-        // (≈70 % d'aide implicite — heuristique FISC-CHILDCARE, cf FISCAL_REFERENCE §9).
-        // CPE déjà subventionné → < 400 $ → pas de réduction. ⚠️ L'ancien commentaire disait
-        // « ~30 % remboursés » : c'était l'inverse de ce que fait la ligne (× 0.30 = on GARDE 30 %).
+        // Frais garderie nets : pour garde privée (> 400 $/mois, non CPE),
+        // calcul exact du crédit remboursable Québec (Annexe C) et de la déduction fédérale T778 (ligne 21400)
+        // CPE déjà subventionné (< 400 $/mois) reste à sa contribution de base sans réduction additionnelle.
         if (careMonthly > 400) {
-            careMonthly = careMonthly * 0.30;
+            const annualCare = careMonthly * 12;
+            const grossMarc = Math.max(0, householdGross - grossAnnaBaseAnnual);
+            const lowerEarned = grossAnnaBaseAnnual > 0 ? Math.min(grossMarc, grossAnnaBaseAnnual) : grossMarc;
+            const careSupport = computeChildcareSupport(annualCare, householdGross, 1, [childAgeYears], lowerEarned);
+            careMonthly = careSupport.netCostMonthly;
         }
 
         // Total mensuel = essentiel + garderie/école/activités, indexé inflation
@@ -423,12 +555,16 @@ export function processOneChild(
 
             const sceeGrant = Math.min(optimalReeeMonthly * SCEE_GRANT_RATE, sceeYearlyLimit / 12, SCEE_LIFETIME_GRANT_LIMIT - newTrackerScee);
             newTrackerScee += Math.max(0, sceeGrant);
+            remainingScee += Math.max(0, sceeGrant);
 
             const iqeeGrant = Math.min(optimalReeeMonthly * IQEE_GRANT_RATE, iqeeYearlyLimit / 12, IQEE_LIFETIME_GRANT_LIMIT - newTrackerIqee);
             newTrackerIqee += Math.max(0, iqeeGrant);
+            remainingIqee += Math.max(0, iqeeGrant);
 
             const totalGrant = Math.max(0, sceeGrant) + Math.max(0, iqeeGrant);
-            reeeNewBalance = reee + optimalReeeMonthly + totalGrant;
+            currentPse += optimalReeeMonthly;
+            currentPae += totalGrant;
+            reeeNewBalance = currentPse + currentPae;
             contribREEEAdd += optimalReeeMonthly + totalGrant;
         }
     }
@@ -445,40 +581,89 @@ export function processOneChild(
 
     // Études post-secondaires : durée et coût annuel selon universityType
     // (uni_local 5k$/an × 4 ans, uni_etranger 35k$/an × 4 ans, etc.).
-    // Avant : 20 000$/an fixe sur 18-25 — ignorait totalement le choix UI.
     const uniStartMonths = 18 * 12;
     const uniEndMonths = uniStartMonths + uni.years * 12;
     if (uni.years > 0 && childAgeMonths >= uniStartMonths && childAgeMonths < uniEndMonths) {
-        // ⚠️ Deuxième défaut mesuré : partagé ICI, donc le RETRAIT REEE qui finance ces études
-        // (calibré sur `studiesMonthly` juste en dessous) suit automatiquement. Partager la seule
-        // dépense laissait sortir du régime 2× ce qu'il fallait payer.
         const studiesMonthly = (uni.yearlyCost / 12) * expenseMultiplier * custody;
         monthlyExpenseDelta += studiesMonthly;
         childGrossCostAdd += studiesMonthly;
         childMonthlyCostAdd += studiesMonthly;
 
-        if (reeeNewBalance >= studiesMonthly) {
-            reeeNewBalance -= studiesMonthly;
-            withdrawalREEEAdd += studiesMonthly;
-            monthlyIncomeDelta += studiesMonthly;
-            reeePayoutAdd += studiesMonthly;
-            contribLiquidAdd += studiesMonthly;
-        } else if (reeeNewBalance > 0) {
-            const remaining = reeeNewBalance;
-            monthlyIncomeDelta += remaining;
-            reeePayoutAdd += remaining;
-            withdrawalREEEAdd += remaining;
-            contribLiquidAdd += remaining;
-            reeeNewBalance = 0;
+        const totalReeeAvailable = currentPse + currentPae;
+        const toWithdraw = Math.min(totalReeeAvailable, studiesMonthly);
+
+        if (toWithdraw > 0) {
+            // Décaissement prioritaire du PAE (subventions + rendements, imposable étudiant)
+            const fromPae = Math.min(currentPae, toWithdraw);
+            currentPae -= fromPae;
+            withdrawalPaeAdd += fromPae;
+
+            // Amortissement au prorata des subventions restantes dans la poche PAE
+            const totalPaeBefore = currentPae + fromPae;
+            if (totalPaeBefore > 0 && (remainingScee + remainingIqee) > 0) {
+                const grantRatio = (remainingScee + remainingIqee) / totalPaeBefore;
+                const totalGrantsAmortized = fromPae * grantRatio;
+                const sceeRatio = (remainingScee + remainingIqee > 0) ? remainingScee / (remainingScee + remainingIqee) : 2 / 3;
+                remainingScee = Math.max(0, remainingScee - totalGrantsAmortized * sceeRatio);
+                remainingIqee = Math.max(0, remainingIqee - totalGrantsAmortized * (1 - sceeRatio));
+            }
+
+            const fromPse = Math.min(currentPse, toWithdraw - fromPae);
+            currentPse -= fromPse;
+            withdrawalPseAdd += fromPse;
+
+            // Fiscalité étudiant sur la part PAE (neutralisée sous le BPA 16 452 $ fédéral / 18 952 $ QC)
+            const annualPae = fromPae * 12;
+            const fedTaxable = Math.max(0, annualPae - BASIC_PERSONAL_AMOUNT_FED);
+            const studentFedTax = (fedTaxable * FED_BRACKETS[0].rate * (1 - QC_FEDERAL_ABATEMENT_RATE)) / 12;
+            const qcTaxable = Math.max(0, annualPae - BASIC_PERSONAL_AMOUNT_QC);
+            const studentQcTax = (qcTaxable * QC_BRACKETS[0].rate) / 12;
+            studentTaxAdd += studentFedTax + studentQcTax;
+
+            reeeNewBalance = currentPse + currentPae;
+            withdrawalREEEAdd += toWithdraw;
+            monthlyIncomeDelta += toWithdraw;
+            reeePayoutAdd += toWithdraw;
+            contribLiquidAdd += toWithdraw;
         }
     }
 
     if (childAgeMonths === 25 * 12 && reeeNewBalance > 0) {
-        liquidDelta += reeeNewBalance;
-        liquidDeltaReee += reeeNewBalance;
-        taxDiversAdd += reeeNewBalance * REEE_AIP_TAX_RATE;
-        flowEventLogs.push(`🎓 Fermeture du REEE (régime d'épargne-études) de ${child.name || 'l\'enfant'} : +${formatCAD(Math.round(reeeNewBalance))} versés dans tes liquidités`);
+        // 1. Restitution du capital souscripteur (PSE) aux liquidités 100 % franc d'impôt
+        const refundPse = currentPse;
+        liquidDelta += refundPse;
+        liquidDeltaReee += refundPse;
+
+        // 2. Remboursement obligatoire des subventions inutilisées aux gouvernements (ARC / RQ)
+        const totalGrantsToRefund = Math.min(currentPae, remainingScee + remainingIqee);
+        const accumulatedEarnings = Math.max(0, currentPae - totalGrantsToRefund);
+
+        // 3. Traitement des rendements restants (Paiement de revenu accumulé / PRA / AIP)
+        const rrspRoom = Math.max(0, ctx.parentRrspRoom ?? 0);
+        const rrspRollover = Math.min(accumulatedEarnings, rrspRoom, 50000); // LIR 204.94
+        const taxableAip = Math.max(0, accumulatedEarnings - rrspRollover);
+
+        // Surtaxe légale de 20 % de l'ARC sur le PRA non roulé au REER
+        const aipPenalty = taxableAip * REEE_AIP_TAX_RATE;
+        taxDiversAdd += aipPenalty;
+
+        // Solde net de PRA versé aux liquidités
+        const aipNetCash = taxableAip - aipPenalty;
+        liquidDelta += aipNetCash;
+        liquidDeltaReee += aipNetCash;
+
+        flowEventLogs.push(
+            `🎓 Fermeture du REEE de ${child.name || 'l\'enfant'} (25 ans) : ` +
+            `+${formatCAD(Math.round(refundPse))} de capital (PSE 100 % franc d'impôt) restitués` +
+            (totalGrantsToRefund > 0 ? `, ${formatCAD(Math.round(totalGrantsToRefund))} de subventions inutilisées remboursées à l'État` : '') +
+            (taxableAip > 0 ? `, ${formatCAD(Math.round(aipNetCash))} de rendements nets versés (surtaxe AIP 20 % : ${formatCAD(Math.round(aipPenalty))})` : '')
+        );
+
         reeeNewBalance = 0;
+        currentPse = 0;
+        currentPae = 0;
+        remainingScee = 0;
+        remainingIqee = 0;
     }
 
     return {
@@ -490,6 +675,13 @@ export function processOneChild(
         newIncomeAnna,
         accGrossDelta,
         reeeNewBalance,
+        newPseBalance: currentPse,
+        newPaeBalance: currentPae,
+        remainingSceeGrants: remainingScee,
+        remainingIqeeGrants: remainingIqee,
+        withdrawalPseAdd,
+        withdrawalPaeAdd,
+        studentTaxAdd,
         taxDiversAdd,
         newTrackerScee,
         newTrackerIqee,
@@ -507,4 +699,5 @@ export function processOneChild(
         lifeEventLogs,
         flowEventLogs,
     };
+
 }

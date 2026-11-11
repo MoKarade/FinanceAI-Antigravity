@@ -20,6 +20,8 @@ export interface GrowthInputs {
     crypto: number; activeCryptoRate: number;
     prevLiquid: number; liquid: number; activeCashRate: number;
     reee: number; contribREEE: number;
+    pseBalance?: number;
+    paeBalance?: number;
 }
 
 interface AssetGrowth {
@@ -28,14 +30,19 @@ interface AssetGrowth {
     pct: number;
 }
 
-interface GrowthResult {
+interface ReeeAssetGrowth extends AssetGrowth {
+    newPseBalance?: number;
+    newPaeBalance?: number;
+}
+
+export interface GrowthResult {
     celi: AssetGrowth;
     celiapp: AssetGrowth;
     reer: AssetGrowth;
     nonReg: AssetGrowth;
     crypto: AssetGrowth;
     liquid: AssetGrowth;
-    reee: AssetGrowth;
+    reee: ReeeAssetGrowth;
     totalGrowth: number;
 }
 
@@ -48,6 +55,9 @@ interface GrowthResult {
  * exclure du calcul de croissance les entrées du mois courant — cotisations ordinaires
  * ET arrivée du meltdown (même règle depuis [ENG-MELTDOWN-MIMOIS], décision Marc 2026-09-04).
  * Idem REEE avec contribREEE.
+ *
+ * Pour le REEE, la croissance de placement mensuelle est intégralement versée au compartiment
+ * PAE (subventions + rendements), le capital souscripteur (PSE) restant invariant.
  */
 export function applyMonthlyGrowth(inputs: Readonly<GrowthInputs>): GrowthResult {
     const celi = applyMidMonthGrowth(inputs.prevCELI, inputs.celi, inputs.effectiveCeliRate, true);
@@ -58,6 +68,19 @@ export function applyMonthlyGrowth(inputs: Readonly<GrowthInputs>): GrowthResult
     const liquid = applyMidMonthGrowth(inputs.prevLiquid, inputs.liquid, inputs.activeCashRate, false);
     const reee = applyMidMonthGrowth(inputs.reee - inputs.contribREEE, inputs.reee, inputs.activeCashRate, true);
 
+    let reeeGrowth: ReeeAssetGrowth = { newVal: reee.newVal, growth: reee.growth, pct: reee.pct };
+    if (inputs.pseBalance !== undefined && inputs.paeBalance !== undefined) {
+        const newPseBalance = Math.max(0, inputs.pseBalance);
+        const newPaeBalance = Math.max(0, inputs.paeBalance + reee.growth);
+        reeeGrowth = {
+            newVal: reee.newVal,
+            growth: reee.growth,
+            pct: reee.pct,
+            newPseBalance,
+            newPaeBalance,
+        };
+    }
+
     return {
         celi: { newVal: celi.newVal, growth: celi.growth, pct: celi.pct },
         celiapp: { newVal: celiapp.newVal, growth: celiapp.growth, pct: celiapp.pct },
@@ -65,7 +88,8 @@ export function applyMonthlyGrowth(inputs: Readonly<GrowthInputs>): GrowthResult
         nonReg: { newVal: nonReg.newVal, growth: nonReg.growth, pct: nonReg.pct },
         crypto: { newVal: crypto.newVal, growth: crypto.growth, pct: crypto.pct },
         liquid: { newVal: liquid.newVal, growth: liquid.growth, pct: liquid.pct },
-        reee: { newVal: reee.newVal, growth: reee.growth, pct: reee.pct },
+        reee: reeeGrowth,
         totalGrowth: celi.growth + reer.growth + nonReg.growth + crypto.growth + liquid.growth + celiapp.growth + reee.growth,
     };
 }
+

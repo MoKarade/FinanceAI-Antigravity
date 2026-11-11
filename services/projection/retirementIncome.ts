@@ -4,7 +4,7 @@
 // avec le total ET le split par source (Phase 3 Tier 3 — split pensions).
 
 import type { RetirementGoal, User } from '../../types';
-import { RRQ_MPE, calculateGISBenefit, rrqAdjustmentFactor, psvDeferralFactor, PSV_BONUS_75_PLUS, PSV_BONUS_AGE, RRQ_CONTRIBUTORY_START_AGE, CAPITAL_GAINS_INCLUSION_STANDARD, GOV_PENSION_RRQ_SHARE, GOV_PENSION_PSV_SHARE, getResidencyStartYear, RRQ_STANDARD_START_AGE, PSV_ELIGIBILITY_AGE } from '../../utils/tax';
+import { RRQ_MPE, RRQ_YAMPE, calculateGISBenefit, rrqAdjustmentFactor, psvDeferralFactor, PSV_BONUS_75_PLUS, PSV_BONUS_AGE, RRQ_CONTRIBUTORY_START_AGE, CAPITAL_GAINS_INCLUSION_STANDARD, GOV_PENSION_RRQ_SHARE, GOV_PENSION_PSV_SHARE, getResidencyStartYear, RRQ_STANDARD_START_AGE, PSV_ELIGIBILITY_AGE } from '../../utils/tax';
 import { projeterAuPatronMga } from './helpers';
 
 // Constantes RRQ/PSV 2026 (Retraite Québec + Service Canada) — règles documentées
@@ -215,6 +215,49 @@ export const computeDbPensionMonthly = (p: {
 export const RRQ_DEFERRED_START_AGE = 72;
 export const PSV_DEFERRED_START_AGE = 70;
 
+/**
+ * Détail des composantes de rente RRQ bonifiée (RLRQ c R-9 / Bill 149).
+ * - Rente de base : 25 % du MGA
+ * - Volet 1 (bonification 2019-2023+) : 8,33 % du MGA proratisé sur 40 ans
+ * - Volet 2 (bonification 2024+ sur le MGAS) : 33,33 % de la tranche MGA->MGAS proratisé sur 40 ans
+ */
+export interface RrqEnhancedBreakdown {
+    basePension: number;
+    volet1: number;
+    volet2: number;
+    totalAnnual: number;
+    totalMonthly: number;
+}
+
+export function computeRrqEnhanced(
+    grossSalaryAnnual: number,
+    yearsPost2019: number = 0,
+    yearsPost2024: number = 0,
+    mga: number = RRQ_MPE,
+    mgas: number = RRQ_YAMPE,
+): RrqEnhancedBreakdown {
+    const earningsRatioMpe = Math.min(1, Math.max(0, grossSalaryAnnual / mga));
+    const earningsRatioBand2 = grossSalaryAnnual > mga && mgas > mga
+        ? Math.min(1, Math.max(0, (grossSalaryAnnual - mga) / (mgas - mga)))
+        : 0;
+
+    const basePension = 0.25 * mga * earningsRatioMpe;
+    const volet1Prorata = Math.min(40, Math.max(0, yearsPost2019)) / 40;
+    const volet1 = 0.0833 * mga * volet1Prorata * earningsRatioMpe;
+
+    const volet2Prorata = Math.min(40, Math.max(0, yearsPost2024)) / 40;
+    const volet2 = 0.3333 * (mgas - mga) * volet2Prorata * earningsRatioBand2;
+
+    const totalAnnual = basePension + volet1 + volet2;
+    return {
+        basePension,
+        volet1,
+        volet2,
+        totalAnnual,
+        totalMonthly: totalAnnual / 12,
+    };
+}
+
 // ───────────────────────────────────────────────────────────────────────────────────────────
 // [DETTE-GODFN-RETIREMENT 2026-09-04] `computeRetirementIncome` (260 lignes) est DÉCOUPÉE en
 // étapes nommées — à COMPORTEMENT STRICTEMENT INCHANGÉ (empreinte des grandeurs publiées
@@ -240,8 +283,9 @@ function calculerPoidsParConjoint(
     let totalPsvProrata = 0;
     let totalRrqWeight = 0;
     const yearsElapsed = Math.floor(m / 12);
-    // MGA RRQ projeté: base 2026 (RRQ_MPE) indexée à inflation + croissance salariale ~0.5%/an
+    // MGA et MGAS RRQ projetés: base 2026 (RRQ_MPE, RRQ_YAMPE) indexées à inflation + croissance salariale ~0.5%/an
     const rrqMpeProjected = projeterAuPatronMga(RRQ_MPE, simInflation, yearsElapsed);
+    const rrqYampeProjected = projeterAuPatronMga(RRQ_YAMPE, simInflation, yearsElapsed);
 
     // A1 — on conserve les POIDS PAR CONJOINT (et pas seulement leur somme) pour
     // attribuer RRQ/PSV à chaque personne selon SON salaire / SA résidence.
@@ -258,7 +302,6 @@ function calculerPoidsParConjoint(
         const currentGrossUser = projeterAuPatronMga(
             u.grossSalary ? u.grossSalary * 12 : (baseGrossAnnual / activeUsersCount),
             simInflation, yearsElapsed);
-        const rrqRatioUser = Math.min(1.0, currentGrossUser / rrqMpeProjected);
 
         // FISC-RRQ-PRORATA (2026-06-16) — prorata de RÉSIDENCE RRQ désormais PER-CONJOINT (avant :
         // dérivé de users[0] SEUL puis appliqué à la rente du COUPLE → faux pour un couple d'arrivées
@@ -269,7 +312,26 @@ function calculerPoidsParConjoint(
         const residencyStartU = getResidencyStartYear(birthYearU, u.isImmigrant, u.canadaArrivalYear);
         const arrivalAgeU = Math.max(RRQ_CONTRIBUTORY_START_AGE, residencyStartU - birthYearU);
         const rrqResidenceProrataUser = Math.min(1, Math.max(0, retirementGoal.targetAge - arrivalAgeU) / RRQ_DENOMINATOR_YEARS);
-        // Poids RRQ individuel = ratio gains/MGA × prorata de résidence (les deux PER-CONJOINT).
+
+        // Bonification RRQ Volets 1 et 2 (Loi 149) au prorata des années cotisées post-2019 et post-2024
+        const workStartYear = Math.max(birthYearU + RRQ_CONTRIBUTORY_START_AGE, residencyStartU);
+        const retireYear = birthYearU + retirementGoal.targetAge;
+        const yearsPost2019 = Math.min(40, Math.max(0, retireYear - Math.max(2019, workStartYear)));
+        const yearsPost2024 = Math.min(40, Math.max(0, retireYear - Math.max(2024, workStartYear)));
+
+        const rrqEnhanced = computeRrqEnhanced(
+            currentGrossUser,
+            yearsPost2019,
+            yearsPost2024,
+            rrqMpeProjected,
+            rrqYampeProjected,
+        );
+        const maxBasePensionAnnual = 0.25 * rrqMpeProjected;
+        const rrqRatioUser = maxBasePensionAnnual > 0
+            ? (rrqEnhanced.totalAnnual / maxBasePensionAnnual)
+            : 0;
+
+        // Poids RRQ individuel = ratio gains/MGA (bonifié Volets 1 & 2) × prorata de résidence (les deux PER-CONJOINT).
         const rrqWeightUser = rrqRatioUser * rrqResidenceProrataUser;
         perUserRrqWeight.push(rrqWeightUser);
         totalRrqWeight += rrqWeightUser;

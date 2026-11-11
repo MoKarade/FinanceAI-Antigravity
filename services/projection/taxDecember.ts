@@ -4,7 +4,7 @@
 // Cycle 11 (processDecemberTaxFiling): régularisation annuelle d'impôt.
 
 import { formatCAD } from '../../utils/format';
-import { OAS_CLAWBACK_THRESHOLD_2026, OAS_CLAWBACK_RATE, CAPITAL_GAINS_INCLUSION_STANDARD, firstCombinedBracketTopForYear, calculateRamqPremium, calculateFSSPremium, PENSION_SPLIT_MIN_AGE, AGE_AMOUNT_FED_MIN_AGE, type FiscalReport, type AgeCreditOptions } from '../../utils/tax';
+import { OAS_CLAWBACK_THRESHOLD_2026, OAS_CLAWBACK_RATE, CAPITAL_GAINS_INCLUSION_STANDARD, firstCombinedBracketTopForYear, calculateRamqPremium, calculateFSSPremium, PENSION_SPLIT_MIN_AGE, AGE_AMOUNT_FED_MIN_AGE, calculateFiscalReport, TAX_BASE_YEAR, PSV_ELIGIBILITY_AGE, type FiscalReport, type AgeCreditOptions } from '../../utils/tax';
 import { NONREG_DIVIDEND_DISTRIBUTION_SHARE } from './helpers';
 import { eligiblePensionRealFor } from './pensionCredit';
 
@@ -365,6 +365,14 @@ export interface DecemberContext {
      * on retombe sur `ramqExempt` (tout le ménage ou personne).
      */
     ramqExemptAdultsCount?: number;
+    /** Cumul annuel brut des bonus par conjoint [Marc, Anna] */
+    bonusYearByUser?: [number, number];
+    /** Cumul annuel brut des RSU par conjoint [Marc, Anna] */
+    rsuYearByUser?: [number, number];
+    /** Cumul annuel brut de travail autonome (side income) par conjoint [Marc, Anna] */
+    sideIncomeYearByUser?: [number, number];
+    /** Retenue à la source provisoire totale de l'année sur le revenu variable */
+    withheldVariableTaxYear?: number;
 }
 
 export interface DecemberHelpers {
@@ -372,7 +380,7 @@ export interface DecemberHelpers {
     // (1+i)^Δ à passer quand `gross` est en dollars RÉELS — les paliers/crédits sont alors ramenés
     // dans le même espace (facteur effectif 1,02^Δ/(1+i)^Δ au lieu du double-indexé 1,02^Δ sur un
     // revenu déflaté). Les appels en espace NOMINAL (gains, dividendes) ne le passent PAS.
-    calculateFiscalReport: (gross: number, deductions: number, withheld: number, year: number, mc?: boolean, ageOpts?: AgeCreditOptions, employmentIncome?: number, realDeflator?: number) => FiscalReport;
+    calculateFiscalReport: (gross: number, deductions: number, withheld: number, year: number, mc?: boolean, ageOpts?: AgeCreditOptions, employmentIncome?: number, realDeflator?: number, selfEmploymentIncome?: number) => FiscalReport;
     getMarginalRate: (income: number, year: number) => number;
     // ITEM 2d — 4e arg optionnel : impôt brut PROGRESSIF (bande sur le montant majoré).
     // Quand fourni, il remplace le calcul plat (montant majoré × taux marginal).
@@ -562,12 +570,27 @@ export function processDecemberTaxFiling(
         // Solo (1 déclarant) : tout le retrait est au principal, rien au « conjoint ».
         const reerMarcReal = reerRealUser(0);
         const reerAnnaReal = nAdults > 1 ? reerRealUser(1) : 0;
-        // Assiette IMPOSABLE élargie. ⚠️ L'assiette d'EMPLOI reste le SALAIRE SEUL : les cotisations
-        // RRQ/RQAP/AE ne portent pas sur un retrait REER, et `employmentIncome` absent vaut
-        // `grossIncome` par défaut (cf. FISC-PAYROLL-BASE-INVEST) — l'omettre ici gonflerait les
-        // cotisations sociales du montant retiré.
-        const taxableMarcReal = grossMarcReal + reerMarcReal;
-        const taxableAnnaReal = grossAnnaReal + reerAnnaReal;
+
+        // Variables annuelles (Bonus, RSU, Side Income) réconciliées
+        const bonusMarcReal = (ctx.bonusYearByUser?.[0] ?? 0) / inflationFactor;
+        const bonusAnnaReal = (nAdults > 1 ? (ctx.bonusYearByUser?.[1] ?? 0) : 0) / inflationFactor;
+        const rsuMarcReal = (ctx.rsuYearByUser?.[0] ?? 0) / inflationFactor;
+        const rsuAnnaReal = (nAdults > 1 ? (ctx.rsuYearByUser?.[1] ?? 0) : 0) / inflationFactor;
+        const sideMarcReal = (ctx.sideIncomeYearByUser?.[0] ?? 0) / inflationFactor;
+        const sideAnnaReal = (nAdults > 1 ? (ctx.sideIncomeYearByUser?.[1] ?? 0) : 0) / inflationFactor;
+
+        // Assiette d'emploi (salaire de base + bonus + RSU)
+        const employmentMarcReal = grossMarcReal + bonusMarcReal + rsuMarcReal;
+        const employmentAnnaReal = grossAnnaReal + bonusAnnaReal + rsuAnnaReal;
+
+        // Assiette de travail autonome (side income)
+        const selfEmploymentMarcReal = sideMarcReal;
+        const selfEmploymentAnnaReal = sideAnnaReal;
+
+        // Assiette IMPOSABLE élargie. ⚠️ L'assiette d'EMPLOI pour RRQ/RQAP/AE inclut salaire + bonus + RSU,
+        // et le revenu autonome (side income) est passé en selfEmploymentIncome (double part RRQ).
+        const taxableMarcReal = employmentMarcReal + selfEmploymentMarcReal + reerMarcReal;
+        const taxableAnnaReal = employmentAnnaReal + selfEmploymentAnnaReal + reerAnnaReal;
 
         // V31: Optimisation fiscale — déductions au salaire le plus élevé
         const deductionsMarc = grossMarcReal > grossAnnaReal ? deductionsReal : 0;
@@ -597,8 +620,8 @@ export function processDecemberTaxFiling(
         // [FISC-BRACKET-REALINDEX] revenus en dollars RÉELS (déflatés ci-dessus) → paliers/crédits
         // ramenés en réel via realDeflator = inflationFactor (sinon : double indexation, les
         // paliers s'élargissaient de ~2 %/an en termes réels → impôt long-terme sous-évalué).
-        const taxMarcReal = taxableMarcReal > 0 ? helpers.calculateFiscalReport(taxableMarcReal, deductionsMarc, 0, ctx.loopYear, ctx.enableMonteCarlo, ageOptsMarc, grossMarcReal, inflationFactor).totalTax : 0;
-        const taxAnnaReal = taxableAnnaReal > 0 ? helpers.calculateFiscalReport(taxableAnnaReal, deductionsAnna, 0, ctx.loopYear, ctx.enableMonteCarlo, ageOptsAnna, grossAnnaReal, inflationFactor).totalTax : 0;
+        const taxMarcReal = taxableMarcReal > 0 ? helpers.calculateFiscalReport(taxableMarcReal, deductionsMarc, 0, ctx.loopYear, ctx.enableMonteCarlo, ageOptsMarc, employmentMarcReal, inflationFactor, selfEmploymentMarcReal).totalTax : 0;
+        const taxAnnaReal = taxableAnnaReal > 0 ? helpers.calculateFiscalReport(taxableAnnaReal, deductionsAnna, 0, ctx.loopYear, ctx.enableMonteCarlo, ageOptsAnna, employmentAnnaReal, inflationFactor, selfEmploymentAnnaReal).totalTax : 0;
         const totalAnnualTax = (taxMarcReal + taxAnnaReal) * inflationFactor;
         grossIncomeTax = totalAnnualTax; // [FA-6-CREDIT-CAP] liability salariale de l'année
 
@@ -613,11 +636,9 @@ export function processDecemberTaxFiling(
         const taxMarcEmployer = grossMarcReal > 0 ? helpers.calculateFiscalReport(grossMarcReal, deductionsEmployerMarc, 0, ctx.loopYear, ctx.enableMonteCarlo, ageOptsMarc, grossMarcReal, inflationFactor).totalTax : 0;
         const taxAnnaEmployer = grossAnnaReal > 0 ? helpers.calculateFiscalReport(grossAnnaReal, deductionsEmployerAnna, 0, ctx.loopYear, ctx.enableMonteCarlo, ageOptsAnna, grossAnnaReal, inflationFactor).totalTax : 0;
         const totalEmployerTax = (taxMarcEmployer + taxAnnaEmployer) * inflationFactor;
-        // [FISC-WHT-92PCT] retenue = 100 % de l'impôt sans déductions (GO Marc 2026-08-01). L'ancien
-        // ×0,92 n'était sourcé nulle part et facturait ~8 % de l'impôt salarial EN DOUBLE chaque avril :
-        // le netSalary saisi incorpore déjà ~100 % de la retenue réelle (vérifié numériquement,
-        // FISCAL_REFERENCE §9). Le solde d'avril ne règle plus que l'écart dû aux déductions (REER…).
-        const estimatedWithholding = totalEmployerTax;
+        // Retenue = 100 % de l'impôt sans déductions + retenue provisoire perçue sur variables (bonus/RSU/side)
+        const withheldVariable = ctx.withheldVariableTaxYear ?? 0;
+        const estimatedWithholding = totalEmployerTax + withheldVariable;
 
         // V30: Override 12-month approximation
         // Panel #558 : le plancher tronquait EN SILENCE — et la retenue 100 % rend les gros
@@ -1149,3 +1170,45 @@ export function processDecemberTaxFiling(
 
     return { newTaxCurrentYear: taxCurrent, logs, nonRegACBAdd };
 }
+
+/**
+ * Calcul du TMED (Taux Marginal Effectif de Décaissement) / METR (Marginal Effective Tax Rate).
+ * Évalue la fraction marginale d'un retrait brut additionnel perdue en impôts,
+ * cotisations et réductions de prestations sociales (récupération PSV, réduction SRG).
+ */
+export function computeTmed(
+    grossIncome: number,
+    additionalWithdrawal: number = 1000,
+    year: number = TAX_BASE_YEAR,
+    opts?: {
+        isRetired?: boolean;
+        age?: number;
+        hasGis?: boolean;
+        oasReceived?: number;
+    },
+): { tmedRate: number; deltaTax: number; deltaClawback: number; netProceeds: number } {
+    const withdrawal = Math.max(1, Number(additionalWithdrawal) || 1000);
+    const income1 = Math.max(0, Number(grossIncome) || 0);
+    const income2 = income1 + withdrawal;
+
+    const report1 = calculateFiscalReport(income1, 0, 0, year);
+    const report2 = calculateFiscalReport(income2, 0, 0, year);
+    const deltaTax = report2.totalTax - report1.totalTax;
+
+    let deltaClawback = 0;
+    if (opts?.isRetired && (opts?.age ?? PSV_ELIGIBILITY_AGE) >= PSV_ELIGIBILITY_AGE) {
+        const threshold = OAS_CLAWBACK_THRESHOLD_2026;
+        const oasCap = opts.oasReceived !== undefined ? opts.oasReceived : 8000;
+        const clawback1 = Math.min(oasCap, Math.max(0, income1 - threshold) * OAS_CLAWBACK_RATE);
+        const clawback2 = Math.min(oasCap, Math.max(0, income2 - threshold) * OAS_CLAWBACK_RATE);
+        deltaClawback += (clawback2 - clawback1);
+    }
+
+    const totalFriction = deltaTax + deltaClawback;
+    const tmedRate = totalFriction / withdrawal;
+    const netProceeds = withdrawal - totalFriction;
+
+    return { tmedRate, deltaTax, deltaClawback, netProceeds };
+}
+
+export const computeMetr = computeTmed;

@@ -80,7 +80,8 @@ describe('[W5-RENTAL-INTERET-DPA] l’intérêt passé aux effets W5 est celui q
         ctxCaptures.length = 0;
         const { passes, publies } = lance([plex(), plex({ id: 'rp2', mortgageBalance: 100_000, mortgageRate: 3 })]);
         expect(Object.keys(ctxCaptures[0] ?? {}).sort()).toEqual(['rp1', 'rp2']);
-        expect((ctxCaptures[0] ?? {}).rp2).toBeCloseTo(100_000 * 0.03 / 12, 6);
+        expect((ctxCaptures[0] ?? {}).rp2).toBeCloseTo(100_000 * (Math.pow(1 + 0.03 / 2, 1 / 6) - 1), 6);
+        expect((ctxCaptures[0] ?? {}).rp2).toBeCloseTo(248.45, 2);
         expect(passes[0]).toBeCloseTo(publies[0], 2);
     });
 

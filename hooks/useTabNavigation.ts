@@ -4,11 +4,14 @@
 // hash (avec les redirections héritées #ACTIONS/#DASHBOARD), titre de page, raccourcis Alt+1..9
 // et <html lang>. [S5-SANS-GA] Le page_view GA4 est retiré avec Google Analytics (24/09/2026).
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tab } from '../types';
 
 export function useTabNavigation(activeTab: Tab, setActiveTab: (tab: Tab) => void): void {
+    const activeTabRef = useRef<Tab>(activeTab);
+    activeTabRef.current = activeTab;
+
     useEffect(() => {
         const applyHash = () => {
             const hash = window.location.hash.replace('#', '');
@@ -25,7 +28,13 @@ export function useTabNavigation(activeTab: Tab, setActiveTab: (tab: Tab) => voi
                 window.history.replaceState(null, '', '#DASHBOARD');
                 return;
             }
-            if (Object.values(Tab).includes(hash as Tab) && hash !== activeTab) {
+            if (!hash) {
+                if (activeTabRef.current !== Tab.DASHBOARD) {
+                    setActiveTab(Tab.DASHBOARD);
+                }
+                return;
+            }
+            if (Object.values(Tab).includes(hash as Tab) && hash !== activeTabRef.current) {
                 setActiveTab(hash as Tab);
             }
         };
@@ -34,10 +43,15 @@ export function useTabNavigation(activeTab: Tab, setActiveTab: (tab: Tab) => voi
         // affichait toujours le Dashboard (le tab `title` changeait mais pas
         // le contenu). Appel immédiat au mount + listener pour les changements
         // ultérieurs.
+        // ⚠️ Ne PAS mettre `activeTab` dans les deps : ré-exécuter `applyHash()` à chaque
+        // changement d'état `activeTab` créait une course quand `setActiveTab(tab)` était
+        // appelé avant ou sans mise à jour immédiate de `window.location.hash` (ex. Profil
+        // depuis le bouton Couple, assistant IA, ou clic rapide), ramenant l'utilisateur
+        // sur l'ancienne page correspondant à l'ancien hash.
         applyHash();
         window.addEventListener('hashchange', applyHash);
         return () => window.removeEventListener('hashchange', applyHash);
-    }, [activeTab, setActiveTab]);
+    }, [setActiveTab]);
 
     useEffect(() => {
         // Le titre est mis à jour avec le tab actif. Les labels détaillés

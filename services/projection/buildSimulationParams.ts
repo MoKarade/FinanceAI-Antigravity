@@ -42,7 +42,9 @@ import type {
     AppState,
 } from '../../types';
 import type { SimulationParams, LiveCSVBalances } from '../projection';
-import { derivePortfolioStartingBalances } from './startingBalancesFromAssets';
+import { derivePortfolioStartingBalances, derivePortfolioStartingACBs } from './startingBalancesFromAssets';
+import { buildBehavioralProfileFromTransactions, type BehavioralProfile } from './behavioralProfile';
+import { computeAccountReturnRatesForMode } from '../assetFundamentals';
 import { TAX_BASE_YEAR, ageOptsForSalaryInversion, calculateGrossFromNet } from '../../utils/tax';
 import { isSavingsNature } from '../../utils/budget';
 import { computeCashLedger, computeCashLedgerDetailed } from '../startingCash';
@@ -110,7 +112,11 @@ export interface BuildSimulationParamsInputs {
     charitableGoals?: CharitableGoal[];
     rentalProperties?: RentalProperty[];
     privateBusinesses?: PrivateBusiness[];
+    behavioralProfile?: BehavioralProfile;
+    initialNonRegACB?: number;
+    initialCryptoACB?: number;
 }
+
 
 /**
  * Σ (brut annuel) sur tous les utilisateurs, avec REPLI net→brut.
@@ -191,7 +197,7 @@ export function computeStartingCash(
 // module : la vue d'ensemble (donc l'Accueil) en a désormais besoin, et importer CE fichier aurait
 // tiré `verifierEntreesMoteur` + les barèmes fiscaux dans le bundle de boot. Ré-exportée ici pour
 // qu'aucun appelant ne change et qu'il n'existe toujours qu'UNE définition.
-export { derivePortfolioStartingBalances } from './startingBalancesFromAssets';
+export { derivePortfolioStartingBalances, derivePortfolioStartingACBs } from './startingBalancesFromAssets';
 
 /**
  * ADAPTATEUR PUR — assemble les `SimulationParams` à partir d'`inputs` déjà
@@ -241,7 +247,11 @@ export function buildSimulationParams(inputs: BuildSimulationParamsInputs): Simu
         rentalProperties: inputs.rentalProperties ?? [],
         privateBusinesses: inputs.privateBusinesses ?? [],
         financialGoals: inputs.financialGoals ?? [],
+        ...(inputs.behavioralProfile !== undefined ? { behavioralProfile: inputs.behavioralProfile } : {}),
+        ...(inputs.initialNonRegACB !== undefined ? { initialNonRegACB: inputs.initialNonRegACB } : {}),
+        ...(inputs.initialCryptoACB !== undefined ? { initialCryptoACB: inputs.initialCryptoACB } : {}),
     };
+
 
     // ⚠️ La vérification porte sur les paramètres ASSEMBLÉS, pas sur un objet reconstruit pour elle.
     //
@@ -308,34 +318,74 @@ export function computeMonthlySavings(
  */
 export function deriveSimulationInputsFromState(
     state: AppState,
-    opts?: { startYear?: number; startMonth?: number; now?: Date },
+    opts?: { startYear?: number; startMonth?: number; now?: Date; includePortfolioACBs?: boolean },
 ): BuildSimulationParamsInputs {
     const now = opts?.now ?? new Date();
     const startYear = opts?.startYear ?? now.getFullYear();
     const startMonth = opts?.startMonth ?? now.getMonth();
 
+    const resolvedBalances = appliquerAutoriteCourtier(
+        derivePortfolioStartingBalances(state.assets ?? [], state.fxRates ?? {}),
+        reconcileBrokerBalances(
+            state.fintableBrokerBalances,
+            holdingsCadByRegime(state.assets ?? [], state.fxRates ?? {}),
+            tauxCourantsDepuisEtat(state),
+        ),
+        jumeauxPorteursDepuisActifs(state.assets ?? [], state.fxRates ?? {}),
+    ).soldes;
+
+    const acbFields: { initialNonRegACB?: number; initialCryptoACB?: number } = {};
+    const retMode = state.projection?.returnAssumptionsMode;
+    if (opts?.includePortfolioACBs || retMode === 'real_holdings') {
+        const startingAcbs = derivePortfolioStartingACBs(
+            state.assets ?? [],
+            state.fxRates ?? {},
+            { nonReg: resolvedBalances.NON_ENREG, crypto: resolvedBalances.CRYPTO },
+        );
+        acbFields.initialNonRegACB = startingAcbs.nonRegACB;
+        acbFields.initialCryptoACB = startingAcbs.cryptoACB;
+    }
+
+    const baseHorizonProj = avecHorizonEsperanceDeVie(state.projection, state.config, state.retirementGoal);
+    const effectiveProjection = retMode === 'iqpf' || retMode === 'real_holdings'
+        ? {
+            ...baseHorizonProj,
+            returnRates: computeAccountReturnRatesForMode(
+                retMode,
+                baseHorizonProj.returnRates,
+                state.assets ?? [],
+                state.fxRates ?? {},
+            ),
+        }
+        : baseHorizonProj;
+
+    const calculatedMonthlySavings = computeMonthlySavings(state.config, state.budgetItems ?? []);
+    const aujourdhuiIso = todayIsoLocal(now);
+    const explicitBehavioral = (state as unknown as { behavioralProfile?: BehavioralProfile }).behavioralProfile;
+    const expMode = state.projection?.expenseProjectionMode;
+    const derivedBehavioral = explicitBehavioral !== undefined
+        ? explicitBehavioral
+        : (expMode === 'real' || expMode === 'hybrid')
+            ? (() => {
+                const netMonthly = computeBaseNetAnnual((state.config?.users ?? []) as unknown as User[]) / 12;
+                const budgetTarget = Math.max(0, netMonthly - calculatedMonthlySavings);
+                return buildBehavioralProfileFromTransactions(
+                    (state.transactions ?? []) as Transaction[],
+                    budgetTarget,
+                    aujourdhuiIso,
+                    expMode,
+                );
+            })()
+            : undefined;
+
     return {
         // [HORIZON-ESPERANCE-DE-VIE] Même règle que useSimulationParams : l'écran et le serveur MCP
         // projettent sur la même durée. `simulate_what_if` refixe `years` après coup (paramètre).
-        projection: avecHorizonEsperanceDeVie(state.projection, state.config, state.retirementGoal),
+        projection: effectiveProjection,
         config: state.config,
-        // ⚠️⚠️ [FINTABLE-AUTORITE-AUJOURDHUI] La MÊME autorité que le chemin React, au MÊME endroit
-        // logique. Sans ça, le serveur MCP (`get_projection`, `simulate_what_if`) répondrait sur un
-        // mois 0 différent de celui de l'écran, pour le même état : deux réponses à une seule
-        // question, ce qui est pire que la question non répondue. Le test de parité hook↔fonction
-        // pure ne l'aurait pas vu — aucun persona ne porte de solde courtier Fintable.
-        liveCSVBalances: appliquerAutoriteCourtier(
-            derivePortfolioStartingBalances(state.assets ?? [], state.fxRates ?? {}),
-            reconcileBrokerBalances(
-                state.fintableBrokerBalances,
-                holdingsCadByRegime(state.assets ?? [], state.fxRates ?? {}),
-                // [FINTABLE-AUTORITE-PARTOUT étape 0] Même reconversion que l'écran : deux réponses
-                // à une seule question seraient pires que la question non répondue.
-                tauxCourantsDepuisEtat(state),
-            ),
-            // [FINTABLE-AUTORITE-PARTOUT étape 3] Même fait, même source que le chemin React.
-            jumeauxPorteursDepuisActifs(state.assets ?? [], state.fxRates ?? {}),
-        ).soldes,
+        liveCSVBalances: resolvedBalances,
+        ...acbFields,
+
         // [ENG-INFINITY-NON-GARDE-A-LA-FRONTIERE] ⚠️ Le ledger DÉTAILLÉ, comme dans le hook. Sans lui,
         // le chemin MCP restait nu sur le canal cash alors que le chemin navigateur était protégé :
         // mesuré, `initialBalances.CELI = NaN` passait sans refus et rendait 7 082 228 $ au lieu de
@@ -352,14 +402,14 @@ export function deriveSimulationInputsFromState(
         transactions: (state.transactions ?? []) as Transaction[],
         // [DETTE-SOLDE-INSTANTANE-FIGE] L'horloge est déjà lue ici (`now`, cinq lignes plus haut,
         // pour `startYear`/`startMonth`) : on en dérive le JOUR, au lieu d'en introduire une seconde.
-        aujourdhuiIso: todayIsoLocal(now),
+        aujourdhuiIso,
         childGoals: state.childGoals ?? [],
         travelGoals: state.travelGoals ?? [],
         lifeEvents: state.lifeEvents ?? [],
         retirementGoal: state.retirementGoal,
         financialGoals: state.financialGoals ?? [],
         budgetItems: state.budgetItems ?? [],
-        calculatedMonthlySavings: computeMonthlySavings(state.config, state.budgetItems ?? []),
+        calculatedMonthlySavings,
         startYear,
         startMonth,
         insurancePolicies: state.insurancePolicies ?? [],
@@ -368,6 +418,7 @@ export function deriveSimulationInputsFromState(
         charitableGoals: state.charitableGoals ?? [],
         rentalProperties: state.rentalProperties ?? [],
         privateBusinesses: state.privateBusinesses ?? [],
+        behavioralProfile: derivedBehavioral,
     };
 }
 

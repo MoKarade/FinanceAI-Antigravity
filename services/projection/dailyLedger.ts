@@ -73,7 +73,7 @@ export const FIELD_KIND: Readonly<Record<string, FieldKind>> = {
     AccruedTaxRevenu: 'stock', AccruedTaxGains: 'stock', AccruedTaxDivers: 'stock',
     AccruedTaxREER: 'stock',
     // Bandes Monte Carlo : des patrimoines, donc des stocks (masquées en vue jour, cf. l'écran).
-    P10: 'stock', P50: 'stock', P90: 'stock',
+    P5: 'stock', P10: 'stock', P25: 'stock', P50: 'stock', P75: 'stock', P90: 'stock', P95: 'stock',
     // ⚠️ Champs posés par l'AFFICHAGE, pas par le moteur : le préfixe passé (`buildPastPrefix`)
     // et la référence verrouillée. Ils doivent être classés comme les autres — un champ inconnu de
     // cette table est simplement ABSENT du point quotidien, ce qui le ferait disparaître de la vue

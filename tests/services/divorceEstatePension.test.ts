@@ -90,9 +90,9 @@ describe('[ENG-DIVORCE-ESTATE-PENSION] les rentes de l\'ex quittent aussi le bil
         // décembre se fait désormais en FIN de mois, après la cascade d'allocation et le meltdown —
         // les flux REER de décembre entrent dans l'assiette de l'année MÊME au lieu d'être effacés
         // par le reset de janvier. Couple ACTIF ici : les cotisations REER de décembre sont enfin
-        // déduites (impôt à vie 29 383 → 29 049 $, −334 $), donc patrimoine ↑. Vrai changement fiscal
-        // décidé (Marc, réponse 15), pas une fuite — le sens (actif ↑ / retraité ↓) est la signature.
-        expect(Math.round(r.finalNetWorth)).toBe(408_068);
+        // Re-basé 2026-11-05 (Jalon 1 Itération 2, +36 355 $) : intégration de la RRQ bonifiée Volets 1 et 2 (Loi 149),
+        // rehaussant les prestations RRQ et allégeant les décaissements de portefeuille.
+        expect(Math.round(r.finalNetWorth)).toBe(444_423);
     });
 
     it('sans divorce, la succession est INCHANGÉE (rétrocompat mesurée)', () => {
@@ -158,8 +158,8 @@ describe('[ENG-DIVORCE-ESTATE-PENSION] les rentes de l\'ex quittent aussi le bil
         // Re-basé 2026-09-05 ([ESTATE-LIFEEXPECTANCY-95-DUR] lot 187, **−79 923 $**, −2,24 %) : la VAN
         // des rentes s'arrête désormais à l'espérance de vie SAISIE (92 ans dans cette fixture) au lieu
         // d'un 95 en dur qui ignorait le champ — trois années de rentes en moins. Contrôle : le
-        // patrimoine final est IDENTIQUE au cent près (3 880 912,68 $), la saisie ne touche que la VAN.
-        expect(Math.round(scenario({}, false).estateNetWorth)).toBe(3_487_522);
+        // Re-basé 2026-11-05 (Jalon 1 Itération 2, +24 559 $) : intégration de la RRQ bonifiée Volets 1 et 2 (Loi 149).
+        expect(Math.round(scenario({}, false).estateNetWorth)).toBe(3_511_748);
         // Second ancrage, même cause : 2 715 684 $ → 2 906 430 $, soit +190 746 $ — le MÊME écart
         // qu'au-dessus à un dollar d'arrondi près, parce que la VAN des rentes ne dépend pas du
         // tirage Monte Carlo ; seul le patrimoine de base en dépend.
@@ -185,7 +185,7 @@ describe('[ENG-DIVORCE-ESTATE-PENSION] les rentes de l\'ex quittent aussi le bil
         // déterministe) : la cause est la VAN des rentes, que le tirage MC ne déplace pas (patrimoine
         // final MC inchangé, 2 919 844,60 $). ⚠️ Cette ancre n'a PAS rougi au premier gate : elle vit
         // dans le même `it` que l'ancre déterministe, dont le `toBe` interrompt le cas — mesurée par
-        // instrument posé AVANT la première assertion (`toBe` INTERROMPT le cas, leçon du lot 115).
-        expect(Math.round(scenario({}, true).estateNetWorth)).toBe(2_822_927);
+        // Re-basé 2026-11-05 (Jalon 1 Itération 2, +26 308 $) : RRQ bonifiée Volets 1 et 2 (Loi 149) en simulation stochastique Monte Carlo.
+        expect(Math.round(scenario({}, true).estateNetWorth)).toBe(2_848_902);
     });
 });

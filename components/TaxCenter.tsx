@@ -417,19 +417,13 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
             <PageHeader
                 title={TAB_LABELS[Tab.TAX]}
                 badge={
-                    <span className="inline-flex items-center gap-2">
-                        <span className="gf-ticker-symbol">
-                            <span className="gf-pulse-live" aria-hidden="true" />
-                            FISC:ARC·RQ · {annee}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded-sm text-[10px] font-mono font-semibold ${paieAppliquee ? 'gf-delta-up' : 'gf-delta-amber'}`}>
-                            {paieAppliquee ? 'PAIE VÉRIFIÉE' : 'SAISIE MANUELLE'}
-                        </span>
+                    <span className={`px-2 py-0.5 rounded-sm text-[10px] font-mono font-semibold ${paieAppliquee ? 'gf-delta-up' : 'gf-delta-amber'}`}>
+                        {paieAppliquee ? 'PAIE VÉRIFIÉE' : 'SAISIE MANUELLE'}
                     </span>
                 }
-                nav={config.users.length > 1 ? (
+                nav={config.users.filter((u) => u.name.trim().length > 0).length > 1 ? (
                     <div role="group" aria-label="Vue fiscale" className="gf-subtab-bar overflow-x-auto no-scrollbar w-full lg:w-auto">
-                        {[{ id: 'all', libelle: 'Couple' }, ...config.users.map((u) => ({ id: u.name, libelle: u.name }))].map((o) => (
+                        {[{ id: 'all', libelle: 'Couple' }, ...config.users.filter((u) => u.name.trim().length > 0).map((u) => ({ id: u.name, libelle: u.name }))].map((o) => (
                             <button
                                 key={o.id}
                                 type="button"

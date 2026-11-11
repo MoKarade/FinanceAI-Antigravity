@@ -527,7 +527,6 @@ export const Transactions: React.FC<TransactionsProps> = ({
         <section aria-labelledby="outils-tx-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure overflow-hidden">
             <div className="px-4 lg:px-5 py-3 flex items-center justify-between gap-2 bg-surface-douce/40">
                 <h2 id="outils-tx-titre" className="text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-400">Outils</h2>
-                <span className="gf-ticker-symbol">AUDIT · IA</span>
             </div>
             {etroit && (
                 <button type="button" onClick={() => { void handleAutoCategorizeAll('gaps'); }} disabled={processing} className={`${ligneOutil} disabled:opacity-50`}>
@@ -576,10 +575,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
     const resumeMois = (
         <section aria-labelledby="mois-tx-titre" className="gf-terminal-card gf-stat-cell rounded-2xl bg-surface border border-bordure p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                    <span className="gf-ticker-symbol">BILAN</span>
-                    <h2 id="mois-tx-titre" className="text-[15px] font-semibold text-ink-50 truncate">{moisCourant.libelle}</h2>
-                </div>
+                <h2 id="mois-tx-titre" className="text-[15px] font-semibold text-ink-50 truncate">{moisCourant.libelle}</h2>
                 <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold tabular-nums ${soldeMois >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}>
                     {soldeMois >= 0 ? '▲' : '▼'} <PrivateAmount>{formatCAD(soldeMois)}</PrivateAmount>
                 </span>
@@ -622,14 +618,6 @@ export const Transactions: React.FC<TransactionsProps> = ({
             <PageHeader
                 // [REFONTE-NAV-L5] Titre = TAB_LABELS (cohérence des en-têtes de la destination).
                 title={TAB_LABELS[Tab.TRANSACTIONS]}
-                subtitle={
-                    <span className="inline-flex items-center gap-2 flex-wrap">
-                        <span className="gf-ticker-symbol">
-                            <span className="gf-pulse-live" aria-hidden="true" />
-                            FLUX:CAD · JOURNAL
-                        </span>
-                    </span>
-                }
                 badge={
                     <span className="inline-flex items-center gap-2 flex-wrap">
                         <span className="px-2.5 py-0.5 rounded-full bg-surface-douce border border-bordure font-mono text-tiny text-ink-300">
@@ -676,89 +664,6 @@ export const Transactions: React.FC<TransactionsProps> = ({
                     </span>
                 }
             />
-
-            {/* Bandeau de cotation des flux (style Google Finance) — 3 KPI cliquables vers Budget */}
-            <section aria-label="Cote des flux de trésorerie" className="gf-quote-strip sm:grid-cols-3 gf-spring-grid">
-                <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => useFinanceStore.getState().setActiveTab(Tab.BUDGET)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); useFinanceStore.getState().setActiveTab(Tab.BUDGET); } }}
-                    className="gf-quote-cell touch-target cursor-pointer transition-all focus-ring group flex flex-col justify-between gap-1.5"
-                >
-                    <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
-                            Solde net · {moisCourant.libelle}
-                        </span>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold gf-delta-neutral group-hover:text-ink-50">
-                            Budget ↗
-                        </span>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-2">
-                        <PrivateAmount as="div" className="font-mono text-[22px] font-bold text-ink-50 tabular-nums">
-                            {formatSigned(soldeMois, { withCurrency: true })}
-                        </PrivateAmount>
-                        <span className={`px-2 py-0.5 rounded-full font-mono text-[11px] font-semibold ${soldeMois >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}>
-                            {soldeMois >= 0 ? 'FLUX +' : 'FLUX −'}
-                        </span>
-                    </div>
-                    {!isPrivacyMode && (
-                        <div className="mt-1 h-1.5 w-full rounded-full bg-surfaceHighlight overflow-hidden flex gf-bar-grow" aria-hidden="true">
-                            {/* MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode */}
-                            <div className="h-full bg-succes-texte" style={{ width: `${pctEntreesMois}%` }} />
-                            <div className="h-full bg-erreur-texte" style={{ width: `${pctSortiesMois}%` }} />
-                        </div>
-                    )}
-                </div>
-                <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => useFinanceStore.getState().setActiveTab(Tab.BUDGET)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); useFinanceStore.getState().setActiveTab(Tab.BUDGET); } }}
-                    className="gf-quote-cell touch-target cursor-pointer transition-all focus-ring group flex flex-col justify-between gap-1.5"
-                >
-                    <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
-                            Entrées du mois
-                        </span>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold gf-delta-up">
-                            Budget ↗
-                        </span>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-2">
-                        <PrivateAmount as="div" className="font-mono text-[22px] font-bold text-success-400 tabular-nums">
-                            {`${signe(moisCourant.entrees)}${formatCAD(moisCourant.entrees)}`}
-                        </PrivateAmount>
-                        {!isPrivacyMode && (
-                            <span className="font-mono text-[11px] text-ink-400 tabular-nums">{pctEntreesMois}%</span>
-                        )}
-                    </div>
-                </div>
-                <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => useFinanceStore.getState().setActiveTab(Tab.BUDGET)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); useFinanceStore.getState().setActiveTab(Tab.BUDGET); } }}
-                    className="gf-quote-cell touch-target cursor-pointer transition-all focus-ring group flex flex-col justify-between gap-1.5"
-                >
-                    <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-ink-400">
-                            Sorties du mois
-                        </span>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold gf-delta-down">
-                            Budget ↗
-                        </span>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-2">
-                        <PrivateAmount as="div" className="font-mono text-[22px] font-bold text-ink-50 tabular-nums">
-                            {formatCAD(moisCourant.sorties)}
-                        </PrivateAmount>
-                        {!isPrivacyMode && (
-                            <span className="font-mono text-[11px] text-ink-400 tabular-nums">{pctSortiesMois}%</span>
-                        )}
-                    </div>
-                </div>
-            </section>
 
             {/* [FINTABLE-4] Import manuel — repli JAMAIS supprimé (seul chemin quand Fintable/Plaid
                 est indisponible), hors du flux principal : le bouton « Importer » de l'en-tête l'ouvre.

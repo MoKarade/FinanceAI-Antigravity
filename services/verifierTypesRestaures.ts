@@ -154,6 +154,8 @@ export const CHAMPS_TEXTE: ReadonlySet<string> = new Set([
     // [PTF-L1E-PASSERELLE] Régime fiscal par compte du grand livre (`brokerAccountRegimes`). `accountId`
     // y figure déjà ; `regime` est la seule feuille textuelle neuve, écrite avec sa déclaration.
     'regime',
+    // [FUTUR-2.0] Sélecteurs persistés des modes de simulation (dépenses, hypothèses de rendements, palier MC).
+    'expenseProjectionMode', 'returnAssumptionsMode', 'mcPowerTier',
     'accountName', 'accountType', 'acquisitionDate', 'actionPlan',
     'activeAiConversationId', 'activeTab', 'activitiesLevel', 'aiChatModel',
     'anthropic', 'apiKeys', 'appliedContributionOrder', 'appliedReturnProfile',

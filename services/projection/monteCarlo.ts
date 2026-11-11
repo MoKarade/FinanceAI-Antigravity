@@ -39,6 +39,74 @@ type RunScenarioFn = (
 export const MC_ITERATIONS_MIN = 50;
 export const MC_ITERATIONS_MAX = 1000;
 export const MC_ITERATIONS_DEFAULT = 100;
+export const MC_DEEP_ITERATIONS_MAX = 10000;
+
+export const MC_POWER_TIERS = {
+    eclair: 250,
+    standard: 1000,
+    approfondi: 5000,
+    deep_search: 10000,
+} as const;
+
+export type McPowerTier = keyof typeof MC_POWER_TIERS;
+
+/**
+ * Résout le nombre d'itérations Monte Carlo lorsque le sélecteur de puissance Futur 2.0
+ * (`mcPowerTier`) est utilisé, autorisant jusqu'à 10 000 itérations en mode Deep Compute.
+ */
+export function effectiveDeepMcIterations(requested?: number, tier?: McPowerTier): number {
+    if (tier && tier in MC_POWER_TIERS) {
+        return MC_POWER_TIERS[tier];
+    }
+    if (requested === undefined) return MC_ITERATIONS_DEFAULT;
+    if (typeof requested !== 'number' || !Number.isFinite(requested)) {
+        return effectiveMcIterations(requested);
+    }
+    return Math.max(MC_ITERATIONS_MIN, Math.min(MC_DEEP_ITERATIONS_MAX, Math.round(requested)));
+}
+
+/**
+ * Calcule les centiles complets (P5, P10, P25, P50, P75, P90, P95) et la CVaR95
+ * (Conditional Value at Risk / Expected Shortfall des 5 % pires scénarios, <= P5).
+ */
+export function computePercentilesAndCvar(outcomes: readonly number[]): {
+    p5: number | null;
+    p10: number | null;
+    p25: number | null;
+    p50: number | null;
+    p75: number | null;
+    p90: number | null;
+    p95: number | null;
+    cvar95: number | null;
+} {
+    const finite = (outcomes ?? []).filter((v) => typeof v === 'number' && Number.isFinite(v));
+    if (finite.length === 0) {
+        return { p5: null, p10: null, p25: null, p50: null, p75: null, p90: null, p95: null, cvar95: null };
+    }
+    const sorted = [...finite].sort((a, b) => a - b);
+    const n = sorted.length;
+
+    const getP = (pct: number): number => {
+        const idx = Math.min(n - 1, Math.max(0, Math.floor((pct / 100) * n)));
+        return sorted[idx] ?? 0;
+    };
+
+    const p5 = getP(5);
+    const p10 = getP(10);
+    const p25 = getP(25);
+    const p50 = getP(50);
+    const p75 = getP(75);
+    const p90 = getP(90);
+    const p95 = getP(95);
+
+    const count5pct = Math.max(1, Math.floor(0.05 * n));
+    const worstSlice = sorted.slice(0, count5pct);
+    const rawCvar = worstSlice.reduce((sum, v) => sum + v, 0) / count5pct;
+    // Propriété mathématique garantie : sur un échantillon trié croissant, la moyenne des k premiers éléments est <= l'élément d'indice floor(0.05*n)
+    const cvar95 = Math.min(p5, rawCvar);
+
+    return { p5, p10, p25, p50, p75, p90, p95, cvar95 };
+}
 
 /** Nombre d'itérations réellement EXÉCUTÉES par le moteur pour une valeur demandée : défaut 100,
  *  borné 50–1000. Afficher autre chose que CE nombre, c'est mentir sur le calcul fait.
@@ -84,9 +152,15 @@ export interface MonteCarloResult {
      *  sur le calcul montré. Un résultat porte donc désormais son propre compte. */
     iterationsRun: number;
     successRate: number;
+    p5Data?: number[];
     p10Data: number[];
+    p25Data?: number[];
     p50Data: number[];
+    p75Data?: number[];
     p90Data: number[];
+    p95Data?: number[];
+    /** Conditional Value at Risk à 95 % (moyenne des 5 % pires patrimoines finaux). */
+    cvar95?: number | null;
     fvi: number;
     expertMetrics: {
         swr: number;
@@ -193,9 +267,15 @@ export function runMonteCarlo(
         }
         return out;
     };
+    const p5Data = allRuns.length ? percentileParMois(0.05) : Array(nMonths + 1).fill(0);
     const p10Data = allRuns.length ? percentileParMois(0.10) : Array(nMonths + 1).fill(0);
+    const p25Data = allRuns.length ? percentileParMois(0.25) : Array(nMonths + 1).fill(0);
     const p50Data = allRuns.length ? percentileParMois(0.50) : Array(nMonths + 1).fill(0);
+    const p75Data = allRuns.length ? percentileParMois(0.75) : Array(nMonths + 1).fill(0);
     const p90Data = allRuns.length ? percentileParMois(0.90) : Array(nMonths + 1).fill(0);
+    const p95Data = allRuns.length ? percentileParMois(0.95) : Array(nMonths + 1).fill(0);
+    const finalOutcomes = allRuns.map(r => r.finalNW);
+    const { cvar95 } = computePercentilesAndCvar(finalOutcomes);
 
     const useManual = Boolean(params.projection?.useManualBalances);
     const cashStart = useManual ? (params.projection.manualCash ?? params.calculatedStartingCash) : params.calculatedStartingCash;
@@ -274,5 +354,18 @@ export function runMonteCarlo(
     // ⚠️ `allRuns.length`, pas `iterations` : c'est ce qui a VRAIMENT tourné. Les deux coïncident
     // aujourd'hui (la boucle ne s'interrompt pas), mais un futur arrêt anticipé — watchdog, budget
     // de temps — rendrait le paramètre demandé mensonger, exactement le défaut que ce lot corrige.
-    return { iterationsRun: allRuns.length, successRate, p10Data, p50Data, p90Data, fvi, expertMetrics };
+    return {
+        iterationsRun: allRuns.length,
+        successRate,
+        p5Data,
+        p10Data,
+        p25Data,
+        p50Data,
+        p75Data,
+        p90Data,
+        p95Data,
+        cvar95,
+        fvi,
+        expertMetrics,
+    };
 }

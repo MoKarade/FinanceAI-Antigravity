@@ -100,7 +100,8 @@ describe('[ENG-DIVORCE-PMT-NON-PARTAGEE] la mensualité suit le partage', () => 
         const avant = n(d.chartData[M_AVANT], 'ImmoHypo');
         const apres = n(d.chartData[M_APRES], 'ImmoHypo');
         // Mesuré sans le correctif : 2 338,36 $ avant ET après, sur une dette pourtant divisée.
-        expect(apres, 'la mensualité n\'a pas suivi le partage').toBeCloseTo(avant / 2, 2);
+        // Avec mensualité canadienne (2 328,33 $), la demi-mensualité (1 164,165 $) s'arrondit à 1 164,17 $ (écart 0,005 $).
+        expect(apres, 'la mensualité n\'a pas suivi le partage').toBeCloseTo(avant / 2, 1);
     });
 
     /**

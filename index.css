@@ -72,14 +72,13 @@
   &:hover {
     @apply border-white/10;
     border-color: rgba(138, 180, 248, 0.34);
-    transform: translateY(-2px) scale(1.01);
     box-shadow:
       0 14px 34px -8px rgba(0, 0, 0, 0.56),
       0 0 0 1px rgba(138, 180, 248, 0.15);
   }
 
   &:active {
-    transform: translateY(0) scale(0.996);
+    transform: none;
   }
 
   &:has(.fixed, [role='dialog'], [aria-modal='true']):hover,
@@ -141,14 +140,12 @@
   /* Card "subtle" — variante pour sous-cards imbriquées */
   @apply bg-white/3 border border-white/5 rounded-card;
   transition:
-    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
     border-color 0.22s cubic-bezier(0.16, 1, 0.3, 1),
     background-color 0.22s cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 
   &:hover {
     border-color: rgba(138, 180, 248, 0.22);
-    transform: translateY(-1.5px) scale(1.006);
     box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.38);
   }
 }
@@ -164,11 +161,9 @@
 }
 
 @utility lift-on-hover {
-  /* Phase D2 — microinteraction: lift léger au hover, utilisé sur les Cards
-   *  cliquables (deep-link cross-tab, navigation, etc.) */
-  @apply transition-all duration-200;
+  /* Phase D2 — microinteraction sobre au hover sur les Cards cliquables */
+  @apply transition-colors duration-200;
   &:hover {
-    transform: translateY(-2px);
     box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.4);
   }
 }
@@ -300,12 +295,8 @@
 @layer utilities {
   /* Animations */
   @keyframes slideUpFade {
-    /* transform absent du keyframe 100% (cf cardRise) : `forwards` ne fige que
-     l'opacité → pas de translateY(0) résiduel qui supprimerait le lift au survol
-     des cartes ni ne créerait un bloc conteneur cassant position:fixed. */
     from {
-      opacity: 0;
-      transform: translateY(20px);
+      opacity: 1;
     }
     to {
       opacity: 1;
@@ -313,38 +304,26 @@
   }
 
   .animate-premium-in {
-    animation: slideUpFade 0.7s var(--ease-premium) forwards;
+    opacity: 1;
   }
 
   /* ANIM — fondu d'entrée OPACITÉ PURE (aucun transform → ne crée pas de bloc
    conteneur, ne casse pas position:fixed). Sert aux transitions d'onglet. */
   @keyframes fadeInOpacity {
     from {
-      opacity: 0;
+      opacity: 1;
     }
     to {
       opacity: 1;
     }
   }
   .animate-tab-in {
-    animation: fadeInOpacity 0.28s ease forwards;
+    opacity: 1;
   }
 
-  /* LUXE — entrée chorégraphiée : les enfants DIRECTS d'un conteneur `.stagger-in`
-   ou `.gf-spring-grid` montent en fondu avec ressort, en cascade (style Apple/Google).
-   Le transform est TRANSIENT (≤0.75s incl. décalage) puis libéré (cf keyframe) → AUCUN bloc
-   conteneur résiduel (ne casse pas position:fixed) et le `:hover { transform }` des cartes
-   reste fonctionnel. */
+  /* LUXE — entrée chorégraphiée sans clignotement d'opacité lors des changements de page ou du défilement. */
   @keyframes cardRise {
-    /* Le transform n'est PAS dans le keyframe 100% : avec `forwards`, seul l'état
-     du dernier keyframe (opacity:1) est figé. Le transform redevient donc libre
-     après l'entrée → le `:hover { transform }` des cartes n'est plus supprimé,
-     et aucun bloc conteneur transform résiduel ne casse position:fixed. */
     0% {
-      opacity: 0;
-      transform: translateY(12px) scale(0.985);
-    }
-    70% {
       opacity: 1;
     }
     100% {
@@ -353,8 +332,7 @@
   }
   .stagger-in > *,
   .gf-spring-grid > * {
-    opacity: 0;
-    animation: cardRise 0.48s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    opacity: 1;
   }
   .stagger-in > *:nth-child(1),
   .gf-spring-grid > *:nth-child(1) {
@@ -830,8 +808,7 @@
 
 @keyframes gfBadgePop {
   0% {
-    opacity: 0;
-    transform: scale(0.92);
+    opacity: 1;
   }
   100% {
     opacity: 1;
@@ -842,39 +819,28 @@
   background-color: var(--gf-vert-fond);
   color: var(--gf-vert);
   border: 1px solid var(--gf-vert-bordure);
-  animation: gfBadgePop 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .gf-delta-down {
   background-color: var(--gf-rouge-fond);
   color: var(--gf-rouge);
   border: 1px solid var(--gf-rouge-bordure);
-  animation: gfBadgePop 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .gf-delta-neutral {
   background-color: var(--gf-bleu-fond);
   color: var(--gf-bleu);
   border: 1px solid var(--gf-bleu-bordure);
-  animation: gfBadgePop 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .gf-delta-amber {
   background-color: var(--gf-ambre-fond);
   color: var(--gf-ambre);
   border: 1px solid var(--gf-ambre-bordure);
-  animation: gfBadgePop 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
-}
-
-.gf-delta-up:hover,
-.gf-delta-down:hover,
-.gf-delta-neutral:hover,
-.gf-delta-amber:hover {
-  transform: translateY(-1px) scale(1.03);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .gf-chip {
@@ -891,23 +857,15 @@
   color: var(--texte);
   border: 1px solid var(--bordure);
   transition:
-    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
   cursor: pointer;
 }
 
 .gf-chip:hover {
   border-color: var(--gf-bleu-bordure);
   background-color: rgba(138, 180, 248, 0.08);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.32);
-}
-
-.gf-chip:active {
-  transform: translateY(0) scale(0.96);
 }
 
 .gf-chip-active {
@@ -915,24 +873,15 @@
   color: var(--gf-bleu);
   border-color: var(--gf-bleu);
   font-weight: 600;
-  box-shadow: 0 0 0 1px rgba(138, 180, 248, 0.25), 0 6px 18px rgba(8, 39, 86, 0.55);
+  box-shadow: 0 0 0 1px rgba(138, 180, 248, 0.25);
 }
 
 /* ── Navigation fluide & Micro-interactions Google Finance ── */
 .gf-nav-item {
   position: relative;
   transition:
-    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.gf-nav-item:hover {
-  transform: translateX(3px);
-}
-
-.gf-nav-item:active {
-  transform: scale(0.97);
+    background-color 0.16s ease,
+    color 0.16s ease;
 }
 
 .gf-nav-item-active {
@@ -960,24 +909,21 @@
 
 @keyframes gfChartReveal {
   0% {
-    opacity: 0.98;
-    transform: translateY(0);
+    opacity: 1;
   }
   100% {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
 .gf-chart-enter {
-  animation: gfChartReveal 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 1;
 }
 
-/* ── Barres de répartition et jauges animées (toutes pages) ── */
+/* ── Barres de répartition et jauges (toutes pages) ── */
 @keyframes gfBarGrow {
   0% {
-    transform: scaleX(0);
-    opacity: 0.35;
+    opacity: 1;
   }
   100% {
     opacity: 1;
@@ -988,36 +934,29 @@
 [aria-hidden='true'].rounded-full.overflow-hidden > *,
 [aria-label*='Répartition'] .rounded-full.overflow-hidden > * {
   transform-origin: left center;
-  animation: gfBarGrow 0.68s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   transition:
-    width 0.55s cubic-bezier(0.16, 1, 0.3, 1),
-    left 0.55s cubic-bezier(0.16, 1, 0.3, 1),
-    background-color 0.3s ease,
-    filter 0.2s ease;
+    width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    left 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.2s ease,
+    filter 0.16s ease;
 }
 
 .gf-bar-grow > *:hover,
 [aria-hidden='true'].rounded-full.overflow-hidden > *:hover,
 [aria-label*='Répartition'] .rounded-full.overflow-hidden > *:hover {
-  filter: brightness(1.18);
+  filter: brightness(1.12);
 }
 
 .gf-card-interactive {
   transition:
-    border-color 0.24s cubic-bezier(0.16, 1, 0.3, 1),
-    background-color 0.24s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .gf-card-interactive:hover {
   border-color: var(--gf-bleu-bordure);
-  transform: translateY(-2px);
-  box-shadow: 0 10px 26px -6px rgba(0, 0, 0, 0.45);
-}
-
-.gf-card-interactive:active {
-  transform: translateY(0) scale(0.99);
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.38);
 }
 
 /* ── Bandeau Marchés / Indices (Google Finance Market Summary Strip) ── */
@@ -1032,15 +971,8 @@
 }
 
 .gf-market-banner > * {
-  opacity: 0;
-  animation: cardRise 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 1;
 }
-.gf-market-banner > *:nth-child(1) { animation-delay: 0.02s; }
-.gf-market-banner > *:nth-child(2) { animation-delay: 0.05s; }
-.gf-market-banner > *:nth-child(3) { animation-delay: 0.08s; }
-.gf-market-banner > *:nth-child(4) { animation-delay: 0.11s; }
-.gf-market-banner > *:nth-child(5) { animation-delay: 0.14s; }
-.gf-market-banner > *:nth-child(n + 6) { animation-delay: 0.17s; }
 
 @media (min-width: 640px) {
   .gf-market-banner {
@@ -1066,27 +998,19 @@
   border: 1px solid var(--bordure);
   text-align: left;
   transition:
-    border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    border-color 0.16s ease,
+    background-color 0.16s ease;
 }
 
 .gf-market-ticker:hover {
   background-color: var(--surface-douce);
   border-color: var(--gf-bleu-bordure);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.4);
-}
-
-.gf-market-ticker:active {
-  transform: translateY(0) scale(0.98);
 }
 
 .gf-market-ticker-active {
   background: linear-gradient(180deg, rgba(8, 39, 86, 0.55) 0%, rgba(14, 16, 20, 0.95) 100%);
   border-color: var(--gf-bleu);
-  box-shadow: inset 0 0 0 1px rgba(138, 180, 248, 0.18), 0 4px 14px rgba(8, 39, 86, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(138, 180, 248, 0.18);
 }
 
 /* ── En-tête de Cote par Page (Google Finance Quote Header) ── */
@@ -1095,44 +1019,24 @@
   overflow: hidden;
   padding: 0.75rem 1rem;
   border-radius: 1rem;
-  background: linear-gradient(180deg, rgba(21, 24, 30, 0.78) 0%, rgba(14, 16, 20, 0.96) 100%);
+  background-color: var(--surface);
   border: 1px solid var(--bordure);
-  transition: border-color 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.gf-page-header::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    #4285f4 0%,
-    #34a853 35%,
-    #fbbc04 68%,
-    #ea4335 100%
-  );
-  opacity: 0.82;
-  pointer-events: none;
+  transition: border-color 0.2s ease;
 }
 
 .gf-terminal-card {
   position: relative;
   overflow: hidden;
   border-radius: 1rem;
-  background: linear-gradient(180deg, rgba(21, 24, 30, 0.86) 0%, rgba(11, 14, 20, 0.96) 100%);
+  background-color: var(--surface);
   border: 1px solid var(--bordure);
   transition:
-    border-color 0.24s cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 0.24s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .gf-terminal-card:hover {
-  border-color: rgba(138, 180, 248, 0.28);
-  box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.48);
+  border-color: rgba(138, 180, 248, 0.24);
 }
 
 .gf-mobile-swipe {
@@ -1149,8 +1053,7 @@
 }
 
 .gf-page-header:hover {
-  border-color: rgba(138, 180, 248, 0.28);
-  box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.45);
+  border-color: rgba(138, 180, 248, 0.24);
 }
 
 .gf-ticker-symbol {
@@ -1177,12 +1080,11 @@
   border-radius: 9999px;
   background-color: var(--fond);
   border: 1px solid var(--bordure);
-  transition: border-color 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: border-color 0.18s ease;
 }
 
 .gf-quote-badge:hover {
   border-color: var(--gf-bleu-bordure);
-  transform: scale(1.02);
 }
 
 /* ── Bandeau Statistiques Clés / Cote (Google Finance Key Stats Strip) ── */
@@ -1193,22 +1095,16 @@
   background-color: var(--surface);
   border: 1px solid var(--bordure);
   overflow: hidden;
-  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  transition: border-color 0.2s ease;
 }
 
 .gf-quote-strip:hover {
-  border-color: rgba(138, 180, 248, 0.26);
-  box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.42);
+  border-color: rgba(138, 180, 248, 0.24);
 }
 
 .gf-quote-strip > * {
-  opacity: 0;
-  animation: cardRise 0.44s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 1;
 }
-.gf-quote-strip > *:nth-child(1) { animation-delay: 0.03s; }
-.gf-quote-strip > *:nth-child(2) { animation-delay: 0.07s; }
-.gf-quote-strip > *:nth-child(3) { animation-delay: 0.11s; }
-.gf-quote-strip > *:nth-child(n + 4) { animation-delay: 0.15s; }
 
 @media (min-width: 1024px) {
   .gf-quote-strip {
@@ -1225,21 +1121,11 @@
   padding: 0.625rem 0.875rem;
   border-bottom: 1px solid var(--bordure);
   border-right: 1px solid var(--bordure);
-  transition:
-    background-color 0.22s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 0.16s ease;
 }
 
 .gf-quote-cell:hover {
-  background-color: rgba(138, 180, 248, 0.06);
-  transform: translateY(-2px) scale(1.008);
-  box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.4);
-  z-index: 1;
-}
-
-.gf-quote-cell:active {
-  transform: translateY(0) scale(0.99);
+  background-color: rgba(138, 180, 248, 0.05);
 }
 
 .gf-stat-cell {
@@ -1247,36 +1133,20 @@
   overflow: hidden;
   background-color: var(--surface);
   border: 1px solid var(--bordure) !important;
-  border-top: 2px solid rgba(138, 180, 248, 0.24) !important;
-  animation: cardRise 0.46s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   transition:
-    border-color 0.22s cubic-bezier(0.16, 1, 0.3, 1),
-    background-color 0.22s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+    border-color 0.18s ease,
+    background-color 0.18s ease;
 }
-
-.gf-stat-cell:nth-child(1) { animation-delay: 0.02s; }
-.gf-stat-cell:nth-child(2) { animation-delay: 0.06s; }
-.gf-stat-cell:nth-child(3) { animation-delay: 0.1s; }
-.gf-stat-cell:nth-child(4) { animation-delay: 0.14s; }
-.gf-stat-cell:nth-child(n + 5) { animation-delay: 0.18s; }
 
 .gf-stat-cell:hover {
   border-color: var(--bordure-champ) !important;
-  border-top-color: var(--gf-bleu) !important;
-  transform: translateY(-3px);
-  box-shadow:
-    0 10px 24px -6px rgba(0, 0, 0, 0.48),
-    0 0 0 1px rgba(138, 180, 248, 0.14);
-}
-
-.gf-stat-cell:active {
-  transform: translateY(-1px) scale(0.985);
 }
 
 /* ── Sous-onglets en pilules Google Finance (SubTabs) ── */
 .gf-subtab-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   padding: 0.25rem;
   border-radius: 9999px;
   background-color: var(--fond);
@@ -1284,23 +1154,17 @@
 }
 
 .gf-subtab-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem 0.75rem;
   border-radius: 9999px !important;
   font-size: 0.8125rem;
   border: 1px solid transparent;
   transition:
-    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.gf-subtab-pill:hover {
-  transform: translateY(-1px);
-}
-
-.gf-subtab-pill:active {
-  transform: scale(0.96);
+    background-color 0.16s ease,
+    color 0.16s ease,
+    border-color 0.16s ease;
 }
 
 .gf-subtab-pill-active {
@@ -1308,7 +1172,6 @@
   color: var(--gf-bleu) !important;
   border-color: var(--gf-bleu-bordure) !important;
   font-weight: 600;
-  box-shadow: 0 2px 10px rgba(8, 39, 86, 0.45);
 }
 
 /* ── Tiroirs (Drawers) & Accordéons fluides ── */
@@ -1334,8 +1197,7 @@
 
 @keyframes gfAccordionIn {
   0% {
-    opacity: 0;
-    transform: translateY(-6px);
+    opacity: 1;
   }
   100% {
     opacity: 1;
@@ -1351,27 +1213,24 @@
 }
 
 .gf-accordion-panel {
-  animation: gfAccordionIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 1;
 }
 
 /* ── Lignes de tableau et listes style Google Finance ── */
 .gf-row {
   transition:
-    background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    background-color 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .gf-row:hover {
   background-color: rgba(138, 180, 248, 0.06);
-  transform: translateX(2px) scale(1.004);
 }
 
 /* ── Courbes haute précision, Animations & Infobulles Google Finance ── */
 @keyframes gfChartSeriesIn {
   0% {
-    opacity: 0;
+    opacity: 1;
   }
   100% {
     opacity: 1;
@@ -1380,8 +1239,7 @@
 
 @keyframes gfChartBarRise {
   0% {
-    opacity: 0;
-    transform: scaleY(0.84);
+    opacity: 1;
   }
   100% {
     opacity: 1;
@@ -1390,8 +1248,7 @@
 
 @keyframes gfChartPieIn {
   0% {
-    opacity: 0;
-    transform: scale(0.92);
+    opacity: 1;
   }
   100% {
     opacity: 1;
@@ -1411,13 +1268,11 @@
 .recharts-bar-rectangles {
   transform-box: fill-box;
   transform-origin: bottom;
-  animation: gfChartBarRise 0.46s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .recharts-pie {
   transform-box: fill-box;
   transform-origin: center;
-  animation: gfChartPieIn 0.46s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .recharts-bar-rectangle path,

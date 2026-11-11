@@ -84,15 +84,6 @@ export const BudgetWorkspace: React.FC<BudgetWorkspaceProps> = ({
                 Transactions), stable quel que soit le sous-onglet actif. */}
             <PageHeader
                 title={TAB_LABELS[Tab.BUDGET]}
-                className="gf-page-header"
-                badge={
-                    <span className="inline-flex items-center gap-2">
-                        <span className="gf-ticker-symbol">
-                            <span className="w-1.5 h-1.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
-                            <span>BUDGET:CAD · TRÉSORERIE</span>
-                        </span>
-                    </span>
-                }
                 nav={
                     <div className="overflow-x-auto no-scrollbar max-w-full">
                         <SubTabs<SubTab>

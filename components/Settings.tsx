@@ -144,14 +144,6 @@ export const Settings: React.FC<SettingsProps> = ({
   const enTete = (
     <PageHeader
       title="Réglages"
-      badge={
-        <span className="inline-flex items-center gap-2">
-          <span className="gf-ticker-symbol">
-            <span className="w-1.5 h-1.5 rounded-full bg-current gf-pulse-live" aria-hidden="true" />
-            CONFIG:GOOGLE · CLOUD &amp; IA
-          </span>
-        </span>
-      }
       actions={
         <button
           type="button"

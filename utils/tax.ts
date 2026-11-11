@@ -26,13 +26,15 @@ export const QC_BRACKETS = [
 
 // BPA 2026 — montants personnels de base (crédit non remboursable au taux le plus bas).
 // Vérifiés 2026-05 contre les sources officielles (indexation féd 2,0 %, QC 2,05 %).
-// Fédéral : BPA dégressif de 16 452$ (revenu ≤ ~177k$) à 14 829$ (hauts revenus) ;
-//   on retient le palier maximal — la dégressivité haut-revenu n'est pas modélisée.
+// Fédéral : BPA dégressif de 16 452$ (revenu ≤ 181 440$) à 14 829$ (revenu ≥ 258 482$) selon LIR 118(1.1).
 // Québec : 18 952$ (= 18 571$ de 2025 × 1,0205).
 // NB : un audit antérieur (« F22 ») avait par erreur retenu les valeurs 2025
 //   (16 444 / 18 571) en les croyant définitives — corrigé ici.
 export const BASIC_PERSONAL_AMOUNT_FED = 16452;
+export const BASIC_PERSONAL_AMOUNT_FED_MIN = 14829;
 export const BASIC_PERSONAL_AMOUNT_QC = 18952;
+export const FED_BPA_PHASEOUT_START = 181440;
+export const FED_BPA_PHASEOUT_END = 258482;
 
 // RRQ 2026 : 5,30 % base + 1,00 % volet 1 = 6,30 %. Le taux de base a été réduit
 // de 5,40 % à 5,30 % en 2026 (cotisation totale employé+employeur 10,8 % → 10,6 %).
@@ -43,7 +45,7 @@ const RRQ_EXEMPTION = 3500;
 export const RRQ_MAX = (RRQ_MPE - RRQ_EXEMPTION) * RRQ_RATE; // ≈ 4 479,30 $
 
 const RRQ_PART2_RATE = 0.04;      // volet 2 (MGA → MGAS), inchangé
-const RRQ_YAMPE = 85000;          // MGAS 2026 (2e plafond)
+export const RRQ_YAMPE = 85000;          // MGAS 2026 (2e plafond)
 // Cotisation max du volet 2 = (RRQ_YAMPE − RRQ_MPE) × RRQ_PART2_RATE = 416 $ (2026) : dérivée, jamais lue
 // par le code (constante nommée retirée au lot 205 — la valeur reste documentée dans FISCAL_REFERENCE §RRQ).
 
@@ -877,6 +879,37 @@ export const getMarginalRate = (income: number, year: number = 2026, realDeflato
     return effectiveFedRate + qcRate;
 };
 
+/**
+ * Montant personnel de base fédéral (BPA) avec dégressivité LIR 118(1.1).
+ * - Revenu imposable <= 181 440 $ (2026, indexé) : BPA maximal de 16 452 $
+ * - Revenu imposable >= 258 482 $ (2026, indexé) : BPA réduit au plancher de 14 829 $
+ * - Entre 181 440 $ et 258 482 $ : réduction linéaire de 1 623 $
+ * Formule : 16 452 - 1 623 * (Revenu - 181 440) / (258 482 - 181 440)
+ */
+export function computeFederalBpa(netTaxable: number, inflationFactor: number = 1): number {
+    const factor = Number.isFinite(inflationFactor) && inflationFactor > 0 ? inflationFactor : 1;
+    const thresholdLow = FED_BPA_PHASEOUT_START * factor;
+    const thresholdHigh = FED_BPA_PHASEOUT_END * factor;
+    const maxBpa = BASIC_PERSONAL_AMOUNT_FED * factor;
+    const minBpa = BASIC_PERSONAL_AMOUNT_FED_MIN * factor;
+    const income = Math.max(0, Number(netTaxable) || 0);
+
+    if (income <= thresholdLow) return maxBpa;
+    if (income >= thresholdHigh) return minBpa;
+    return maxBpa - (maxBpa - minBpa) * ((income - thresholdLow) / (thresholdHigh - thresholdLow));
+}
+
+/**
+ * Calcul d'impôt fédéral brut net du crédit non remboursable BPA (avec dégressivité LIR 118(1.1)).
+ */
+export function computeFederalTax(taxableIncome: number, indexedBasicFed?: number, year: number = 2026, realDeflator: number = 1): number {
+    const income = Math.max(0, Number(taxableIncome) || 0);
+    const { fed: indexedFedBrackets, inflationFactor } = getIndexedBracketsForYear(year, realDeflator);
+    const fedData = calculateDetailedTax(income, indexedFedBrackets, true);
+    const bpa = indexedBasicFed !== undefined ? indexedBasicFed : computeFederalBpa(income, inflationFactor);
+    return Math.max(0, fedData.totalTax - bpa * FED_NONREFUNDABLE_RATE);
+}
+
 export type FiscalReport = ReturnType<typeof calculateFiscalReport>;
 
 export const calculateFiscalReport = (
@@ -897,6 +930,8 @@ export const calculateFiscalReport = (
     // (taxDecember déflate les revenus par ctx.inflationFactor avant d'appeler ici). Défaut 1 =
     // espace nominal, rétrocompat bit-identique. Propagé aux paliers, BPA et crédits d'âge.
     realDeflator: number = 1,
+    // Revenu de travail autonome (side income) assujetti à la double cotisation RRQ (part employé + employeur)
+    selfEmploymentIncome: number = 0,
 ) => {
     grossIncome = Number(grossIncome) || 0;
     rrspContribution = Number(rrspContribution) || 0;
@@ -912,7 +947,7 @@ export const calculateFiscalReport = (
     // mais une garde asymétrique est une garde qui ne tient que par ses voisins. Bit-identique pour
     // toute assiette ≥ 0.
     const employmentBase = Math.max(0, employmentIncome === undefined ? grossIncome : (Number(employmentIncome) || 0));
-    const { fed: indexedFedBrackets, qc: indexedQcBrackets, basicFed: indexedBasicFed, basicQc: indexedBasicQc } = getIndexedBracketsForYear(year, realDeflator);
+    const { fed: indexedFedBrackets, qc: indexedQcBrackets, basicQc: indexedBasicQc, inflationFactor } = getIndexedBracketsForYear(year, realDeflator);
 
     const netTaxable = Math.max(0, grossIncome - rrspContribution - fhsaContribution);
 
@@ -925,9 +960,10 @@ export const calculateFiscalReport = (
 
     const fedData = calculateDetailedTax(netTaxable, indexedFedBrackets, skipBreakdown);
     let fedTax = fedData.totalTax;
-    // Crédit non-remboursable BPA fédéral: l'ARC maintient le crédit au taux le plus
-    // bas applicable, soit 15% (gelé), malgré la baisse du 1er palier à 14% (C-4).
-    fedTax -= (indexedBasicFed * FED_NONREFUNDABLE_RATE);
+    // Crédit non-remboursable BPA fédéral dégressif (LIR 118(1.1)) :
+    // 16 452 $ sous 181 440 $, dégressif jusqu'à 14 829 $ au-delà de 258 482 $.
+    const dynamicBasicFed = computeFederalBpa(netTaxable, inflationFactor);
+    fedTax -= (dynamicBasicFed * FED_NONREFUNDABLE_RATE);
     // §6.2 — crédits âge fédéral + pension fédéral (appliqués AVANT abatement QC).
     // Le clamp final à 0 sur totalTax couvre déjà le cas où fedTax devient négatif.
     fedTax -= ageCredits.fedCredit;
@@ -946,13 +982,39 @@ export const calculateFiscalReport = (
 
     const rrqBaseVolet2 = Math.max(0, Math.min(employmentBase, RRQ_YAMPE) - RRQ_MPE);
     const rrqVolet2 = rrqBaseVolet2 * RRQ_PART2_RATE;
-    const rrq = rrqVolet1 + rrqVolet2;
 
     const rqap = Math.min(RQAP_MAX, Math.min(employmentBase, RQAP_MAX_INCOME) * RQAP_RATE);
     const ae = Math.min(AE_MAX_QC, Math.min(employmentBase, AE_MAX_INCOME) * AE_RATE_QC);
 
+    // Cotisations sur travail autonome (side income) — double part RRQ (employé 6,30 % + employeur 6,30 % = 12,60 %)
+    const selfEmpBase = Math.max(0, Number(selfEmploymentIncome) || 0);
+    let selfRrqVolet1 = 0;
+    let selfRrqVolet2 = 0;
+    let selfRqap = 0;
+    if (selfEmpBase > 0) {
+        const usedUnderMpe = Math.min(employmentBase, RRQ_MPE);
+        const mpeRoom = Math.max(0, RRQ_MPE - usedUnderMpe);
+        const exemptionRoom = Math.max(0, RRQ_EXEMPTION - Math.min(employmentBase, RRQ_EXEMPTION));
+        const selfRrqBase1 = Math.max(0, Math.min(selfEmpBase, mpeRoom) - exemptionRoom);
+        selfRrqVolet1 = selfRrqBase1 * (RRQ_RATE * 2);
+
+        const usedUnderYampe = Math.max(RRQ_MPE, Math.min(employmentBase, RRQ_YAMPE));
+        const yampeRoom = Math.max(0, RRQ_YAMPE - usedUnderYampe);
+        const selfRrqBase2 = Math.min(Math.max(0, selfEmpBase - mpeRoom), yampeRoom);
+        selfRrqVolet2 = selfRrqBase2 * (RRQ_PART2_RATE * 2);
+
+        const usedUnderRqap = Math.min(employmentBase, RQAP_MAX_INCOME);
+        const rqapRoom = Math.max(0, RQAP_MAX_INCOME - usedUnderRqap);
+        selfRqap = Math.min(RQAP_MAX, Math.min(selfEmpBase, rqapRoom) * 0.0087);
+    }
+
+    const totalRrqVolet1 = rrqVolet1 + selfRrqVolet1;
+    const totalRrqVolet2 = rrqVolet2 + selfRrqVolet2;
+    const totalRrq = totalRrqVolet1 + totalRrqVolet2;
+    const totalRqap = rqap + selfRqap;
+
     const totalTax = Math.max(0, fedTax) + Math.max(0, qcTax);
-    const totalDeductions = totalTax + rrq + rqap + ae;
+    const totalDeductions = totalTax + totalRrq + totalRqap + ae;
     const netIncome = grossIncome - totalDeductions;
 
     // [FISC-MARGINAL-SPACE] MÊME (année, déflateur) que les paliers du rapport lui-même : figé à
@@ -962,10 +1024,15 @@ export const calculateFiscalReport = (
     const marginalRate = getMarginalRate(netTaxable, year, realDeflator);
 
     return {
+        grossIncome,
         fedTax: Math.max(0, fedTax),
         qcTax: Math.max(0, qcTax),
-        deductionsSource: rrq + rqap + ae,
-        rrq, rrqVolet1, rrqVolet2, rqap, ae,
+        deductionsSource: totalRrq + totalRqap + ae,
+        rrq: totalRrq,
+        rrqVolet1: totalRrqVolet1,
+        rrqVolet2: totalRrqVolet2,
+        rqap: totalRqap,
+        ae,
         totalTax,
         netIncome,
         marginalRate,
@@ -1104,7 +1171,31 @@ export const calculateCapitalGainsTax = (realizedGain: number, marginalRate: num
     return realizedGain * CAPITAL_GAINS_INCLUSION_STANDARD * marginalRate;
 };
 
+/**
+ * Calcule la fraction imposable d'un gain en capital brut (LIR art. 38(a)).
+ * Taux standard statutaire : 50 % uniforme (CAPITAL_GAINS_INCLUSION_STANDARD).
+ * Option bipalier (stress-test / analyse de sensibilité) : 50 % jusqu'au seuil par déclarant, 66,67 % au-delà.
+ */
+export function computeTaxableCapitalGain(
+    grossGain: number,
+    numFilers: number = 1,
+    tiered: boolean = false,
+    thresholdPerFiler: number = 250_000,
+): number {
+    if (grossGain <= 0 || !Number.isFinite(grossGain)) return 0;
+    if (!tiered) {
+        return grossGain * CAPITAL_GAINS_INCLUSION_STANDARD;
+    }
+    const n = Math.max(1, numFilers);
+    const gainPerFiler = grossGain / n;
+    const taxablePerFiler = gainPerFiler <= thresholdPerFiler
+        ? gainPerFiler * 0.50
+        : thresholdPerFiler * 0.50 + (gainPerFiler - thresholdPerFiler) * (2 / 3);
+    return taxablePerFiler * n;
+}
+
 type DividendKind = 'eligible' | 'non-eligible';
+
 
 // Taux de majoration (gross-up) du dividende selon le type. Exposé pour permettre
 // au moteur de calculer le montant MAJORÉ à empiler progressivement (ITEM 2d) avec

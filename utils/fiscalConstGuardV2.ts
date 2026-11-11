@@ -115,6 +115,10 @@ export const FISCAL_CONST_INVENTORY: readonly InventoryEntry[] = [
       reason: 'APRIL_SETTLEMENT_FLOOR_REAL — plancher de garde du remboursement d’avril, documenté PR #563. Borne de robustesse, pas un barème.' },
     { file: 'services/projection/taxDecember.ts', value: '11', family: 'structural',
       reason: '[×3] Index du mois de DÉCEMBRE (0-based). Aucun rapport avec la fiscalité.' },
+    { file: 'services/projection/taxDecember.ts', value: '1000', family: 'design',
+      reason: '[×2] Échantillon de retrait additionnel par défaut pour l’évaluation marginale du TMED / METR (computeTmed). Heuristique numérique.' },
+    { file: 'services/projection/taxDecember.ts', value: '8000', family: 'design',
+      reason: 'Plafond par défaut de la PSV pour le calcul incrémental de récupération dans le TMED quand la PSV reçue n’est pas spécifiée. Heuristique.' },
 
     // ── services/projection/retirementIncome.ts ──────────────────────────────────────────────
     { file: 'services/projection/retirementIncome.ts', value: '70', family: 'fiscal',
@@ -124,13 +128,23 @@ export const FISCAL_CONST_INVENTORY: readonly InventoryEntry[] = [
     // ⚠️ AJOUTÉES le 2026-08-22 ([FISC-GUARD-ARGUMENT] + [FISC-GUARD-BENIGN-60]) : révélées par
     // l’élargissement à la position d’ARGUMENT et par le retrait de `60` de BENIGN.
     { file: 'services/projection/retirementIncome.ts', value: '60', family: 'fiscal',
-      reason: 'Borne LÉGALE basse d’anticipation de la rente RRQ : `Math.max(60, rrqStartAge ?? defaultStart)`. On ne peut pas demander sa rente avant 60 ans, et le facteur d’anticipation est calibré sur cette borne. Elle était doublement invisible — `60` était dans BENIGN, ET la valeur est en position d’argument : il a fallu les deux correctifs du même lot pour la voir.' },
+      reason: '[×2] Borne LÉGALE basse d’anticipation de la rente RRQ : `Math.max(60, rrqStartAge ?? defaultStart)`. On ne peut pas demander sa rente avant 60 ans, et le facteur d’anticipation est calibré sur cette borne. Elle était doublement invisible — `60` était dans BENIGN, ET la valeur est en position d’argument : il a fallu les deux correctifs du même lot pour la voir.' },
     { file: 'services/projection/retirementIncome.ts', value: '1.0', family: 'structural',
       reason: '[≠2] DEUX plafonnements à 100 %, sans rapport entre eux. (a) `Math.min(1.0, currentGrossUser / rrqMpeProjected)` — le ratio gains/MGA ne dépasse pas 1, cotiser au-delà du maximum des gains admissibles n’augmente pas la rente. (b) `Math.min(1.0, residencyYears / PSV_FULL_RESIDENCY_YEARS)` — le prorata de résidence PSV plafonne à la pleine pension. Les DEUX bornes traduisent une règle, mais le nombre lui-même n’est qu’un plafond de fraction : aucune indexation ne le fera bouger.' },
     { file: 'services/projection/retirementIncome.ts', value: '39', family: 'fiscal',
       reason: 'RRQ_DENOMINATOR_YEARS — déjà une constante NOMMÉE, dénominateur du calcul de rente.' },
     { file: 'services/projection/retirementIncome.ts', value: '40', family: 'fiscal',
-      reason: 'PSV_FULL_RESIDENCY_YEARS — déjà une constante NOMMÉE, résidence requise pour la PSV pleine.' },
+      reason: '[×5] PSV_FULL_RESIDENCY_YEARS (résidence requise pour la PSV pleine) et dénominateur 40 ans des Volets 1 et 2 de la RRQ bonifiée.' },
+    { file: 'services/projection/retirementIncome.ts', value: '0.25', family: 'fiscal',
+      reason: '[×2] Taux de remplacement statutaire de base de la rente de retraite du RRQ (25 % du MGA). Ancré dans FISCAL_REFERENCE §6.' },
+    { file: 'services/projection/retirementIncome.ts', value: '0.0833', family: 'fiscal',
+      reason: 'Taux statutaire de la RRQ bonifiée Volet 1 (+8,33 % du MGA post-2019). Ancré dans FISCAL_REFERENCE §6.' },
+    { file: 'services/projection/retirementIncome.ts', value: '0.3333', family: 'fiscal',
+      reason: 'Taux statutaire de la RRQ bonifiée Volet 2 (33,33 % de la tranche MGA->MGAS post-2024). Ancré dans FISCAL_REFERENCE §6.' },
+    { file: 'services/projection/retirementIncome.ts', value: '2019', family: 'fiscal',
+      reason: 'Année de début de la cotisation bonifiée Volet 1 du RRQ (Loi 149 / R-9). Ancrée dans FISCAL_REFERENCE §6.' },
+    { file: 'services/projection/retirementIncome.ts', value: '2024', family: 'fiscal',
+      reason: 'Année de début de la cotisation bonifiée Volet 2 du RRQ sur le MGAS (Loi 149 / R-9). Ancrée dans FISCAL_REFERENCE §6.' },
 
     // Trouvés PAR LE RATCHET lui-même, pas par le tri manuel — la démonstration que le scan
     // élargi aux replis (`||`) attrape ce que l'œil laisse passer.
@@ -233,15 +247,33 @@ export const FISCAL_CONST_INVENTORY: readonly InventoryEntry[] = [
     { file: 'services/projection/childrenReee.ts', value: '2500', family: 'fiscal',
       reason: '`REEE_TARGET_ANNUAL_CONTRIB_BASIC` — cotisation visée pour toucher la SCEE pleine (20 % × 2 500 $ = 500 $). Dérivée du barème, donc fiscale par construction. Ancrée §7.' },
     { file: 'services/projection/childrenReee.ts', value: '5000', family: 'fiscal',
-      reason: '`REEE_TARGET_ANNUAL_CONTRIB_CATCHUP` — cotisation visée en mode rattrapage (subvention doublée tant que la SCEE cumulée reste sous le maximum théorique). Ancrée §7.' },
+      reason: '[≠2] DEUX SENS : `REEE_TARGET_ANNUAL_CONTRIB_CATCHUP` (5 000 $/an en rattrapage, ancrée §7) et plafond fédéral de déduction pour frais de garde d’un enfant de 7 à 16 ans (LIR 63, ancré §2).' },
     { file: 'services/projection/childrenReee.ts', value: '0.55', family: 'fiscal',
       reason: '`RQAP_REPLACEMENT_RATE_BASE` — taux de remplacement du revenu pendant le congé parental. ANCRÉ FISCAL_REFERENCE §2 depuis `[RQAP-CAP-98K]` (2026-08-20), avec sa divergence : le régime de BASE verse 70 % puis 55 % selon la phase, donc un 0,55 plat SOUS-ESTIME le début du congé. Modéliser les phases demande le nombre de semaines par prestation ET le choix base/particulier, que l’app ne saisit pas — décision produit, ticket `[RQAP-PHASES-70-55]`.' },
     { file: 'services/projection/childrenReee.ts', value: '350', family: 'design',
       reason: 'Économie de transport pendant le congé parental (350 $/mois). Hypothèse de coût de ménage, indexée par `expenseMultiplier` — aucune règle fiscale, à ne surtout pas « sourcer ».' },
     { file: 'services/projection/childrenReee.ts', value: '400', family: 'design',
       reason: 'Seuil de frais de garde au-delà duquel l’aide implicite s’applique. Heuristique FISC-CHILDCARE documentée §9 comme LIMITE assumée, pas comme barème.' },
-    { file: 'services/projection/childrenReee.ts', value: '0.30', family: 'design',
-      reason: 'Part du coût de garde restant à charge au-delà du seuil (≈70 % d’aide implicite). Approximation de modèle, cf. §9 — le vrai crédit est un barème progressif selon le revenu familial.' },
+    { file: 'services/projection/childrenReee.ts', value: '0.70', family: 'fiscal',
+      reason: 'RQAP_TIER1_RATE — taux de remplacement statutaire pour les semaines 1 à 26 (maternité/paternité/accueil 70 %, RLRQ c A-29.011). Ancré dans FISCAL_REFERENCE §2.' },
+    { file: 'services/projection/childrenReee.ts', value: '0.75', family: 'fiscal',
+      reason: 'Taux de remplacement statutaire du régime particulier du RQAP (75 %, RLRQ c A-29.011). Ancré dans FISCAL_REFERENCE §2.' },
+    { file: 'services/projection/childrenReee.ts', value: '6', family: 'structural',
+      reason: 'Seuil de bascule bipalier du RQAP (6 premiers mois à 70 %, mois 6 à 11 à 55 %). Calendrier de prestations.' },
+    { file: 'services/projection/childrenReee.ts', value: '41885', family: 'fiscal',
+      reason: '[×3] Seuil inférieur de revenu familial net pour le crédit remboursable pour frais de garde du Québec (taux maximal 78 %, Annexe C / LIR 1029.8.79). Ancré dans FISCAL_REFERENCE §2.' },
+    { file: 'services/projection/childrenReee.ts', value: '123000', family: 'fiscal',
+      reason: '[×2] Seuil supérieur de revenu familial net pour le crédit remboursable pour frais de garde du Québec (taux plancher 67 %, Annexe C / LIR 1029.8.79). Ancré dans FISCAL_REFERENCE §2.' },
+    { file: 'services/projection/childrenReee.ts', value: '0.78', family: 'fiscal',
+      reason: '[×2] Taux maximal du crédit d’impôt remboursable pour frais de garde d’enfants du Québec (78 %, Annexe C). Ancré dans FISCAL_REFERENCE §2.' },
+    { file: 'services/projection/childrenReee.ts', value: '7', family: 'fiscal',
+      reason: '[×2] Âge limite (moins de 7 ans à la fin de l’année) pour le plafond bonifié de frais de garde d’enfants (fédéral LIR 63 et Québec Annexe C). Ancré dans FISCAL_REFERENCE §2.' },
+    { file: 'services/projection/childrenReee.ts', value: '8000', family: 'fiscal',
+      reason: 'Plafond annuel fédéral de frais de garde pour enfant de moins de 7 ans (8 000 $, Formulaire T778 / LIR 63). Ancré dans FISCAL_REFERENCE §2.' },
+    { file: 'services/projection/childrenReee.ts', value: '11965', family: 'fiscal',
+      reason: 'Limite annuelle des dépenses admissibles au crédit pour frais de garde du Québec pour enfant de moins de 7 ans (11 965 $, Annexe C). Ancré dans FISCAL_REFERENCE §2.' },
+    { file: 'services/projection/childrenReee.ts', value: '5545', family: 'fiscal',
+      reason: 'Limite annuelle des dépenses admissibles au crédit pour frais de garde du Québec pour enfant de 7 à 16 ans (5 545 $, Annexe C). Ancré dans FISCAL_REFERENCE §2.' },
     { file: 'services/projection/childrenReee.ts', value: '150000', family: 'design',
       reason: '[×2] Seuil de revenu familial où le modèle commence à réduire les ALLOCATIONS gouvernementales de l’enfant (`householdGross > 150000`), et base du prorata de la même rampe. ⚠️ Ma première raison disait « aide aux études » et « inventée pour l’écran » : les deux sont faux — le code réduit `child.governmentBenefits` et l’ajoute à `monthlyIncomeDelta`, donc ça DÉPLACE de l’encaisse. Reste `design` : la courbe de dégressivité est un proxy, pas le barème d’un programme réel (§7 le nomme « clawback d’allocation »).' },
     { file: 'services/projection/childrenReee.ts', value: '100000', family: 'design',
@@ -311,6 +343,10 @@ export const FISCAL_CONST_INVENTORY: readonly InventoryEntry[] = [
       reason: '[×2] Ratio prêt/valeur au-delà duquel le modèle déclenche un appel de marge (test du seuil, puis calcul du surplus). ⚠️⚠️ RAISON RÉÉCRITE le 2026-09-18 : elle citait « le §8 dit LTV 65 %, plafond B-20 de la portion réavançable » pour justifier le classement `fiscal` — or `[SMITH-MARGE-SANS-DETTE]` a RETIRÉ cette phrase de §8 le jour même, parce qu’elle accolait la formule du CODE (`marge + hypothèque ≤ 65 %`) à une règle qui, elle, borne la seule portion réavançable. La raison s’appuyait donc sur une citation morte, et commettait exactement ce qu’elle reprochait : contredire la section qu’elle invoque. Ce que §8 dit MAINTENANT : c’est une hypothèse de MODÈLE, l’écart avec B-20 est nommé, et la décision est routée (`[SMITH-LTV-SEUIL-65]`). ⚠️ `family: fiscal` est CONSERVÉ à dessein — le rétrograder sortirait la valeur du tri fiscal pendant que la décision est ouverte, et une protection ne se retire pas pour cause de justification réécrite ; la question « fiscal ou design ? » part avec le ticket. ⚠️ Une garde d’anti-fantôme vérifie que le littéral existe encore, jamais qu’une raison dit vrai : c’est un panel qui l’a vu.' },
     { file: 'services/projection/realEstateMonth.ts', value: '15', family: 'fiscal',
       reason: 'Durée de remboursement du RAP (régime d’accession à la propriété) : 15 ans, ARC. ✅ Ancrée en FISCAL_REFERENCE §7 « RAP — remboursement » le 2026-09-05 (source relayée, `[FISC-RAP-15ANS]`).' },
+    { file: 'services/projection/realEstateMonth.ts', value: '6', family: 'structural',
+      reason: 'Exposant 1/6 de la composition semi-annuelle des prêts hypothécaires canadiens selon la Loi sur l’intérêt (art. 6). Mathématique financière.' },
+    { file: 'services/projection/realEstateMonth.ts', value: '0.80', family: 'fiscal',
+      reason: '[×2] Plafond combiné prêt-valeur global (Hypothèque + HELOC) de 80 % imposé par la ligne directrice B-20 du BSIF. Ancré dans FISCAL_REFERENCE §8.' },
 
     // ── services/projection/w5Effects.ts ─────────────────────────────────────────────────────
     { file: 'services/projection/w5Effects.ts', value: '0.45', family: 'fiscal',
@@ -342,6 +378,8 @@ export const FISCAL_CONST_INVENTORY: readonly InventoryEntry[] = [
       reason: 'Taux de remplacement du revenu par DÉFAUT d’une assurance invalidité longue durée (`proj.ltdIncomeReplacementPct ?? 60`, en pourcentage). Paramètre d’un CONTRAT privé — 60 à 70 % est l’usage du marché — jamais une règle fiscale ni un programme public. À ne pas confondre avec `0.55` du même fichier, qui est LUI le taux de l’assurance-emploi (fédéral, barème). Deux taux de remplacement voisins dans un même module, l’un légal et l’autre contractuel : c’est exactement le genre de paire qu’un inventaire doit distinguer.' },
     { file: 'services/projection/activeIncome.ts', value: '99', family: 'structural',
       reason: '[×2] Sentinelle « pas de fin connue » pour les années de RSU restantes (`?? 99`), pour le 1er conjoint et pour le 2e. Valeur d’absence, pas un paramètre.' },
+    { file: 'services/projection/activeIncome.ts', value: '0.45', family: 'design',
+      reason: '[×2] Taux de retenue à la source provisoire mensuelle de 45 % sur les bonus, RSU et sideIncome avant réconciliation fiscale en fin d’année.' },
 
     // ── services/projection/monthlyEvents.ts ─────────────────────────────────────────────────
     { file: 'services/projection/monthlyEvents.ts', value: '0.95', family: 'design',
@@ -390,6 +428,8 @@ export const FISCAL_CONST_INVENTORY: readonly InventoryEntry[] = [
     // ── services/projection/rentalMonth.ts ───────────────────────────────────────────────────
     { file: 'services/projection/rentalMonth.ts', value: '25', family: 'design',
       reason: '`DEFAULT_RENTAL_AMORTIZATION_YEARS` — amortissement supposé d’une hypothèque locative quand le champ est absent. Hypothèse NOMMÉE, introduite avec le conteneur locatif ; pratique de prêteur, pas un barème.' },
+    { file: 'services/projection/rentalMonth.ts', value: '0.04', family: 'fiscal',
+      reason: '`CCA_CLASS_1_RATE` — taux statutaire maximal de la Déduction pour amortissement (DPA) de Catégorie 1 pour immeubles locatifs résidentiels (4 %, LIR 1100(1)(a)). Ancré dans FISCAL_REFERENCE §8.' },
 
     // ── services/taxEstimate.ts ──────────────────────────────────────────────────────────────
     { file: 'services/taxEstimate.ts', value: '0.02', family: 'design',

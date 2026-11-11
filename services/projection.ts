@@ -4,10 +4,18 @@ import { calculateFiscalReport, getMarginalRate, calculateDividendTax, getDivide
 import { RRIF_RATES, welcomeTax } from './projection/helpers';
 import { salaryShares, splitByShares, stepReerByUser, addByWeights } from './projection/perUserBalances';
 import { logError, logErrorThrottled } from './errorLogger';
-import { runMonteCarlo, effectiveMcIterations, type MonteCarloResult } from './projection/monteCarlo';
+import { runMonteCarlo, effectiveMcIterations, effectiveDeepMcIterations, type MonteCarloResult } from './projection/monteCarlo';
 import type { EngineOverrides, StrategyConfig } from './projection/strategyConfig';
 import { returnRatesForProfile } from './projection/strategyConfig';
-import { runStrategySearch, type StrategySearchResult, type RunStrategySearchOptions } from './projection/strategySearch';
+import {
+    runStrategySearch,
+    runTournamentStrategySearch,
+    evaluateShapleyForWinner,
+    type StrategySearchResult,
+    type RunStrategySearchOptions,
+    type TournamentSearchOptions,
+    type ShapleyAttributionItem,
+} from './projection/strategySearch';
 import { ASSET_LOCATION_BONUS_PP } from './projection/strategySpace';
 import { SCENARIO_DEFINITIONS, strategyDefFor } from './projection/scenarios';
 import { applyW5Effects, applyAgeBasedExpenses } from './projection/w5Effects';
@@ -44,9 +52,10 @@ import { handleNonRegSale as portfolioNonRegSale, handleCryptoSale as portfolioC
 import { computeEstateNetWorth } from './projection/estateCalculation';
 import { computeMonthlyMarketRates, type StressTestConfig } from './projection/marketShocks';
 import { computeEffectiveExpenseInflation } from './projection/monthlyCalcs';
+import { computeProjectedExpenses, createDefaultBehavioralProfile, type BehavioralProfile } from './projection/behavioralProfile';
 import { type AllocationStrategy, type FutureScenarioType, type ProjectionResult, type SimulationParams } from './projection/types';
 export type { AllocationStrategy, FutureScenarioType, ProjectionChartPoint, ProjectionResult, LiveCSVBalances, SimulationParams } from './projection/types';
-export type { StrategySearchResult, ConfigResult } from './projection/strategySearch';
+export type { StrategySearchResult, ConfigResult, ShapleyAttributionItem, TournamentSearchOptions } from './projection/strategySearch';
 export type { StrategyConfig } from './projection/strategyConfig';
 export {
     rankConfigResults,
@@ -82,7 +91,7 @@ interface ScenarioDiagnostics {
 }
 
 const runScenario = (params: SimulationParams, strategy: AllocationStrategy, enableMonteCarlo = false, delayPensions = false, mcIterationIndex = 0, scenarioType: FutureScenarioType = 'BASE', overrides: EngineOverrides = {}, diagnostics: ScenarioDiagnostics = {}) => {
-    const { projection, calculatedStartingCash, liveCSVBalances, realEstateGoals, debts, childGoals, travelGoals, lifeEvents, retirementGoal, config, baseGrossAnnual, baseNetAnnual, currentRentExpense, baseMonthlyExpenses, startYear, startMonth = 0, insurancePolicies = [], vehicleReplacements = [], majorRenovations = [], charitableGoals = [], rentalProperties = [], privateBusinesses = [], financialGoals = [] } = params;
+    const { projection, calculatedStartingCash, liveCSVBalances, realEstateGoals, debts, childGoals, travelGoals, lifeEvents, retirementGoal, config, baseGrossAnnual, baseNetAnnual, currentRentExpense, baseMonthlyExpenses, startYear, startMonth = 0, insurancePolicies = [], vehicleReplacements = [], majorRenovations = [], charitableGoals = [], rentalProperties = [], privateBusinesses = [], financialGoals = [], behavioralProfile } = params;
     
     // Cycle 22 split: RNG seedé déterministique → ./projection/setupSimulation
     const rng = buildSeededRng(scenarioType, strategy, mcIterationIndex);
@@ -116,6 +125,30 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
     const effProj = scenarioType === 'COMPOUND_STRESS'
         ? { ...projection, ltcEnabled: true }
         : projection;
+
+    // Jalon 2 / F12 : initialisation du profil comportemental effectif
+    const effectiveBehavioralProfile: BehavioralProfile = behavioralProfile
+        ? { ...behavioralProfile }
+        : createDefaultBehavioralProfile(baseMonthlyExpenses);
+    const effProjExtended = effProj as unknown as {
+        expenseProjectionMode?: 'budget' | 'real' | 'hybrid';
+        hybridConvergenceStartMonths?: number;
+        hybridConvergenceEndMonths?: number;
+        customLifestyleCreep?: number;
+    };
+    if (effProjExtended.expenseProjectionMode) {
+        effectiveBehavioralProfile.expenseMode = effProjExtended.expenseProjectionMode;
+    }
+    if (effProjExtended.hybridConvergenceStartMonths) {
+        effectiveBehavioralProfile.convergenceStartMonth = effProjExtended.hybridConvergenceStartMonths;
+    }
+    if (effProjExtended.hybridConvergenceEndMonths) {
+        effectiveBehavioralProfile.convergenceEndMonth = effProjExtended.hybridConvergenceEndMonths;
+    }
+    if (effProjExtended.customLifestyleCreep !== undefined) {
+        effectiveBehavioralProfile.lifestyleCreepAnnual = effProjExtended.customLifestyleCreep;
+    }
+
     const data = [];
 
     let liquid = Number(effProj.useManualBalances ? (effProj.manualCash ?? calculatedStartingCash) : calculatedStartingCash) || 0;
@@ -407,7 +440,16 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
     let goalShortfallCount = 0;
     let goalShortfallTotal = 0;
 
-    let reeeTracker: Record<string, { scee: number; iqee: number; contribLifetime: number }> = {};
+    let reeeTracker: Record<string, {
+        scee: number;
+        iqee: number;
+        contribLifetime: number;
+        pseBalance: number;
+        paeBalance: number;
+        remainingScee: number;
+        remainingIqee: number;
+    }> = {};
+
 
     // Cycle 22 split: revenus net/brut baseline → ./projection/setupSimulation
     const { incomeMarcNetMonthly, incomeAnnaNetMonthly, grossMarcBaseAnnual, grossAnnaBaseAnnual } =
@@ -493,11 +535,16 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
     // D2.8: État LTC (Long-Term Care). Une fois déclenché, le coût mensuel
     // s'ajoute aux dépenses jusqu'à la fin de la simulation.
     let ltcActive = false;
-    let nonRegACB = nonReg;
-    // M-4 (2026-06) : coût de base crypto, convention identique à nonRegACB (= valeur de départ →
-    // aucun gain latent sur les avoirs initiaux ; seule la croissance future est imposable). Sur une
-    // vente, on ne taxe que le gain (produit − coût de base proportionnel), pas 100 % du produit.
-    let cryptoACB = crypto;
+
+    // F15 — Initialisation du PBR réel (ACB) au mois zéro depuis les achats historiques.
+    // Repli sans données simulées sur le solde de départ si non renseigné.
+    let nonRegACB = (params.initialNonRegACB !== undefined && Number.isFinite(params.initialNonRegACB))
+        ? Math.max(0, params.initialNonRegACB)
+        : nonReg;
+    let cryptoACB = (params.initialCryptoACB !== undefined && Number.isFinite(params.initialCryptoACB))
+        ? Math.max(0, params.initialCryptoACB)
+        : crypto;
+
 
     // Cycle 25 split: handleNonRegSale partagé → ./projection/portfolioOps
     // Closure-wrapper: synchronise les let locaux avec le state object.
@@ -1198,8 +1245,22 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             // D2.5: Smile Curve appliquée au besoin de retraite (1 si flag off).
             monthlyExpenses = Math.abs(retirementGoal.targetMonthlyIncome) * expenseMultiplier * smileLifestyleFactor(age);
         } else {
-            // Active phase income & expenses
-            monthlyExpenses = effectiveBaseExpenses * expenseMultiplier;
+            // Active phase income & expenses — Jalon 2 (F12) : 3 modes (budget, réel, hybride)
+            const calMonth = (startMonth + m - 1) % 12;
+            const stochasticZ = (enableMonteCarlo && effectiveBehavioralProfile.expenseMode !== 'budget' && effectiveBehavioralProfile.expenseVolatility > 0)
+                ? (rng() * 2 - 1)
+                : 0;
+            monthlyExpenses = computeProjectedExpenses(
+                m,
+                effectiveBaseExpenses,
+                effectiveBehavioralProfile,
+                {
+                    calendarMonth: calMonth,
+                    expenseMultiplier,
+                    enableMonteCarlo,
+                    stochasticZ,
+                }
+            );
         }
 
         // Cycle 9 split: LTC trigger + coût mensuel → ./projection/stochasticEvents
@@ -1653,7 +1714,15 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             const childAgeMonths = m - birthOffset;
             const isFirstMonth = m === birthOffset;
             const childId = child.id || `enfant_${idx}`;
-            const tracker = reeeTracker[childId] ?? { scee: 0, iqee: 0, contribLifetime: 0 };
+            const tracker = reeeTracker[childId] ?? {
+                scee: 0,
+                iqee: 0,
+                contribLifetime: 0,
+                pseBalance: _childReee,
+                paeBalance: 0,
+                remainingScee: 0,
+                remainingIqee: 0,
+            };
             const result = processOneChild(
                 child, idx, isFirstMonth, childAgeMonths,
                 {
@@ -1670,6 +1739,10 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
                     incomeAnna: _childIncomeAnna,
                     liquid: _childLiquid,
                     reee: _childReee,
+                    pseBalance: tracker.pseBalance,
+                    paeBalance: tracker.paeBalance,
+                    remainingSceeGrants: tracker.remainingScee,
+                    remainingIqeeGrants: tracker.remainingIqee,
                     // [ENG-DIVORCE-ALLOC-ASSIETTE] (décision Marc 2026-09-05, réponse 14 : « comme mesuré »)
                     // L'assiette de la RÉCUPÉRATION des allocations (`householdGross > 150 000`) est le
                     // revenu du MÉNAGE QUI RESTE : après un divorce ou un décès, le salaire de l'ex-conjoint
@@ -1705,7 +1778,12 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
                 scee: result.newTrackerScee,
                 iqee: result.newTrackerIqee,
                 contribLifetime: result.newTrackerReeeContribLifetime,
+                pseBalance: result.newPseBalance,
+                paeBalance: result.newPaeBalance,
+                remainingScee: result.remainingSceeGrants,
+                remainingIqee: result.remainingIqeeGrants,
             };
+
             childGrossCost += result.childGrossCostAdd;
             childBenefits += result.childBenefitsAdd;
             childMonthlyCost += result.childMonthlyCostAdd;
@@ -2259,6 +2337,10 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         });
         const { effectiveCeliRate, effectiveReerRate, effectiveNonRegRate, activeCeliRate, activeCryptoRate, activeCashRate } = gr;
 
+        // F16 — REEE : calcul des compartiments PSE (capital) et PAE (subventions + rendements)
+        const totalPse = Object.values(reeeTracker).reduce((s, t) => s + (t.pseBalance ?? 0), 0);
+        const totalPae = Object.values(reeeTracker).reduce((s, t) => s + (t.paeBalance ?? 0), 0);
+
         // Cycle 24 split: croissance mensuelle 7 actifs → ./projection/growthApplication
         const g = applyMonthlyGrowth({
             prevCELI, celi, effectiveCeliRate,
@@ -2268,6 +2350,8 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             crypto, activeCryptoRate,
             prevLiquid, liquid, activeCashRate,
             reee, contribREEE,
+            pseBalance: totalPse,
+            paeBalance: totalPae,
         });
         celi = g.celi.newVal; growthCELI = g.celi.growth; growthPctCELI = g.celi.pct;
         celiapp = g.celiapp.newVal; growthCELIAPP = g.celiapp.growth; growthPctCELIAPP = g.celiapp.pct;
@@ -2280,6 +2364,19 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         liquid = g.liquid.newVal; growthLiquid = g.liquid.growth; growthPctLiquid = g.liquid.pct;
         reee = g.reee.newVal; growthREEE = g.reee.growth; growthPctREEE = g.reee.pct;
         totalGrowth += g.totalGrowth;
+
+        // F16 : la croissance de placement mensuelle du REEE est créditée aux poches PAE des enfants
+        if (g.reee.growth !== 0 && (totalPse + totalPae) > 0) {
+            for (const cId of Object.keys(reeeTracker)) {
+                const tr = reeeTracker[cId];
+                const childTot = (tr.pseBalance ?? 0) + (tr.paeBalance ?? 0);
+                if (childTot > 0) {
+                    const share = childTot / (totalPse + totalPae);
+                    tr.paeBalance = Math.max(0, (tr.paeBalance ?? 0) + g.reee.growth * share);
+                }
+            }
+        }
+
         // [ENG-STRESSTEST-GROWTH-UNREGISTERED] Versement des deltas de choc/reprise APRÈS les
         // assignations ci-dessus (qui écrasent). `+=` et non `=` : un mois peut porter les deux.
         // Le choc entre dans `MarketGrowth*` parce que c'en EST un — un krach est un rendement
@@ -2685,30 +2782,36 @@ export const calculateFutureProjection = (params: SimulationParams, runMC: boole
     const target = results[selectedIdx] || best;
     let successRate: number | null = null;
     let mcIterationsRun: number | null = null;
+    let cvar95: number | null = null;
     let fvi: number | null = null;
     let expertMetrics: MonteCarloResult['expertMetrics'] | null = null;
 
     if (runMC) {
         // Cycle 5 audit UI: monteCarloIterations désormais lu depuis ProjectionConfig
-        // (panneau Paramètres Avancés). [REFONTE-NAV-L2a] Clamp délégué à la source unique
-        // (mêmes bornes 50-1000, défaut 100) — l'UI affiche via le MÊME helper, donc le
-        // libellé « Monte Carlo (N itér.) » ne peut plus diverger du calcul réellement fait.
-        const MC_ITERATIONS = effectiveMcIterations(params.projection.monteCarloIterations);
+        // (panneau Paramètres Avancés). En mode Futur 2.0 (`mcPowerTier` explicite), autorise jusqu'à 10 000 itérations.
+        const MC_ITERATIONS = params.projection.mcPowerTier
+            ? effectiveDeepMcIterations(params.projection.monteCarloIterations, params.projection.mcPowerTier)
+            : effectiveMcIterations(params.projection.monteCarloIterations);
         // Cycle 7 split: runScenario injecté pour éviter dépendance circulaire.
         // G21 C4 fix : utilise la stratégie réelle du scénario ciblé (avant,
         // 'AUTO_MARGINAL' était hardcodé → le MC ignorait le scénario sélectionné).
         const mcResult = runMonteCarlo(runScenario, effectiveParams, (target.strategy as AllocationStrategy) ?? 'AUTO_MARGINAL', target.delayPensions as boolean, MC_ITERATIONS, appliedOverrides);
         successRate = mcResult.successRate;
         fvi = mcResult.fvi;
+        cvar95 = mcResult.cvar95 ?? null;
         expertMetrics = mcResult.expertMetrics;
         // [MC-LABEL-FROZEN] Le compte voyage AVEC le résultat : le libellé de l'écran Futur lisait
         // la config vivante, donc mentait dès qu'on bougeait le curseur sans relancer.
         mcIterationsRun = mcResult.iterationsRun;
 
         target.chartData.forEach((d, i) => {
+            d.P5 = mcResult.p5Data?.[i] ?? null;
             d.P10 = mcResult.p10Data[i] ?? null;
+            d.P25 = mcResult.p25Data?.[i] ?? null;
             d.P50 = mcResult.p50Data[i] ?? null;
+            d.P75 = mcResult.p75Data?.[i] ?? null;
             d.P90 = mcResult.p90Data[i] ?? null;
+            d.P95 = mcResult.p95Data?.[i] ?? null;
         });
 
         const delayStr = target.delayPensions ? 'repousser vos rentes gouvernementales à 70 ans' : 'prendre vos rentes gouvernementales aux âges normaux';
@@ -2716,7 +2819,9 @@ export const calculateFutureProjection = (params: SimulationParams, runMC: boole
         const isBest = results.length > 1 && target === best; // [UI-SCEN] 1 résultat = aucune comparaison → pas de « optimale »
         target.aiNote = `${isBest ? 'Stratégie optimale : ' : ''}Simulation basée sur **${stratStr}** et **${delayStr}**. Indice de Vitalité : ${fvi}%.`;
     } else {
-        target.chartData.forEach((d) => { d.P10 = null; d.P50 = null; d.P90 = null; });
+        target.chartData.forEach((d) => {
+            d.P5 = null; d.P10 = null; d.P25 = null; d.P50 = null; d.P75 = null; d.P90 = null; d.P95 = null;
+        });
         // [UI-SCEN] — le report des rentes passe par les âges rrqStartAge/psvStartAge (#210),
         // plus par delayPensions (toujours false dans STRATEGY_DEFS) : on lit les âges réels.
         // [ENG-LIBELLE-RRQ-70-VS-72] Le repli DÉRIVE de la source unique du moteur. Il disait `70`
@@ -2741,6 +2846,7 @@ export const calculateFutureProjection = (params: SimulationParams, runMC: boole
         survivalRatePct: successRate,
         fvi,
         mcIterationsRun,
+        cvar95,
         expertMetrics: expertMetrics ?? undefined,
         savingsSensitivity,
         allResults: results,
@@ -2758,3 +2864,16 @@ export const calculateStrategySearch = (
     configs: ReadonlyArray<StrategyConfig>,
     opts: RunStrategySearchOptions = {},
 ): StrategySearchResult => runStrategySearch(runScenario, params, configs, opts);
+
+export const calculateTournamentStrategySearch = (
+    params: SimulationParams,
+    configs: ReadonlyArray<StrategyConfig>,
+    opts: TournamentSearchOptions = {},
+): StrategySearchResult => runTournamentStrategySearch(runScenario, params, configs, opts);
+
+export const calculateShapleyAttribution = (
+    params: SimulationParams,
+    baselineConfig: StrategyConfig,
+    winnerConfig: StrategyConfig,
+    monthlyExpenses?: number,
+): ShapleyAttributionItem[] => evaluateShapleyForWinner(runScenario, params, baselineConfig, winnerConfig, monthlyExpenses);

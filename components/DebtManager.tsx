@@ -316,14 +316,8 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ debts, setDebts }) => 
             <PageHeader
                 title="Dettes"
                 badge={
-                    <span className="inline-flex flex-wrap items-center gap-2">
-                        <span className="gf-ticker-symbol">
-                            <span className="gf-pulse-live" aria-hidden="true" />
-                            PASSIF:CAD · AMORTISSEMENT
-                        </span>
-                        <span className="text-meta lg:text-body text-texte-doux">
-                            Total dû <PrivateAmount className={`font-mono font-semibold lg:font-normal ${totalDebt > 0 ? 'text-erreur-texte' : 'text-succes-texte'}`}>{formatCAD(totalDebt)}</PrivateAmount>
-                        </span>
+                    <span className="text-meta lg:text-body text-texte-doux">
+                        Total dû <PrivateAmount className={`font-mono font-semibold lg:font-normal ${totalDebt > 0 ? 'text-erreur-texte' : 'text-succes-texte'}`}>{formatCAD(totalDebt)}</PrivateAmount>
                     </span>
                 }
                 actions={
@@ -338,56 +332,6 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ debts, setDebts }) => 
                     </button>
                 }
             />
-
-            {/* Bandeau de cotations Google Finance Beta */}
-            <div className="gf-terminal-card gf-card-interactive p-3.5 sm:p-4">
-                <div className="gf-quote-strip grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
-                    <div className="gf-quote-cell flex flex-col gap-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-400">Passif total</span>
-                            <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold ${totalDebt > 0 ? 'gf-delta-down' : 'gf-delta-up'}`}>
-                                {totalDebt > 0 ? 'ENGAGÉ' : 'SOLDÉ'}
-                            </span>
-                        </div>
-                        <PrivateAmount as="div" className={`font-mono text-[16px] lg:text-[20px] font-bold ${totalDebt > 0 ? 'text-erreur-texte' : 'text-succes-texte'}`}>
-                            {formatCAD(totalDebt)}
-                        </PrivateAmount>
-                        <span className="text-tiny text-ink-400">solde consolidé du jour</span>
-                    </div>
-                    <div className="gf-quote-cell flex flex-col gap-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-400">Flux mensuel</span>
-                            <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-neutral">MIN + EXTRA</span>
-                        </div>
-                        <PrivateAmount as="div" className="font-mono text-[16px] lg:text-[20px] font-bold text-ink-50">
-                            {formatCAD(totalMinPayment + extraPayment)}
-                        </PrivateAmount>
-                        <span className="text-tiny text-ink-400">remboursement mensuel cible</span>
-                    </div>
-                    <div className="gf-quote-cell flex flex-col gap-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-400">Coût des intérêts</span>
-                            <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-amber">CUMULÉ</span>
-                        </div>
-                        {simulation.valide
-                            ? <PrivateAmount as="div" className="font-mono text-[16px] lg:text-[20px] font-bold text-alerte-texte">{formatCAD(Math.round(simulation.totalInterest))}</PrivateAmount>
-                            : <div className="font-mono text-[16px] lg:text-[20px] font-bold text-ink-400">n.d.</div>}
-                        <span className="text-tiny text-ink-400">d'ici l'extinction complète</span>
-                    </div>
-                    <div className="gf-quote-cell flex flex-col gap-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-400">Horizon estimé</span>
-                            <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-up">
-                                {strategie === 'avalanche' ? 'AVALANCHE' : 'NEIGE'}
-                            </span>
-                        </div>
-                        {simulation.valide
-                            ? <div className="font-mono text-[16px] lg:text-[20px] font-bold text-succes-texte"><PrivateAmount>{formatNumber(simulation.months / 12, { decimals: 1 })}</PrivateAmount> ans</div>
-                            : <div className="font-mono text-[16px] lg:text-[20px] font-bold text-ink-400">n.d.</div>}
-                        <span className="text-tiny text-ink-400">selon la stratégie choisie</span>
-                    </div>
-                </div>
-            </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-[380px_minmax(0,1fr)] gap-5 items-start">
                 <div className="space-y-4">

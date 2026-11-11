@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import { Layout } from './components/Layout';
 import { recoverUser230kData, hasInflatedStarterProperty, saveProtectedDossierSnapshot } from './services/dataRecovery';
 import { hasFirestoreSyncedThisSession } from './services/firebase/workspaceSync';
@@ -46,10 +46,9 @@ export const App: React.FC = () => {
     useAppBootEffects();
     useTabNavigation(activeTab, setActiveTab);
 
-    const handleSetTab = (tab: Tab) => {
+    const handleSetTab = useCallback((tab: Tab) => {
         setActiveTab(tab);
-        window.location.hash = tab;
-    };
+    }, [setActiveTab]);
 
     const cmdK = useCommandPalette();
 

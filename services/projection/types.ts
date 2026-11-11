@@ -3,6 +3,7 @@
 // Élimine les imports circulaires (monthlyOutput, meltdownReer, cashflowAllocation → projection.ts).
 
 import type { EntreeRefusee } from './verifierEntreesMoteur';
+import type { BehavioralProfile } from './behavioralProfile';
 import type {
     ProjectionConfig,
     RealEstateGoal,
@@ -60,7 +61,11 @@ export interface SimulationParams {
     rentalProperties?: RentalProperty[];
     privateBusinesses?: PrivateBusiness[];
     financialGoals?: FinancialGoal[];
+    behavioralProfile?: BehavioralProfile;
+    initialNonRegACB?: number;
+    initialCryptoACB?: number;
 }
+
 
 export type FutureScenarioType =
     | 'BASE'
@@ -80,9 +85,13 @@ export interface ProjectionChartPoint {
     monthIndex: number;
     NetWorth: number;
     // Variantes MC (minimales)
+    P5?: number | null;
     P10?: number | null;
+    P25?: number | null;
     P50?: number | null;
+    P75?: number | null;
     P90?: number | null;
+    P95?: number | null;
     // Variantes déterministes (champ complet)
     dateLabel?: string;
     year?: number;
@@ -287,6 +296,8 @@ export interface ProjectionResult {
      *  le MC n'a pas tourné, ou pour un résultat calculé avant ce lot : l'UI doit alors afficher
      *  « Monte Carlo » SANS chiffre plutôt qu'un nombre lu ailleurs (no-fake-data). */
     mcIterationsRun?: number | null;
+    /** Conditional Value at Risk à 95 % (moyenne des 5 % pires scénarios Monte Carlo). */
+    cvar95?: number | null;
     expertMetrics?: {
         swr: number;
         taxLeakage: number;

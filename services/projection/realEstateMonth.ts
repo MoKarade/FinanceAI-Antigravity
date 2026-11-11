@@ -17,6 +17,29 @@ type GetMonthOffsetFn = (dateStr: string) => number;
 // FISC-WELCOME-UNIFY — la fonction injectée porte la municipalité du bien (welcome tax MTL vs reste QC).
 type WelcomeTaxFn = (price: number, municipality?: Municipality) => number;
 
+/**
+ * Loi sur l'intérêt canadienne : calcul du taux périodique mensuel effectif pour une capitalisation semi-annuelle.
+ * im = (1 + r/2)^(1/6) - 1
+ */
+export function computeCanadianMonthlyMortgageRate(annualNominalRatePct: number): number {
+    const rNominal = (annualNominalRatePct / 100);
+    return rNominal > 0 ? Math.pow(1 + rNominal / 2, 1 / 6) - 1 : 0;
+}
+
+/**
+ * Calcul de la mensualité canadienne semi-annuelle pour un prêt amorti sur n mois.
+ */
+export function computeCanadianMortgagePayment(
+    principal: number,
+    annualNominalRatePct: number,
+    totalMonths: number,
+): number {
+    if (totalMonths <= 0 || principal <= 0) return 0;
+    const im = computeCanadianMonthlyMortgageRate(annualNominalRatePct);
+    if (im <= 0) return principal / totalMonths;
+    return (principal * im * Math.pow(1 + im, totalMonths)) / (Math.pow(1 + im, totalMonths) - 1);
+}
+
 export interface PropertyStateMutable {
     id: string;
     isBought: boolean;
@@ -355,10 +378,8 @@ export function processRealEstate(
                     );
                 }
 
-                const r = (goal.mortgageRate / 100) / 12;
                 const n = goal.amortization * 12;
-                const p = pState.mortgage;
-                pState.calculatedPmt = r > 0 ? p * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1) : p / n;
+                pState.calculatedPmt = computeCanadianMortgagePayment(pState.mortgage, goal.mortgageRate, n);
                 // [ENG-RENEWAL-RATE-MISMATCH] Le taux courant du prêt vit dans l'ÉTAT dès l'achat :
                 // c'est lui (jamais `goal.mortgageRate` directement) que l'intérêt mensuel consomme,
                 // sinon un renouvellement à taux différent affame le capital en silence.
@@ -435,10 +456,7 @@ export function processRealEstate(
                     const tauxCourantPct = pState.currentRatePct ?? goal.mortgageRate;
                     const saisie = goal.renewalRateProjection;
                     const newRatePct = (Number.isFinite(saisie) && (saisie as number) > 0) ? (saisie as number) : tauxCourantPct;
-                    const nr = (newRatePct / 100) / 12;
-                    pState.calculatedPmt = nr > 0
-                        ? pState.mortgage * nr * Math.pow(1 + nr, remainingMonths) / (Math.pow(1 + nr, remainingMonths) - 1)
-                        : pState.mortgage / remainingMonths;
+                    pState.calculatedPmt = computeCanadianMortgagePayment(pState.mortgage, newRatePct, remainingMonths);
                     // [ENG-RENEWAL-RATE-MISMATCH] Le taux COURANT suit : l'intérêt mensuel et la
                     // marge Smith lisent `currentRatePct`, donc PMT et intérêt restent calculés au
                     // MÊME taux. Avant, seul le PMT bougeait — capital affamé (mesuré au panel
@@ -461,7 +479,7 @@ export function processRealEstate(
             // [ENG-RENEWAL-RATE-MISMATCH] L'intérêt se calcule au taux COURANT du prêt (écrit à
             // l'achat, mis à jour au renouvellement) — `?? goal.mortgageRate` couvre l'état SEMÉ
             // d'un bien déjà détenu au départ de la simulation, qui n'a pas traversé le bloc d'achat.
-            const monthlyRate = ((pState.currentRatePct ?? goal.mortgageRate) / 100) / 12;
+            const monthlyRate = computeCanadianMonthlyMortgageRate(pState.currentRatePct ?? goal.mortgageRate);
             const interestPaid = pState.mortgage * monthlyRate;
             const principalPaid = Math.max(0, pState.calculatedPmt - interestPaid);
             const prevMortgage = pState.mortgage;
@@ -479,9 +497,15 @@ export function processRealEstate(
 
             // Smith Manoeuvre (intérêts capitalisés)
             if (useSmithManoeuvre && goal.isPrimaryResidence && principalPaid > 0) {
-                state.smithManoeuvreDebt += principalPaid;
-                state.nonReg += principalPaid;
-                state.nonRegACB += principalPaid;
+                // Règle B-20 : ré-avancement borné au solde admissible sous les plafonds HELOC (65 %) et combiné (80 %)
+                const maxHelocRoom = Math.max(0, pState.currentValue * 0.65 - state.smithManoeuvreDebt);
+                const maxCombinedRoom = Math.max(0, pState.currentValue * 0.80 - (pState.mortgage + state.smithManoeuvreDebt));
+                const reAdvanceAllowed = Math.min(principalPaid, maxHelocRoom, maxCombinedRoom);
+                if (reAdvanceAllowed > 0) {
+                    state.smithManoeuvreDebt += reAdvanceAllowed;
+                    state.nonReg += reAdvanceAllowed;
+                    state.nonRegACB += reAdvanceAllowed;
+                }
                 // [SMITH-HELOC-TAUX-FIGE] Le taux de la marge SUIT désormais celui du prêt du bien
                 // (décision Marc 2026-08-24). Avant : 5 % figé, indépendant du dossier — donc une
                 // marge moins chère que l'hypothèque dès que celle-ci dépassait 5 %, ce qui rendait
@@ -557,19 +581,23 @@ export function processRealEstate(
             // D-UN-ECART-DE-TAUX`, ici appliqué au chemin plutôt qu'au taux) : ce qui tranche est
             // l'ABSENCE de dette négative, identique partout.
             //
-            // ⚠️ Ce qui n'est PAS corrigé ici et qui reste une question de MODÈLE : le seuil de 65 %
-            // compare `marge + hypothèque` à la valeur du bien. Au Canada, le 65 % borne la portion
-            // MARGE d'un prêt ré-avançable (le total marge + hypothèque étant plutôt borné à 80 %) —
-            // les deux ne se confondent pas. Changer ce seuil déplace de l'argent : c'est une
-            // décision, elle est routée, pas prise ici.
-            if (state.smithManoeuvreDebt > 0
-                && state.smithManoeuvreDebt + pState.mortgage > pState.currentValue * 0.65) {
-                const surplusMarginCall = (state.smithManoeuvreDebt + pState.mortgage) - (pState.currentValue * 0.65);
-                const aRembourser = Math.min(surplusMarginCall, state.smithManoeuvreDebt);
-                if (aRembourser > 0 && state.nonReg > 0) {
-                    const call = handleNonRegSale(state, aRembourser);
-                    state.smithManoeuvreDebt = Math.max(0, state.smithManoeuvreDebt - call);
-                    state.flowEventLogs.push(`🚨 Appel de marge : vente forcée de ${formatCAD(Math.round(call))} (compte non-enregistré)`);
+            // Règle B-20 du BSIF pour produit combiné ré-avançable (HELOC / Manœuvre Smith) :
+            //  - Portion marge de crédit rotative (HELOC) : plafonnée à 65 % de la valeur marchande
+            //  - Total combiné (prêt hypothécaire fixe + marge HELOC) : plafonné à 80 % de la valeur marchande
+            if (goal.isPrimaryResidence && state.smithManoeuvreDebt > 0) {
+                const maxHeloc = pState.currentValue * 0.65;
+                const maxCombined = pState.currentValue * 0.80;
+                const surplusHeloc = Math.max(0, state.smithManoeuvreDebt - maxHeloc);
+                const surplusCombined = Math.max(0, (state.smithManoeuvreDebt + pState.mortgage) - maxCombined);
+                const surplusMarginCall = Math.max(surplusHeloc, surplusCombined);
+
+                if (surplusMarginCall > 0) {
+                    const aRembourser = Math.min(surplusMarginCall, state.smithManoeuvreDebt);
+                    if (aRembourser > 0 && state.nonReg > 0) {
+                        const call = handleNonRegSale(state, aRembourser);
+                        state.smithManoeuvreDebt = Math.max(0, state.smithManoeuvreDebt - call);
+                        state.flowEventLogs.push(`🚨 Appel de marge (règle B20) : vente forcée de ${formatCAD(Math.round(call))} (compte non-enregistré)`);
+                    }
                 }
             }
 

@@ -311,7 +311,7 @@ export const FutureKpiStrip: React.FC<{
     }
 
     return (
-        <section aria-label="Indicateurs clés" className="gf-quote-strip grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 gf-spring-grid p-3 rounded-2xl bg-surface/60 border border-bordure">
+        <section aria-label="Indicateurs clés" className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 lg:gap-3 gf-spring-grid">
             <KpiTile
                 label="Patrimoine net"
                 value={net}

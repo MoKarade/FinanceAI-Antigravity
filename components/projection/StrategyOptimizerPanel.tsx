@@ -15,8 +15,8 @@ import { SIMULATION_ECHEC } from '../../services/simulationMessages';
 import { PrivateAmount } from '../ui/PrivateAmount';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { useViewportBelowSm } from '../../hooks/useViewportBelowSm';
-import type { SimulationParams, ConfigResult } from '../../services/projection';
-import { formatCompactCAD } from '../../utils/format';
+import type { SimulationParams, ConfigResult, ShapleyAttributionItem } from '../../services/projection';
+import { formatCAD, formatCompactCAD } from '../../utils/format';
 import {
     rankConfigResults,
     explainWinner,
@@ -26,6 +26,7 @@ import {
 } from '../../services/projection';
 import {
     runStrategySearchAsync,
+    runTournamentStrategySearchAsync,
     SEARCH_CANCELLED,
     type StrategySearchProgress,
 } from '../../services/projection/runAsync';
@@ -96,11 +97,13 @@ export const StrategyOptimizerPanel: React.FC<Props> = ({ params, onApply }) => 
     const isNarrowViewport = useViewportBelowSm();
     const [applied, setApplied] = useState(false);
     const [composerOpen, setComposerOpen] = useState(true);
+    const [deepTournament, setDeepTournament] = useState(false);
     const [selection, setSelection] = useState<LeverSelection>({});
     const [objective, setObjective] = useState<OptimizeObjective>('balanced');
     const [status, setStatus] = useState<Status>('idle');
-    const [progress, setProgress] = useState<StrategySearchProgress | null>(null);
+    const [progress, setProgress] = useState<(StrategySearchProgress & { round?: 1 | 2 | 3 }) | null>(null);
     const [results, setResults] = useState<ConfigResult[] | null>(null);
+    const [shapley, setShapley] = useState<ShapleyAttributionItem[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [filter, setFilter] = useState<{ key: keyof StrategyConfig; value: unknown } | null>(null);
 
@@ -143,6 +146,7 @@ export const StrategyOptimizerPanel: React.FC<Props> = ({ params, onApply }) => 
         setStatus('running');
         setError(null);
         setResults(null);
+        setShapley([]);
         setApplied(false);
         setComposerOpen(false); // replie le composeur pour laisser place aux résultats
         setProgress({ done: 0, total: configCount });
@@ -150,13 +154,19 @@ export const StrategyOptimizerPanel: React.FC<Props> = ({ params, onApply }) => 
         abortRef.current = ac;
         try {
             const configs = generateStrategySpace(selection, ctx);
-            const result = await runStrategySearchAsync(params, configs, {
-                iterations: iters,
-                signal: ac.signal,
-                onProgress: (p) => { if (aliveRef.current) setProgress(p); },
-            });
+            const result = deepTournament
+                ? await runTournamentStrategySearchAsync(params, configs, {
+                    signal: ac.signal,
+                    onProgress: (p) => { if (aliveRef.current) setProgress(p); },
+                })
+                : await runStrategySearchAsync(params, configs, {
+                    iterations: iters,
+                    signal: ac.signal,
+                    onProgress: (p) => { if (aliveRef.current) setProgress(p); },
+                });
             if (!aliveRef.current) return;
             setResults(result.results);
+            setShapley(result.shapleyAttribution ?? []);
             setStatus('done');
         } catch (e: unknown) {
             if (!aliveRef.current) return;
@@ -170,7 +180,7 @@ export const StrategyOptimizerPanel: React.FC<Props> = ({ params, onApply }) => 
             setError(SIMULATION_ECHEC);
             setStatus('error');
         }
-    }, [params, selection, ctx, configCount, iters]);
+    }, [params, selection, ctx, configCount, iters, deepTournament]);
 
     const cancel = useCallback(() => abortRef.current?.abort(), []);
 
@@ -251,15 +261,29 @@ export const StrategyOptimizerPanel: React.FC<Props> = ({ params, onApply }) => 
                 })}
             </div>
 
-            {/* Compte + temps estimé en direct */}
-            <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-fond border border-bordure px-3 py-2">
+            {/* Compte + temps estimé en direct + bascule Tournoi Deep Search */}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-fond border border-bordure px-3 py-2">
                 <span className="text-tiny text-texte-doux">
                     <strong className="text-texte tabular-nums">{configCount.toLocaleString('fr-CA')}</strong> configuration{configCount > 1 ? 's' : ''}
                     {' · '}{fmtMs(estMs)} sur {nWorkers} cœur{nWorkers > 1 ? 's' : ''}
                 </span>
-                {configCount > WARN_THRESHOLD && (
-                    <span className="text-tiny font-bold text-alerte-texte">calcul long</span>
-                )}
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        aria-pressed={deepTournament}
+                        onClick={() => setDeepTournament((v) => !v)}
+                        className={`touch-target min-h-11 rounded-lg border px-2.5 py-1 text-tiny font-bold focus-ring transition-colors ${
+                            deepTournament
+                                ? 'border-accent bg-accent-fonce/20 text-texte'
+                                : 'border-bordure bg-surface-douce text-texte-doux hover:bg-fond'
+                        }`}
+                    >
+                        {deepTournament ? 'Tournoi CRN + Shapley actif' : 'Mode Tournoi Deep Search'}
+                    </button>
+                    {configCount > WARN_THRESHOLD && (
+                        <span className="text-tiny font-bold text-alerte-texte">calcul long</span>
+                    )}
+                </div>
             </div>
             </>)}
 
@@ -267,7 +291,7 @@ export const StrategyOptimizerPanel: React.FC<Props> = ({ params, onApply }) => 
                 <button
                     type="button"
                     onClick={run}
-                    className={`mt-3 w-full rounded-lg bg-accent text-sur-accent hover:bg-accent-fonce border border-accent px-3 py-2 text-meta font-bold focus-ring transition-colors ${
+                    className={`touch-target min-h-11 mt-3 w-full rounded-lg bg-accent text-sur-accent hover:bg-accent-fonce border border-accent px-3 py-2 text-meta font-bold focus-ring transition-colors ${
                         isNarrowViewport ? 'min-h-[56px]' : ''
                     }`}
                 >
@@ -280,9 +304,13 @@ export const StrategyOptimizerPanel: React.FC<Props> = ({ params, onApply }) => 
                     <div className="flex items-center justify-between text-tiny text-texte-doux mb-1.5">
                         <span className="flex items-center gap-1.5">
                             <span className="inline-block h-3 w-3 rounded-full border-2 border-accent/40 border-t-accent animate-spin" aria-hidden="true" />
-                            Simulation Monte Carlo en cours…
+                            {/* NOMBRE-NON-MONETAIRE : numéro de manche du tournoi Monte Carlo */}
+                            Simulation Monte Carlo en cours{progress.round ? ` (manche ${progress.round}/3)` : ''}…
                         </span>
-                        <span className="tabular-nums font-bold text-texte">{pct}%</span>
+                        <span className="tabular-nums font-bold text-texte">
+                            {/* NOMBRE-NON-MONETAIRE : vitesse technique de calcul worker */}
+                            {progress.simPerSec ? `${progress.simPerSec.toLocaleString('fr-CA')} sim/s · ` : ''}{pct}%
+                        </span>
                     </div>
                     {/* NOMBRE-NON-MONETAIRE : avancement du calcul de l'optimiseur, pas une donnée du dossier */}
                     <div className="h-2 rounded-full bg-surface-douce border border-bordure overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
@@ -329,6 +357,7 @@ export const StrategyOptimizerPanel: React.FC<Props> = ({ params, onApply }) => 
                         explanation={explainWinner(winner, runnerUp, objective)}
                         survivalThreshold={ranking.survivalThreshold}
                         hasSurvivor={ranking.hasSurvivor}
+                        shapley={shapley}
                         applied={applied}
                         onApply={onApply ? () => { onApply(winner.result.config); setApplied(true); } : undefined}
                     />
@@ -352,9 +381,10 @@ const WinnerCard: React.FC<{
     explanation: string;
     survivalThreshold: number;
     hasSurvivor: boolean;
+    shapley?: ShapleyAttributionItem[];
     applied?: boolean;
     onApply?: () => void;
-}> = ({ winner, explanation, survivalThreshold, hasSurvivor, applied, onApply }) => {
+}> = ({ winner, explanation, survivalThreshold, hasSurvivor, shapley, applied, onApply }) => {
     const r = winner.result;
     return (
         <div className="rounded-xl border border-succes-texte/30 bg-succes-fond p-3">
@@ -405,12 +435,35 @@ const WinnerCard: React.FC<{
                 <ScoreBar label="Robustesse" value={winner.breakdown.robustness} />
             </div>
 
+            {/* Cascade d'attribution marginale de Shapley (Tournoi Deep Search) */}
+            {shapley && shapley.length > 0 && (
+                <div className="mt-3 rounded-lg border border-bordure bg-fond p-2.5 space-y-1.5">
+                    <div className="text-tiny font-bold text-texte-doux">
+                        Attribution marginale exacte des leviers (Shapley)
+                    </div>
+                    {shapley.map((item) => (
+                        <div key={String(item.key)} className="flex items-center justify-between gap-2 text-tiny">
+                            <span className="text-texte truncate">{item.label}</span>
+                            <span className="tabular-nums font-bold text-succes-texte shrink-0">
+                                {item.gainDollars >= 0 ? '+' : ''}
+                                <PrivateAmount>{formatCAD(Math.round(item.gainDollars))}</PrivateAmount>
+                                {item.gainMonthsFreedom > 0 && (
+                                    <span className="ml-1.5 text-texte-doux font-normal">
+                                        (+<PrivateAmount>{item.gainMonthsFreedom}</PrivateAmount> mois)
+                                    </span>
+                                )}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
             {onApply && (
                 <button
                     type="button"
                     onClick={onApply}
                     disabled={applied}
-                    className="mt-3 w-full rounded-lg bg-succes-texte/20 hover:bg-succes-texte/30 disabled:opacity-60 disabled:cursor-not-allowed border border-succes-texte/40 px-3 py-2 text-meta font-bold text-succes-texte focus-ring transition-colors"
+                    className="touch-target min-h-11 mt-3 w-full rounded-lg bg-succes-texte/20 hover:bg-succes-texte/30 disabled:opacity-60 disabled:cursor-not-allowed border border-succes-texte/40 px-3 py-2 text-meta font-bold text-succes-texte focus-ring transition-colors"
                 >
                     {applied ? 'Appliquée à tes paramètres' : 'Appliquer cette stratégie'}
                 </button>

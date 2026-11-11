@@ -219,12 +219,12 @@ describe('dailyLedger — invariants de raccord (moteur réel)', () => {
      *  • `CELIAPP`, `NonReg`, `LiquidDebt`, `CELIAPPMax` : restent à zéro même sur la fixture
      *    riche (le CELIAPP se transfère, le non-enregistré est absorbé par la mise de fonds).
      *  • `AccruedTaxRevenu/Gains/Divers/REER` : nuls sur une fenêtre de 5 mois sans règlement.
-     *  • `P10`/`P50`/`P90` : n'existent qu'en Monte Carlo. `lockedNetWorth` : courbe verrouillée.
+     *  • `P5`/`P10`/`P25`/`P50`/`P75`/`P90`/`P95` : n'existent qu'en Monte Carlo. `lockedNetWorth` : courbe verrouillée.
      */
     const SOLDES_NON_COUVERTS = [
         'Liquidites', 'CELIAPP', 'NonReg', 'LiquidDebt', 'CELIAPPMax',
         'AccruedTaxRevenu', 'AccruedTaxGains', 'AccruedTaxDivers', 'AccruedTaxREER',
-        'P10', 'P50', 'P90', 'lockedNetWorth',
+        'P5', 'P10', 'P25', 'P50', 'P75', 'P90', 'P95', 'lockedNetWorth',
         // [ENG-W5-BUSINESS-NON-PUBLIE] (lot 214) 0 dans cette fixture (aucune entreprise) : balayé à 900 000 $
         // par `bilanQuotidien.test.ts`, où il est non nul — une garde ne couvre que ce que sa fixture rend non nul.
         'Entreprise',

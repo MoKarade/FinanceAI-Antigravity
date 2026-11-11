@@ -67,9 +67,12 @@ describe('[RQAP-PRESTATION-COTISATIONS] la prestation de congé parental ne coti
         expect((users()[1].grossSalary ?? 0) * 12, 'fixture invalide : Anna doit gagner > plafond RQAP')
             .toBeGreaterThan(RQAP_MAX_INCOME);
         __runScenarioForTests(params(), 'AUTO_MARGINAL' as AllocationStrategy, false, false);
-        // La fenêtre RQAP : base = 55 % d'un salaire ≤ plafond (~108 k × 0,55 ≈ 59 k) — on identifie
-        // les appels dont le gross est EXACTEMENT 0,55 × min(salaire indexé, plafond projeté).
-        const candidats = appelsRqap.filter(a => { const b = a.gross / 0.55; return b > 50_000 && b <= RQAP_MAX_INCOME * 1.2; });
+        // La fenêtre RQAP : bipalier officiel 70 % (mois 1-6) puis 55 % (mois 7-12) d'un salaire <= plafond
+        const candidats = appelsRqap.filter(a => {
+            const b70 = a.gross / 0.70;
+            const b55 = a.gross / 0.55;
+            return (b70 > 50_000 && b70 <= RQAP_MAX_INCOME * 1.2) || (b55 > 50_000 && b55 <= RQAP_MAX_INCOME * 1.2);
+        });
         expect(candidats.length, 'fenêtre vide : le congé RQAP n\u2019a pas produit ses appels dans la plage attendue')
             .toBeGreaterThanOrEqual(12);
         // TOUS les appels de la fenêtre doivent porter l'assiette d'emploi NULLE (le `toBe(0)`

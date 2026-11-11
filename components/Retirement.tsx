@@ -225,17 +225,10 @@ export const Retirement: React.FC<RetirementProps> = ({
 
     // [REFONTE-NAV-L4] sous-onglet actif (idiome BudgetWorkspace, aucun état persisté).
     const [subTab, setSubTab] = useState<RetirementSubTab>('projection');
-    const [horizonFocus, setHorizonFocus] = useState<'accumulation' | 'decaissement'>('accumulation');
 
     const tickerBadge = (
-        <span className="inline-flex items-center gap-2">
-            <span className="gf-ticker-symbol">
-                <span className="gf-pulse-live" aria-hidden="true" />
-                RETRAITE:QC · RRQ &amp; PSV
-            </span>
-            <span className="px-2 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-amber">
-                CIBLE {goal.targetAge} ANS
-            </span>
+        <span className="px-2 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-amber">
+            CIBLE {goal.targetAge} ANS
         </span>
     );
 
@@ -297,50 +290,6 @@ export const Retirement: React.FC<RetirementProps> = ({
                 )}
             />
             {etroit && activeScenarioName && <p className="-mt-2 text-meta text-ink-400">Scénario : {activeScenarioName}</p>}
-
-            <div className="flex flex-wrap items-center justify-between gap-2.5">
-                <div
-                    role="group"
-                    aria-label="Horizons et scénarios de retraite"
-                    className="gf-subtab-bar overflow-x-auto no-scrollbar max-w-full"
-                >
-                    <button
-                        type="button"
-                        onClick={() => { setSubTab('projection'); setHorizonFocus('accumulation'); }}
-                        aria-pressed={subTab === 'projection' && horizonFocus === 'accumulation'}
-                        className={`gf-subtab-pill touch-target ${subTab === 'projection' && horizonFocus === 'accumulation' ? 'gf-subtab-pill-active' : ''}`}
-                    >
-                        {/* NOMBRE-NON-MONETAIRE : âge cible et espérance de vie saisis en hypothèse */}
-                        <span>Trajectoire ({goal.targetAge} → {lifeExpectancy} ans)</span>
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => { setSubTab('projection'); setHorizonFocus('decaissement'); }}
-                        aria-pressed={subTab === 'projection' && horizonFocus === 'decaissement'}
-                        className={`gf-subtab-pill touch-target ${subTab === 'projection' && horizonFocus === 'decaissement' ? 'gf-subtab-pill-active' : ''}`}
-                    >
-                        <span>Décaissement &amp; Rentes ({goal.targetAge}+ ans)</span>
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setSubTab('outils')}
-                        aria-pressed={subTab === 'outils'}
-                        className={`gf-subtab-pill touch-target ${subTab === 'outils' ? 'gf-subtab-pill-active' : ''}`}
-                    >
-                        <span>Simulateurs &amp; Paliers</span>
-                    </button>
-                </div>
-                <div className="hidden sm:flex items-center gap-2 font-mono text-[11px] text-ink-300">
-                    <span className="px-2 py-0.5 rounded-sm gf-delta-neutral">
-                        HORIZON {lifeExpectancy} ANS
-                    </span>
-                    {isProjectionLocked && (
-                        <span className="px-2 py-0.5 rounded-sm gf-delta-amber">
-                            RÉFÉRENCE VERROUILLÉE
-                        </span>
-                    )}
-                </div>
-            </div>
 
             <TabPanel idPrefix="retraite" tab="outils" when={subTab === 'outils'} className="space-y-5 focus-ring rounded-card">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start gf-spring-grid">

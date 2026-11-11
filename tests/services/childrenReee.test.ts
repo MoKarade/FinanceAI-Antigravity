@@ -96,26 +96,54 @@ describe('processOneChild — REEE (plafond viager F13, cotisation, fermeture)',
         expect(r.newTrackerReeeContribLifetime).toBe(50000); // inchangé
     });
 
-    it('fermeture du REEE à 25 ans : solde versé en liquidités + impôt 20 %', () => {
+    it('fermeture du REEE à 25 ans avec capital PSE seul : solde versé 100 % franc d\'impôt', () => {
         const r = processOneChild(
             makeChild(), 0, false, 25 * 12,
-            baseCtx({ grossAnnaBaseAnnual: 0, reee: 10000 }),
+            baseCtx({ grossAnnaBaseAnnual: 0, reee: 10000, pseBalance: 10000, paeBalance: 0 }),
             vi.fn(fiscalStub),
         );
         expect(r.liquidDelta).toBeCloseTo(10000, 5);
-        expect(r.taxDiversAdd).toBeCloseTo(2000, 5); // 20 % sur le solde
+        expect(r.taxDiversAdd).toBe(0); // Capital PSE 100 % franc d'impôt (LIR 146.1)
         expect(r.reeeNewBalance).toBe(0);
+        expect(r.newPseBalance).toBe(0);
     });
 
-    it('études post-secondaires (18 ans) : décaissement REEE → payout > 0', () => {
+    it('fermeture du REEE à 25 ans mixte (PSE + subventions + PRA) : PSE franc d\'impôt, subventions remboursées et surtaxe AIP 20 % sur rendements', () => {
+        const r = processOneChild(
+            makeChild(), 0, false, 25 * 12,
+            baseCtx({
+                grossAnnaBaseAnnual: 0,
+                reee: 10000,
+                pseBalance: 6000,
+                paeBalance: 4000,
+                remainingSceeGrants: 1000,
+                remainingIqeeGrants: 500,
+            }),
+            vi.fn(fiscalStub),
+        );
+        // PSE (6 000 $) retourné franc d'impôt
+        // Subventions (1 500 $) retournées aux gouvernements
+        // Rendements PRA = 4 000 - 1 500 = 2 500 $, surtaxe 20 % = 500 $, net = 2 000 $
+        // Liquidités parentales = 6 000 + 2 000 = 8 000 $
+        expect(r.taxDiversAdd).toBeCloseTo(500, 5);
+        expect(r.liquidDelta).toBeCloseTo(8000, 5);
+        expect(r.reeeNewBalance).toBe(0);
+        expect(r.newPseBalance).toBe(0);
+        expect(r.newPaeBalance).toBe(0);
+    });
+
+    it('études post-secondaires (18 ans) : décaissement REEE priorisant le PAE et neutralisé par le BPA étudiant', () => {
         const r = processOneChild(
             makeChild({ universityType: 'uni_local' as ChildGoal['universityType'] }), 0, false, 18 * 12,
-            baseCtx({ grossAnnaBaseAnnual: 0, reee: 50000 }),
+            baseCtx({ grossAnnaBaseAnnual: 0, reee: 50000, pseBalance: 20000, paeBalance: 30000 }),
             vi.fn(fiscalStub),
         );
         expect(r.reeePayoutAdd).toBeGreaterThan(0);
         expect(r.withdrawalREEEAdd).toBeGreaterThan(0);
+        expect(r.withdrawalPaeAdd).toBeGreaterThan(0); // Décaissement PAE prioritaire
+        expect(r.studentTaxAdd).toBe(0); // Neutralisé par le BPA étudiant (16 452 $ fed / 18 952 $ QC)
     });
+
 });
 
 /**
@@ -139,20 +167,24 @@ describe('[RQAP-CAP-98K] plafond de revenu assurable — source, index, immunit�
     const ctxRiche = (o: Partial<ChildProcessCtx> = {}) =>
         baseCtx({ grossAnnaBaseAnnual: 120000, incomeAnna: 6000, householdGross: 216000, ...o });
 
-    it('(a) l’assiette vient de RQAP_MAX_INCOME, pas du littéral 98 000 $ de 2025', () => {
+    it('(a) l’assiette vient de RQAP_MAX_INCOME, pas du littéral 98 000 $ de 2025 (bipalier 70 % puis 55 %)', () => {
         const c = capterAssiette();
+        // Mois 0-5 : palier 1 à 70 %
         processOneChild(makeChild(), 0, false, 2, ctxRiche({ m: 2 }), c.fn);
-        // Le discriminant est un ÉCART de 2 750 $/an : 98 000 × 0,55 = 53 900 contre
-        // 103 000 × 0,55 = 56 650. Les deux sont des nombres crédibles — d'où le test.
-        expect(c.vues[0]).toBeCloseTo(RQAP_MAX_INCOME * 0.55, 6);
-        expect(c.vues[0]).not.toBeCloseTo(98000 * 0.55, 0);
+        expect(c.vues[0]).toBeCloseTo(RQAP_MAX_INCOME * 0.70, 6);
+        expect(c.vues[0]).not.toBeCloseTo(98000 * 0.70, 0);
+
+        // Mois 6-11 : palier 2 à 55 % (enfant âgé de 6 mois)
+        const cTier2 = capterAssiette();
+        processOneChild(makeChild(), 0, false, 6, ctxRiche({ m: 8 }), cTier2.fn);
+        expect(cTier2.vues[0]).toBeCloseTo(RQAP_MAX_INCOME * 0.55, 6);
     });
 
     it('(b) le plafond suit inflation + 0,5 pp/an — le patron du MGA de la RRQ', () => {
         const c = capterAssiette();
         const annees = 10;
         processOneChild(makeChild(), 0, false, 2, ctxRiche({ m: annees * 12 + 2, simInflation: 2 }), c.fn);
-        expect(c.vues[0]).toBeCloseTo(RQAP_MAX_INCOME * Math.pow(1.025, annees) * 0.55, 4);
+        expect(c.vues[0]).toBeCloseTo(RQAP_MAX_INCOME * Math.pow(1.025, annees) * 0.70, 4);
     });
 
     it('(c) ⚠️ un gel Guyton-Klinger ne déplace PLUS le plafond légal', () => {
@@ -168,15 +200,15 @@ describe('[RQAP-CAP-98K] plafond de revenu assurable — source, index, immunit�
         expect(avecGel.vues[0]).toBeCloseTo(sansGel.vues[0], 6);
         // ⚠️ PRÉCONDITION ASSERTÉE (revue) : sans elle, ce test passerait pour N'IMPORTE QUELLE
         // implémentation le jour où la fixture change — si le salaire tombe SOUS le plafond, les
-        // deux appels rendent `annaGross × 0,55` et l'égalité devient vraie sans rien prouver.
+        // deux appels rendent `annaGross × 0,70` et l'égalité devient vraie sans rien prouver.
         // On vérifie donc que c'est bien le PLAFOND qu'on lit, pas le salaire.
-        expect(sansGel.vues[0]).toBeCloseTo(RQAP_MAX_INCOME * Math.pow(1.025, 20) * 0.55, 4);
+        expect(sansGel.vues[0]).toBeCloseTo(RQAP_MAX_INCOME * Math.pow(1.025, 20) * 0.70, 4);
     });
 
     it('un salaire SOUS le plafond n’est pas touché — le plafond ne mord que par le haut', () => {
         // Anti-vacuité du lot : si le correctif avait déplacé TOUT le monde, il serait faux.
         const c = capterAssiette();
         processOneChild(makeChild(), 0, false, 2, baseCtx({ grossAnnaBaseAnnual: 40000, m: 2 }), c.fn);
-        expect(c.vues[0]).toBeCloseTo(40000 * 0.55, 6);
+        expect(c.vues[0]).toBeCloseTo(40000 * 0.70, 6);
     });
 });
