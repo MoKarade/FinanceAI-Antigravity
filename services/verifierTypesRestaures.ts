@@ -202,6 +202,9 @@ export const CHAMPS_TEXTE: ReadonlySet<string> = new Set([
     'mimeType', 'model', 'municipality', 'name',
     'nature', 'nextDividendDate', 'notes', 'originalCategory',
     'owner', 'pattern', 'payee', 'priceHistory',
+    // Champs d'exécution du Grand Calcul (non persistés sur FinanceState, mais vus par la garde de
+    // dérivation de `store/types.ts` — même motif que `projectionStatus` juste en dessous).
+    'grandCalculError', 'grandCalculStatus',
     'projectionStatus', 'propertyId', 'purchaseDate', 'rateProvider',
     'rationale', 'region', 'role', 'salarySource',
     'savingsMode', 'schoolType', 'sector', 'setupOptOut',

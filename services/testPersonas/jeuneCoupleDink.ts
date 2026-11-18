@@ -95,8 +95,8 @@ export function buildJeuneCoupleDink(): Partial<AppState> {
         ] as unknown as AppState['travelGoals'],
         lifeEvents: [],
         financialGoals: [
-            { id: 'jc-fg1', name: 'Mise de fonds maison', target: 96000, current: 18000, accountType: 'CELIAPP', deadline: '2030-06-01' },
-        ] as unknown as AppState['financialGoals'],
+            { id: 'jc-fg1', name: 'Mise de fonds maison', type: 'CUSTOM', targetAmount: 96000, manualCurrentAmount: 18000, targetAccount: 'CELI', deadline: '2030-06-01' },
+        ],
         // [R6] DINK (sans enfant) → opt-out « enfant » (immo/dettes déjà renseignés).
         setupOptOut: { children: true },
         ...emptyCollections(),

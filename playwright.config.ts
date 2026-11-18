@@ -5,8 +5,8 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Projets : chromium (Desktop Chrome) + mobile-chrome (390×844 tactile, specs « *Mobile* » seulement).
  * Animations : reducedMotion pour stabiliser les screenshots.
- * WebServer : démarre `npm run dev` sur le port 3000 (vite.config.ts → server.port: 3000).
- * reuseExistingServer : true pour dev local (évite double-démarrage).
+ * WebServer : compile et démarre `vite preview` sur le port 3000 (élimine les transforms ESM dev par worker).
+ * reuseExistingServer : !process.env.CI pour dev local (évite double-démarrage).
  */
 export default defineConfig({
   testDir: './e2e',
@@ -75,10 +75,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run build && npx vite preview --port 3000 --strictPort',
     url: 'http://localhost:3000',
-    reuseExistingServer: true,
-    timeout: 120_000,
+    reuseExistingServer: !process.env.CI,
+    timeout: 180_000,
     stdout: 'ignore',
     stderr: 'pipe',
   },

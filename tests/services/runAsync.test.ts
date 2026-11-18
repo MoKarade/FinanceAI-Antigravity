@@ -1,6 +1,14 @@
-import { describe, it, expect } from 'vitest';
-import { reconstructWorkerError, shardContiguous, runProjectionAsync, PROJECTION_CANCELLED } from '../../services/projection/runAsync';
-import type { SimulationParams } from '../../services/projection';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import {
+    reconstructWorkerError,
+    shardContiguous,
+    runProjectionAsync,
+    runStrategySearchAsync,
+    PROJECTION_CANCELLED,
+    SEARCH_CANCELLED,
+} from '../../services/projection/runAsync';
+import * as projectionMod from '../../services/projection';
+import type { ProjectionResult, SimulationParams, StrategyConfig } from '../../services/projection';
 
 /**
  * F3 (audit 2026-05-28) — la frontière postMessage du Web Worker ne transporte pas
@@ -164,5 +172,113 @@ describe('runProjectionAsync — abort (HARDEN-SNAPSHOT-RACE)', () => {
         const b = runProjectionAsync(params, false, 0, undefined, key);
         expect(a).toBe(b);
         return a.catch(() => { /* rejet moteur attendu, absorbé */ });
+    });
+
+    it('repli synchrone si le Worker échoue avant son premier message (erreur réseau/script)', async () => {
+        const origWorker = globalThis.Worker;
+        const fakeResult: ProjectionResult = {
+            chartData: [{ monthIndex: 0, year: 2026, age: 35, NetWorth: 10_000 }] as ProjectionResult['chartData'],
+            fireNumber: 500_000,
+            allResults: [],
+        };
+        const spyCalc = vi.spyOn(projectionMod, 'calculateFutureProjection').mockReturnValueOnce(fakeResult);
+        class FailingWorker {
+            private listeners = new Map<string, Array<(e: unknown) => void>>();
+            addEventListener(type: string, fn: (e: unknown) => void) {
+                const list = this.listeners.get(type) ?? [];
+                list.push(fn);
+                this.listeners.set(type, list);
+            }
+            removeEventListener(type: string, fn: (e: unknown) => void) {
+                const list = this.listeners.get(type) ?? [];
+                this.listeners.set(type, list.filter((f) => f !== fn));
+            }
+            postMessage() {
+                queueMicrotask(() => {
+                    for (const fn of this.listeners.get('error') ?? []) {
+                        fn({ message: 'Failed to load worker script' });
+                    }
+                });
+            }
+            terminate() {}
+        }
+        globalThis.Worker = FailingWorker as unknown as typeof Worker;
+        try {
+            const validLikeParams = { projection: { years: 10 } } as unknown as SimulationParams;
+            const res = await runProjectionAsync(validLikeParams, false, 0);
+            expect(spyCalc).toHaveBeenCalledTimes(1);
+            expect(res).toEqual(fakeResult);
+        } finally {
+            globalThis.Worker = origWorker;
+            spyCalc.mockRestore();
+        }
+    });
+});
+
+describe('runStrategySearchAsync — watchdog et annulation sans fuite de timers', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+        vi.unstubAllGlobals();
+        vi.restoreAllMocks();
+    });
+
+    it('ne fuit aucun timer watchdog lorsque onProgress appelle synchroniquement controller.abort()', async () => {
+        vi.useFakeTimers();
+
+        const spawned: Array<{
+            terminated: boolean;
+            listeners: Map<string, Array<(e: unknown) => void>>;
+            emit: (type: string, e: unknown) => void;
+        }> = [];
+
+        class SearchProgressWorker {
+            terminated = false;
+            listeners = new Map<string, Array<(e: unknown) => void>>();
+            constructor() {
+                spawned.push(this);
+            }
+            addEventListener(type: string, cb: (e: unknown) => void) {
+                const list = this.listeners.get(type) ?? [];
+                list.push(cb);
+                this.listeners.set(type, list);
+            }
+            emit(type: string, e: unknown) {
+                for (const cb of this.listeners.get(type) ?? []) cb(e);
+            }
+            postMessage(msg: { __requestId: number }) {
+                queueMicrotask(() => {
+                    if (this.terminated) return;
+                    this.emit('message', {
+                        data: { __requestId: msg.__requestId, __progress: { done: 1, total: 2 } },
+                    });
+                });
+            }
+            terminate() {
+                this.terminated = true;
+            }
+        }
+
+        vi.stubGlobal('Worker', SearchProgressWorker);
+        const controller = new AbortController();
+        const configs = [{}, {}] as unknown as StrategyConfig[];
+        const params = {} as unknown as SimulationParams;
+
+        expect(SEARCH_CANCELLED).toBe('__SEARCH_CANCELLED__');
+        const promise = runStrategySearchAsync(params, configs, {
+            maxWorkers: 2,
+            signal: controller.signal,
+            onProgress: () => {
+                controller.abort();
+            },
+        });
+        const caught = promise.catch((e: unknown) => e);
+        await vi.advanceTimersByTimeAsync(0);
+        const err = await caught;
+
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toBe('__SEARCH_CANCELLED__');
+        expect(spawned).toHaveLength(2);
+        expect(spawned.every((w) => w.terminated)).toBe(true);
+        expect(vi.getTimerCount()).toBe(0);
     });
 });

@@ -33,5 +33,5 @@ export const TEST_LIFE_EVENTS: LifeEvent[] = [
 ];
 
 export const TEST_FINANCIAL_GOALS: FinancialGoal[] = [
-    { id: 'fg-1', name: 'Fond urgence 6 mois', target: 30000, current: 8500, accountType: 'CELI', deadline: '2027-12-31' } as unknown as FinancialGoal,
+    { id: 'fg-1', name: 'Fond urgence 6 mois', type: 'LIQUIDITY', targetAmount: 30000, manualCurrentAmount: 8500, targetAccount: 'CELI', deadline: '2027-12-31' },
 ];

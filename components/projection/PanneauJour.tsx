@@ -20,6 +20,7 @@
 // chose que quelqu'un cherchait (`EPURATION-SUPPRIME-LA-RESERVE`).
 import React, { useState } from 'react';
 import { Icon } from '../ui/Icon';
+import { PrivateAmount } from '../ui/PrivateAmount';
 import { SubTabs, TabPanel } from '../ui/SubTabs';
 import { useViewportBelowSm } from '../../hooks/useViewportBelowSm';
 import { PANNEAU_SECTIONS, PANNEAU_SECTION_IDS, type SectionPanneauId } from '../future/panneauSections';
@@ -163,7 +164,7 @@ export const PanneauJour: React.FC<PanneauJourProps> = (props) => {
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
                 <div className="flex items-baseline gap-2 min-w-0">
                     <span className="text-body font-extrabold text-texte tracking-tight">{data.dateLabel || 'N/A'}</span>
-                    <span className="text-tiny font-bold text-primary bg-primary/15 border border-primary/30 px-2 py-0.5 rounded-full whitespace-nowrap">Âge {data.age || '??'}</span>
+                    <span className="text-tiny font-bold text-primary bg-primary/15 border border-primary/30 px-2 py-0.5 rounded-full whitespace-nowrap">Âge <PrivateAmount>{data.age || '??'}</PrivateAmount></span>
                 </div>
                 {/* ⚠️ L'ORIGINE est écrite, pas devinée : « aujourd'hui », « aperçu » et « épinglé »
                     se ressemblent à l'écran et ne veulent pas dire la même chose. Région live : le

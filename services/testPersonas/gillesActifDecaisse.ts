@@ -88,8 +88,8 @@ export function buildGillesActifDecaisse(): Partial<AppState> {
         ] as unknown as AppState['travelGoals'],
         lifeEvents: [],
         financialGoals: [
-            { id: 'gi-fg1', name: 'Coussin santé', target: 40000, current: 25000, accountType: 'NON-ENREG', deadline: '2030-12-31' },
-        ] as unknown as AppState['financialGoals'],
+            { id: 'gi-fg1', name: 'Coussin santé', type: 'LIQUIDITY', targetAmount: 40000, manualCurrentAmount: 25000, targetAccount: 'NON-ENREG', deadline: '2030-12-31' },
+        ],
         // [R6] Aucune dette / projet immo / enfant → opt-out explicite (pas de PageSetupGate sur ces pages).
         setupOptOut: { debts: true, realEstate: true, children: true },
         ...emptyCollections(),

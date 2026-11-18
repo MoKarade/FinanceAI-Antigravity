@@ -7,6 +7,7 @@
 import { gaussianRandom, applyShock } from './helpers';
 import { canadianInflationFor, type YearReturn } from './historicalReturns';
 import type { BaseRates } from './glidepathRates';
+import { stepAndComputeRegimeRates, type MacroRegimeState } from './macroRegimes';
 
 export interface StressTestConfig {
     enabled: boolean;
@@ -26,7 +27,8 @@ interface MarketRatesResult {
 
 /**
  * Calcule les taux de marché effectifs pour le mois m.
- * En MC, applique 6 chocs gaussiens corrélés (ordre fixe = déterminisme PRNG).
+ * En MC, applique 6 chocs gaussiens corrélés (ordre fixe = déterminisme PRNG),
+ * ou délègue au modèle de régimes macroéconomiques si macroState est actif.
  * Le bootstrap historique ou replay override les taux MC si présent.
  * Le stress test ajoute un choc d'inflation supplémentaire.
  */
@@ -38,7 +40,19 @@ export function computeMonthlyMarketRates(
     historicalSequence: YearReturn[] | null,
     stressTest: Readonly<StressTestConfig> | null,
     rng: () => number,
+    macroState?: MacroRegimeState | null,
 ): MarketRatesResult {
+    if (enableMonteCarlo && macroState && !historicalSequence) {
+        const regRates = stepAndComputeRegimeRates(m, baseRates, simInflation, macroState, rng);
+        if (stressTest?.enabled) {
+            const crashStartMonth = stressTest.year * 12;
+            if (m >= crashStartMonth && m <= crashStartMonth + stressTest.recoveryMonths) {
+                return { ...regRates, currentInflation: regRates.currentInflation + stressTest.inflationShock };
+            }
+        }
+        return regRates;
+    }
+
     let mcCeliRate = baseRates.celi;
     let mcReerRate = baseRates.reer;
     let mcNonRegRate = baseRates.nonReg;
@@ -56,8 +70,12 @@ export function computeMonthlyMarketRates(
         const Z_cash = (Z_inflation_shock * 0.5 + gaussianRandom(rng, 0, 1) * 0.5);
 
         mcCeliRate = applyShock(baseRates.celi, 15, Z_stocks);
-        mcReerRate = applyShock(baseRates.reer, 15, Z_stocks);
-        mcNonRegRate = applyShock(baseRates.nonReg, 15, Z_stocks);
+        mcReerRate = baseRates.reer === baseRates.celi ? mcCeliRate : applyShock(baseRates.reer, 15, Z_stocks);
+        mcNonRegRate = baseRates.nonReg === baseRates.celi
+            ? mcCeliRate
+            : baseRates.nonReg === baseRates.reer
+                ? mcReerRate
+                : applyShock(baseRates.nonReg, 15, Z_stocks);
         mcCryptoRate = applyShock(baseRates.crypto, 45, Z_crypto);
         mcCashRate = applyShock(baseRates.cash, 2, Z_cash);
         currentInflation = applyShock(simInflation, 1.5, Z_inflation_shock);

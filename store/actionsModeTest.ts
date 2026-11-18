@@ -31,8 +31,23 @@ export const creerActionsModeTest = (
         // « sauvegarderait » les données fictives par-dessus les vraies (perte définitive).
         let realDataSnapshot = prev.realDataSnapshot;
         if (!prev.isTestMode) {
-            const { apiKeys: _ak, activeTab: _at, isPrivacyMode: _pm, lastProjection: _lp, pendingFocus: _pf, isTestMode: _tm, realDataSnapshot: _rds, activeTestPersonaId: _atp, ...persistable } = prev as FinanceState;
+            const {
+                apiKeys: _ak,
+                activeTab: _at,
+                isPrivacyMode: _pm,
+                lastProjection: _lp,
+                pendingFocus: _pf,
+                isTestMode: _tm,
+                realDataSnapshot: _rds,
+                activeTestPersonaId: _atp,
+                grandCalculResult: _gcr,
+                grandCalculStatus: _gcs,
+                grandCalculProgress: _gcp,
+                grandCalculError: _gce,
+                ...persistable
+            } = prev as FinanceState;
             void _ak; void _at; void _pm; void _lp; void _pf; void _tm; void _rds; void _atp;
+            void _gcr; void _gcs; void _gcp; void _gce;
             realDataSnapshot = persistable as Partial<Omit<AppState, 'apiKeys'>>;
         }
         return {
@@ -48,6 +63,10 @@ export const creerActionsModeTest = (
             // couvre pas : reset explicite, sinon la sig RÉELLE traîne dans l'état persona (déjà
             // capturée dans realDataSnapshot ci-dessus, restaurée à la sortie).
             revealedProjectionSig: null,
+            grandCalculResult: null,
+            grandCalculStatus: 'idle',
+            grandCalculProgress: null,
+            grandCalculError: null,
             isTestMode: true,
             realDataSnapshot,
             activeTestPersonaId: personaId ?? null,
@@ -66,7 +85,18 @@ export const creerActionsModeTest = (
             logError({ source: 'storage', severity: 'warning', message: 'disableTestMode : mode test actif sans realDataSnapshot — vraies données non restaurables, retour à un état vide.' });
             // [PROJECTION-PERSIST] reset explicite (hors AppState) : une sig issue d'un persona
             // ne doit pas survivre en mode réel dans ce chemin dégradé.
-            return { ...prev, ...personaResetBase(), revealedProjectionSig: null, isTestMode: false, realDataSnapshot: null, activeTestPersonaId: null };
+            return {
+                ...prev,
+                ...personaResetBase(),
+                revealedProjectionSig: null,
+                grandCalculResult: null,
+                grandCalculStatus: 'idle',
+                grandCalculProgress: null,
+                grandCalculError: null,
+                isTestMode: false,
+                realDataSnapshot: null,
+                activeTestPersonaId: null,
+            };
         }
         // [PERSONA-PURGE] Le snapshot des « vraies » données peut lui-même être pollué
         // (pris à une époque où des artefacts de persona avaient déjà fui) → on le
@@ -95,6 +125,10 @@ export const creerActionsModeTest = (
             ...cleanSnap,
             ...singularResets,
             aiChatCostUsdTotal: snapTotal + demoSpendUsd,
+            grandCalculResult: null,
+            grandCalculStatus: 'idle',
+            grandCalculProgress: null,
+            grandCalculError: null,
             isTestMode: false,
             realDataSnapshot: null,
             activeTestPersonaId: null,

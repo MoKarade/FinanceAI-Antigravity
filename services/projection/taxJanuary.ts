@@ -76,6 +76,8 @@ export interface JanuaryContext {
     taxCurrentYearGains: number;        // pour FERR margRate proxy
     prevPortfolioNW: number;
     loopYear: number;
+    /** Saute la génération de messages texte (mode MC allégé). */
+    skipLogs?: boolean;
 }
 
 export interface JanuaryHelpers {
@@ -302,18 +304,20 @@ function retraitFerrObligatoire(ctx: JanuaryContext, helpers: JanuaryHelpers): {
         // [FISC-BRACKET-REALINDEX], comme taxDecember) — sinon revenu réel contre paliers nominaux
         // de loopYear = retenue FERR sous-évaluée. Avant le lot 136, la cohérence de ce site était
         // ACCIDENTELLE (marginal figé aux paliers 2026 = l'espace du revenu déflaté).
-        const rrifMarginalRate = helpers.calculateFiscalReport(deflatedIncomeForMargRate, 0, 0, ctx.loopYear, false, ageOptsFerr, undefined, inflFactorAtNow).marginalRate;
+        const rrifMarginalRate = helpers.calculateFiscalReport(deflatedIncomeForMargRate, 0, 0, ctx.loopYear, true, ageOptsFerr, undefined, inflFactorAtNow).marginalRate;
 
         // M-1 (2026-06) : `calculateFiscalReport(...).marginalRate` est un DÉCIMAL (~0,30–0,53),
         // pas un pourcentage. L'ancien `/ 100` rendait la retenue FERR ~100× trop faible. La retenue
         // n'impacte pas le patrimoine final (réconcilié en décembre via taxCurrentYear.reer), mais
         // l'affichage de la retenue mensuelle / WithheldTaxRrif / ImpotRetraitREER était faux.
         ferrTaxOnRrif = ferrMandatoryGross * rrifMarginalRate;
-        const netRrif = ferrMandatoryGross - ferrTaxOnRrif;
-        // ⚠️ `decimals: 2` : l'ancien code écrivait `.toFixed(2)$`. Passer au défaut (0 décimale)
-        // aurait CHANGÉ la sortie de ce journal — la migration route le formatage vers la source
-        // unique, elle ne décide pas à sa place de la précision affichée.
-        ferrLogMsg = `🏦 FERR (per-conjoint): Brut ${formatCAD(ferrMandatoryGross, { decimals: 2 })} → Net ${formatCAD(netRrif, { decimals: 2 })} → Liquidités`;
+        if (!ctx.skipLogs) {
+            const netRrif = ferrMandatoryGross - ferrTaxOnRrif;
+            // ⚠️ `decimals: 2` : l'ancien code écrivait `.toFixed(2)$`. Passer au défaut (0 décimale)
+            // aurait CHANGÉ la sortie de ce journal — la migration route le formatage vers la source
+            // unique, elle ne décide pas à sa place de la précision affichée.
+            ferrLogMsg = `🏦 FERR (per-conjoint): Brut ${formatCAD(ferrMandatoryGross, { decimals: 2 })} → Net ${formatCAD(netRrif, { decimals: 2 })} → Liquidités`;
+        }
     }
     return { ferrMandatoryGross, ferrGrossByUser, ferrTaxOnRrif, ferrLogMsg };
 }
@@ -344,7 +348,7 @@ function facteurGuytonKlinger(ctx: JanuaryContext, logs: string[]): {
         const rawDrop = (ctx.prevPortfolioNW - currentPortfolio) / ctx.prevPortfolioNW;
         const drop = ctx.prevPortfolioNW > 0 && Number.isFinite(rawDrop) ? Math.max(0, rawDrop) : 0;
         guytonKlingerIndexationFactor = Math.max(0, Math.min(1, (GK_SMOOTH_CEIL_DROP - drop) / GK_SMOOTH_BAND_WIDTH));
-        if (guytonKlingerIndexationFactor < 1) {
+        if (!ctx.skipLogs && guytonKlingerIndexationFactor < 1) {
             logs.push(`❄️ Guyton-Klinger: indexation des dépenses réduite à ${Math.round(guytonKlingerIndexationFactor * 100)} % (portefeuille −${(drop * 100).toFixed(1)} %)`);
         }
         newPrevPortfolioNW = currentPortfolio;

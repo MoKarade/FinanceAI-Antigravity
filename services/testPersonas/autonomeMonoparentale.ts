@@ -84,8 +84,8 @@ export function buildAutonomeMonoparentale(): Partial<AppState> {
         ] as unknown as AppState['travelGoals'],
         lifeEvents: [],
         financialGoals: [
-            { id: 'na-fg1', name: 'REER autonome 100 k$', target: 100000, current: 28000, accountType: 'REER', deadline: '2040-12-31' },
-        ] as unknown as AppState['financialGoals'],
+            { id: 'na-fg1', name: 'REER autonome 100 k$', type: 'REER', targetAmount: 100000, manualCurrentAmount: 28000, targetAccount: 'REER', deadline: '2040-12-31' },
+        ],
         // [R6] Monoparentale locataire : enfant activé (ci-dessus), pas de projet immo → opt-out « realEstate ».
         setupOptOut: { realEstate: true },
         ...emptyCollections(),

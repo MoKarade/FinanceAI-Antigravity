@@ -1,7 +1,7 @@
 // services/projection.ts — moteur de projection financière (migré depuis utils/useFutureSimulation.ts)
 import { formatCAD } from '../utils/format';
 import { calculateFiscalReport, getMarginalRate, calculateDividendTax, getDividendGrossUpRate, calculateGrossWithholdingRRSP, getResidencyStartYear, CAPITAL_GAINS_INCLUSION_STANDARD, FHSA_ANNUAL_LIMIT_PER_USER, FHSA_LIFETIME_LIMIT_PER_USER, PSV_ELIGIBILITY_AGE, PSV_RESIDENCY_START_AGE, PENSION_SPLIT_MIN_AGE, RRQ_STANDARD_START_AGE } from '../utils/tax';
-import { RRIF_RATES, welcomeTax } from './projection/helpers';
+import { RRIF_RATES, round2, welcomeTax } from './projection/helpers';
 import { salaryShares, splitByShares, stepReerByUser, addByWeights } from './projection/perUserBalances';
 import { logError, logErrorThrottled } from './errorLogger';
 import { runMonteCarlo, effectiveMcIterations, effectiveDeepMcIterations, type MonteCarloResult } from './projection/monteCarlo';
@@ -25,7 +25,7 @@ import { processAprilSettlement } from './projection/taxApril';
 import { computeOasClawback, computeAnnualNonRegDividends, processTaxLossHarvesting, processGainHarvesting, processDecemberTaxFiling } from './projection/taxDecember';
 import { processJanuaryReset } from './projection/taxJanuary';
 import { phaseDette, estLePremierMoisApresLeTerme } from './projection/debtSchedule';
-import { initRentalStates, processRentalMonth, rentalInterestParImmeuble } from './projection/rentalMonth';
+import { initRentalStates, processRentalMonth, rentalInterestParImmeuble, computeCcaRecapture, type RentalState } from './projection/rentalMonth';
 import { processAutoVehicleReplacement } from './projection/vehicleCycle';
 import { buildHistoricalSequence, buildReplaySequence, type YearReturn } from './projection/historicalReturns';
 import { computeRetirementIncome, computeDbPensionMonthly, RRQ_DEFERRED_START_AGE } from './projection/retirementIncome';
@@ -40,8 +40,9 @@ import { SCHL_AMORT_MAX_INSURED_STANDARD } from './realEstate';
 import { applyTravelExpenses, applyLifeEvents, computeStressTest, applyFinancialGoalDeadlines, computeIncomeLossFactor, computePerteEmploiLossPct } from './projection/monthlyEvents';
 import { computeLatentTax } from './projection/latentTax';
 import { computeGlidepathRates } from './projection/glidepathRates';
+import type { RealEstateGoal, Debt, PrivateBusiness, RentalProperty, ChildGoal } from '../types';
 import { processCashflowAllocation, type CashflowState } from './projection/cashflowAllocation';
-import { processRealEstate, type RealEstateState } from './projection/realEstateMonth';
+import { processRealEstate, type RealEstateState, type PropertyStateMutable } from './projection/realEstateMonth';
 import { buildMonthlyDataPoint, estPointAllege } from './projection/monthlyOutput';
 import { FIRE_TARGET_MULTIPLE } from './projection/modelAssumptions';
 import { computeRawNetWorth } from './projection/netWorth';
@@ -51,10 +52,47 @@ import { buildSeededRng, computeHistoricalContributionRoom, computeRrqAdjustment
 import { handleNonRegSale as portfolioNonRegSale, handleCryptoSale as portfolioCryptoSale, applyCapitalDisposition } from './projection/portfolioOps';
 import { computeEstateNetWorth } from './projection/estateCalculation';
 import { computeMonthlyMarketRates, type StressTestConfig } from './projection/marketShocks';
+import { createMacroRegimeState, type MacroRegimeRunConfig } from './projection/macroRegimes';
+import {
+    runGrandCalculShardWithRunner,
+    mergeGrandCalculShards,
+    clampGrandCalculIterations,
+    computeRetirementRealReturnFactor,
+    computeSustainableMonthlyNetReal,
+    GRAND_CALCUL_ITERATIONS_MIN,
+    GRAND_CALCUL_ITERATIONS_MAX,
+    GRAND_CALCUL_ITERATIONS_DEFAULT,
+    type MergeGrandCalculMeta,
+} from './projection/grandCalcul';
 import { computeEffectiveExpenseInflation } from './projection/monthlyCalcs';
 import { computeProjectedExpenses, createDefaultBehavioralProfile, type BehavioralProfile } from './projection/behavioralProfile';
-import { type AllocationStrategy, type FutureScenarioType, type ProjectionResult, type SimulationParams } from './projection/types';
-export type { AllocationStrategy, FutureScenarioType, ProjectionChartPoint, ProjectionResult, LiveCSVBalances, SimulationParams } from './projection/types';
+import {
+    type AllocationStrategy,
+    type FutureScenarioType,
+    type ProjectionChartPoint,
+    type ProjectionResult,
+    type SimulationParams,
+    type GrandCalculConfig,
+    type GrandCalculShardResult,
+} from './projection/types';
+export type {
+    AllocationStrategy,
+    FutureScenarioType,
+    ProjectionChartPoint,
+    ProjectionResult,
+    LiveCSVBalances,
+    SimulationParams,
+    MacroRegimeId,
+    GrandCalculConfig,
+    FiAgeDistribution,
+    GoalProbabilityResult,
+    GuaranteedPurchasingPower,
+    EstateTaxSummary,
+    CompactMonthlyQuantileShard,
+    GrandCalculMonthlyBand,
+    GrandCalculShardResult,
+    GrandCalculResult,
+} from './projection/types';
 export type { StrategySearchResult, ConfigResult, ShapleyAttributionItem, TournamentSearchOptions } from './projection/strategySearch';
 export type { StrategyConfig } from './projection/strategyConfig';
 export {
@@ -79,36 +117,87 @@ export {
  * porte des LEVIERS de stratégie explorés par la recherche (`strategySpace`). Un drapeau de
  * diagnostic glissé là-dedans serait balayé comme s'il changeait le plan financier.
  */
-interface ScenarioDiagnostics {
-    /**
-     * Émettre le point mensuel COMPLET même sous Monte-Carlo. **Tests uniquement.**
-     * Sous MC, `buildMonthlyDataPoint` ne rend normalement que `{ NetWorth, monthIndex }` (perf).
-     * Or le divorce, la mortalité du conjoint, le LTC et la perte d'emploi n'existent QUE sous MC :
-     * leurs flux mensuels étaient donc INVÉRIFIABLES. Trois lots ont dû se rabattre sur des
-     * agrégats ou des tests de fonction pure faute de pouvoir les observer.
-     */
-    verboseMonthlyPoints?: boolean;
+type EnginePropertyState = PropertyStateMutable & { cost: number; isPrimaryResidence: boolean };
+
+interface PreparedScenarioSetup {
+    effProj: SimulationParams['projection'];
+    effectiveBehavioralProfile: BehavioralProfile;
+    startLiquid: number;
+    startCeli: number;
+    startCeliapp: number;
+    startReer: number;
+    startNonReg: number;
+    startCrypto: number;
+    startReee: number;
+    activeRE: RealEstateGoal[];
+    activeChild: ChildGoal[];
+    activeRentals: RentalProperty[];
+    baseRentalStates: RentalState[];
+    baseRentalTaxBases: Array<{ purchaseCost: number; priorCcaTaken: number }>;
+    privateBusinessValue: number;
+    baseBusinessStates: PrivateBusiness[];
+    rentalNames: string[];
+    basePropertiesState: EnginePropertyState[];
+    bootRealEstateEquity: number;
+    bootMortgageBalance: number;
+    bootPrimaryHousingOffset: number;
+    baseActiveDebts: Debt[];
+    totalHistoricalCeliRoom: number;
+    totalHistoricalRrspRoom: number;
+    activeUsersCount: number;
+    smileLifestyleFactor: (age: number) => number;
+    fhsaEligibleUsersCount: number;
+    fhsaRoomInitial: number;
+    celiappOpeningYear: number;
+    fhsaLifetimeContrib: number;
+    hasPurchasedPrimaryInitial: boolean;
+    hasFuturePurchase: boolean;
+    psvResidencyYearsBase: [number, number];
+    simInflation: number;
+    baseRates: { celi: number; reer: number; nonReg: number; crypto: number; cash: number };
+    incomeMarcNetMonthly: number;
+    incomeAnnaNetMonthly: number;
+    grossMarcBaseAnnual: number;
+    grossAnnaBaseAnnual: number;
+    reerSharesInitial: number[];
+    reerByUserInitial: number[];
+    simSalaryGrowth: number;
+    simEFMonths: number;
+    stressTestConfig: StressTestConfig | null;
+    totalMonths: number;
+    loopDates: Date[];
+    loopYears: Int32Array;
+    loopMonths: Int32Array;
+    loopIsoMonths: string[];
+    hasW5Collections: boolean;
+    hasAgeBasedExpenses: boolean;
+    hasTravelGoals: boolean;
+    hasLifeEvents: boolean;
+    hasFinancialGoals: boolean;
+    goalMonthMask: Uint8Array;
+    travelMonthMask: Uint8Array;
+    lifeEventMonthMask: Uint8Array;
+    getMonthOffset: (dateStr: string | undefined | null) => number;
 }
 
-const runScenario = (params: SimulationParams, strategy: AllocationStrategy, enableMonteCarlo = false, delayPensions = false, mcIterationIndex = 0, scenarioType: FutureScenarioType = 'BASE', overrides: EngineOverrides = {}, diagnostics: ScenarioDiagnostics = {}) => {
-    const { projection, calculatedStartingCash, liveCSVBalances, realEstateGoals, debts, childGoals, travelGoals, lifeEvents, retirementGoal, config, baseGrossAnnual, baseNetAnnual, currentRentExpense, baseMonthlyExpenses, startYear, startMonth = 0, insurancePolicies = [], vehicleReplacements = [], majorRenovations = [], charitableGoals = [], rentalProperties = [], privateBusinesses = [], financialGoals = [], behavioralProfile } = params;
-    
-    // Cycle 22 split: RNG seedé déterministique → ./projection/setupSimulation
-    const rng = buildSeededRng(scenarioType, strategy, mcIterationIndex);
+const EMPTY_CHART_DATA: ProjectionChartPoint[] = [];
+const EMPTY_STRING_LOGS: string[] = [];
+const EMPTY_EVENT_DAYS: Record<string, number> = {};
 
-    // Sprint 2 PH5 — Parse ISO directement (format YYYY-MM-DD) sans allouer
-    // un objet Date. Appelé en boucle hot (chaque propriété immo × chaque mois
-    // × chaque itération MC = jusqu'à 100 × 360 × N allocations Date évitées).
-    // Gain : -5 à -15ms par scénario MC, élimine pression GC dans la boucle.
-    // Defensive : retourne 0 si dateStr est null/undefined/vide (au lieu de crash
-    // `.slice` sur undefined — vu en mode test avec fixture sans purchaseDate).
+function prepareScenarioSetup(params: SimulationParams, scenarioType: FutureScenarioType): PreparedScenarioSetup {
+    const {
+        projection, calculatedStartingCash, liveCSVBalances, realEstateGoals, debts,
+        childGoals, travelGoals, lifeEvents, config, baseGrossAnnual, baseMonthlyExpenses,
+        startYear, startMonth = 0, insurancePolicies = [], vehicleReplacements = [],
+        majorRenovations = [], charitableGoals = [], rentalProperties = [],
+        privateBusinesses = [], financialGoals = [], behavioralProfile,
+    } = params;
+
     const getMonthOffset = (dateStr: string | undefined | null): number => {
         if (!dateStr || typeof dateStr !== 'string' || dateStr.length < 7) return 0;
         const year = parseInt(dateStr.slice(0, 4), 10);
         const month = parseInt(dateStr.slice(5, 7), 10) - 1;
         if (isNaN(year) || isNaN(month)) {
-            // [Panel #552, silent-failure] une date corrompue (offset 0 silencieux) rend un bien
-            // DÉTENU indiscernable d'un achat « ce mois-ci » — tracer, jamais avaler.
             logErrorThrottled(`monthOffset-invalide:${dateStr}`, {
                 source: 'projection', severity: 'warning',
                 message: 'Date illisible dans la simulation — offset 0 appliqué',
@@ -119,14 +208,10 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         return (year - startYear) * 12 + (month - startMonth);
     };
 
-    // Phase 4 #4: COMPOUND_STRESS force ltcEnabled (la facette "soins LD"
-    // du cumul stress). Les autres paramètres (inflation, rates) sont
-    // déjà overridés par computeScenarioOverrides.
     const effProj = scenarioType === 'COMPOUND_STRESS'
         ? { ...projection, ltcEnabled: true }
         : projection;
 
-    // Jalon 2 / F12 : initialisation du profil comportemental effectif
     const effectiveBehavioralProfile: BehavioralProfile = behavioralProfile
         ? { ...behavioralProfile }
         : createDefaultBehavioralProfile(baseMonthlyExpenses);
@@ -149,21 +234,14 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         effectiveBehavioralProfile.lifestyleCreepAnnual = effProjExtended.customLifestyleCreep;
     }
 
-    const data = [];
+    const startLiquid = Number(effProj.useManualBalances ? (effProj.manualCash ?? calculatedStartingCash) : calculatedStartingCash) || 0;
+    const startCeli = Number(effProj.useManualBalances ? (effProj.manualCELI ?? liveCSVBalances.CELI) : liveCSVBalances.CELI) || 0;
+    const startCeliapp = Number(liveCSVBalances.CELIAPP) || 0;
+    const startReer = Number(effProj.useManualBalances ? (effProj.manualREER ?? liveCSVBalances.REER) : liveCSVBalances.REER) || 0;
+    const startNonReg = Number(effProj.useManualBalances ? (effProj.manualNonReg ?? liveCSVBalances.NON_ENREG) : liveCSVBalances.NON_ENREG) || 0;
+    const startCrypto = Number(effProj.useManualBalances ? (effProj.manualCrypto ?? liveCSVBalances.CRYPTO) : liveCSVBalances.CRYPTO) || 0;
+    const startReee = Number(liveCSVBalances.REEE) || 0;
 
-    let liquid = Number(effProj.useManualBalances ? (effProj.manualCash ?? calculatedStartingCash) : calculatedStartingCash) || 0;
-    let celi = Number(effProj.useManualBalances ? (effProj.manualCELI ?? liveCSVBalances.CELI) : liveCSVBalances.CELI) || 0;
-    let celiapp = Number(liveCSVBalances.CELIAPP) || 0;
-    let reer = Number(effProj.useManualBalances ? (effProj.manualREER ?? liveCSVBalances.REER) : liveCSVBalances.REER) || 0;
-    let nonReg = Number(effProj.useManualBalances ? (effProj.manualNonReg ?? liveCSVBalances.NON_ENREG) : liveCSVBalances.NON_ENREG) || 0;
-    let crypto = Number(effProj.useManualBalances ? (effProj.manualCrypto ?? liveCSVBalances.CRYPTO) : liveCSVBalances.CRYPTO) || 0;
-    let reee = Number(liveCSVBalances.REEE) || 0;
-
-    // Sanitisation à la frontière (panel #552, même patron que activeDebts plus bas) : un champ
-    // immo vidé dans l'UI (`parseFloat('')` = NaN) empoisonnait `goal.mortgageRate / 100` → PMT
-    // NaN → 968 valeurs non finies mesurées dans chartData, rabattues en « 0 $ crédible » par la
-    // garde de computeRawNetWorth. Normalisé + JOURNALISÉ (jamais avalé). NB : `activeRE` ne
-    // filtre PAS isActive (seulement les entrées nullish) — le gate isActive vit dans le moteur.
     const activeRE = (realEstateGoals || []).filter(g => !!g).map(g => {
         const price = Number.isFinite(g.price) ? g.price : 0;
         const downPayment = Number.isFinite(g.downPayment) ? g.downPayment : 0;
@@ -183,59 +261,23 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
     });
     const activeChild = (childGoals || []).filter(g => !!g);
 
-    let realEstateEquity = 0;
-    let mortgageBalance = 0;
-    // [ENG-W5-RENTAL-OFFBALANCE] État des immeubles locatifs (W5.6). Jusqu'ici leur valeur, leur
-    // hypothèque et le service de celle-ci n'existaient NULLE PART dans le moteur — seul le NOI
-    // affluait au revenu (`w5Effects`). Mesuré : 300 k$ d'équité + 500 k$ de prêt introuvables.
-    const rentalStates = initRentalStates(rentalProperties);
-    /**
-     * [ENG-W5-BUSINESS-OFFBALANCE] Valeur des entreprises privées détenues (W5.7), au prorata de la
-     * part. Jusqu'au 2026-08-19, seul `annualDividend` circulait : la valeur elle-même n'entrait ni
-     * au patrimoine mensuel ni à la succession — **2 M$ mesurés absents du NW**.
-     *
-     * ⚠️ On compte `estimatedValue × ownershipPct` et **PAS** `retainedEarnings` : une valeur juste
-     * marchande EMBARQUE déjà les bénéfices non répartis (l'encaisse de la société en fait partie).
-     * Les additionner double-compterait de 400 k$ dans le persona de référence. Si `estimatedValue`
-     * devait un jour s'entendre HORS encaisse, ce serait une décision à écrire dans
-     * `docs/adr/`, pas un `+` discret ici.
-     *
-     * ⚠️ Valeur CONSTANTE sur tout l'horizon : aucune croissance n'est modélisée. Faire croître une
-     * entreprise privée à un taux inventé serait de la donnée fabriquée — le manque est nommé au
-     * BACKLOG plutôt que comblé au jugé.
-     */
-    // [ENG-W5-BUSINESS-NON-PUBLIE] (lot 214) La règle vit dans `privateBusinessValue.ts` — le passé
-    // l'applique aussi, et deux copies divergeraient en silence.
-    // ⚠️ [ENG-W5-BUSINESS-DIVORCE-NON-PARTAGE] `let`, pas `const` : DÉCISION MARC 2026-09-14 — au
-    // divorce, l'entreprise privée se partage COMME LE RESTE du patrimoine familial (même `keep`
-    // que `realEstateEquity` trois lignes plus bas dans la boucle), avec l'hypothèse « société
-    // d'acquêts par défaut » — le modèle ne distingue nulle part ailleurs les biens propres des
-    // biens communs (immobilier, REER, CELI…), donc traiter l'entreprise autrement aurait été la
-    // seule exception. Mesuré AVANT le correctif : entreprise à 900 000 $, partage à 75 % →
-    // patrimoine post-divorce surestimé de 900 000 $ pile (elle restait à 100 % pendant que tout le
-    // reste tombait à 25 %).
-    let privateBusinessValue = computePrivateBusinessValue(privateBusinesses);
-    // [ENG-W5-BUSINESS-DIVORCE-NON-PARTAGE] Copie MUTABLE, même patron que `rentalStates` deux lignes
-    // plus bas : `privateBusinesses` (le paramètre brut) alimente AUSSI le dividende mensuel dans
-    // `applyW5Effects` (`biz.ownershipPct`), un second registre du MÊME fait que `privateBusinessValue`
-    // (`PARTAGER-LE-MONTANT-PAS-SES-REFLETS`) — sans cette copie, le partage réduirait la VALEUR
-    // d'entreprise au bilan (ci-dessus) en laissant le ménage restant toucher et se faire imposer
-    // 100 % du dividende annuel indéfiniment. `businessStates` est ce que `applyW5Effects` consomme
-    // désormais (jamais `privateBusinesses` brut) ; son `ownershipPct` suit `*= keep` dans le callback
-    // de partage, exactement comme `rentalStates` suit `currentValue`/`mortgage`/`monthlyPayment`.
-    let businessStates = privateBusinesses.map(b => ({ ...b }));
-    const rentalNames = (rentalProperties ?? []).map(rp => rp?.name || 'immeuble locatif');
+    const activeRentals = (rentalProperties ?? []).filter(Boolean);
+    const baseRentalStates = initRentalStates(activeRentals);
+    const baseRentalTaxBases = activeRentals.map(rp => {
+        const val = Math.max(0, Number.isFinite(Number(rp?.currentValue)) ? Number(rp.currentValue) : 0);
+        const pp = Number.isFinite(Number(rp?.purchasePrice)) ? Number(rp.purchasePrice) : 0;
+        const cca = Number.isFinite(Number(rp?.ccaTaken)) ? Number(rp.ccaTaken) : 0;
+        return {
+            purchaseCost: pp > 0 ? pp : val,
+            priorCcaTaken: Math.max(0, cca),
+        };
+    });
+    const privateBusinessValue = computePrivateBusinessValue(privateBusinesses);
+    const baseBusinessStates = privateBusinesses.map(b => ({ ...b }));
+    const rentalNames = activeRentals.map(rp => rp?.name || 'immeuble locatif');
 
-    let propertiesState = activeRE.map(g => {
-        // [ENG-PAST-PURCHASE] (décision Marc 2026-07-31) Un bien acheté dans le PASSÉ démarre
-        // DÉJÀ DÉTENU : équité présente dès le mois 0, hypothèque restante amortie, AUCUN débit
-        // de mise de fonds du cash d'aujourd'hui. Avant : re-achat au m0 si le cash suffisait
-        // (mise de fonds dépensée DEUX fois) ou « Achat reporté » à l'infini sinon (le Futur
-        // perdait la maison — mesuré Immobilier = 0 sur tout l'horizon).
+    const basePropertiesState: EnginePropertyState[] = activeRE.map(g => {
         const purchaseOffset = getMonthOffset(g.purchaseDate);
-        // [ENG-PAST-OWNED-VS-PLANNED] (A6) : une date passée n'implique plus l'achat — seul
-        // `isOwned !== false` initialise le passé (false = objectif planifié non réalisé → RIEN ;
-        // undefined = legacy, comportement historique conservé, l'UI pose la question).
         const past = g.isActive && purchaseOffset < 0 && g.isOwned !== false ? initPastPurchase(g, -purchaseOffset) : null;
         return {
             id: g.id || 'anon',
@@ -245,47 +287,24 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             calculatedPmt: past ? past.calculatedPmt : 0,
             isPaidOff: past ? past.isPaidOff : false,
             isSold: false,
-            // RE-GAIN — coût d'achat (ACB approx) + nature RP/locatif, pour imposer le gain en capital
-            // à la disposition d'un immeuble locatif (vente via LifeEvent ou disposition réputée au décès).
             cost: g.price || 0,
             isPrimaryResidence: g.isPrimaryResidence ?? false,
         };
     });
-    // [Panel #552, ÉLEVÉ projection-validator] SEMER l'équité/dette immo des biens DÉJÀ détenus
-    // AVANT les graines prevNW/minNetWorth (plus bas) : sans ça, le bien passé existe au m0 mais
-    // pas dans la graine → diffNW[0] portait un « flux fantôme » de toute l'équité (mesuré
-    // +156 629 $) et minNetWorth démarrait SOUS le vrai plancher de 158 731 $ → biais pessimiste
-    // dans safetyScore (Monte-Carlo), goalSeek et strategyRanking pour tout propriétaire.
-    for (const p of propertiesState) {
+    let bootRealEstateEquity = 0;
+    let bootMortgageBalance = 0;
+    for (const p of basePropertiesState) {
         if (p.isBought) {
-            realEstateEquity += p.currentValue - p.mortgage;
-            mortgageBalance += p.mortgage;
+            bootRealEstateEquity += p.currentValue - p.mortgage;
+            bootMortgageBalance += p.mortgage;
         }
     }
-    // [Panel #552, ÉLEVÉ financial-integrity] Pour une RP déjà détenue au boot, la substitution
-    // « loyer retiré ↔ PMT ajouté » doit être NULLE au départ : le budget de base d'un propriétaire
-    // contient DÉJÀ son versement hypothécaire réel. L'offset = PMT reconstruit + charges (constant,
-    // comme les ajouts du moteur), au lieu du proxy loyer (défaut 1 600 $ → sur-charge mesurée
-    // jusqu'à 20 084 $/an quand aucune ligne « logement » n'existe au budget).
-    const bootPrimaryHousingOffset = propertiesState.reduce((s, p, i) =>
+    const bootPrimaryHousingOffset = basePropertiesState.reduce((s, p, i) =>
         s + (p.isBought && p.isPrimaryResidence
             ? p.calculatedPmt + (activeRE[i]?.unrecoverableMonthly || 0)
             : 0), 0);
 
-    // Sanitisation à la frontière : un champ vidé dans l'UI (`parseFloat('')` = NaN, DebtManager)
-    // contaminerait sinon `d.balance` (NaN persistant via l'amortissement) → `rawNetWorth` = NaN →
-    // patrimoine net cassé SILENCIEUSEMENT (graphe vide). On normalise à 0 et on JOURNALISE
-    // l'anomalie (jamais avalée). [silent-failure-hunter, money-critical 2026-06-16]
-    //
-    // ⚠️ DEVENUE INATTEIGNABLE POUR LE CAS `NaN` depuis `[ENG-INFINITY-NON-GARDE-A-LA-FRONTIERE]`
-    // (lot 38) : `verifierEntreesMoteur` scanne les paramètres assemblés — `debts` compris — et
-    // REFUSE la projection avant qu'on arrive ici. Les deux politiques sont contradictoires
-    // (normaliser à 0 vs refuser en nommant le champ) et c'est la seconde qui a été retenue par
-    // Marc : un « 0 $ » crédible est pire qu'un refus honnête. Le code reste en ceinture pour un
-    // appelant qui n'aurait pas traversé la frontière (tests, scripts de mesure), mais il ne compte
-    // PLUS comme protection dans un inventaire — une garde morte s'annote, sinon elle se fait
-    // recompter (`UNE-GARDE-QUI-NE-PEUT-PAS-TIRER-N-EST-PAS-UNE-PROTECTION`).
-    let activeDebts = (debts || []).filter(d => !!d).map(d => {
+    const baseActiveDebts = (debts || []).filter(d => !!d).map(d => {
         const balance = Number.isFinite(d.balance) ? d.balance : 0;
         const interestRate = Number.isFinite(d.interestRate) ? d.interestRate : 0;
         const minimumPayment = Number.isFinite(d.minimumPayment) ? d.minimumPayment : 0;
@@ -298,20 +317,260 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         }
         return { ...d, balance, interestRate, minimumPayment };
     });
+
+    const { totalHistoricalCeliRoom, totalHistoricalRrspRoom, activeUsersCount } =
+        computeHistoricalContributionRoom(config.users, baseGrossAnnual, startYear);
+    const smileLifestyleFactor = makeSmileLifestyleFactor(effProj.useSmileCurve);
+
+    let fhsaEligibleUsersCount = config.users.filter(u => u && !u.hasOwnedPropertyLast4Years).length;
+    if (startCeliapp > 0 && fhsaEligibleUsersCount === 0) fhsaEligibleUsersCount = 1;
+    const celiappOpeningYear = startCeliapp > 0 ? (startYear - 1) : startYear;
+    const fhsaRoomInitial = startYear === celiappOpeningYear
+        ? FHSA_ANNUAL_LIMIT_PER_USER * fhsaEligibleUsersCount
+        : 0;
+    const fhsaLifetimeContrib = Math.min(startCeliapp, FHSA_LIFETIME_LIMIT_PER_USER * fhsaEligibleUsersCount);
+
+    const hasPurchasedPrimaryInitial = basePropertiesState.some(p => p.isBought && p.isPrimaryResidence);
+    const hasFuturePurchase = realEstateGoals.some(g => g.isActive && g.isPrimaryResidence);
+
+    const psvResidencyYearsBase: [number, number] = [0, 0];
+    config.users.filter(u => u).forEach((u, idx) => {
+        const birthYear = u.birthYear || (startYear - (u.age || 30));
+        const residencyStart = getResidencyStartYear(birthYear, u.isImmigrant, u.canadaArrivalYear);
+        psvResidencyYearsBase[idx] = Math.max(0, startYear - Math.max(residencyStart, birthYear + PSV_RESIDENCY_START_AGE));
+    });
+
+    const { simInflation, baseRates } = computeScenarioOverrides(
+        projection as unknown as { inflationRate?: number; returnRates?: { celi: number; reer: number; nonReg: number; crypto: number; cash: number } } & Record<string, unknown>,
+        scenarioType,
+    );
+
+    const { incomeMarcNetMonthly, incomeAnnaNetMonthly, grossMarcBaseAnnual, grossAnnaBaseAnnual } =
+        computeIncomeBaseline(config.users, startYear);
+
+    const reerSharesInitial = salaryShares(
+        activeUsersCount > 1 ? [grossMarcBaseAnnual, grossAnnaBaseAnnual] : [grossMarcBaseAnnual + grossAnnaBaseAnnual],
+    );
+    const reerByUserInitial = splitByShares(startReer, reerSharesInitial);
+    const simSalaryGrowth = effProj.salaryGrowth ?? 2.5;
+    const simEFMonths = effProj.emergencyFundMonths || 3;
+
+    const stressTestConfig: StressTestConfig | null = effProj.stressTestEnabled ? {
+        enabled: true,
+        year: effProj.stressTestYear || 5,
+        recoveryMonths: effProj.stressTestRecoveryMonths || 24,
+        inflationShock: effProj.stressTestInflationShock || 0,
+    } : null;
+
+    const totalMonths = projection.years * 12 + 1;
+    const loopDates: Date[] = new Array(totalMonths);
+    const loopYears = new Int32Array(totalMonths);
+    const loopMonths = new Int32Array(totalMonths);
+    const loopIsoMonths: string[] = new Array(totalMonths);
+    for (let i = 0; i < totalMonths; i++) {
+        const dt = new Date(startYear, startMonth + i, 1);
+        loopDates[i] = dt;
+        const y = dt.getFullYear();
+        const mo = dt.getMonth();
+        loopYears[i] = y;
+        loopMonths[i] = mo;
+        loopIsoMonths[i] = `${y}-${String(mo + 1).padStart(2, '0')}`;
+    }
+
+    const goalMonthMask = new Uint8Array(totalMonths);
+    if (financialGoals.length > 0) {
+        for (let i = 0; i < totalMonths; i++) {
+            const iso = loopIsoMonths[i];
+            for (let gi = 0; gi < financialGoals.length; gi++) {
+                const g = financialGoals[gi];
+                if (!g || g.status === 'archived' || g.completed) continue;
+                const d = typeof g.deadline === 'string' ? g.deadline.trim() : '';
+                if (d && d.startsWith(iso)) {
+                    goalMonthMask[i] = 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    const travelMonthMask = new Uint8Array(totalMonths);
+    if (travelGoals.length > 0) {
+        for (let i = 0; i < totalMonths; i++) {
+            const iso = loopIsoMonths[i];
+            for (let ti = 0; ti < travelGoals.length; ti++) {
+                const t = travelGoals[ti];
+                if (t?.date && typeof t.date === 'string' && t.date.startsWith(iso)) {
+                    travelMonthMask[i] = 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    const lifeEventMonthMask = new Uint8Array(totalMonths);
+    if (lifeEvents.length > 0) {
+        for (let i = 0; i < totalMonths; i++) {
+            const iso = loopIsoMonths[i];
+            for (let li = 0; li < lifeEvents.length; li++) {
+                const e = lifeEvents[li];
+                if (e?.date && typeof e.date === 'string' && e.date.startsWith(iso)) {
+                    lifeEventMonthMask[i] = 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    const hasW5Collections = insurancePolicies.length > 0
+        || vehicleReplacements.length > 0
+        || majorRenovations.length > 0
+        || charitableGoals.length > 0
+        || activeRentals.length > 0
+        || privateBusinesses.length > 0;
+
+    const hasAgeBasedExpenses = Boolean(
+        (effProj.boomerangSupportMonthly || 0) > 0
+        || (effProj.caregivingMonthly || 0) > 0
+        || effProj.snowbirdEnabled,
+    );
+
+    return {
+        effProj,
+        effectiveBehavioralProfile,
+        startLiquid,
+        startCeli,
+        startCeliapp,
+        startReer,
+        startNonReg,
+        startCrypto,
+        startReee,
+        activeRE,
+        activeChild,
+        activeRentals,
+        baseRentalStates,
+        baseRentalTaxBases,
+        privateBusinessValue,
+        baseBusinessStates,
+        rentalNames,
+        basePropertiesState,
+        bootRealEstateEquity,
+        bootMortgageBalance,
+        bootPrimaryHousingOffset,
+        baseActiveDebts,
+        totalHistoricalCeliRoom,
+        totalHistoricalRrspRoom,
+        activeUsersCount,
+        smileLifestyleFactor,
+        fhsaEligibleUsersCount,
+        fhsaRoomInitial,
+        celiappOpeningYear,
+        fhsaLifetimeContrib,
+        hasPurchasedPrimaryInitial,
+        hasFuturePurchase,
+        psvResidencyYearsBase,
+        simInflation,
+        baseRates,
+        incomeMarcNetMonthly,
+        incomeAnnaNetMonthly,
+        grossMarcBaseAnnual,
+        grossAnnaBaseAnnual,
+        reerSharesInitial,
+        reerByUserInitial,
+        simSalaryGrowth,
+        simEFMonths,
+        stressTestConfig,
+        totalMonths,
+        loopDates,
+        loopYears,
+        loopMonths,
+        loopIsoMonths,
+        hasW5Collections,
+        hasAgeBasedExpenses,
+        hasTravelGoals: travelGoals.length > 0,
+        hasLifeEvents: lifeEvents.length > 0,
+        hasFinancialGoals: financialGoals.length > 0,
+        goalMonthMask,
+        travelMonthMask,
+        lifeEventMonthMask,
+        getMonthOffset,
+    };
+}
+
+interface ScenarioDiagnostics {
+    /**
+     * Émettre le point mensuel COMPLET même sous Monte-Carlo. **Tests uniquement.**
+     * Sous MC, `buildMonthlyDataPoint` ne rend normalement que `{ NetWorth, monthIndex }` (perf).
+     * Or le divorce, la mortalité du conjoint, le LTC et la perte d'emploi n'existent QUE sous MC :
+     * leurs flux mensuels étaient donc INVÉRIFIABLES. Trois lots ont dû se rabattre sur des
+     * agrégats ou des tests de fonction pure faute de pouvoir les observer.
+     */
+    verboseMonthlyPoints?: boolean;
+    /** Configuration optionnelle des régimes macroéconomiques et crises historiques (Grand Calcul R1). */
+    macroRegimes?: MacroRegimeRunConfig;
+    /** Setup précalculé (hissé hors de la boucle MC dans runGrandCalculShard / runMonteCarlo). */
+    preparedSetup?: PreparedScenarioSetup;
+    /** Tampon préalloué pour NetWorth mensuel en mode pointAllege (zéro allocation d'objet par mois). */
+    netWorthBuffer?: Float64Array;
+}
+
+const runScenario = (params: SimulationParams, strategy: AllocationStrategy, enableMonteCarlo = false, delayPensions = false, mcIterationIndex = 0, scenarioType: FutureScenarioType = 'BASE', overrides: EngineOverrides = {}, diagnostics: ScenarioDiagnostics = {}) => {
+    const { projection, calculatedStartingCash, liveCSVBalances, travelGoals, lifeEvents, retirementGoal, config, baseGrossAnnual, baseNetAnnual, currentRentExpense, startYear, startMonth = 0, insurancePolicies = [], vehicleReplacements = [], majorRenovations = [], charitableGoals = [], financialGoals = [] } = params;
+    const setup = diagnostics.preparedSetup ?? prepareScenarioSetup(params, scenarioType);
+    const pointAllege = estPointAllege(enableMonteCarlo, diagnostics.verboseMonthlyPoints);
+    const netWorthBuf = pointAllege ? diagnostics.netWorthBuffer : undefined;
+    let netWorthBufLen = 0;
+
+    // Cycle 22 split: RNG seedé déterministique → ./projection/setupSimulation
+    const rng = buildSeededRng(scenarioType, strategy, mcIterationIndex);
+    const macroState = diagnostics.macroRegimes
+        ? createMacroRegimeState(diagnostics.macroRegimes, scenarioType, strategy, mcIterationIndex)
+        : null;
+
+    const getMonthOffset = setup.getMonthOffset;
+    const effProj = setup.effProj;
+    const effectiveBehavioralProfile = setup.effectiveBehavioralProfile;
+
+    const data: ProjectionChartPoint[] = [];
+
+    let liquid = setup.startLiquid;
+    let celi = setup.startCeli;
+    let celiapp = setup.startCeliapp;
+    let reer = setup.startReer;
+    let nonReg = setup.startNonReg;
+    let crypto = setup.startCrypto;
+    let reee = setup.startReee;
+
+    const activeRE = setup.activeRE;
+    const activeChild = setup.activeChild;
+    const activeRentals = setup.activeRentals;
+    const rentalStates = setup.baseRentalStates.length > 0
+        ? setup.baseRentalStates.map(rs => ({ ...rs }))
+        : [];
+    const rentalTaxBases = setup.baseRentalTaxBases.length > 0
+        ? setup.baseRentalTaxBases.map(tb => ({ ...tb }))
+        : [];
+    let privateBusinessValue = setup.privateBusinessValue;
+    let businessStates = setup.baseBusinessStates.length > 0
+        ? setup.baseBusinessStates.map(b => ({ ...b }))
+        : [];
+    const rentalNames = setup.rentalNames;
+
+    let propertiesState = setup.basePropertiesState.length > 0
+        ? setup.basePropertiesState.map(p => ({ ...p }))
+        : [];
+    let realEstateEquity = setup.bootRealEstateEquity;
+    let mortgageBalance = setup.bootMortgageBalance;
+    const bootPrimaryHousingOffset = setup.bootPrimaryHousingOffset;
+
+    let activeDebts = setup.baseActiveDebts.length > 0
+        ? setup.baseActiveDebts.map(d => ({ ...d }))
+        : [];
     let hasHitFire = false;
 
     const user1 = config.users[0];
     const currentAge = user1?.age || 30;
-    // D2.3: suppression de `new Date().getFullYear()` (rendait la simulation
-    // non déterministe — résultat dépendait de l'horloge système).
-    // La variable n'était de toute façon jamais utilisée.
-
-    // Cycle 22 split: droits CELI/REER historiques → ./projection/setupSimulation
-    const { totalHistoricalCeliRoom, totalHistoricalRrspRoom, activeUsersCount } =
-        computeHistoricalContributionRoom(config.users, baseGrossAnnual, startYear);
-
-    // Cycle 22 split: Smile Curve factor → ./projection/setupSimulation
-    const smileLifestyleFactor = makeSmileLifestyleFactor(effProj.useSmileCurve);
+    const { totalHistoricalCeliRoom, totalHistoricalRrspRoom, activeUsersCount } = setup;
+    const smileLifestyleFactor = setup.smileLifestyleFactor;
 
     let useManualBalances = effProj.useManualBalances ?? false;
     let manualCELIRoom = effProj.manualCELIRoom ?? 0;
@@ -320,87 +579,41 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
     let celiRoom = useManualBalances ? manualCELIRoom : Math.max(0, totalHistoricalCeliRoom - celi);
     let rrspRoom = useManualBalances ? manualRRSPRoom : Math.max(0, totalHistoricalRrspRoom - reer);
 
-    let fhsaEligibleUsersCount = config.users.filter(u => u && !u.hasOwnedPropertyLast4Years).length;
-    if (celiapp > 0 && fhsaEligibleUsersCount === 0) fhsaEligibleUsersCount = 1;
-    
-    let fhsaRoom = 0;
-    const celiappOpeningYear = celiapp > 0 ? (startYear - 1) : startYear;
-    if (startYear === celiappOpeningYear) { 
-        fhsaRoom = FHSA_ANNUAL_LIMIT_PER_USER * fhsaEligibleUsersCount;
-    }
-
+    let fhsaEligibleUsersCount = setup.fhsaEligibleUsersCount;
+    let fhsaRoom = setup.fhsaRoomInitial;
+    const celiappOpeningYear = setup.celiappOpeningYear;
     let fhsaClosingYear: number | null = -1;
-    let fhsaLifetimeContrib = Math.min(celiapp, FHSA_LIFETIME_LIMIT_PER_USER * fhsaEligibleUsersCount);
+    let fhsaLifetimeContrib = setup.fhsaLifetimeContrib;
     let accFhsaYear = 0;
-    
-    // [ENG-PAST-PURCHASE] Une résidence principale DÉJÀ détenue au boot (achat passé) → le loyer
-    // n'est pas facturé dès le mois 0. (`isBought` exige déjà `isActive` en amont — pas de garde
-    // redondante ici, finding panel #552.)
-    let hasPurchasedPrimary = propertiesState.some(p => p.isBought && p.isPrimaryResidence);
-    const hasFuturePurchase = realEstateGoals.some(g => g.isActive && g.isPrimaryResidence);
+
+    let hasPurchasedPrimary = setup.hasPurchasedPrimaryInitial;
+    const hasFuturePurchase = setup.hasFuturePurchase;
     let hasLoggedRetirement = false;
 
-    let psvResidencyYears = [0, 0];
-    config.users.filter(u => u).forEach((u, idx) => {
-        const birthYear = u.birthYear || (startYear - (u.age || 30));
-        const residencyStart = getResidencyStartYear(birthYear, u.isImmigrant, u.canadaArrivalYear);
-        psvResidencyYears[idx] = Math.max(0, startYear - Math.max(residencyStart, birthYear + PSV_RESIDENCY_START_AGE));
-    });
-
-    // Cycle 22 split: scenario overrides (inflation + rates) → ./projection/setupSimulation
-    const { simInflation, baseRates } = computeScenarioOverrides(projection as unknown as { inflationRate?: number; returnRates?: { celi: number; reer: number; nonReg: number; crypto: number; cash: number } } & Record<string, unknown>, scenarioType);
+    const psvResidencyYears: [number, number] = [setup.psvResidencyYearsBase[0], setup.psvResidencyYearsBase[1]];
+    const { simInflation, baseRates } = setup;
 
     let overrideRetirementAge = retirementGoal.targetAge || 65;
     if (scenarioType === 'LIBERTE_55') overrideRetirementAge = 55;
-    // C1-fix (audit 2026-06) : « reporter les rentes » (delayPensions) ne force PLUS
-    // l'âge d'arrêt de travail. delayPensions ne pilote QUE le début RRQ/PSV, et il les
-    // met à des âges DIFFÉRENTS — RRQ 72, PSV 70 (`RRQ_DEFERRED_START_AGE` /
-    // `PSV_DEFERRED_START_AGE`, cf retirementIncome). ⚠️ Ce commentaire disait « à 70 »
-    // pour les deux jusqu'à `[ENG-LIBELLE-RRQ-70-VS-72]` : faux pour la RRQ depuis que le
-    // report a été étendu à 72. L'âge de retraite reste celui choisi → permet le cas clé
-    // « arrêter à 60, vivre du REER/CELI, reporter les rentes » (le moteur ponte le
-    // revenu via le décaissement des comptes entre l'arrêt et le début des rentes).
     const effectiveRetirementAge = overrideRetirementAge;
     const retirementMonthIndex = (effectiveRetirementAge - currentAge) * 12;
 
-    // PH4-FUT-B-3 — levier « taux d'épargne » : multiplie l'épargne mensuelle (net − dépenses) par
-    // `appliedSavingsMultiplier` et RÉDUIT les dépenses d'autant (conservation du revenu net : épargner
-    // plus = dépenser moins, le surplus est investi par la cascade). Appliqué seulement en mode RÉEL et
-    // sur une épargne POSITIVE (en déficit, « épargner plus » est mal défini → aucun effet). Défaut
-    // absent/1 → dépenses inchangées (non-régression). baseNetAnnual et baseMonthlyExpenses ⊂ params.
     const savingsMult = projection.appliedSavingsMultiplier ?? 1;
-    const realMonthlySavings = baseNetAnnual / 12 - baseMonthlyExpenses;
+    const realMonthlySavings = baseNetAnnual / 12 - params.baseMonthlyExpenses;
     const adjustedRealExpenses = (savingsMult !== 1 && realMonthlySavings > 0)
         ? Math.max(0, baseNetAnnual / 12 - realMonthlySavings * savingsMult)
-        : baseMonthlyExpenses;
-    // [SANDBOX-CURSEURS-THEORIQUES-RETRAIT] `useTheoretical`/`theoreticalExpenses` NEUTRALISÉS : leur
-    // interface est retirée, un dossier persisté à `true` ne doit plus projeter des dépenses inventées.
+        : params.baseMonthlyExpenses;
     const effectiveBaseExpenses = adjustedRealExpenses;
     const fireTargetAnnual = effectiveBaseExpenses * 12;
-    // Règle des 4 % (Trinity Study, 1998) — justification et source unique du multiple :
-    // `services/projection/modelAssumptions.ts`.
     const fireTargetNetWorth = fireTargetAnnual * FIRE_TARGET_MULTIPLE;
 
-    // FIX cycle 2 TS reviewer: type explicite pour éviter inférence `null` (cascade strict)
     let month1ActionPlan: { monthlyCashflow: number; strategy: AllocationStrategy } | null = null;
-    // [FISC-RRSP-ROOM-PER-USER] Revenu gagné de l'année PAR personne (règle ARC : les droits REER
-    // se calculent PAR PERSONNE, jamais sur l'agrégat ménage). SOURCE UNIQUE : l'ancien scalaire
-    // ménage accGrossIncomeYear a été SUPPRIMÉ (plus aucun lecteur) — un total se dérive par somme,
-    // il ne se co-tient pas (PARTAGER-LE-MONTANT-PAS-SES-REFLETS).
     let accGrossIncomeYearByUser: [number, number] = [0, 0];
-    // [RRSP-FIRST-YEAR-13M] Tampon d'UN mois entre la production du revenu gagné et son versement
-    // à l'accumulateur annuel, pour que le versement ait lieu APRÈS le reset de janvier.
-    // ⚠️ Il est VIDÉ à chaque mois : entre deux itérations il vaut toujours [0, 0], donc aucun
-    // instantané Monte Carlo n'a besoin de le porter (contrairement à l'accumulateur lui-même).
     let grossIncomeEnAttenteByUser: [number, number] = [0, 0];
     let accRrspYear = 0;
 
-    // donCredit [FA-6-CREDIT-CAP] = crédit-don accumulé (positif) ; plafonné à l'impôt dû puis appliqué
-    // à `divers` en décembre (un crédit non remboursable ne peut pas générer de remboursement net).
     let taxCurrentYear = { revenu: 0, gains: 0, reer: 0, divers: 0, donCredit: 0 };
     let taxPreviousYear = { revenu: 0, gains: 0, reer: 0, divers: 0, donCredit: 0 };
-    // [ENG-TTP-UNSETTLED-HORIZON] Dette fiscale RÉCONCILIÉE (par le dernier décembre) pas encore
-    // réglée par un avril — photographiée à la réconciliation, remise à 0 au règlement.
     let reconciledUnsettledTax = 0;
 
     let accRetraitsReerYear = 0;
@@ -409,7 +622,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
     let rapRepaymentDueTotal = 0;
     let rapRepaymentStartOffset = 0;
     let hasUsedRap = false;
-    let celiWithdrawalsThisYear = 0; 
+    let celiWithdrawalsThisYear = 0;
 
     let oasClawbackNextPeriod = 0;
     let monthlyOasReduction = 0;
@@ -419,24 +632,14 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
     let capitalLossBank = 0;
     let accCapitalGainsYear = 0;
     let prevPortfolioNW = 0;
-    let guytonKlinger_indexationFactor = 1; // [ENG-GK-THRESHOLD-KNIFE] 1 = indexation pleine, 0 = gel total (lissé)
+    let guytonKlinger_indexationFactor = 1;
     let expenseMultiplier = 1;
 
-    // V65: Advanced Metrics Tracking
     let totalTaxesPaid = 0;
     let totalGrowth = 0;
     let totalExpenses = 0;
-    // minNetWorth : initialisé plus bas via la SOURCE UNIQUE (computeRawNetWorth), une fois la
-    // closure currentRawNetWorth définie — sinon une copie locale incomplète (sans dettes) ferait
-    // démarrer le min surévalué pour un persona endetté. [fix MEDIUM review 2026-06-16]
     let shortfallMonths = 0;
-    // [PV-6] Passif d'INSOLVABILITÉ : résiduel d'un découvert NON couvert par la cascade de sauvetage
-    // (comptes épuisés / cap OAS). Avant, il était absorbé par `liquid = 0` (CF-2) → patrimoine
-    // surévalué dans les scénarios DÉJÀ en ruine. On le porte désormais comme dette cumulée, soustraite
-    // du patrimoine net (mensuel + succession). Pas d'intérêt (conservateur ; scénario déjà ruiné).
     let liquidDebt = 0;
-    // [PV-11a] — shortfalls d'OBJECTIF (drawn < visé aux deadlines de goals) : métrique structurée
-    // (≠ shortfallMonths qui compte les mois de déficit de CASHFLOW — sémantique différente).
     let goalShortfallCount = 0;
     let goalShortfallTotal = 0;
 
@@ -450,55 +653,16 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         remainingIqee: number;
     }> = {};
 
+    const { incomeMarcNetMonthly, incomeAnnaNetMonthly, grossMarcBaseAnnual, grossAnnaBaseAnnual } = setup;
 
-    // Cycle 22 split: revenus net/brut baseline → ./projection/setupSimulation
-    const { incomeMarcNetMonthly, incomeAnnaNetMonthly, grossMarcBaseAnnual, grossAnnaBaseAnnual } =
-        computeIncomeBaseline(config.users, startYear);
-
-    // Registre REER PAR CONJOINT maintenu EN PARALLÈLE du solde commun (qui reste la vérité). Clé de
-    // répartition = part salariale (proxy d'historique de cotisation ; `rrspContributed` prévu — ITEM-2C
-    // sous-phase suivante). Invariant Σ(reerByUser) == reer garanti par stepReerByUser.
-    // [ITEM-2C] Depuis le fix FERR per-conjoint, ce registre PILOTE la fiscalité : chaque conjoint de 72+
-    // convertit SA part au facteur RRIF de SON âge (taxJanuary). Au décès, la part du défunt roule vers le
-    // survivant (cf bloc survivorMode). Plus un shadow.
-    // ⚠️ [panel #613 — ÉLEVÉ-2] `let`, PAS `const`. Ces parts pilotent l'attribution des COTISATIONS
-    // dans `stepReerByUser` : tant qu'elles restent celles du couple, le slot du conjoint parti se
-    // REPEUPLE dès la première cotisation, et la consolidation `reerByUser = [reer, 0]` faite au
-    // divorce ne tient qu'UN MOIS. Mesuré : 342 658 $ réattribués à l'ex, et 16 janviers de FERR
-    // OBLIGATOIRE sur ce slot fantôme (257 627 $ de retraits bruts imposés au ménage) — parce que
-    // `taxJanuary` convertit `reerByUser[1]` au facteur RRIF de l'ÂGE de `config.users[1]`, un
-    // contribuable qui n'est plus dans le ménage. C'est la régression FISC-SURVIVOR-DRAWDOWN, que
-    // le bloc décès avait corrigée pour lui-même sans corriger les PARTS (défaut latent identique).
-    let reerShares = salaryShares(
-        activeUsersCount > 1 ? [grossMarcBaseAnnual, grossAnnaBaseAnnual] : [grossMarcBaseAnnual + grossAnnaBaseAnnual],
-    );
-    let reerByUser = splitByShares(reer, reerShares);
-    // Phase 2 : retraits REER de l'ANNÉE attribués par conjoint (au prorata des soldes au moment du
-    // retrait). Invariant Σ == accRetraitsReerYear. Consommé par taxDecember (impôt par conjoint sur
-    // les vrais retraits, au lieu du split 50/50). Reset chaque janvier comme l'accumulateur commun.
+    let reerShares = setup.reerSharesInitial.slice();
+    let reerByUser = setup.reerByUserInitial.slice();
     let accRetraitsReerYearByUser: number[] = reerShares.map(() => 0);
-    // [FISC-LATENT-PENSION-CREDIT] (lot 200) Retraits FERR OBLIGATOIRES de l'ANNÉE par conjoint, en
-    // dollars NOMINAUX — la grandeur annualisée que l'impôt latent attendait. Elle est connue dès le
-    // 1er janvier (`taxJanuary` la calcule pour l'année entière : solde × facteur RRIF de l'âge) et
-    // reste CONSTANTE jusqu'au janvier suivant, donc l'impôt latent d'un mois ne dépend plus du mois
-    // calendaire de lancement — l'objection qui laissait cette moitié absente (`accRetraitsReerYear`
-    // est un cumul année-à-date). Zéro tant qu'aucun conjoint n'a atteint l'âge FERR.
     let ferrAnnualByUser: number[] = reerShares.map(() => 0);
 
-    const simSalaryGrowth = effProj.salaryGrowth ?? 2.5;
-    const simEFMonths = effProj.emergencyFundMonths || 3;
-
-    // Cycle 27 split: stressTest config construit une fois (évite re-création par itération)
-    const stressTestConfig: StressTestConfig | null = effProj.stressTestEnabled ? {
-        enabled: true,
-        year: effProj.stressTestYear || 5,
-        recoveryMonths: effProj.stressTestRecoveryMonths || 24,
-        inflationShock: effProj.stressTestInflationShock || 0,
-    } : null;
-
-    // Cycle 22 split: la baseline RRQ (facteur d'ajustement + pension de base) est
-    // recalculée dans les sous-modules de retraite. Seul psvBasePension (PSV) est
-    // consommé directement ici.
+    const simSalaryGrowth = setup.simSalaryGrowth;
+    const simEFMonths = setup.simEFMonths;
+    const stressTestConfig = setup.stressTestConfig;
     const { psvBasePension } = computeRrqAdjustment(delayPensions, retirementGoal);
 
     // D2.2: RRIF_RATES et welcomeTax → ./projection/helpers
@@ -635,25 +799,26 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
     let inheritanceReceived = false;
     let ciTriggered = false;                     // FIX agent: empêche re-déclenchement maladie grave
 
-    // §7.A.3 — Pré-calcule les Date des 360+ mois en une passe.
-    // Avant : 2 allocations Date + 1 setMonth par itération mois × 100 itér MC ×
-    // 7 scénarios = 504k allocations par calculateFutureProjection().
-    // Après : N allocations par runScenario (N = years*12+1), réutilisées.
-    const totalMonths = projection.years * 12 + 1;
-    const loopDates: Date[] = new Array(totalMonths);
-    for (let i = 0; i < totalMonths; i++) {
-        loopDates[i] = new Date(startYear, startMonth + i, 1);
-    }
+    const totalMonths = setup.totalMonths;
+    const loopDates = setup.loopDates;
+    const loopYears = setup.loopYears;
+    const loopMonths = setup.loopMonths;
+    const loopIsoMonths = setup.loopIsoMonths;
 
-    for (let m = 0; m <= projection.years * 12; m++) {
+    let elapsedYearsAtEnd = projection.years;
+    let cumulativeCpiMultiplier = 1;
+    let firstFireAge: number | null = null;
+    let firstFireMonthIndex: number | null = null;
+    const goalOutcomes: Record<string, { met: boolean; shortfallReal: number; shortfallNominal: number }> = {};
+    let retirementMonthsEvaluated = 0;
+    let retFundedRealSum = 0;
+    let retAnnuityFvFactor = 0;
+
+    for (let m = 0; m < totalMonths; m++) {
         moisCourantPourDettes = m;   // [DETTE-DATES] cf. `sumActiveDebts` — closure sur ce compteur
         const currentLoopDate = loopDates[m];
-        // Mois CALENDAIRE réel (0=jan … 11=déc), PAS le mois-dans-la-projection.
-        // Indispensable quand la projection démarre ≠ janvier : les déclencheurs
-        // annuels (reset janvier, règlement d'impôt d'avril, year-end décembre)
-        // doivent tomber aux vrais mois civils. No-op quand startMonth=0 (=== m%12).
-        const currentMonthIndex = currentLoopDate.getMonth();
-        const loopYear = currentLoopDate.getFullYear();
+        const currentMonthIndex = loopMonths[m];
+        const loopYear = loopYears[m];
 
 
         const age = currentAge + Math.floor(m / 12);
@@ -681,12 +846,19 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             survivorTriggerLogged = false;
         }
 
-        if (isDead) break;
+        if (isDead) {
+            elapsedYearsAtEnd = m / 12;
+            break;
+        }
 
         // --- 1. GROWTH & MARKET SHOCKS ---
         // Cycle 27 split: chocs de marché + bootstrap historique + stress test inflation → ./projection/marketShocks
         const { mcCeliRate, mcReerRate, mcNonRegRate, mcCryptoRate, mcCashRate, currentInflation } =
-            computeMonthlyMarketRates(m, enableMonteCarlo, baseRates, simInflation, historicalSequence, stressTestConfig, rng);
+            computeMonthlyMarketRates(m, enableMonteCarlo, baseRates, simInflation, historicalSequence, stressTestConfig, rng, macroState);
+
+        if (m > 0) {
+            cumulativeCpiMultiplier *= Math.pow(Math.max(1e-6, 1 + currentInflation / 100), 1 / 12);
+        }
 
         // Cycle 29 split: inflation effective des dépenses → ./projection/monthlyCalcs
         const effectiveExpenseInflation = computeEffectiveExpenseInflation(age, isRetired, currentInflation, effProj);
@@ -705,6 +877,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
 
         let monthlyIncome = 0;
         let monthlyExpenses = 0;
+        let uncoveredThisMonth = 0;
         let incomeMarc = 0;
         let incomeAnna = 0;
         incomeRetirement = 0;
@@ -729,66 +902,48 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         let immoInterest = 0;
         let immoPrincipal = 0;
 
-        let lifeEventsLog: string[] = [];
+        let lifeEventsLog: string[] = pointAllege ? EMPTY_STRING_LOGS : [];
         // [Panel #552, ÉLEVÉ financial-integrity] Rendre VISIBLE l'hypothèse « bien passé =
         // détenu » : un objectif d'achat à date passée jamais réalisé serait sinon promu bien
         // détenu EN SILENCE (équité + dette fantômes). Le vrai discriminant (champ isOwned) est
         // au BACKLOG [ENG-PAST-OWNED-VS-PLANNED] — décision UX Marc requise.
-        if (m === 0) {
+        if (!pointAllege && m === 0) {
             propertiesState.forEach((p, i) => {
                 if (p.isBought) {
                     lifeEventsLog.push(`🏠 ${activeRE[i]?.name || 'Propriété'} : supposée DÉTENUE depuis ${activeRE[i]?.purchaseDate || '?'} (équité de départ ${formatCAD(Math.round(p.currentValue - p.mortgage))})`);
                 }
             });
         }
-        let flowEventsLog: string[] = [];
-        // FIX silent-failure: les événements stochastiques de vie (divorce, LTC,
-        // LTD, CI, héritage, perte emploi, décès conjoint, mortalité) ne se
-        // déclenchent QUE quand enableMonteCarlo. Si on gate ici par !MC, on
-        // perd tous les logs d'événements. lifeEventsLog est cappé à 50 entrées.
-        // [FUTUR-DAILY-EVENTS] Jour du mois (1-based) des événements qui en ONT un (événement saisi
-        // avec date complète, échéance fiscale). Clé = le message lui-même (jointure exacte côté
-        // affichage). Un événement sans jour connu n'y figure pas — l'affichage le pose au mois.
-        const eventDaysLog: Record<string, number> = {};
-        const ambiguousEventDays = new Set<string>();
+        let flowEventsLog: string[] = pointAllege ? EMPTY_STRING_LOGS : [];
+        const eventDaysLog: Record<string, number> = pointAllege ? EMPTY_EVENT_DAYS : {};
+        const ambiguousEventDays: Set<string> | null = pointAllege ? null : new Set<string>();
         const logEvent = (arr: string[], msg: string, day?: number) => {
-            if (arr.length >= 50) return;
-            // ⚠️ Collision de MESSAGES identiques le même mois (finding ÉLEVÉ revue #594, élargi au
-            // mix daté/non-daté par le validator) : deux homonymes ne peuvent pas partager une
-            // entrée — écraser poserait les deux sur le jour du dernier, et une occurrence SANS
-            // jour hériterait du jour de l'autre (fausse précision dans les deux sens). No-fake :
-            // toute ambiguïté RETIRE l'entrée et la verrouille, tous s'affichent au mois.
+            if (pointAllege || arr.length >= 50) return;
             const seenBefore = arr.includes(msg);
             arr.push(msg);
             const hasDay = Number.isFinite(day) && (day as number) >= 1 && (day as number) <= 31;
             if (!hasDay) {
                 if (msg in eventDaysLog) delete eventDaysLog[msg];
-                if (seenBefore) ambiguousEventDays.add(msg);
+                if (seenBefore) ambiguousEventDays!.add(msg);
                 return;
             }
             const rounded = Math.round(day as number);
             if (seenBefore && (!(msg in eventDaysLog) || eventDaysLog[msg] !== rounded)) {
                 delete eventDaysLog[msg];
-                ambiguousEventDays.add(msg);
+                ambiguousEventDays!.add(msg);
                 return;
             }
-            if (!ambiguousEventDays.has(msg)) eventDaysLog[msg] = rounded;
+            if (!ambiguousEventDays!.has(msg)) eventDaysLog[msg] = rounded;
         };
 
         // W1.4: log différé du décès conjoint (déclenché plus haut avant l'init de logEvent)
         if (survivorMode && !survivorTriggerLogged) {
-            const spouseAge = (config.users[1]?.age || 30) + Math.floor(m / 12);
-            logEvent(lifeEventsLog, `🖤 Décès du conjoint à ${spouseAge} ans — bascule en mode survivant`);
-            // [ITEM-2C] Roulement REER conjugal AU DÉCÈS (sans impôt, règle ARC) : la part REER du défunt
-            // rejoint le SURVIVANT (user0) → `reerByUser = [Σ, 0]`. Sans cela, la part du défunt (registre
-            // [1]) continuerait de FERR-convertir au gate per-conjoint comme un « contribuable mort » à 72+
-            // = flux fiscal fantôme imposé au survivant (régression FISC-SURVIVOR-DRAWDOWN). Cohérent avec le
-            // modèle « tout le revenu de retraite est celui du survivant » (1 contribuable).
+            if (!pointAllege) {
+                const spouseAge = (config.users[1]?.age || 30) + Math.floor(m / 12);
+                logEvent(lifeEventsLog, `🖤 Décès du conjoint à ${spouseAge} ans — bascule en mode survivant`);
+            }
             const mergedReer = reerByUser.reduce((s, v) => s + (Number.isFinite(v) ? v : 0), 0);
             reerByUser = reerByUser.map((_, i) => (i === 0 ? mergedReer : 0));
-            // [panel #613 — ÉLEVÉ-2] Les PARTS aussi : le défaut était identique ici, simplement
-            // moins visible (un défunt ne cotise plus, mais le SURVIVANT si — et sa cotisation était
-            // répartie vers le slot du mort, qui repartait en FERR obligatoire à son âge).
             reerShares = reerShares.map((_, i) => (i === 0 ? 1 : 0));
             survivorTriggerLogged = true;
         }
@@ -797,8 +952,10 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         if (scenarioType === 'WINDFALL' && m === 60) {
             const windfallAmount = 250000;
             liquid += windfallAmount;
-            logEvent(lifeEventsLog, `🎁 Héritage Inattendu: +${formatCAD(windfallAmount)}`);
-            logEvent(flowEventsLog, `💰 WINDFALL: Injection de surplus.`);
+            if (!pointAllege) {
+                logEvent(lifeEventsLog, `🎁 Héritage Inattendu: +${formatCAD(windfallAmount)}`);
+                logEvent(flowEventsLog, `💰 WINDFALL: Injection de surplus.`);
+            }
         }
 
         // Phase 4 #4 — Héritage tardif: même montant mais 20 ans plus tard.
@@ -806,16 +963,16 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         if (scenarioType === 'LATE_INHERITANCE' && m === 240) {
             const lateAmount = 250000;
             liquid += lateAmount;
-            logEvent(lifeEventsLog, `⏳ Héritage Tardif (an 20): +${formatCAD(lateAmount)}`);
-            logEvent(flowEventsLog, `💰 LATE_INHERITANCE: enfin libéré.`);
+            if (!pointAllege) {
+                logEvent(lifeEventsLog, `⏳ Héritage Tardif (an 20): +${formatCAD(lateAmount)}`);
+                logEvent(flowEventsLog, `💰 LATE_INHERITANCE: enfin libéré.`);
+            }
         }
 
         // Phase 2: Restitution du CELI en JANVIER (Mois 0)
         if (currentMonthIndex === 0 && m > 0) {
             celiRoom += celiWithdrawalsThisYear; // +0 si aucun retrait → celiRoom inchangé (zéro effet $)
-            // [FUTUR-ICONS-RICH] Ne journaliser la régénération QUE s'il y a eu un vrai retrait à restituer :
-            // sinon ~30-40 flowEvents « régénération de 0 $ » polluent les icônes du graphe (finding code-reviewer).
-            if (celiWithdrawalsThisYear > 0) flowEventsLog.push(`🔄 CELI: Régénération de l'espace de cotisation`);
+            if (!pointAllege && celiWithdrawalsThisYear > 0) flowEventsLog.push(`🔄 CELI: Régénération de l'espace de cotisation`);
             celiWithdrawalsThisYear = 0;
         }
         let fluxImpots = 0;
@@ -954,6 +1111,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
                 currentValue: p.currentValue * keep,
                 mortgage: p.mortgage * keep,
                 calculatedPmt: p.calculatedPmt * keep,
+                cost: Number.isFinite(p.cost) ? p.cost * keep : 0,
             } : p));
             // [ENG-W5-RENTAL-OFFBALANCE] Les IMMEUBLES LOCATIFS se partagent comme le reste du
             // patrimoine familial. Oubliés ici, ils survivaient INTACTS au divorce pendant que tous
@@ -970,10 +1128,18 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             // ponctionnerait un cashflow que le divorcé n'a plus. La divergence est VOLONTAIRE et
             // assumée ; l'asymétrie du chemin des buts est un défaut préexistant, tracé au BACKLOG
             // (`[ENG-DIVORCE-PMT-NON-PARTAGEE]`) plutôt que corrigé ici — il re-baserait des goldens.
-            for (const rs of rentalStates) {
+            for (let ri = 0; ri < rentalStates.length; ri++) {
+                const rs = rentalStates[ri];
                 rs.currentValue *= keep;
                 rs.mortgage *= keep;
                 rs.monthlyPayment *= keep;
+                rs.ucc *= keep;
+                rs.initialCost *= keep;
+                rs.totalCcaClaimed *= keep;
+                if (rentalTaxBases[ri]) {
+                    rentalTaxBases[ri].purchaseCost *= keep;
+                    rentalTaxBases[ri].priorCcaTaken *= keep;
+                }
             }
             // [ENG-DIVORCE-DEBT-ASYMMETRY] Les dettes NON immobilières se partagent au MÊME taux que
             // les actifs — DÉCISION MARC 2026-08-13 (esprit du patrimoine familial québécois : on
@@ -1034,15 +1200,9 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             divorced = true;
         }
         if (divorced && !divorceLogged) {
-            // [panel #613 — FAIBLE-12] Libellé neutre en SIGNE : « -X% patrimoine » était faux pour
-            // un ménage à valeur nette négative, où le partage des dettes lui REND X % de son
-            // déficit. On décrit le geste (un partage), pas sa direction.
-            // ⚠️ [ENG-DIVORCE-SPLITPCT-UNBOUNDED, revue Vercel] Le libellé DOIT passer par le même
-            // `clampSplitPct` que le calcul. Avec la valeur brute, une saisie hors bornes (150) ou
-            // non finie annonçait « partage de 150 % » pendant que le moteur en appliquait 100 —
-            // et le clamp AGGRAVAIT le mensonge : avant lui, le libellé et le calcul étaient faux
-            // ENSEMBLE, donc cohérents. C'est le motif « règle dupliquée corrigée à moitié ».
-            logEvent(lifeEventsLog, `💔 Divorce — partage de ${clampSplitPct(effProj.divorceSplitPct ?? DIVORCE_SPLIT_PCT_DEFAULT)}% du patrimoine NET (actifs et dettes)`);
+            if (!pointAllege) {
+                logEvent(lifeEventsLog, `💔 Divorce — partage de ${clampSplitPct(effProj.divorceSplitPct ?? DIVORCE_SPLIT_PCT_DEFAULT)}% du patrimoine NET (actifs et dettes)`);
+            }
             divorceLogged = true;
         }
 
@@ -1084,7 +1244,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         // ---- PHASE RETRAITE ----
         if (isRetired) {
             if (!hasLoggedRetirement) {
-                lifeEventsLog.push('📍 Début Retraite');
+                if (!pointAllege) lifeEventsLog.push('📍 Début Retraite');
                 hasLoggedRetirement = true;
             }
             // Cycle 13 split: calcul RRQ/PSV/DB → ./projection/retirementIncome
@@ -1165,26 +1325,15 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             // revenu d'EMPLOI à perdre) → un événement daté en retraite est inerte. Interaction avec une perte
             // STOCHASTIQUE (Monte-Carlo) le même mois : composition MULTIPLICATIVE (× 0,55 × facteur), bornée
             // [0, 1] — voulu (aléa MC + événement planifié = deux pertes distinctes).
-            const incomeLossFactor = computeIncomeLossFactor(lifeEvents, currentLoopDate);
+            const incomeLossFactor = setup.hasLifeEvents ? computeIncomeLossFactor(lifeEvents, currentLoopDate) : 1;
             let activeGrossAddByUser = aiResult.accGrossAddByUser;
             if (incomeLossFactor < 1) {
                 incomeMarc *= incomeLossFactor;
                 incomeAnna *= incomeLossFactor;
                 monthlyIncome *= incomeLossFactor;
                 activeGrossAddByUser = [activeGrossAddByUser[0] * incomeLossFactor, activeGrossAddByUser[1] * incomeLossFactor];
-                logEvent(lifeEventsLog, `📉 Perte de revenu planifiée (-${Math.round((1 - incomeLossFactor) * 100)} %)`);
+                if (!pointAllege) logEvent(lifeEventsLog, `📉 Perte de revenu planifiée (-${Math.round((1 - incomeLossFactor) * 100)} %)`);
 
-                // [CHOMAGE-DEUX-MODELES] L'événement daté PERTE_EMPLOI verse désormais l'AE, comme
-                // le chômage STOCHASTIQUE (même formule, source unique `prestationAeNetteMensuelle`
-                // — 55 % du brut assurable plafonné, imposée à assiette de cotisation nulle).
-                // Avant : la perte datée coupait le revenu SANS prestation, alors que la même perte
-                // tirée au sort en versait une — deux réponses au même événement de vie.
-                // ⚠️ Seule la part PERTE_EMPLOI reçoit l'AE : une SABBATIQUE est un départ
-                // volontaire (inadmissible), un ACCIDENT relève du régime maladie/LTD (hors lot).
-                // ⚠️ Approximation LINÉAIRE assumée : prestation pleine × part de revenu perdue —
-                // exacte à 100 % de perte (le cas nominal), proportionnelle en deçà.
-                // ⚠️ L'AE n'est PAS du revenu GAGNÉ (146(1)) : rien n'est ré-ajouté à
-                // `activeGrossAddByUser` — même convention que le chômage stochastique.
                 const pertePct = computePerteEmploiLossPct(lifeEvents, currentLoopDate);
                 if (pertePct > 0) {
                     const yearsElapsedAe = Math.floor(m / 12);
@@ -1193,8 +1342,6 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
                         simInflation, yearsElapsed: yearsElapsedAe, loopYear,
                         enableMonteCarlo, calculateFiscalReport,
                     };
-                    // Marc DÉJÀ au chômage stochastique ce mois : son revenu EST une prestation AE
-                    // — pas de seconde prestation pour la même personne.
                     const marcDejaAuChomage = unemployedMonthsRemaining > 0 || aiResult.newUnemployedMonths > 0;
                     const aeMarc = marcDejaAuChomage ? 0
                         : prestationAeNetteMensuelle(grossMarcBaseAnnual * sgf, aeCtx) * pertePct;
@@ -1204,7 +1351,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
                         incomeMarc += aeMarc;
                         incomeAnna += aeAnna;
                         monthlyIncome += aeMarc + aeAnna;
-                        logEvent(lifeEventsLog, `💼 Prestation d'assurance-emploi versée pendant la perte d'emploi planifiée`);
+                        if (!pointAllege) logEvent(lifeEventsLog, `💼 Prestation d'assurance-emploi versée pendant la perte d'emploi planifiée`);
                     }
                 }
             }
@@ -1237,13 +1384,18 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             unemployedMonthsRemaining = aiResult.newUnemployedMonths;
             ltdMonthsRemaining = aiResult.newLtdMonths;
             ltdLogged = aiResult.ltdLogged;
-            aiResult.lifeEventLogs.forEach(msg => logEvent(lifeEventsLog, msg));
+            if (!pointAllege && aiResult.lifeEventLogs.length > 0) {
+                aiResult.lifeEventLogs.forEach(msg => logEvent(lifeEventsLog, msg));
+            }
         }
 
         // --- 3. MONTHLY EXPENSES & EVENTS ---
         if (isRetired) {
             // D2.5: Smile Curve appliquée au besoin de retraite (1 si flag off).
-            monthlyExpenses = Math.abs(retirementGoal.targetMonthlyIncome) * expenseMultiplier * smileLifestyleFactor(age);
+            const baseRetTargetMonthly = Number.isFinite(retirementGoal.targetMonthlyIncome)
+                ? Math.abs(retirementGoal.targetMonthlyIncome)
+                : 0;
+            monthlyExpenses = baseRetTargetMonthly * expenseMultiplier * smileLifestyleFactor(age);
         } else {
             // Active phase income & expenses — Jalon 2 (F12) : 3 modes (budget, réel, hybride)
             const calMonth = (startMonth + m - 1) % 12;
@@ -1266,7 +1418,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         // Cycle 9 split: LTC trigger + coût mensuel → ./projection/stochasticEvents
         if (tryLtcTrigger({ age, enableMonteCarlo, rng }, effProj, ltcActive)) {
             ltcActive = true;
-            logEvent(lifeEventsLog, `🏥 Soins de longue durée déclenchés à ${age} ans`);
+            if (!pointAllege) logEvent(lifeEventsLog, `🏥 Soins de longue durée déclenchés à ${age} ans`);
         }
         if (ltcActive) {
             monthlyExpenses += ltcMonthlyCost(effProj, expenseMultiplier);
@@ -1279,93 +1431,79 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
 
 
         // Cycle 8 split: événements stochastiques one-shot (CI + héritage)
-        // extraits dans ./projection/stochasticEvents.
-        const stochCtx = { m, currentMonthIndex, age, currentAge, expenseMultiplier, enableMonteCarlo, rng };
-        const stochMutator = {
-            addLiquid: (amt: number) => { liquid += amt; },
-            addExpense: (amt: number) => { monthlyExpenses += amt; },
-            logLife: (msg: string, day?: number) => logEvent(lifeEventsLog, msg, day),
-        };
-        if (tryCriticalIllness(stochCtx, effProj, ciTriggered, stochMutator)) ciTriggered = true;
-        if (tryInheritance(stochCtx, effProj, inheritanceReceived, stochMutator)) inheritanceReceived = true;
+        if (enableMonteCarlo && currentMonthIndex === 0 && m > 0 && (effProj.criticalIllnessEnabled || effProj.inheritanceEnabled)) {
+            const stochCtx = { m, currentMonthIndex, age, currentAge, expenseMultiplier, enableMonteCarlo, rng };
+            const stochMutator = {
+                addLiquid: (amt: number) => { liquid += amt; },
+                addExpense: (amt: number) => { monthlyExpenses += amt; },
+                logLife: (msg: string, day?: number) => { if (!pointAllege) logEvent(lifeEventsLog, msg, day); },
+            };
+            if (tryCriticalIllness(stochCtx, effProj, ciTriggered, stochMutator)) ciTriggered = true;
+            if (tryInheritance(stochCtx, effProj, inheritanceReceived, stochMutator)) inheritanceReceived = true;
+        }
 
         // Cycle 7 split: Sandwich generation (boomerang + caregiving) + Snowbird
-        // extraits dans ./projection/w5Effects (applyAgeBasedExpenses).
-        applyAgeBasedExpenses(
-            { age, currentMonthIndex, isRetired, expenseMultiplier },
-            effProj,
-            { addExpense: (amt) => { monthlyExpenses += amt; } }
-        );
+        if (setup.hasAgeBasedExpenses) {
+            applyAgeBasedExpenses(
+                { age, currentMonthIndex, isRetired, expenseMultiplier },
+                effProj,
+                { addExpense: (amt) => { monthlyExpenses += amt; } }
+            );
+        }
 
         // Cycle 7 split: 6 effets W5.x extraits dans ./projection/w5Effects.ts
-        // (insurance/véhicules cycliques/rénos majeures/dons charity/locatifs/CCPC).
-        // Mutation via mutateur passé par référence — état partagé inchangé.
-        const w5Resultat = applyW5Effects(
-            {
-                m, currentMonthIndex, currentLoopDate, startYear, startMonth, expenseMultiplier,
-                // [W5-RENTAL-INTERET-DPA] Intérêt du mois par immeuble, lu sur l'état AVANT le mois
-                // locatif (qui vient plus bas dans la boucle) : même solde, même formule, donc la somme
-                // vaut exactement le `rm.interest` que `processRentalMonth` publiera pour ce mois.
-                rentalInterestMensuelParImmeuble: rentalInterestParImmeuble(rentalStates),
-            },
-            // [ENG-W5-BUSINESS-DIVORCE-NON-PARTAGE] `businessStates` (partagé au divorce), PAS
-            // `privateBusinesses` (le paramètre brut, jamais muté) : le dividende mensuel doit suivre
-            // la même part de propriété que l'équité au bilan.
-            { insurancePolicies, vehicleReplacements, majorRenovations, charitableGoals, rentalProperties, privateBusinesses: businessStates },
-            {
-                addExpense: (amt) => { monthlyExpenses += amt; },
-                addIncome: (amt) => { monthlyIncome += amt; },
-                subtractLiquid: (amt) => { liquid -= amt; },
-                addTaxRevenu: (amt) => { taxCurrentYear.revenu += amt; },
-                addTaxGains: (amt) => { taxCurrentYear.gains += amt; },
-                addTaxDivers: (amt) => { taxCurrentYear.divers += amt; },
-                addDonationCredit: (amt) => { taxCurrentYear.donCredit += amt; },
-                logFlow: (msg, day?: number) => logEvent(flowEventsLog, msg, day),
-                logLife: (msg, day?: number) => logEvent(lifeEventsLog, msg, day),
-            }
-        );
-        // [FISC-RRSP-RENTAL-EARNED] (décision Marc 2026-09-05) Le NOI locatif W5 est du revenu GAGNÉ
-        // pour les droits REER de son propriétaire. Produit AVANT le bloc de janvier, il prend le
-        // même chemin que le salaire : le tampon, versé APRÈS le reset (sinon janvier entrerait dans
-        // l'année qui vient de se clore — `UN-ACCUMULATEUR-ANNUEL-SE-JUGE-SUR-SA-POSITION…`).
-        // `soloHousehold` effondre tout sur le déclarant restant, comme `taxFilers`.
-        {
+        if (setup.hasW5Collections || !pointAllege) {
+            const w5Resultat = applyW5Effects(
+                {
+                    m, currentMonthIndex, currentLoopDate, startYear, startMonth, expenseMultiplier,
+                    rentalInterestMensuelParImmeuble: rentalInterestParImmeuble(rentalStates),
+                    skipLogs: pointAllege,
+                },
+                { insurancePolicies, vehicleReplacements, majorRenovations, charitableGoals, rentalProperties: activeRentals, privateBusinesses: businessStates },
+                {
+                    addExpense: (amt) => { monthlyExpenses += amt; },
+                    addIncome: (amt) => { monthlyIncome += amt; },
+                    subtractLiquid: (amt) => { liquid -= amt; },
+                    addTaxRevenu: (amt) => { taxCurrentYear.revenu += amt; },
+                    addTaxGains: (amt) => { taxCurrentYear.gains += amt; },
+                    addTaxDivers: (amt) => { taxCurrentYear.divers += amt; },
+                    addDonationCredit: (amt) => { taxCurrentYear.donCredit += amt; },
+                    logFlow: (msg, day?: number) => { if (!pointAllege) logEvent(flowEventsLog, msg, day); },
+                    logLife: (msg, day?: number) => { if (!pointAllege) logEvent(lifeEventsLog, msg, day); },
+                }
+            );
             const [locatif0, locatif1] = repartirRevenuGagne(w5Resultat.rentalNoiMensuelParProprietaire, { activeUsersCount, soloHousehold });
             grossIncomeEnAttenteByUser[0] += locatif0;
             grossIncomeEnAttenteByUser[1] += locatif1;
         }
 
         // --- 4. TAX WITHHOLDING & APRIL SETTLEMENT ---
-        // Cycle 8 split: avril extrait dans ./projection/taxCycle (processAprilSettlement).
-        const aprilResult = processAprilSettlement(currentMonthIndex, m, taxPreviousYear, {
-            subtractLiquid: (amt) => { liquid -= amt; },
-            addNonReg: (amt) => { nonReg += amt; },
-            addNonRegACB: (amt) => { nonRegACB += amt; },
-            logFlow: (msg, day?: number) => logEvent(flowEventsLog, msg, day),
-        });
-        const taxPaidRevenu = aprilResult.taxPaidRevenu;
-        const taxPaidGains = aprilResult.taxPaidGains;
-        const taxPaidDivers = aprilResult.taxPaidDivers;
-        const taxPaidREER = aprilResult.taxPaidREER;
-        // [ENG-APRIL-REFUND-NONREG-UNPUBLISHED] Le remboursement d'impôt réinvesti est un TRANSFERT
-        // vers le non-enregistré : il alimente le flux publié comme n'importe quelle cotisation.
-        // ⚠️ Le ticket redoutait que publier ce flux « déplace une décision d'allocation dans le même
-        // mois », `cashflowAllocation` recevant `contribNonReg` en ENTRÉE. VÉRIFIÉ : ce module ne
-        // fait qu'un `state.contribNonReg += excess` et ne LIT jamais la valeur. Le risque annoncé
-        // n'existe pas — le golden le confirme (seul `NetTransferNonReg` bouge).
-        contribNonReg += aprilResult.reinvestedNonReg;
-        if (aprilResult.fluxImpots !== 0) {
-            fluxImpots = aprilResult.fluxImpots;
-            impotSalaireMois = taxPaidRevenu;
-            impotReerMois = taxPaidREER;
-            impotGainsMois = taxPaidGains;
-            impotDiversMois = taxPaidDivers;
+        let taxPaidRevenu = 0;
+        let taxPaidGains = 0;
+        let taxPaidDivers = 0;
+        let taxPaidREER = 0;
+        if (currentMonthIndex === 3 && m > 0) {
+            const aprilResult = processAprilSettlement(currentMonthIndex, m, taxPreviousYear, {
+                subtractLiquid: (amt) => { liquid -= amt; },
+                addNonReg: (amt) => { nonReg += amt; },
+                addNonRegACB: (amt) => { nonRegACB += amt; },
+                logFlow: (msg, day?: number) => { if (!pointAllege) logEvent(flowEventsLog, msg, day); },
+            }, pointAllege);
+            taxPaidRevenu = aprilResult.taxPaidRevenu;
+            taxPaidGains = aprilResult.taxPaidGains;
+            taxPaidDivers = aprilResult.taxPaidDivers;
+            taxPaidREER = aprilResult.taxPaidREER;
+            contribNonReg += aprilResult.reinvestedNonReg;
+            if (aprilResult.fluxImpots !== 0) {
+                fluxImpots = aprilResult.fluxImpots;
+                impotSalaireMois = taxPaidRevenu;
+                impotReerMois = taxPaidREER;
+                impotGainsMois = taxPaidGains;
+                impotDiversMois = taxPaidDivers;
+            }
+            reconciledUnsettledTax = 0;
+            taxPreviousYear = aprilResult.newTaxPreviousYear;
         }
-        // [ENG-TTP-UNSETTLED-HORIZON] Avril vient de RÉGLER l'année réconciliée (le settlement ne
-        // s'exécute qu'à currentMonthIndex === 3 ET m > 0, cf taxApril.ts:44 — garde alignée #555 :
-        // une future reprise d'état avec report fiscal au m0 ne doit pas effacer une dette).
-        if (currentMonthIndex === 3 && m > 0) reconciledUnsettledTax = 0;
-        taxPreviousYear = aprilResult.newTaxPreviousYear;
 
         // [FISC-SRCDED-NOOP — retenue mensuelle retirée 2026-06-26] La provision salariale mensuelle
         // (`computeMonthlyWithholding`) était VESTIGIALE : sa sortie accumulée dans `taxCurrentYear.revenu`
@@ -1381,118 +1519,72 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
 
 
         // Cycle 12 split: January reset → ./projection/taxCycle.processJanuaryReset
-        const janResult = processJanuaryReset(
-            currentMonthIndex,
-            {
-                // [ENG-DIVORCE-ROOM-COUPLE] Les droits enregistrés restaient ceux d'un COUPLE après
-                // un divorce (ou un décès). Mesuré : +15 000 $/an de droits CELI (2 × 7 500) pour un
-                // ménage à UNE tête → CELI final 2 268 641 $ contre 1 405 271 $, soit +58 573 $ de
-                // patrimoine et −27 456 $ d'impôt sur 30 ans. Décembre disait déjà « 1 déclarant » —
-                // janvier, lui, redonnait les droits des deux : les deux voies se contredisaient.
-                //
-                // ⚠️ Les QUATRE usages de `activeUsersCount` dans `taxJanuary` ont été relus un par
-                // un avant de passer `taxFilers` — c'est un homonyme, comme dans `retirementIncome` :
-                //   · plafond REER `rrspYearlyCap × N`  → un COMPTE de déclarants  → 1 ✔
-                //   · `revenu / N` (taux marginal FERR) → revenu PAR TÊTE ; après divorce le revenu
-                //     est déjà celui d'une seule personne, diviser par 2 le sous-estimerait → 1 ✔
-                //   · `hasSpouse: N > 1`                → faux pour un divorcé      → 1 ✔
-                //   · `familyIncome: parTête × N`       → reconstitue le familial    → 1 ✔
-                m, startYear, simInflation, age, isRetired, activeUsersCount: taxFilers,
-                oasClawbackNextPeriod, hasPurchasedPrimary,
-                celiappOpeningYear,
-                // Plafond FHSA À VIE : `FHSA_LIFETIME_LIMIT_PER_USER × N`. Un ménage à une tête ne
-                // conserve pas les 80 000 $ d'un couple.
-                fhsaEligibleUsersCount: soloHousehold ? Math.min(1, fhsaEligibleUsersCount) : fhsaEligibleUsersCount,
-                users: config.users,
-                // ⚠️ Liste DÉDIÉE aux droits — `users` reste ENTIER : la boucle FERR itère sur
-                // `reerByUser.length` et lit `users[i]` pour l'âge du conjoint. La raccourcir ferait
-                // rendre `-Infinity` à `currentAgeOfUser(1)`, et la part REER de l'index 1 ne se
-                // convertirait jamais en FERR — silencieusement. Deux questions, deux listes.
-                roomUsers: soloHousehold ? config.users.slice(0, 1) : config.users,
-                celiapp, reer, reerByUser, liquid, nonReg, crypto, celi,
-                accGrossIncomeYearByUser, accRetraitsReerYearOld: accRetraitsReerYear,
-                incomeRetirementMonthly: incomeRetirement,
-                fhsaRoomCurrent: fhsaRoom, fhsaLifetimeContrib,
-                celiRoomCurrent: celiRoom, rrspRoomCurrent: rrspRoom,
-                taxCurrentYearGains: taxCurrentYear.gains,
-                prevPortfolioNW, loopYear,
-            },
-            { RRIF_RATES, calculateFiscalReport },
-        );
-        if (janResult) {
-            // FA-3b — capture du revenu imposable AUTRE de l'année qui se termine (retraits
-            // REER/FERR + loyers, nominal) AVANT le reset : c'est l'assiette du test SRG de la
-            // nouvelle année (le vrai SRG est établi sur la déclaration de l'année précédente).
-            // Limites assumées (doc §6) : année 1 sans historique → assiette RRQ+DB seule (12 mois,
-            // optimiste) ; le SALAIRE de l'année précédant la retraite n'est pas compté ; janvier de
-            // l'année Y utilise l'assiette Y-2 (capture après le calcul de janvier — tolérance modèle,
-            // le vrai cycle SRG court juillet→juin).
-            prevYearOtherIncomeForGisNominal = accRetraitsReerYear + accRentesYear;
-            // PV-9 : les gains réalisés de l'année écoulée (capturés en décembre) entrent dans
-            // l'assiette du test SRG de la nouvelle année (lag, comme les retraits REER + loyers).
-            prevYearCapitalGainsForGisNominal = capitalGainsRealizedThisYear;
-            accRetraitsReerYear = janResult.accRetraitsReerYearReset;
-            accRetraitsReerYearByUser = accRetraitsReerYearByUser.map(() => 0);
-            accRentesYear = janResult.accRentesYearReset;
-            monthlyOasReduction = janResult.monthlyOasReduction;
-            celiRoom += janResult.celiRoomDelta;
-            fhsaRoom = janResult.fhsaRoomNew;
-            if (janResult.celiappTransferToReer > 0) {
-                reer += janResult.celiappTransferToReer;
-                celiapp = 0;
-                // [ENG-CELIAPP-TRANSFERT-FLUX-MUET] La fermeture du CELIAPP (15 ans, ou 71 ans)
-                // DÉPLACE le solde vers le REER. Sans ces deux lignes, l'argent changeait de compte
-                // sans qu'aucun des deux flux ne soit publié : la forme-flux était violée des DEUX
-                // côtés, du MÊME montant (mesuré 9 092,54 $ au mois 168 d'une fixture MC 30 ans).
-                withdrawalCELIAPP += janResult.celiappTransferToReer;
-                contribREER += janResult.celiappTransferToReer;
+        if (currentMonthIndex === 0 && m > 0) {
+            const janResult = processJanuaryReset(
+                currentMonthIndex,
+                {
+                    m, startYear, simInflation, age, isRetired, activeUsersCount: taxFilers,
+                    oasClawbackNextPeriod, hasPurchasedPrimary,
+                    celiappOpeningYear,
+                    fhsaEligibleUsersCount: soloHousehold ? Math.min(1, fhsaEligibleUsersCount) : fhsaEligibleUsersCount,
+                    users: config.users,
+                    roomUsers: soloHousehold ? config.users.slice(0, 1) : config.users,
+                    celiapp, reer, reerByUser, liquid, nonReg, crypto, celi,
+                    accGrossIncomeYearByUser, accRetraitsReerYearOld: accRetraitsReerYear,
+                    incomeRetirementMonthly: incomeRetirement,
+                    fhsaRoomCurrent: fhsaRoom, fhsaLifetimeContrib,
+                    celiRoomCurrent: celiRoom, rrspRoomCurrent: rrspRoom,
+                    taxCurrentYearGains: taxCurrentYear.gains,
+                    prevPortfolioNW, loopYear,
+                    skipLogs: pointAllege,
+                },
+                { RRIF_RATES, calculateFiscalReport },
+            );
+            if (janResult) {
+                prevYearOtherIncomeForGisNominal = accRetraitsReerYear + accRentesYear;
+                prevYearCapitalGainsForGisNominal = capitalGainsRealizedThisYear;
+                accRetraitsReerYear = janResult.accRetraitsReerYearReset;
+                accRetraitsReerYearByUser = accRetraitsReerYearByUser.map(() => 0);
+                accRentesYear = janResult.accRentesYearReset;
+                monthlyOasReduction = janResult.monthlyOasReduction;
+                celiRoom += janResult.celiRoomDelta;
+                fhsaRoom = janResult.fhsaRoomNew;
+                if (janResult.celiappTransferToReer > 0) {
+                    reer += janResult.celiappTransferToReer;
+                    celiapp = 0;
+                    withdrawalCELIAPP += janResult.celiappTransferToReer;
+                    contribREER += janResult.celiappTransferToReer;
+                }
+                if (janResult.rrspRoomReset) {
+                    rrspRoom = 0;
+                } else {
+                    rrspRoom += janResult.rrspRoomDelta;
+                }
+                accGrossIncomeYearByUser = [0, 0];
+                ferrAnnualByUser = reerShares.map((_, i) => {
+                    const v = janResult.ferrGrossByUser?.[i];
+                    return Number.isFinite(v) ? Math.max(0, v as number) : 0;
+                });
+                if (janResult.ferrMandatoryGross > 0) {
+                    taxOnRrif = janResult.ferrTaxOnRrif;
+                    reer -= janResult.ferrMandatoryGross;
+                    taxCurrentYear.reer += janResult.ferrTaxOnRrif;
+                    impotReerMois += janResult.ferrTaxOnRrif;
+                    accRetraitsReerYear += janResult.ferrMandatoryGross;
+                    retraitReerMois += janResult.ferrMandatoryGross;
+                    withdrawalREER += janResult.ferrMandatoryGross;
+                    ferrWithdrawalMois += janResult.ferrMandatoryGross;
+                    reerByUser = reerByUser.map((v, i) => Math.max(0, (Number.isFinite(v) ? v : 0) - (janResult.ferrGrossByUser[i] ?? 0)));
+                    accRetraitsReerYearByUser = accRetraitsReerYearByUser.map((v, i) => (Number.isFinite(v) ? v : 0) + (janResult.ferrGrossByUser[i] ?? 0));
+                    liquid += janResult.ferrMandatoryGross;
+                    if (!pointAllege && janResult.ferrLogMsg) flowEventsLog.push(janResult.ferrLogMsg);
+                }
+                guytonKlinger_indexationFactor = janResult.guytonKlingerIndexationFactor;
+                prevPortfolioNW = janResult.newPrevPortfolioNW;
+                if (!pointAllege && janResult.logs.length > 0) {
+                    janResult.logs.forEach(msg => flowEventsLog.push(msg));
+                }
             }
-            if (janResult.rrspRoomReset) {
-                rrspRoom = 0;
-            } else {
-                rrspRoom += janResult.rrspRoomDelta;
-            }
-            accGrossIncomeYearByUser = [0, 0];
-            // [FISC-LATENT-PENSION-CREDIT] Ré-évaluée CHAQUE janvier (y compris à zéro, quand le REER
-            // est épuisé) : c'est la valeur annuelle de l'année qui commence.
-            ferrAnnualByUser = reerShares.map((_, i) => {
-                const v = janResult.ferrGrossByUser?.[i];
-                return Number.isFinite(v) ? Math.max(0, v as number) : 0;
-            });
-            // FERR
-            if (janResult.ferrMandatoryGross > 0) {
-                taxOnRrif = janResult.ferrTaxOnRrif;
-                reer -= janResult.ferrMandatoryGross;
-                taxCurrentYear.reer += janResult.ferrTaxOnRrif;
-                impotReerMois += janResult.ferrTaxOnRrif;
-                accRetraitsReerYear += janResult.ferrMandatoryGross;
-                // [ENG-FERR-FLOW-INVISIBLE] (panel #551, MESURÉ : 113 418 $ = 11,6 % des sorties
-                // REER invisibles sur AUTO_MARGINAL) — la FERR est un retrait REER : elle alimente
-                // le flux AFFICHÉ comme les autres sources, sinon « 1er retrait REER » ne se
-                // déclenche jamais pour un retraité 71+ et le tooltip/MCP sous-affichent.
-                // (l'impôt FERR arrive à totalTaxesPaid via le débit d'avril du bucket .reer —
-                // [PROJ-TTP-DOUBLECOUNT] : plus AUCUN terme séparé à ajouter.)
-                retraitReerMois += janResult.ferrMandatoryGross;
-                // [ENG-FERR-NETTRANSFER-MUET] (2026-08-19) — le lot [ENG-FERR-FLOW-INVISIBLE] avait
-                // alimenté le registre d'AFFICHAGE (`retraitReerMois`) et oublié celui des TRANSFERTS
-                // (`withdrawalREER` → `NetTransferREER`). MESURÉ : 131 566,62 $ de REER qui
-                // disparaissaient sans flux publié, en mode DÉTERMINISTE, à chaque janvier de 72+.
-                // La garde forme-flux ne l'avait jamais vu : sa fixture s'arrête AVANT la retraite.
-                withdrawalREER += janResult.ferrMandatoryGross;
-                ferrWithdrawalMois += janResult.ferrMandatoryGross;
-                // [ITEM-2C] La FERR de chaque conjoint sort de SA part REER (registre per-conjoint), pas au
-                // pro-rata du pool → le solde REER de chaque conjoint reflète SES conversions obligatoires
-                // (et conditionne SON FERR de l'an suivant). La réconciliation de fin de mois préserve l'attribution.
-                reerByUser = reerByUser.map((v, i) => Math.max(0, (Number.isFinite(v) ? v : 0) - (janResult.ferrGrossByUser[i] ?? 0)));
-                accRetraitsReerYearByUser = accRetraitsReerYearByUser.map((v, i) => (Number.isFinite(v) ? v : 0) + (janResult.ferrGrossByUser[i] ?? 0));
-                liquid += janResult.ferrMandatoryGross;
-                if (janResult.ferrLogMsg) flowEventsLog.push(janResult.ferrLogMsg);
-            }
-            // Guyton-Klinger
-            guytonKlinger_indexationFactor = janResult.guytonKlingerIndexationFactor;
-            prevPortfolioNW = janResult.newPrevPortfolioNW;
-            // Logs
-            janResult.logs.forEach(msg => flowEventsLog.push(msg));
         }
 
         // [RRSP-FIRST-YEAR-13M] Versement du revenu gagné du mois, APRÈS le reset de janvier :
@@ -1505,30 +1597,22 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
 
         // Cycle 10/23 split: Auto-vehicle → ./projection/vehicleCycle (processAutoVehicleReplacement)
         monthsSinceLastVehicle++;
-        const vehResult = processAutoVehicleReplacement(m, monthsSinceLastVehicle, effProj.vehicleReplacementEnabled, simInflation);
-        if (vehResult.cost > 0) {
-            liquid -= vehResult.cost;
-            if (vehResult.resetCounter) monthsSinceLastVehicle = 0;
-            if (vehResult.logMsg) lifeEventsLog.push(vehResult.logMsg);
+        if (effProj.vehicleReplacementEnabled && m > 0) {
+            const vehResult = processAutoVehicleReplacement(m, monthsSinceLastVehicle, effProj.vehicleReplacementEnabled, simInflation, pointAllege);
+            if (vehResult.cost > 0) {
+                liquid -= vehResult.cost;
+                if (vehResult.resetCounter) monthsSinceLastVehicle = 0;
+                if (!pointAllege && vehResult.logMsg) lifeEventsLog.push(vehResult.logMsg);
+            }
         }
 
         // ---- DETTES ----
-        // Si minimumPayment ≤ intérêts mensuels, la dette ne s'éteint jamais
-        // (négatif amortissement). Bug observable sur cartes de crédit à
-        // forte balance avec paiement minimum dérisoire. Garde-fou : forcer
-        // un paiement effectif suffisant pour amortir en 25 ans maximum
-        // (balance/300 + intérêts), même si le minimumPayment est plus bas.
         let debtPayments = 0;
-        activeDebts.forEach(d => {
-            // [DETTE-DATES] Le calendrier de la dette AVANT son arithmétique. Une dette pas encore
-            // commencée ne coûte rien ; une dette dont le terme est échu ne se paie plus.
+        for (let di = 0; di < activeDebts.length; di++) {
+            const d = activeDebts[di];
             const phase = phaseDette(d, startYear, startMonth, m);
-
-            // ⚠️ Terme échu avec un solde RESTANT : on ne l'efface PAS (décision Marc 2026-08-19).
-            // Effacer une dette parce qu'une date est passée fabriquerait du patrimoine — le solde
-            // reste au bilan, visible, et on le DIT une seule fois, le mois où le terme échoit.
-            // Répéter l'alerte tous les mois pendant vingt ans la rendrait invisible.
-            if (phase === 'terminee'
+            if (!pointAllege
+                && phase === 'terminee'
                 && d.balance > 0.005
                 && estLePremierMoisApresLeTerme(d, startYear, startMonth, m)) {
                 lifeEventsLog.push(
@@ -1538,13 +1622,13 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
 
             if (phase === 'active' && d.balance > 0) {
                 const interest = (d.balance * (d.interestRate / 100)) / 12;
-                const principalFloor = d.balance / 300; // 300 = 25 ans × 12 mois
+                const principalFloor = d.balance / 300;
                 const effectiveMinimum = Math.max(d.minimumPayment, interest + principalFloor);
                 const payment = Math.min(d.balance + interest, effectiveMinimum);
                 d.balance = d.balance + interest - payment;
                 debtPayments += payment;
             }
-        });
+        }
         monthlyExpenses += debtPayments;
 
         // Cycle 20 split: tout l'immobilier mensuel → ./projection/realEstateMonth
@@ -1563,21 +1647,19 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             immoInterest, immoPrincipal, immoHypo, immoCharges,
             totalRentalIncome: 0,
             rentalEarnedParProprietaire: montantsParProprietaireVides(),
-            lifeEventLogs: [], flowEventLogs: [],
+            lifeEventLogs: pointAllege ? EMPTY_STRING_LOGS : [],
+            flowEventLogs: pointAllege ? EMPTY_STRING_LOGS : [],
         };
         processRealEstate(
             reState,
             { m, loopYear, isRetired, activeUsersCount, simInflation, simSalaryGrowth,
               grossMarcBaseAnnual, grossAnnaBaseAnnual, incomeRetirement,
-              // [RAP-DIVORCE-DEUX-TETES] plafond RAP = droit PAR PERSONNE → nombre de DÉCLARANTS.
               taxFilers,
               useSmithManoeuvre: effProj.useSmithManoeuvre === true, currentRentExpense,
               bootPrimaryHousingOffset,
               skipRapForPurchase: overrides.skipRapForPurchase ?? (strategy === 'PRIO_CELI_NO_RAP'),
-              // PH4-FUT-B-4 — downsizing déclenché au mois EXACT de la retraite (une seule fois).
-              // Revue : clamp à max(0,…) pour ne PAS perdre le levier si l'utilisateur est DÉJÀ
-              // retraité au départ (retirementMonthIndex < 0) → downsizing au mois 0 plutôt que jamais.
-              downsizeThisMonth: effProj.appliedDownsize === true && m === Math.max(0, retirementMonthIndex) },
+              downsizeThisMonth: effProj.appliedDownsize === true && m === Math.max(0, retirementMonthIndex),
+              skipLogs: pointAllege },
             activeRE,
             propertiesState,
             getMonthOffset,
@@ -1650,9 +1732,6 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         // re-soustrait JAMAIS `rentalMortgage` du patrimoine (double comptage interdit par la
         // source unique `computeRawNetWorth`).
         if (rentalStates.length > 0) {
-            // [ENG-PROPGROWTH-PAR-IMMEUBLE] (décision Marc 2026-09-04) La croissance vient de CHAQUE
-            // immeuble (semée dans son état) — le lecteur config `effProj.propertyGrowthRate ?? 3`
-            // est RETIRÉ de ce chemin : aucune UI n'a jamais écrit ce champ, il figeait 3 % partout.
             const rm = processRentalMonth(rentalStates, rentalNames);
             realEstateEquity += rm.equity;
             mortgageBalance += rm.mortgageBalance;
@@ -1660,11 +1739,13 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             immoInterest += rm.interest;
             immoPrincipal += rm.principal;
             immoHypo += rm.debtService;
-            rm.logs.forEach(msg => logEvent(lifeEventsLog, msg));
+            if (!pointAllege && rm.logs.length > 0) rm.logs.forEach(msg => logEvent(lifeEventsLog, msg));
         }
         const totalRentalIncome = reState.totalRentalIncome;
-        reState.lifeEventLogs.forEach(msg => logEvent(lifeEventsLog, msg));
-        reState.flowEventLogs.forEach(msg => logEvent(flowEventsLog, msg));
+        if (!pointAllege) {
+            if (reState.lifeEventLogs.length > 0) reState.lifeEventLogs.forEach(msg => logEvent(lifeEventsLog, msg));
+            if (reState.flowEventLogs.length > 0) reState.flowEventLogs.forEach(msg => logEvent(flowEventsLog, msg));
+        }
 
         // ---- ENFANTS & REEE ----
         // Cycle 14 split: processOneChild → ./projection/childrenReee.
@@ -1802,82 +1883,78 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         monthlyIncome = _childMonthlyIncome;
         incomeAnna = _childIncomeAnna;
 
-        const currentIsoMonth = currentLoopDate.toISOString().split('T')[0].substring(0, 7);
+        const currentIsoMonth = loopIsoMonths[m];
         // Cycle 16 split: voyages + événements de vie + stress test → ./projection/monthlyEvents
-        applyTravelExpenses(travelGoals, currentIsoMonth, expenseMultiplier, {
-            addExpense: (n) => { monthlyExpenses += n; },
-            logFlow: (s, day?: number) => logEvent(flowEventsLog, s, day),
-        });
-        applyLifeEvents(lifeEvents, currentIsoMonth, expenseMultiplier, propertiesState, {
-            shockPortfolio: (f) => { celi *= f; reer *= f; nonReg *= f; crypto *= f; },
-            addLiquid: (n) => { liquid += n; },
-            addExpense: (n) => { monthlyExpenses += n; },
-            adjustRealEstate: (eq, mort) => { realEstateEquity += eq; mortgageBalance += mort; },
-            realizeCapitalDisposition: (rawGain) => {
-                // Idiome copie/recopie (comme handleNonRegSale) : le helper mute un mini-state, on recopie
-                // les `let` du moteur. Une PERTE alimente `capitalLossBank` (consommée par les gains futurs).
-                const ms = { capitalLossBank, accCapitalGainsYear };
-                const result = applyCapitalDisposition(ms, rawGain);
-                capitalLossBank = ms.capitalLossBank;
-                accCapitalGainsYear = ms.accCapitalGainsYear;
-                return result;
-            },
-            logLife: (s, day?: number) => logEvent(lifeEventsLog, s, day),
-            logFlow: (s, day?: number) => logEvent(flowEventsLog, s, day),
-        });
+        if (setup.travelMonthMask[m]) {
+            applyTravelExpenses(travelGoals, currentIsoMonth, expenseMultiplier, {
+                addExpense: (n) => { monthlyExpenses += n; },
+                logFlow: (s, day?: number) => { if (!pointAllege) logEvent(flowEventsLog, s, day); },
+            }, pointAllege);
+        }
+        if (setup.lifeEventMonthMask[m]) {
+            applyLifeEvents(lifeEvents, currentIsoMonth, expenseMultiplier, propertiesState, {
+                shockPortfolio: (f) => { celi *= f; reer *= f; nonReg *= f; crypto *= f; },
+                addLiquid: (n) => { liquid += n; },
+                addExpense: (n) => { monthlyExpenses += n; },
+                adjustRealEstate: (eq, mort) => { realEstateEquity += eq; mortgageBalance += mort; },
+                realizeCapitalDisposition: (rawGain) => {
+                    const ms = { capitalLossBank, accCapitalGainsYear };
+                    const result = applyCapitalDisposition(ms, rawGain);
+                    capitalLossBank = ms.capitalLossBank;
+                    accCapitalGainsYear = ms.accCapitalGainsYear;
+                    return result;
+                },
+                logLife: (s, day?: number) => { if (!pointAllege) logEvent(lifeEventsLog, s, day); },
+                logFlow: (s, day?: number) => { if (!pointAllege) logEvent(flowEventsLog, s, day); },
+            }, pointAllege);
+        }
 
-        // Wiring 2026-05: FinancialGoal aux deadlines (SavingsGoal retiré du produit — NAV-REMOVE-OBJECTIFS-TAB).
-        const goalMutator = {
-            withdrawFromAccount: (account: 'CELI' | 'REER' | 'NON-ENREG' | 'CRYPTO' | 'LIQUID', amount: number): number => {
-                let remaining = amount;
-                if (account === 'LIQUID' || account === 'NON-ENREG') {
-                    // [PV-11 revue] clamp à 0 : `liquid` peut être NÉGATIF ici (impôt d'avril débité
-                    // AVANT les goals, sauvetage PV-1 après) — sans clamp, un goal « effaçait » le
-                    // découvert sans le payer (survente NonReg + withdrawalLiquid négatif au chart).
-                    const fromLiquid = Math.min(Math.max(0, liquid), remaining);
-                    liquid -= fromLiquid; remaining -= fromLiquid;
-                    withdrawalLiquid += fromLiquid;
-                    if (remaining > 0 && account === 'NON-ENREG' && nonReg > 0) {
-                        // [PV-10] Vente non-enregistrée RÉELLE via handleNonRegSale : gain réalisé
-                        // (ACB proportionnel, banque de pertes, accCapitalGainsYear → imposé en
-                        // décembre). Avant : ACB décrémenté du montant VENDU complet et AUCUN gain
-                        // réalisé → retraits d'objectifs jamais imposés (sous-imposition) ET ACB
-                        // sous-évalué (sur-imposition des ventes suivantes) — double erreur.
-                        const fromNR = handleNonRegSale(remaining);
-                        remaining -= fromNR;
-                        withdrawalNonReg += fromNR;
+        // Wiring 2026-05: FinancialGoal aux deadlines
+        if (setup.goalMonthMask[m]) {
+            const goalMutator = {
+                withdrawFromAccount: (account: 'CELI' | 'REER' | 'NON-ENREG' | 'CRYPTO' | 'LIQUID', amount: number): number => {
+                    let remaining = amount;
+                    if (account === 'LIQUID' || account === 'NON-ENREG') {
+                        const fromLiquid = Math.min(Math.max(0, liquid), remaining);
+                        liquid -= fromLiquid; remaining -= fromLiquid;
+                        withdrawalLiquid += fromLiquid;
+                        if (remaining > 0 && account === 'NON-ENREG' && nonReg > 0) {
+                            const fromNR = handleNonRegSale(remaining);
+                            remaining -= fromNR;
+                            withdrawalNonReg += fromNR;
+                        }
+                    } else if (account === 'CELI') {
+                        const drawn = Math.min(celi, remaining);
+                        celi -= drawn; celiWithdrawalsThisYear += drawn; remaining -= drawn;
+                        withdrawalCELI += drawn;
+                    } else if (account === 'REER') {
+                        const drawn = Math.min(reer, remaining);
+                        reer -= drawn; accRetraitsReerYear += drawn; remaining -= drawn;
+                        accRetraitsReerYearByUser = addByWeights(accRetraitsReerYearByUser, drawn, reerByUser);
+                        withdrawalREER += drawn;
+                        retraitReerMois += drawn;
+                    } else if (account === 'CRYPTO') {
+                        const drawn = handleCryptoSaleLocal(remaining);
+                        remaining -= drawn;
+                        withdrawalCrypto += drawn;
                     }
-                } else if (account === 'CELI') {
-                    const drawn = Math.min(celi, remaining);
-                    celi -= drawn; celiWithdrawalsThisYear += drawn; remaining -= drawn;
-                    withdrawalCELI += drawn;
-                } else if (account === 'REER') {
-                    const drawn = Math.min(reer, remaining);
-                    reer -= drawn; accRetraitsReerYear += drawn; remaining -= drawn;
-                    accRetraitsReerYearByUser = addByWeights(accRetraitsReerYearByUser, drawn, reerByUser);
-                    withdrawalREER += drawn;
-                    // [ENG-FERR-FLOW-INVISIBLE] même parité pour les retraits de GOALS (3ᵉ source).
-                    retraitReerMois += drawn;
-                } else if (account === 'CRYPTO') {
-                    // [PV-7] gain proportionnel + banque de pertes via le helper partagé.
-                    const drawn = handleCryptoSaleLocal(remaining);
-                    remaining -= drawn;
-                    withdrawalCrypto += drawn;
-                }
-                // [PV-11b] — les retraits de GOALS alimentent désormais les séries withdrawal* du
-                // chartData (sous-rapport pour les consommateurs « source unique » avant ce fix).
-                return amount - remaining;
-            },
-            addExpense: (_n: number) => { /* déjà soustrait du compte ciblé */ },
-            logFlow: (s: string, day?: number) => logEvent(flowEventsLog, s, day),
-            // [PV-11a] — remontée STRUCTURÉE du shortfall d'objectif (le log texte reste).
-            onGoalShortfall: (_goalName: string, asked: number, drawn: number) => {
-                goalShortfallCount++;
-                // Borne drawn à 0 (défense) : un drawn négatif surévaluerait le manque.
-                goalShortfallTotal += Math.max(0, asked - Math.max(0, drawn));
-            },
-        };
-        applyFinancialGoalDeadlines(financialGoals, currentIsoMonth, expenseMultiplier, goalMutator);
+                    return amount - remaining;
+                },
+                addExpense: (_n: number) => { /* déjà soustrait du compte ciblé */ },
+                logFlow: (s: string, day?: number) => { if (!pointAllege) logEvent(flowEventsLog, s, day); },
+                getNetWorth: currentRawNetWorth,
+                onGoalEvaluated: (goalKey: string, met: boolean, shortfallReal: number, shortfallNominal: number) => {
+                    if (goalKey) {
+                        goalOutcomes[goalKey] = { met, shortfallReal, shortfallNominal };
+                    }
+                },
+                onGoalShortfall: (_goalName: string, asked: number, drawn: number) => {
+                    goalShortfallCount++;
+                    goalShortfallTotal += Math.max(0, asked - Math.max(0, drawn));
+                },
+            };
+            applyFinancialGoalDeadlines(financialGoals, currentIsoMonth, expenseMultiplier, goalMutator, pointAllege);
+        }
         // [ENG-STRESSTEST-GROWTH-UNREGISTERED] Le krach et la reprise MUTENT les soldes — c'est bien
         // un mouvement de MARCHÉ, exactement comme le rendement mensuel. Ils n'alimentaient pourtant
         // AUCUN registre de flux : mesuré 371 782 $ de patrimoine apparus (puis disparus) sans
@@ -1926,7 +2003,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             contribCELI, contribREER, contribNonReg, contribCELIAPP,
             shortfallMonths,
             uncoveredShortfall: 0,
-            flowEventLogs: [],
+            flowEventLogs: pointAllege ? EMPTY_STRING_LOGS : [],
         });
         const applyCashState = (cs: CashflowState): void => {
             liquid = cs.liquid; celi = cs.celi; reer = cs.reer;
@@ -1934,7 +2011,9 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             capitalLossBank = cs.capitalLossBank; crypto = cs.crypto; cryptoACB = cs.cryptoACB;
             celiRoom = cs.celiRoom; rrspRoom = cs.rrspRoom; fhsaRoom = cs.fhsaRoom;
             taxCurrentYear.reer = cs.taxCurrentYearReer;
-            accRetraitsReerYearByUser = addByWeights(accRetraitsReerYearByUser, cs.accRetraitsReerYear - accRetraitsReerYear, reerByUser);
+            if (cs.accRetraitsReerYear !== accRetraitsReerYear) {
+                accRetraitsReerYearByUser = addByWeights(accRetraitsReerYearByUser, cs.accRetraitsReerYear - accRetraitsReerYear, reerByUser);
+            }
             accRetraitsReerYear = cs.accRetraitsReerYear;
             accCapitalGainsYear = cs.accCapitalGainsYear;
             accRrspYear = cs.accRrspYear; accFhsaYear = cs.accFhsaYear;
@@ -1946,23 +2025,18 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             contribCELI = cs.contribCELI; contribREER = cs.contribREER;
             contribNonReg = cs.contribNonReg; contribCELIAPP = cs.contribCELIAPP;
             shortfallMonths = cs.shortfallMonths;
-            cs.flowEventLogs.forEach(msg => logEvent(flowEventsLog, msg));
+            if (!pointAllege && cs.flowEventLogs.length > 0) {
+                cs.flowEventLogs.forEach(msg => logEvent(flowEventsLog, msg));
+            }
         };
-        // ⚠️ ctx FIGÉ ici (capture par valeur) et réutilisé par le sauvetage [PV-1] plus bas :
-        // ne pas y ajouter un champ muté entre les deux appels (le meltdown intermédiaire ne
-        // touche que reer/nonReg/taxCurrentYear/accRetraitsReerYear — hors ctx, vérifié).
         const cashflowCtxBase = {
             targetEF, criticalThreshold, isRetired, strategy,
-            // [panel #613 — ÉLEVÉ-4] 3e voie de la cohérence : `cashflowAllocation` dérive
-            // `liveFilers` de ce drapeau pour les seuils PBMA / palier 1 / plafond PSV, et zéroïse
-            // le salaire du conjoint. Sémantique « un seul contribuable » ⇒ `soloHousehold`.
-            // Sans ça, un divorcé cotisait au REER sur des seuils DOUBLÉS de célibataire.
             m, loopYear, enableMonteCarlo, activeUsersCount, survivorMode: soloHousehold,
             grossMarcBaseAnnual, grossAnnaBaseAnnual, simSalaryGrowth,
             incomeRetirement, accRentesYear, hasFuturePurchase, hasPurchasedPrimary,
             contributionOrder: overrides.contributionOrder, debtFirst: overrides.debtFirst,
+            skipLogs: pointAllege,
         };
-        // [PV-1] snapshot pour ne pas compter 2× le même mois en déficit (allocation + sauvetage).
         const shortfallMonthsAtMonthStart = shortfallMonths;
 
         const cashState = buildCashState();
@@ -1974,29 +2048,20 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             calculateGrossWithholdingRRSP,
         );
         applyCashState(cashState);
-        // FISC-BROKE-LIQUID-FLOOR : un déficit mensuel non couvert (tous comptes de décaissement
-        // épuisés, coussin critique gardé) est porté en dette VISIBLE — pas évaporé. Conservation
-        // rétablie : ΔNW baisse du déficit, DetteTotale l'expose (NW reconstructible même insolvable).
-        // Pas de double-comptage avec le sauvetage de découvert [PV-6] plus bas : PV-6 ne RE-porte pas
-        // CE déficit (le liquide reste au coussin ≥0, donc il ne s'arme pas dessus). Un découvert DISTINCT
-        // créé le même mois par un débit direct (réno/impôt d'avril) peut, lui, déclencher PV-6 sur un
-        // AUTRE montant — montants disjoints, jamais le même dollar (vérifié au panel). Seuil > 1 $ :
-        // ignore les poussières d'arrondi (zone morte 0,1–1 $ négligeable), aligné sur le résiduel PV-6.
         if (cashState.uncoveredShortfall > 1) {
             liquidDebt += cashState.uncoveredShortfall;
-            logEvent(flowEventsLog, `⚠️ Dépense non couverte (comptes de décaissement épuisés) : ${formatCAD(Math.round(cashState.uncoveredShortfall))} — portée en dette`);
+            uncoveredThisMonth += cashState.uncoveredShortfall;
+            if (!pointAllege) {
+                logEvent(flowEventsLog, `⚠️ Dépense non couverte (comptes de décaissement épuisés) : ${formatCAD(Math.round(cashState.uncoveredShortfall))} — portée en dette`);
+            }
         }
 
         // Cycle 15 split: REER Meltdown → ./projection/meltdownReer
         const meltResult = processReerMeltdown(
-            // [ENG-DIVORCE — panel re-revue] `taxFilers`, PAS `activeUsersCount` : la cible du
-            // meltdown est un revenu imposable PAR DÉCLARATION. Et `grossAnnaBaseAnnual` mis à 0 en
-            // solo — même motif qu'au dépôt fiscal de décembre : le salaire d'un ex-conjoint parti
-            // ne fait plus partie de l'assiette qu'on cherche à « remplir ».
             { m, isRetired, simSalaryGrowth, taxFilers, incomeRetirement,
               accRetraitsReerYear, accRentesYear, grossMarcBaseAnnual,
               grossAnnaBaseAnnual: soloHousehold ? 0 : grossAnnaBaseAnnual,
-              reer, nonReg, celi, realEstateEquity },
+              reer, nonReg, celi, realEstateEquity, skipLogs: pointAllege },
             strategy,
         );
         if (meltResult) {
@@ -2048,7 +2113,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             // le scénario MELTDOWN_REER (l'opposé du but de la Phase 2).
             accRetraitsReerYearByUser = addByWeights(accRetraitsReerYearByUser, meltResult.reerDrawn, reerByUser);
             taxCurrentYear.reer += meltResult.withholding;
-            if (meltResult.log) logEvent(flowEventsLog, meltResult.log);
+            if (!pointAllege && meltResult.log) logEvent(flowEventsLog, meltResult.log);
         }
 
         // Cycle 11 split: December tax filing → ./projection/taxCycle.processDecemberTaxFiling
@@ -2082,30 +2147,21 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             const ghOtherNominal = isRetired
                 ? (incomeRetirement * 12 + accRentesYear + accRetraitsReerYear)
                 : (grossMarcBaseAnnual + (soloHousehold ? 0 : grossAnnaBaseAnnual)) * Math.pow(1 + simSalaryGrowth / 100, yearsElapsed);
-            const gh = processGainHarvesting({
-                enabled: !!overrides.gainHarvesting,
-                nonReg, nonRegACB, otherTaxableNominal: ghOtherNominal,
-                existingGainsNominal: accCapitalGainsYear, activeUsersCount: taxFilers, loopYear,
-                capitalLossBank,
-            });
+            const gh = overrides.gainHarvesting
+                ? processGainHarvesting({
+                    enabled: true,
+                    nonReg, nonRegACB, otherTaxableNominal: ghOtherNominal,
+                    existingGainsNominal: accCapitalGainsYear, activeUsersCount: taxFilers, loopYear,
+                    capitalLossBank, skipLogs: pointAllege,
+                })
+                : { harvestedGain: 0, consumedLoss: 0, logMsg: undefined };
             if (gh.harvestedGain > 0) {
-                // [PV-2] Seule la part NON compensée par la banque de pertes est imposable ;
-                // l'ACB monte du gain TOTAL réalisé (la part compensée = step-up gratuit).
                 accCapitalGainsYear += gh.harvestedGain - gh.consumedLoss;
                 capitalLossBank -= gh.consumedLoss;
                 nonRegACB += gh.harvestedGain;
-                if (gh.logMsg) logEvent(flowEventsLog, gh.logMsg);
+                if (!pointAllege && gh.logMsg) logEvent(flowEventsLog, gh.logMsg);
             }
 
-            // FA-10 — survivorMode : UN seul contribuable (user2 décédé, cf. activeIncome.ts:61 ;
-            // le roulement REER fait que tout le revenu de retraite est celui du SURVIVANT user1).
-            // Même traitement que le clawback FA-2 (oasBeneficiaries) : n=1, pas de décomposition
-            // par conjoint, pas d'ageSpouse (⇒ pas de crédits d'âge du défunt, pas de fractionnement
-            // avec lui, seuils RAMQ/ligne 361 célibataire, RAMQ/FSS ×1), salaire du défunt à 0 dans
-            // la branche active. La DB par conjoint est AGRÉGÉE sur une tête (l'assiette du crédit
-            // pension / fractionnable reste complète — la diviser perdait la moitié du crédit).
-            // Avant : le revenu du survivant était réparti sur 2 têtes → barème progressif appliqué
-            // 2× à demi-revenu + crédits du défunt + fractionnement fictif = sous-imposition.
             const decResult = processDecemberTaxFiling(
                 currentMonthIndex,
                 {
@@ -2115,79 +2171,37 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
                     grossMarcBaseAnnual,
                     grossAnnaBaseAnnual: soloHousehold ? 0 : grossAnnaBaseAnnual,
                     simSalaryGrowth,
-                    // [ENG-T1213-NET-MONTHLY] FORCÉ À FALSE (décision de Marc, 2026-09-03), et pas
-                    // seulement retiré de l'interface. Le réglage est PERSISTÉ dans la configuration :
-                    // se contenter de retirer le bouton laisserait une config qui l'a déjà à `true`
-                    // bloquée avec −45,7 % de patrimoine projeté et AUCUN moyen de revenir en arrière
-                    // (« un repli persisté est pire qu'un repli calculé » — le dépôt a déjà payé ce
-                    // piège sur `grossSalary`). Le champ reste dans le type : aucune migration de
-                    // données, donc aucun risque d'écraser une saisie.
-                    // ⚠️ Le mécanisme n'est pas « désactivé par prudence » : il était FAUX. Réduire la
-                    // retenue sans majorer le net mensuel encaissé fait perdre l'économie fiscale du
-                    // REER sans jamais verser la contrepartie — l'inverse du vrai T1213, qui est
-                    // neutre à positif. Le rebrancher exige de modéliser cette hausse, ce qui bute
-                    // sur une causalité (les déductions de l'année ne sont connues qu'en décembre).
                     optimizeSourceDeductions: false,
                     incomeRetirementMonthly: incomeRetirement,
-                    // FA-3a — SRG mensuel familial : NON IMPOSABLE (Service Canada), soustrait
-                    // de l'assiette imposable par taxDecember (revenu cash inchangé).
                     incomeRetirementGisMonthly: incomeRetirementGis,
-                    // A1 — décomposition par conjoint pour imposer chacun sur SON revenu de
-                    // retraite réel (split égal sinon, cf. taxDecember). Vide hors retraite.
                     incomeRetirementPerUserMonthly: soloHousehold ? undefined : incomeRetirementPerUser,
-                    // Phase 3 — composante DB mensuelle par conjoint (fractionnement 65+).
-                    // [FISC-LATENT-PENSION-CREDIT] Expression HISSÉE en `dbPerUserMonthly()` : elle
-                    // sert aussi à l'impôt latent, et deux écritures d'un même effondrement solo
-                    // divergeraient en silence (leçon du lot 84, où le même geste a supprimé un
-                    // littéral en double au lieu de le déclarer).
                     incomeRetirementDbPerUserMonthly: dbPerUserMonthly(),
                     nonReg, baseNonRegRate: baseRates.nonReg,
                     accRrspYear, accFhsaYear, smithInterestDeductibleYear,
                     accRentesYear, accRetraitsReerYear, accCapitalGainsYear,
                     accRetraitsReerYearByUser: soloHousehold ? undefined : accRetraitsReerYearByUser,
                     age,
-                    // B-AUDIT-3 — âge courant du conjoint (user[1]) pour les crédits d'âge/
-                    // pension PAR conjoint dans l'impôt de décembre. undefined si pas de conjoint
-                    // (ou conjoint décédé — FA-10).
                     ageSpouse: !soloHousehold ? ageSpouseProjete : undefined,
-                    // §6.4 RAMQ: nombre d'enfants à charge (relève le seuil d'exemption).
-                    // Approximé via childGoals.length faute de champ dédié dans User.
-                    // TODO: ajouter `User.dependentChildrenCount` pour précision.
                     childrenCount: activeChild.length,
-                    // §6.4 RAMQ — [ENG-RAMQ-FIELDS] exemption PAR ADULTE si couverture privée
-                    // (`User.hasPrivateDrugInsurance`, Annexe K : chaque conjoint calcule SA prime).
-                    // Ménage solo (décès/divorce : c'est user[0] qui reste, cf. survivorMode) →
-                    // seul son drapeau compte. Champ absent = false (paie au public, conservateur).
                     ramqExemptAdultsCount: soloHousehold
                         ? (config.users[0]?.hasPrivateDrugInsurance ? 1 : 0)
                         : config.users.filter(u => u?.hasPrivateDrugInsurance).length,
-                    // PH4-FUT-B — levier fractionnement de pension. Absent/true = actif (historique) ;
-                    // false → la Phase 3 d'optimisation de décembre est sautée (impôt = brut par conjoint).
                     enablePensionSplitting: effProj.appliedPensionSplitting !== false,
+                    skipLogs: pointAllege,
                 },
                 { calculateFiscalReport, getMarginalRate, calculateDividendTax, getDividendGrossUpRate },
                 taxCurrentYear,
             );
             taxCurrentYear = decResult.newTaxCurrentYear;
-            // [FISC-DIV-ACB-STEPUP] Le dividende réputé du non-enregistré vient d'être imposé et son
-            // montant est resté dans le compte : le prix de base rajusté monte d'autant, sinon la
-            // même somme est ré-imposée dans le gain latent à la réalisation ou au décès.
-            // ⚠️ MÊME patron que `processGainHarvesting` quelques lignes plus haut
-            // (`nonRegACB += gh.harvestedGain`) : le module rend un delta, l'appelant l'applique.
             nonRegACB += decResult.nonRegACBAdd;
-            // [ENG-TTP-UNSETTLED-HORIZON] Décembre vient de RÉCONCILIER l'année : ce montant est
-            // la vraie dette fiscale de l'année (retenues provisionnées + complément), réglée par
-            // l'avril SUIVANT. Photo ICI ≡ lire taxPreviousYear (son transfert est quelques lignes
-            // plus bas, MÊME bloc décembre — vérifié #555) : la photo est le point le plus lisible.
-            // NB : l'audit #554 mesurait 5 815,50 $ en sommant les séries AccruedTax* = année
-            // réconciliée (171,89 $ NET) + stub de l'année en cours NON réconciliée (5 643,61 $ de
-            // retenues brutes) — c'est le NET réconcilié seul qui est la vraie dette.
-            reconciledUnsettledTax = (['revenu', 'gains', 'divers', 'reer'] as const)
-                .reduce((s, k) => s + (Number.isFinite(taxCurrentYear[k]) ? taxCurrentYear[k] : 0), 0);
-            decResult.logs.forEach(msg => logEvent(flowEventsLog, msg));
+            reconciledUnsettledTax = (Number.isFinite(taxCurrentYear.revenu) ? taxCurrentYear.revenu : 0)
+                + (Number.isFinite(taxCurrentYear.gains) ? taxCurrentYear.gains : 0)
+                + (Number.isFinite(taxCurrentYear.divers) ? taxCurrentYear.divers : 0)
+                + (Number.isFinite(taxCurrentYear.reer) ? taxCurrentYear.reer : 0);
+            if (!pointAllege && decResult.logs.length > 0) {
+                decResult.logs.forEach(msg => logEvent(flowEventsLog, msg));
+            }
 
-            // PV-9 : capture des gains réalisés de l'année AVANT le reset (réutilisés par le clawback
-            // PSV ci-dessous, même décembre, et par le test SRG de l'an prochain via le lag de janvier).
             capitalGainsRealizedThisYear = accCapitalGainsYear;
 
             if (isRetired && age >= PENSION_SPLIT_MIN_AGE) {
@@ -2203,9 +2217,10 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
                     capitalGainsRealizedThisYear,
                     pensionPSV - incomeRetirementGis,
                     computeAnnualNonRegDividends(nonReg, baseRates.nonReg ?? 0) * getDividendGrossUpRate('eligible'),
+                    pointAllege,
                 );
                 oasClawbackNextPeriod = oasResult.clawbackAnnual;
-                if (oasResult.logMsg) flowEventsLog.push(oasResult.logMsg);
+                if (!pointAllege && oasResult.logMsg) flowEventsLog.push(oasResult.logMsg);
             }
 
             accCapitalGainsYear = 0;
@@ -2213,42 +2228,15 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             accRrspYear = 0;
             accFhsaYear = 0;
 
-            // V30: Transfer accumulated taxes to the 'previous year' bucket to be paid in April.
             taxPreviousYear = { ...taxCurrentYear };
             taxCurrentYear = { revenu: 0, gains: 0, reer: 0, divers: 0, donCredit: 0 };
 
-            // V28 + Cycle 12: TFSA Room reset géré en Janvier — voir processJanuaryReset (./projection/taxJanuary)
-
-            // [CELIAPP-DOUBLE-RECHARGE] Décembre n'écrit PLUS l'espace CELIAPP — audit 2026-08-19.
-            //
-            // Il posait ici `fhsaRoom = FHSA_ANNUAL_LIMIT_PER_USER * taxFilers`, ce qui REMETTAIT
-            // l'espace au plein annuel quoi qu'on ait cotisé. Or janvier (`taxJanuary.ts`, la
-            // source unique depuis le Cycle 12) calcule SON report à partir de cette valeur :
-            //   allowedCarryForward = min(annuel, fhsaRoomCurrent)
-            // Il lisait donc toujours « annuel » comme résiduel → report TOUJOURS MAXIMAL, quelle
-            // que soit l'utilisation réelle. Deux producteurs qui s'ignorent.
-            //
-            // MESURÉ (couple, plafond annuel 16 000 $) : espace publié 32 000 $ CHAQUE année au
-            // lieu de suivre le résiduel (16 000 $ si tout est cotisé, 24 000 $ si la moitié l'est),
-            // et le plafond à vie de 80 000 $ atteint en 3 ans au lieu de 5.
-            //
-            // ⚠️ La garde du panel #613 (« les droits sont PERSONNELS : ceux du conjoint partent
-            // avec lui ») n'est PAS perdue : janvier reçoit déjà `fhsaEligibleUsersCount` passé au
-            // travers de `soloHousehold` (voir l'appel à `processJanuaryReset` plus bas), et ce
-            // compteur est même PLUS juste que `taxFilers` — il exclut les propriétaires récents,
-            // qui n'ont pas droit au CELIAPP.
-            //
-            // Le résiduel transmis est désormais le VRAI : `cashflowAllocation` fait
-            // `state.fhsaRoom -= fillFhsa` à chaque cotisation. Le CELI avait migré vers janvier au
-            // Cycle 12 (cf. commentaire ci-dessus) ; le CELIAPP était resté en arrière.
-
-            // Cycle 10 split: TLH → ./projection/taxCycle (processTaxLossHarvesting)
             const currentNonRegRate = (enableMonteCarlo || historicalSequence !== null) ? mcNonRegRate : baseRates.nonReg;
-            const tlhResult = processTaxLossHarvesting(currentMonthIndex, m, nonReg, nonRegACB, currentNonRegRate);
+            const tlhResult = processTaxLossHarvesting(currentMonthIndex, m, nonReg, nonRegACB, currentNonRegRate, pointAllege);
             if (tlhResult.harvestedLoss > 0) {
                 capitalLossBank += tlhResult.harvestedLoss;
                 nonRegACB += tlhResult.acbDelta;
-                if (tlhResult.logMsg) logEvent(flowEventsLog, tlhResult.logMsg);
+                if (!pointAllege && tlhResult.logMsg) logEvent(flowEventsLog, tlhResult.logMsg);
             }
         }
 
@@ -2317,10 +2305,15 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             const grossDrawn = assetsBeforeRescue - (celi + reer + nonReg + crypto);
             const covered = grossDrawn - (taxCurrentYear.reer - withholdingBeforeRescue);
             const residual = overdraft - covered;
-            logEvent(flowEventsLog, `🏦 Découvert de liquidités couvert par vente de placements : ${formatCAD(Math.round(Math.min(covered, overdraft)))} sur ${formatCAD(Math.round(overdraft))}`);
+            if (!pointAllege) {
+                logEvent(flowEventsLog, `🏦 Découvert de liquidités couvert par vente de placements : ${formatCAD(Math.round(Math.min(covered, overdraft)))} sur ${formatCAD(Math.round(overdraft))}`);
+            }
             if (residual > 1) {
                 liquidDebt += residual; // [PV-6] porté en dette (plus absorbé silencieusement)
-                logEvent(flowEventsLog, `⚠️ Découvert NON couvert (comptes insuffisants) : ${formatCAD(Math.round(residual))} — porté en dette`);
+                uncoveredThisMonth += residual;
+                if (!pointAllege) {
+                    logEvent(flowEventsLog, `⚠️ Découvert NON couvert (comptes insuffisants) : ${formatCAD(Math.round(residual))} — porté en dette`);
+                }
             }
             // Un seul incrément de shortfallMonths par mois, même si l'allocation régulière
             // ET le sauvetage ont chacun constaté un déficit.
@@ -2386,6 +2379,18 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         if (shockREER !== 0) { growthREER += shockREER; totalGrowth += shockREER; }
         if (shockNonReg !== 0) { growthNonReg += shockNonReg; totalGrowth += shockNonReg; }
         if (shockCrypto !== 0) { growthCrypto += shockCrypto; totalGrowth += shockCrypto; }
+
+        if (isRetired) {
+            retirementMonthsEvaluated++;
+            const safeCpi = Math.max(1e-9, cumulativeCpiMultiplier);
+            const fundedNominal = Math.max(0, monthlyExpenses - uncoveredThisMonth);
+            retFundedRealSum += fundedNominal / safeCpi;
+            const finGrowth = growthCELI + growthREER + growthNonReg + growthCrypto + growthLiquid + growthCELIAPP;
+            const finEnd = Math.max(0, liquid + celi + celiapp + reer + nonReg + crypto);
+            const finBase = Math.max(0, finEnd - finGrowth);
+            const realFactor = computeRetirementRealReturnFactor(finGrowth, finBase, currentInflation);
+            retAnnuityFvFactor = retAnnuityFvFactor * realFactor + 1;
+        }
         // [PROJ-TTP-DOUBLECOUNT] (panel #551, MESURÉ au cent — corrigé 2026-08-01) « Impôt à vie »
         // = Σ des flux d'impôt réellement DÉBITÉS du liquide, c'est-à-dire `fluxImpots` SEUL :
         // avril débite le bucket `.reer` ENTIER (taxApril.ts — retenues cascade + meltdown + FERR,
@@ -2414,28 +2419,28 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         const rawNetWorth = currentRawNetWorth();
         if (rawNetWorth < minNetWorth) minNetWorth = rawNetWorth;
 
-        // V23 Fix 1: FIRE comparaison en dollars futurs (inflation-ajustée)
-        const futureFireTarget = fireTargetNetWorth * Math.pow(1 + simInflation / 100, m / 12);
+        // V23 Fix 1: FIRE comparaison en dollars futurs (inflation-ajustée ; alignée sur CPI cumulée sous MC/régimes)
+        const useStochCpi = enableMonteCarlo || historicalSequence !== null || macroState !== null;
+        const futureFireTarget = fireTargetNetWorth * (useStochCpi ? cumulativeCpiMultiplier : Math.pow(1 + simInflation / 100, m / 12));
         if (!hasHitFire && rawNetWorth >= futureFireTarget) {
-            logEvent(lifeEventsLog, FIRE_LIFE_EVENT);
+            if (!pointAllege) logEvent(lifeEventsLog, FIRE_LIFE_EVENT);
             hasHitFire = true;
         }
+        if (firstFireAge === null && futureFireTarget > 0 && Number.isFinite(rawNetWorth) && rawNetWorth >= futureFireTarget) {
+            firstFireMonthIndex = m;
+            firstFireAge = currentAge + m / 12;
+        }
 
-        // [PERF-ENG-LATENT-MC-WASTE] Ce bloc entier n'alimente QUE le point mensuel détaillé —
-        // impôt latent, dividendes, revenus de placement imposables, taux marginal et effectif,
-        // cumuls REEE. Sous Monte Carlo, `buildMonthlyDataPoint` ne rend que `{ NetWorth, monthIndex }` :
-        // tout ceci était calculé puis JETÉ, à chaque mois de chaque itération.
-        //
-        // ⚠️ Le saut est sûr parce que ces grandeurs n'ont AUCUN autre lecteur — vérifié une par une :
-        // chacune est déclarée ici et lue uniquement dans le `data.push` ci-dessous — et parce que
-        // `computeLatentTax` est une fonction PURE (son en-tête le dit, et elle ne fait qu'appeler
-        // `calculateFiscalReport`, injecté). Retirer un calcul dont la sortie est jetée n'est sûr
-        // que si l'on a d'abord prouvé qu'il ne fait rien d'autre que produire cette sortie.
-        //
-        // ⚠️ La condition vient de `estPointAllege`, la MÊME que celle de `buildMonthlyDataPoint` —
-        // importée, pas recopiée. Deux écritures de cette condition divergeraient en silence : des
-        // champs calculés pour rien, ou un point verbeux privé de ses champs.
-        const pointAllege = estPointAllege(enableMonteCarlo, diagnostics.verboseMonthlyPoints);
+        if (pointAllege) {
+            if (netWorthBuf) {
+                netWorthBuf[m] = round2(rawNetWorth);
+                netWorthBufLen = m + 1;
+            } else {
+                data.push({ NetWorth: round2(rawNetWorth), monthIndex: m } as ProjectionChartPoint);
+            }
+            continue;
+        }
+
         let impotLatent = 0;
         let reeeContribCum = 0;
         let reeeGrantsCum = 0;
@@ -2546,13 +2551,30 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
     }
 
     // Cycle 26 split: bilan successoral → ./projection/estateCalculation
-    // RE-GAIN-SUCC — gain latent des immeubles LOCATIFS non vendus à la fin (RP exclue, exempte au décès).
-    const realEstateLatentGain = propertiesState
+    // RE-GAIN-SUCC — gain latent des immeubles LOCATIFS non vendus à la fin (RP exclue, exempte au décès)
+    // + gain en capital et récupération de DPA (100 % LIR 13(1)) des immeubles locatifs W5.
+    const propLatentGain = propertiesState
         .filter(p => p.isBought && !p.isSold && !p.isPrimaryResidence)
         .reduce((s, p) => s + Math.max(0, p.currentValue - (p.cost ?? 0)), 0);
+    let rentalLatentGain = 0;
+    let rentalRecaptureTaxable = 0;
+    for (let ri = 0; ri < rentalStates.length; ri++) {
+        const rs = rentalStates[ri];
+        const tb = rentalTaxBases[ri];
+        const cost = tb ? tb.purchaseCost : rs.initialCost;
+        const priorCca = tb ? tb.priorCcaTaken : 0;
+        // La DPA pendant la simulation n'est pas transmise à applyW5Effects (actualCca = 0) :
+        // seule la DPA antérieure réellement déduite avant simulation (rp.ccaTaken) est récupérable au décès.
+        const effectiveEndUcc = Math.max(0, cost - priorCca);
+        const recap = computeCcaRecapture(rs.currentValue, cost, effectiveEndUcc);
+        rentalLatentGain += recap.capitalGainGross;
+        rentalRecaptureTaxable += recap.recapture100Pct;
+    }
+    const realEstateLatentGain = propLatentGain + rentalLatentGain;
     const estate = computeEstateNetWorth({
         liquid, celi, celiapp, reer, nonReg, nonRegACB, crypto, cryptoACB, reee,
-        realEstateEquity, mortgageBalance, realEstateLatentGain, smithManoeuvreDebt, liquidDebt,
+        realEstateEquity, mortgageBalance, realEstateLatentGain, rentalRecaptureTaxable, isDeceasedEarly: isDead,
+        smithManoeuvreDebt, liquidDebt,
         // [ENG-W5-BUSINESS-OFFBALANCE] La succession aussi : sans ce terme, le legs sous-évaluait le
         // patrimoine de la valeur ENTIÈRE de l'entreprise (mesuré 2 M$ dans le persona W5).
         privateBusinessValue,
@@ -2561,7 +2583,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         activeDebtsTotal: sumActiveDebts(),
         incomeRetirement, accRentesYear, accRetraitsReerYear,
         grossMarcBaseAnnual, grossAnnaBaseAnnual, simSalaryGrowth,
-        simulationYears: projection.years,
+        simulationYears: elapsedYearsAtEnd,
         startYear, currentAge,
         retirementTargetAge: retirementGoal.targetAge,
         governmentPension: retirementGoal.governmentPension,
@@ -2588,8 +2610,8 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         // porté à l'année finale, comme `rrqExpected`.
         dbPensionMonthlyPlanned: computeDbPensionMonthly({
             retirementGoal,
-            age: Math.max(currentAge + projection.years, retirementGoal.dbPensionStartAge ?? retirementGoal.targetAge),
-            inflFactor: Math.pow(1 + simInflation / 100, projection.years),
+            age: Math.max(currentAge + elapsedYearsAtEnd, retirementGoal.dbPensionStartAge ?? retirementGoal.targetAge),
+            inflFactor: Math.pow(1 + simInflation / 100, elapsedYearsAtEnd),
             survivorMode, dbSurvivorPct,
             // ⚠️ `divorced` SEUL, PAS `survivorMode || divorced` — exactement comme l'appel de
             // référence de `computeRetirementIncome` 1 200 lignes plus haut. Le décès est DÉJÀ porté
@@ -2624,19 +2646,48 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         startingREEE: liveCSVBalances.REEE || 0,
     }, calculateFiscalReport);
 
+    const grossFinancialEnd = Math.max(0, liquid + celi + celiapp + reer + nonReg + crypto);
+    const financialDebtsAndUnsettled = liquidDebt + smithManoeuvreDebt + sumActiveDebts()
+        + (Number.isFinite(reconciledUnsettledTax) ? Math.max(0, reconciledUnsettledTax) : 0);
+    const finTaxableEnd = reer
+        + Math.max(0, nonReg - nonRegACB) * CAPITAL_GAINS_INCLUSION_STANDARD
+        + Math.max(0, crypto - cryptoACB) * CAPITAL_GAINS_INCLUSION_STANDARD;
+    const totalEstateLiquidationEnd = estate.taxableBreakdown.rrspRrif
+        + estate.taxableBreakdown.capitalGainsTaxable
+        + estate.taxableBreakdown.rentalRecapture;
+    const sustainableMonthlyNetReal = computeSustainableMonthlyNetReal({
+        retirementMonthsEvaluated,
+        retFundedRealSum,
+        retAnnuityFvFactor,
+        grossFinancial: grossFinancialEnd,
+        financialDebtsAndUnsettled,
+        finTaxable: finTaxableEnd,
+        totalEstateLiquidation: totalEstateLiquidationEnd,
+        totalEstateTax: estate.totalEstateTax,
+        cumCpiFactor: cumulativeCpiMultiplier,
+        lifeExpectancy: retirementGoal.lifeExpectancy,
+        effectiveRetirementAge,
+    });
+
     // Bug détecté en mode test : chartData parfois vide silencieusement
     // (lastProjection jamais set côté store). Trace explicite pour faciliter
     // le debug local quand on voit "Patrimoine projeté: 0.00M$" en UI.
-    if (data.length === 0) {
+    if (!netWorthBuf && data.length === 0) {
         // Anomalie moteur (« Patrimoine projeté: 0.00M$ » en UI) : visible dans les diagnostics,
         // pas seulement en console. logError est worker-safe (no-op de persistance hors localStorage).
         logError({ source: 'projection', severity: 'warning', message: 'runScenario a retourné chartData=[] (early break mortalité ou boucle skippée ?)', context: { years: projection.years, isDead, estateNetWorth: estate.estateNetWorth } });
     }
 
     return {
-        chartData: data,
+        chartData: netWorthBuf ? EMPTY_CHART_DATA : data,
+        ...(netWorthBuf ? { netWorthSeries: netWorthBuf, netWorthSeriesLen: netWorthBufLen } : {}),
         actionPlan: month1ActionPlan,
         fireNumber: fireTargetNetWorth || 0,
+        firstFireAge,
+        firstFireMonthIndex,
+        goalOutcomes,
+        finalExpenseMultiplier: expenseMultiplier,
+        cumCpiFactorAtEnd: cumulativeCpiMultiplier,
         finalNetWorth: estate.finalRawNetWorth,
         estateNetWorth: estate.estateNetWorth,
         reerByUserFinal: reerByUser,
@@ -2650,6 +2701,12 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         // retour). `totalEstateTax` est une grandeur DISJOINTE (impôt de liquidation).
         unsettledTaxAtHorizon: Number.isFinite(reconciledUnsettledTax) ? reconciledUnsettledTax : 0,
         totalEstateTax: estate.totalEstateTax,
+        fedEstateTax: estate.fedEstateTax,
+        qcEstateTax: estate.qcEstateTax,
+        estateTaxableBreakdown: estate.taxableBreakdown,
+        projectedDeathAge: estate.projectedDeathAge,
+        sustainableMonthlyNetReal,
+        retirementMonthsEvaluated,
         totalTaxesPaid: totalTaxesPaid || 0,
         totalGrowth: totalGrowth || 0,
         totalExpenses,
@@ -2678,11 +2735,7 @@ export const __runScenarioForTests = runScenario;
  *  constante fiscale : elle ne va pas dans FISCAL_REFERENCE. */
 export const SAVINGS_SENSITIVITY_MONTHLY = 100;
 
-export const calculateFutureProjection = (params: SimulationParams, runMC: boolean = false, selectedIdx: number = 0, onlyStratTypes?: string[]): ProjectionResult => {
-    // G21 C5 — leviers « appliqués » depuis l'optimiseur (orthogonaux à l'axe
-    // scénario). EngineOverrides threadés à TOUS les scénarios + bonus de rendement
-    // NonReg pour l'asset location (clone immutable, effet modulé par le solde réel).
-    // Tous absents ⇒ comportement historique strictement inchangé.
+function resolveEffectiveStrategyParams(params: SimulationParams) {
     const proj = params.projection;
     const appliedOverrides: EngineOverrides = {
         contributionOrder: proj.appliedContributionOrder,
@@ -2690,10 +2743,6 @@ export const calculateFutureProjection = (params: SimulationParams, runMC: boole
         skipRapForPurchase: proj.appliedSkipRap,
         gainHarvesting: proj.appliedGainHarvesting,
     };
-    // PH4-FUT-B — profil de rendement (levier) : remplace returnRates par le preset
-    // (conservative/aggressive ; 'balanced'/absent = inchangé → non-régression) PUIS bonus
-    // asset-location. `returnRatesForProfile` est le helper PARTAGÉ avec configToEngine (recherche)
-    // → la courbe « appliquée » reproduit EXACTEMENT ce que l'optimiseur a classé.
     const profileRates = returnRatesForProfile(proj.appliedReturnProfile, proj.returnRates);
     const effectiveReturnRates = proj.appliedAssetLocation && profileRates
         ? {
@@ -2706,6 +2755,16 @@ export const calculateFutureProjection = (params: SimulationParams, runMC: boole
     const effectiveParams: SimulationParams = effectiveReturnRates && effectiveReturnRates !== proj.returnRates
         ? { ...params, projection: { ...proj, returnRates: effectiveReturnRates } }
         : params;
+    const selectedDef = strategyDefFor(proj.withdrawalStrategy);
+    return { effectiveParams, appliedOverrides, selectedDef };
+}
+
+export const calculateFutureProjection = (params: SimulationParams, runMC: boolean = false, selectedIdx: number = 0, onlyStratTypes?: string[]): ProjectionResult => {
+    // G21 C5 — leviers « appliqués » depuis l'optimiseur (orthogonaux à l'axe
+    // scénario). EngineOverrides threadés à TOUS les scénarios + bonus de rendement
+    // NonReg pour l'asset location (clone immutable, effet modulé par le solde réel).
+    // Tous absents ⇒ comportement historique strictement inchangé.
+    const { effectiveParams, appliedOverrides, selectedDef } = resolveEffectiveStrategyParams(params);
 
     // [UI-SCEN] (2026-06-09, demande Marc « enlève les plans de base ») — la stratégie de
     // gestion est un PARAMÈTRE (projection.withdrawalStrategy) : par défaut le moteur ne
@@ -2714,7 +2773,6 @@ export const calculateFutureProjection = (params: SimulationParams, runMC: boole
     // (panneau de l'onglet Optimisation). Parmi les façons de gérer (kind 'strategy',
     // toutes stratType BASE), seule la SÉLECTIONNÉE est calculée — y compris quand
     // onlyStratTypes contient 'BASE' (goalSeek : 1 sim au lieu de 5).
-    const selectedDef = strategyDefFor(proj.withdrawalStrategy);
     let activeDefs: typeof SCENARIO_DEFINITIONS;
     if (onlyStratTypes) {
         const matching = SCENARIO_DEFINITIONS.filter(d => onlyStratTypes.includes(d.stratType))
@@ -2877,3 +2935,79 @@ export const calculateShapleyAttribution = (
     winnerConfig: StrategyConfig,
     monthlyExpenses?: number,
 ): ShapleyAttributionItem[] => evaluateShapleyForWinner(runScenario, params, baselineConfig, winnerConfig, monthlyExpenses);
+
+/**
+ * Exécute un lot (shard) du mode lourd « Grand Calcul » à mémoire bornée.
+ * Injecte `runScenario` avec la stratégie effective et les régimes macroéconomiques optionnels.
+ */
+export const runGrandCalculShard = (
+    params: SimulationParams,
+    config: GrandCalculConfig,
+    startIter: number,
+    count: number,
+    onProgress?: (done: number, total: number) => void,
+): GrandCalculShardResult => {
+    const { effectiveParams, appliedOverrides, selectedDef } = resolveEffectiveStrategyParams(params);
+    const preparedSetup = prepareScenarioSetup(effectiveParams, selectedDef.stratType);
+    const netWorthBuffer = new Float64Array(preparedSetup.totalMonths);
+    return runGrandCalculShardWithRunner(
+        (p, s, mc, dp, idx, st, ov, gc) => runScenario(p, s, mc, dp, idx, st, ov, {
+            macroRegimes: gc,
+            preparedSetup,
+            netWorthBuffer,
+        }),
+        params,
+        config,
+        startIter,
+        count,
+        onProgress,
+        {
+            effectiveParams,
+            strategy: selectedDef.strategy,
+            delayPensions: selectedDef.delayPensions,
+            scenarioType: selectedDef.stratType,
+            overrides: appliedOverrides,
+        },
+    );
+};
+
+/**
+ * Calcule la référence déterministe (notamment l'impôt successoral ARC/RQ de base)
+ * à passer dans `meta.deterministicEstate` lors de la fusion `mergeGrandCalculShards`.
+ */
+export const computeGrandCalculDeterministicBaseline = (params: SimulationParams): {
+    deterministicEstate: NonNullable<MergeGrandCalculMeta['deterministicEstate']>;
+} => {
+    const { effectiveParams, appliedOverrides, selectedDef } = resolveEffectiveStrategyParams(params);
+    const base = runScenario(
+        effectiveParams,
+        selectedDef.strategy,
+        false,
+        selectedDef.delayPensions,
+        0,
+        selectedDef.stratType,
+        appliedOverrides,
+    );
+    return {
+        deterministicEstate: {
+            total: Number.isFinite(base.totalEstateTax) ? base.totalEstateTax : null,
+            fed: base.fedEstateTax ?? null,
+            qc: base.qcEstateTax ?? null,
+            taxableBreakdown: base.estateTaxableBreakdown ?? {
+                rrspRrif: null,
+                capitalGainsTaxable: null,
+                rentalRecapture: null,
+            },
+            projectedDeathAge: Number.isFinite(base.projectedDeathAge) ? base.projectedDeathAge : null,
+        },
+    };
+};
+
+export {
+    mergeGrandCalculShards,
+    clampGrandCalculIterations,
+    GRAND_CALCUL_ITERATIONS_MIN,
+    GRAND_CALCUL_ITERATIONS_MAX,
+    GRAND_CALCUL_ITERATIONS_DEFAULT,
+};
+export type { MergeGrandCalculMeta };

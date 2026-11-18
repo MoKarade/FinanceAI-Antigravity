@@ -3,7 +3,8 @@
 // entre useFinanceStore.ts et ses sous-modules (actionsModeTest, migrationsPersistees, optionsPersistance).
 
 import type { AppState, Tab } from '../types';
-import type { ProjectionResult } from '../services/projection/types';
+import type { GrandCalculResult, ProjectionResult } from '../services/projection/types';
+import type { GrandCalculProgress } from '../services/projection/runAsync';
 import type { EcritureFx } from '../services/fx/ecritureFx';
 
 export interface PendingFocus {
@@ -13,6 +14,8 @@ export interface PendingFocus {
 }
 
 export type ProjectionStatus = 'idle' | 'computing' | 'error';
+
+export type GrandCalculStatus = 'idle' | 'restoring' | 'running' | 'ready' | 'cancelled' | 'error';
 
 export interface FinanceState extends AppState {
     activeTab: Tab;
@@ -24,6 +27,10 @@ export interface FinanceState extends AppState {
     lockedProjection: ProjectionResult | null;
     isProjectionLocked: boolean;
     revealedProjectionSig: string | null;
+    grandCalculResult: GrandCalculResult | null;
+    grandCalculStatus: GrandCalculStatus;
+    grandCalculProgress: GrandCalculProgress | null;
+    grandCalculError: string | null;
     pendingFocus: PendingFocus | null;
     isTestMode: boolean;
     realDataSnapshot: Partial<Omit<AppState, 'apiKeys'>> | null;
@@ -40,6 +47,11 @@ export interface FinanceState extends AppState {
     unlockProjection: () => void;
     setLockedProjection: (r: ProjectionResult | null) => void;
     setRevealedProjectionSig: (sig: string | null) => void;
+    setGrandCalculResult: (r: GrandCalculResult | null) => void;
+    setGrandCalculStatus: (s: GrandCalculStatus) => void;
+    setGrandCalculProgress: (p: GrandCalculProgress | null) => void;
+    setGrandCalculError: (err: string | null) => void;
+    resetGrandCalcul: () => void;
     navigateWithFocus: (tab: Tab, section?: string) => void;
     clearPendingFocus: () => void;
     updateFxRates: (rates: EcritureFx) => void;

@@ -31,6 +31,7 @@ export interface W5Context {
      *  produite par `rentalCcaParImmeuble` sur l'état AVANT le mois locatif). Déduite de la base imposable
      *  du NOI sans créer de perte (LIR 1100(11)). Absent → calculée automatiquement sur `rp.currentValue`. */
     rentalCcaMensuelParImmeuble?: Readonly<Record<string, number>>;
+    skipLogs?: boolean;
 }
 
 export interface W5Mutator {
@@ -108,7 +109,7 @@ export function applyW5Effects(
         if (cyclMonths > 0 && m > 0 && m % cyclMonths === 0) {
             const cost = (v.costEstimate || 0) * expenseMultiplier;
             state.subtractLiquid(cost);
-            state.logFlow(`🚗 Remplacement véhicule: -${formatCAD(Math.round(cost))}`);
+            if (!ctx.skipLogs) state.logFlow(`🚗 Remplacement véhicule: -${formatCAD(Math.round(cost))}`);
         }
     }
 
@@ -120,7 +121,7 @@ export function applyW5Effects(
         if (renoMonthIdx === m) {
             const cost = (reno.cost || 0) * expenseMultiplier;
             state.subtractLiquid(cost);
-            state.logLife(`🔨 Rénovation majeure: -${formatCAD(Math.round(cost))} (${reno.description || 'maison'})`);
+            if (!ctx.skipLogs) state.logLife(`🔨 Rénovation majeure: -${formatCAD(Math.round(cost))} (${reno.description || 'maison'})`);
         }
     }
 

@@ -59,6 +59,7 @@ export interface MeltdownCtx {
     nonReg: number;
     celi: number;
     realEstateEquity: number;
+    skipLogs?: boolean;
 }
 
 interface MeltdownResult {
@@ -115,7 +116,7 @@ export function processReerMeltdown(
         reerDrawn: meltAmountBrut,
         nonRegAdd: netMelt,
         withholding,
-        log: m % 12 === 0
+        log: !ctx.skipLogs && m % 12 === 0
             ? `🔥 Stratégie Meltdown: Retrait de ${formatCAD(Math.round(meltAmountBrut * 12))} pour saturer les paliers.`
             : null,
     };

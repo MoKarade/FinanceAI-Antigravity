@@ -313,3 +313,114 @@ export interface ProjectionResult {
     // Audit 2026-05: unknown au lieu de any pour forcer narrow chez consommateurs.
     [key: string]: unknown;
 }
+
+// ── Contrats Grand Calcul (R1) & Métriques prédictives (R2) ──────────────────
+
+export type MacroRegimeId = 'expansion' | 'stagflation' | 'recession' | 'krach';
+
+export interface GrandCalculConfig {
+    iterations: number; // borné [50_000, 100_000]
+    enableMacroRegimes: boolean;
+    includeHistoricalCrises: boolean;
+    seed?: number;
+}
+
+export interface FiAgeDistribution {
+    reachedPct: number | null; // 0..100, null si cible invalide (<= 0)
+    p5Age: number | null;      // 5e centile (le plus tôt), null si reachedPct < 5
+    p50Age: number | null;     // médiane, null si reachedPct < 50
+    p95Age: number | null;     // 95e centile (le plus tard), null si reachedPct < 95
+    horizonAge: number;
+}
+
+export interface GoalProbabilityResult {
+    goalId: string;
+    name: string;
+    deadline: string;
+    targetAmount: number;
+    probabilityPct: number | null; // null si échéance hors horizon ou invalide
+    medianShortfall: number | null; // déficit médian (CAD constants) parmi les échecs, 0 si 100 % atteint, null si hors horizon/invalide
+    status: 'evaluated' | 'already_completed' | 'beyond_horizon' | 'invalid_deadline';
+}
+
+export interface GuaranteedPurchasingPower {
+    // Polarité : sécurité P95 = 95 % des scénarios soutiennent >= cette valeur (5e centile)
+    p95SecurityMonthlyNetReal: number | null;
+    p90SecurityMonthlyNetReal: number | null;
+    p50SecurityMonthlyNetReal: number | null;
+    retirementMonthsEvaluated: number;
+}
+
+export interface EstateTaxSummary {
+    deterministicTotal: number | null;
+    deterministicFed: number | null; // ARC
+    deterministicQc: number | null;  // Revenu Québec
+    mcTotalP5: number | null;
+    mcTotalP50: number | null;
+    mcTotalP95: number | null;
+    mcFedP50: number | null;
+    mcQcP50: number | null;
+    mcRealTotalP50: number | null; // CAD constants
+    taxableBreakdown: {
+        rrspRrif: number | null;
+        capitalGainsTaxable: number | null;
+        rentalRecapture: number | null;
+    };
+    projectedDeathAge: number | null;
+}
+
+export interface CompactMonthlyQuantileShard {
+    nMonths: number;
+    counts: Uint16Array;
+    means: Float64Array;
+    weights: Uint32Array;
+    exactFlags?: Uint8Array;
+}
+
+export interface GrandCalculShardResult {
+    iterationsDone: number;
+    ruinedCount: number;
+    monthlyHistogramsOrSamples: CompactMonthlyQuantileShard;
+    fiReachedAges: Float32Array | number[];
+    goalResults: Record<string, { metCount: number; failCount?: number; shortfalls: number[]; status: GoalProbabilityResult['status'] }>;
+    sustainableMonthlyNetReal: Float32Array | number[];
+    estateTotals: Float32Array | number[];
+    estateFeds: Float32Array | number[];
+    estateQcs: Float32Array | number[];
+    estateRealTotals: Float32Array | number[];
+    finalNetWorths?: Float32Array | number[];
+    deathAges?: Float32Array | number[];
+    fireTargetValid?: boolean;
+    horizonAge?: number;
+    retirementMonthsTotal?: number;
+}
+
+export interface GrandCalculMonthlyBand {
+    monthIndex: number;
+    year: number;
+    age: number;
+    p5: number;
+    p10: number;
+    p25: number;
+    p50: number;
+    p75: number;
+    p90: number;
+    p95: number;
+}
+
+export interface GrandCalculResult {
+    version: 1;
+    paramsSig: string;
+    createdAt: string; // ISO UTC
+    durationMs: number;
+    iterationsRun: number;
+    regimesEnabled: boolean;
+    historicalCrisesEnabled: boolean;
+    survivalRatePct: number | null;
+    cvar95: number | null;
+    monthlyBands: GrandCalculMonthlyBand[];
+    fiAge: FiAgeDistribution;
+    goalProbabilities: GoalProbabilityResult[];
+    guaranteedPurchasingPower: GuaranteedPurchasingPower;
+    estateTax: EstateTaxSummary;
+}

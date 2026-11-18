@@ -6,6 +6,7 @@ import { useViewportBelowSm } from '../../hooks/useViewportBelowSm';
 import { splitEventIcon } from './ProjectionTooltip';
 import { Icon } from '../ui/Icon';
 import { PrivateAmount } from '../ui/PrivateAmount';
+import { useFinanceStore } from '../../store/useFinanceStore';
 import { ProjectionChartPoint } from '../../services/projection/types';
 import { transactionsOnDay } from '../../services/history/dayTransactions';
 import { type DayVariationResult } from '../../services/history/dayVariation';
@@ -91,6 +92,8 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
     const isNarrowViewport = useViewportBelowSm();
     const [detailExpanded, setDetailExpanded] = useState(false);
     const showFull = !isNarrowViewport || detailExpanded;
+    const storePrivacy = useFinanceStore((s) => s.isPrivacyMode);
+    const privacyActive = isPrivacyMode || storePrivacy;
 
     // [PASSE-REEL-TXN-DU-JOUR] Filtrage À LA DEMANDE. Le registre journalier couvre jusqu'à ~4 000
     // jours : y pré-indexer les transactions les garderait toutes en mémoire en permanence pour
@@ -241,7 +244,7 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
                             fois sans AUCUN retour sur le jour atteint — la feature marcherait à
                             l'œil et serait muette à l'oreille. Pattern APG du sélecteur de date. */}
                         <div className="text-lg font-black text-texte tracking-tight" aria-live="polite" aria-atomic="true">{point.dateLabel || point.year || '—'}</div>
-                        <div className="text-tiny text-ink-400 mt-0.5">Âge {point.age ?? '—'}</div>
+                        <div className="text-tiny text-ink-400 mt-0.5">Âge <PrivateAmount>{point.age ?? '—'}</PrivateAmount></div>
                         {/* ⚠️ [WCAG 2.5.3 label-in-name] L'aria-label CONTIENT le texte visible :
                             un label de REMPLACEMENT (« Jour précédent » seul) casserait la commande
                             vocale — « clique Veille » ne trouverait aucun bouton de ce nom. Même
@@ -408,7 +411,7 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
                         {((point.lifeEvents?.length ?? 0) > 0 || (point.flowEvents?.length ?? 0) > 0) && (
                             <div className="border-t border-bordure pt-3">
                                 <div className="text-tiny uppercase tracking-widest text-yellow-500 font-bold mb-2">Événements ce mois</div>
-                                {showFull ? (
+                                {showFull && !privacyActive ? (
                                     <ul className="space-y-1.5">
                                         {[...(point.lifeEvents || []), ...(point.flowEvents || [])].map((e: string, i: number) => {
                                             const { icon, text } = splitEventIcon(e);
@@ -423,9 +426,10 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
                                 ) : (
                                     /* [FUTUR-MOBILE-PR5] Feuille condensée : le FAIT sans le détail —
                                        même patron que ProjectionExplains (garde le fait, tait le montant),
-                                       ici appliqué au repli mobile plutôt qu'au mode discret. */
+                                       ici appliqué au repli mobile ou au mode discret. */
                                     <p className="text-tiny text-ink-400 italic">
                                         {eventsCount === 1 ? '1 événement ce mois-ci' : `${eventsCount} événements ce mois-ci`}
+                                        {privacyActive ? ' — désactivez le mode discret pour les lire.' : ''}
                                     </p>
                                 )}
                             </div>

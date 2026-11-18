@@ -37,28 +37,49 @@ export const getHydrationStatus = (): HydrationStatus => _hydrationStatus;
  *  (« jamais importé ») : ils ne s'héritent jamais de l'état vivant à la fusion. */
 const CLES_TRI_ETAT = ['brokerLedger', 'instruments', 'brokerAccountRegimes'] as const satisfies readonly (keyof FinanceState)[];
 
+const CLES_RUNTIME_GRAND_CALCUL = [
+    'grandCalculResult',
+    'grandCalculStatus',
+    'grandCalculProgress',
+    'grandCalculError',
+] as const satisfies readonly (keyof FinanceState)[];
+
 export const fusionnerEtatPersiste = (persistedState: unknown, currentState: FinanceState): FinanceState => {
-    const fautifs = verifierTypesRestaures(persistedState);
+    let sanitizedPersisted: unknown = persistedState;
+    if (persistedState !== null && typeof persistedState === 'object' && !Array.isArray(persistedState)) {
+        const copie: Record<string, unknown> = { ...(persistedState as Record<string, unknown>) };
+        for (const cle of CLES_RUNTIME_GRAND_CALCUL) {
+            delete copie[cle];
+        }
+        sanitizedPersisted = copie;
+    }
+    const fautifs = verifierTypesRestaures(sanitizedPersisted);
     if (fautifs.length > 0) {
         // Le résumé est fabriqué par le module de la garde, pas ici : un second site de
         // formatage dérive, et il porterait des littéraux (un plafond de citations) dans
         // un fichier dont l'inventaire des constantes surveille chaque nombre.
         throw new Error(`Données persistées illisibles — ${resumeTechniqueDesFautifs(fautifs)}`);
     }
-    const fusion: FinanceState = { ...currentState, ...(persistedState as object) };
+    const fusion: FinanceState = { ...currentState, ...(sanitizedPersisted as object) };
     // [PTF-L1A-RESTAURATION-TRI-ETAT] Un champ TRI-ÉTAT (`undefined` = jamais importé) vient du BLOB
     // et de lui seul. zustand appelle `merge(blob, get())` avec l'état VIVANT, pas des défauts
     // recalculés (middleware.mjs) : sans cette ligne, « Restaurer depuis Drive » avec un blob qui ne
     // porte pas la clé (sauvegarde d'avant le livre, ou appareil qui n'en a jamais eu) GARDAIT en
     // silence le livre local — la copie restaurée n'était donc pas celle qu'on avait choisie.
     // Sans blob (`persistedState` absent : premier lancement), on ne touche à rien.
-    if (persistedState !== null && typeof persistedState === 'object') {
+    if (sanitizedPersisted !== null && typeof sanitizedPersisted === 'object') {
         for (const cle of CLES_TRI_ETAT) {
-            (fusion as unknown as Record<string, unknown>)[cle] = Object.hasOwn(persistedState, cle)
-                ? (persistedState as Record<string, unknown>)[cle]
+            (fusion as unknown as Record<string, unknown>)[cle] = Object.hasOwn(sanitizedPersisted, cle)
+                ? (sanitizedPersisted as Record<string, unknown>)[cle]
                 : undefined;
         }
     }
+    // État d'exécution non persisté du Grand Calcul : toujours réinitialisé à la réhydratation
+    // (pull Drive ou blob ancien/altéré ne doit jamais laisser survivre des résultats d'un autre dossier).
+    fusion.grandCalculResult = null;
+    fusion.grandCalculStatus = 'idle';
+    fusion.grandCalculProgress = null;
+    fusion.grandCalculError = null;
     return fusion;
 };
 
@@ -107,6 +128,10 @@ export const extrairePersistable = (state: FinanceState) => {
         projectionRefus: _projectionRefus,
         lockedProjection: _lockedProjection,
         pendingFocus: _pendingFocus,
+        grandCalculResult: _grandCalculResult,
+        grandCalculStatus: _grandCalculStatus,
+        grandCalculProgress: _grandCalculProgress,
+        grandCalculError: _grandCalculError,
         ...persistable
     } = state;
     return persistable;

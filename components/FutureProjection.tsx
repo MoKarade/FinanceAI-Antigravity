@@ -6,6 +6,18 @@ import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { resolveDaySeriesIndex } from '../utils/daySeriesIndex';
 import { hasForeignCurrencyAssets } from '../services/portfolio';
 const FutureHistorySection = lazyWithRetry(() => import('./future/FutureHistorySection'), 'FutureHistorySection');
+const GrandCalculPanel = lazyWithRetry(
+    () => import('./future/GrandCalculPanel').then((m) => ({ default: m.GrandCalculPanel })),
+    'GrandCalculPanel',
+);
+const GrandCalculPredictionsPanel = lazyWithRetry(
+    () => import('./future/GrandCalculPredictionsPanel').then((m) => ({ default: m.GrandCalculPredictionsPanel })),
+    'GrandCalculPredictionsPanel',
+);
+const CurveExplanationPanel = lazyWithRetry(
+    () => import('./projection/CurveExplanationPanel').then((m) => ({ default: m.CurveExplanationPanel })),
+    'CurveExplanationPanel',
+);
 // [NAV-MERGE-SANTE-FUTUR] Résumé condensé de Santé, en tête de page — léger (pas de recharts),
 // import statique (pas de justification à le mettre derrière un lazy comme FutureHistorySection).
 import { FutureHealthSummary } from './future/FutureHealthSummary';
@@ -31,7 +43,7 @@ import { PrivateAmount } from './ui/PrivateAmount';
 import { Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, ReferenceArea, Line, ComposedChart, Bar, ReferenceDot } from 'recharts';
 import { GF_CROSSHAIR_CURSOR, GF_ACTIVE_DOT } from '../utils/chartTooltip';
 import { Tab, BudgetConfig, BudgetCategory, RealEstateGoal, RetirementGoal, Transaction, ProjectionConfig } from '../types';
-import { ProjectionResult, ProjectionChartPoint } from '../services/projection/types';
+import { ProjectionResult, ProjectionChartPoint, type SimulationParams } from '../services/projection/types';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { logError } from '../services/errorLogger';
 import { loadRevealedProjection, saveRevealedProjection, clearRevealedProjection } from '../services/lockedProjectionStore';
@@ -90,7 +102,7 @@ const RENDER_MAX_POINTS = 700;
 
 const CURVE_FIELDS: ReadonlySet<string> = new Set([
     'Liquidites', 'CELI', 'CELIAPP', 'REER', 'REEE', 'NonReg', 'Crypto', 'Immobilier', 'Entreprise',
-    'ImpotLatent', 'FluxImpots', 'P10', 'P50', 'P90', 'NetWorth', 'lockedNetWorth',
+    'ImpotLatent', 'FluxImpots', 'P5', 'P10', 'P25', 'P50', 'P75', 'P90', 'P95', 'NetWorth', 'lockedNetWorth',
     // ⚠️ `DettesNonImmo` est entrée ici AVANT d'avoir la moindre courbe (elle en a une depuis
     // `[FUTUR-COURBE-DETTE]`, 2026-09-18 — aire orange sous zéro) : sa vraie raison d'être dans ce
     // set est que le patrimoine au jour est RECOMPOSÉ (`NetWorth = Σ NET_WORTH_DAILY_ASSETS − DettesNonImmo`) et que la
@@ -132,6 +144,7 @@ import { indexAujourdhui, indexApresPas, PAS_PAR_DEFAUT, type PasNavigation } fr
 import { resolvePointByX } from '../utils/chartTooltip';
 import { ProjectionControls } from './projection/ProjectionControls';
 import { useSimulationParams, useTodayIsoLocal } from '../hooks/useSimulationParams';
+import { useGrandCalcul } from '../hooks/useGrandCalcul';
 import { buildPastPrefix } from '../services/history/buildPastPrefix';
 import { computePrivateBusinessValue } from '../services/projection/privateBusinessValue';
 import { mentionDettesPasse } from '../services/history/pastDebtNotice';
@@ -159,6 +172,41 @@ import { reperesRonds } from '../utils/reperesRonds';
 import { NO_DATA_LABEL } from './ui/emptyAware';
 import { dayVariation } from '../services/history/dayVariation';
 import { addDay } from '../services/history/reconstructCashHistory';
+
+const GrandCalculPanels: React.FC<{
+    params: SimulationParams;
+    showBands: boolean;
+    onToggleBands: (show: boolean) => void;
+}> = ({ params, showBands, onToggleBands }) => {
+    const grandCalcul = useGrandCalcul(params);
+    return (
+        <>
+            <GrandCalculPanel
+                result={grandCalcul.result}
+                status={grandCalcul.status}
+                progress={grandCalcul.progress}
+                error={grandCalcul.error}
+                config={grandCalcul.config}
+                onUpdateConfig={grandCalcul.updateConfig}
+                isStale={grandCalcul.isStale}
+                showBands={showBands}
+                onToggleBands={onToggleBands}
+                onLaunch={grandCalcul.launch}
+                onCancel={grandCalcul.cancel}
+                onClear={grandCalcul.clear}
+                isRunning={grandCalcul.isRunning}
+                isRestoring={grandCalcul.isRestoring}
+                isSaving={grandCalcul.isSaving}
+                refusMessage={grandCalcul.refusMessage}
+            />
+            <GrandCalculPredictionsPanel
+                result={grandCalcul.result}
+                isStale={grandCalcul.isStale}
+                unreadableStorage={grandCalcul.unreadableStorage}
+            />
+        </>
+    );
+};
 
 // [PROJECTION-PERSIST] Dédup MODULE-LEVEL de l'écriture du blob figé (finding code-reviewer) :
 // survit au démontage/remontage de l'onglet → pas de réécriture IDB (~1-2 Mo chiffrés) à chaque
@@ -233,6 +281,8 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         params, pastHistory, liveCSVBalances, calculatedStartingCash,
         startYear, startMonth, todayMonthIndex, mentionAutoriteCourtier,
     } = useSimulationParams(calculatedMonthlySavings);
+    const grandCalculResult = useFinanceStore((s) => s.grandCalculResult);
+    const [showGrandCalculBands, setShowGrandCalculBands] = useState<boolean>(true);
 
     const applyHistoricalRate = () => {
         if (liveCSVBalances.historicalRate > 0) {
@@ -488,12 +538,34 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         () => buildLockedByMonth(lockedProjection, isProjectionLocked, (p) => p.NetWorth ?? NaN),
         [isProjectionLocked, lockedProjection],
     );
+    const grandCalculByMonth = useMemo(() => {
+        if (!showGrandCalculBands || !grandCalculResult?.monthlyBands?.length) return null;
+        return new Map(grandCalculResult.monthlyBands.map((b) => [b.monthIndex, b]));
+    }, [showGrandCalculBands, grandCalculResult]);
     const displayData = useMemo(() => {
         const base = pastPrefixPoints.length ? [...pastPrefixPoints, ...chartData] : chartData;
-        // Sous verrou : on ajoute `lockedNetWorth` à chaque point (référence figée) → 2e courbe tracée.
-        if (!lockedByMonth) return base;
-        return base.map((d) => ({ ...d, lockedNetWorth: lockedByMonth.get((d as { monthIndex: number }).monthIndex) }));
-    }, [pastPrefixPoints, chartData, lockedByMonth]);
+        // Sous verrou ou bandes Grand Calcul : fusion typée par monthIndex.
+        if (!lockedByMonth && !grandCalculByMonth) return base;
+        return base.map((d) => {
+            const monthIdx = (d as { monthIndex: number }).monthIndex;
+            const band = grandCalculByMonth && monthIdx >= 0 ? grandCalculByMonth.get(monthIdx) : undefined;
+            return {
+                ...d,
+                ...(lockedByMonth ? { lockedNetWorth: lockedByMonth.get(monthIdx) } : null),
+                ...(band
+                    ? {
+                        P5: band.p5,
+                        P10: band.p10,
+                        P25: band.p25,
+                        P50: band.p50,
+                        P75: band.p75,
+                        P90: band.p90,
+                        P95: band.p95,
+                    }
+                    : null),
+            };
+        });
+    }, [pastPrefixPoints, chartData, lockedByMonth, grandCalculByMonth]);
     const pastStartIndex = pastPrefixPoints.length ? pastPrefixPoints[0].monthIndex : 0;
 
     // PH2-c — la PUBLICATION dans store.lastProjection est faite par ProjectionEngine (app-level),
@@ -837,8 +909,15 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             // la table `sr-only` incapable de dire POURQUOI la dette monte, alors que le graphe le
             // montre — et l’`aria-label` du conteneur promet « les mêmes données ».
             { key: 'DetteLevierSmith', label: LIBELLE_LEVIER, format: money },
+            ...(grandCalculByMonth !== null
+                ? [
+                      { key: 'P5', label: 'Bande P5 (pessimiste)', format: money },
+                      { key: 'P50', label: 'Bande P50 (médiane)', format: money },
+                      { key: 'P95', label: 'Bande P95 (optimiste)', format: money },
+                  ]
+                : []),
         ];
-    }, [isPrivacyMode]);
+    }, [isPrivacyMode, grandCalculByMonth]);
 
     // G5 — événement sélectionné (clic sur une pastille) → fiche détail.
     const [detailPoint, setDetailPoint] = useState<ProjectionChartPoint | null>(null);
@@ -1189,9 +1268,13 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         const empilees = modeCourbe === 'empilee'
             ? (['Liquidites', 'CELI', 'CELIAPP', 'REER', 'REEE', 'NonReg', 'Crypto', 'Immobilier', 'Entreprise'] as const).filter((k) => vue(k))
             : [];
-        const lignes: Array<'NetWorth' | 'P10' | 'P50' | 'P90' | 'ImpotLatent'> = [];
+        const lignes: Array<'NetWorth' | 'P5' | 'P10' | 'P25' | 'P50' | 'P75' | 'P90' | 'P95' | 'ImpotLatent'> = [];
         if (vue('NetWorth') || modeCourbe === 'nette') lignes.push('NetWorth');
-        if (runMC && vue('montecarlo')) lignes.push('P10', 'P50', 'P90');
+        if (grandCalculByMonth !== null && vue('montecarlo')) {
+            lignes.push('P5', 'P10', 'P25', 'P50', 'P75', 'P90', 'P95');
+        } else if (runMC && vue('montecarlo')) {
+            lignes.push('P10', 'P50', 'P90');
+        }
         if (vue('ImpotLatent') && modeCourbe === 'empilee') lignes.push('ImpotLatent');
         const valeurs: number[] = [];
         const garder = (v: unknown) => { if (typeof v === 'number' && Number.isFinite(v)) valeurs.push(v); };
@@ -1211,7 +1294,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         const bas = Math.min(0, ...valeurs, ticks[0]);
         const haut = Math.max(...valeurs, ticks[ticks.length - 1]);
         return { ticks, domaine: [bas, haut] as [number, number] };
-    }, [chartSeries, hiddenSeries, runMC, fireNumber, modeCourbe]);
+    }, [chartSeries, hiddenSeries, runMC, grandCalculByMonth, fireNumber, modeCourbe]);
     /** Série de RÉSOLUTION des interactions : les jours complets, ou le mensuel en repli. */
     const selectSeries = isDailyCurve ? daysInWindow : (zoom.visibleData as ProjectionChartPoint[]);
 
@@ -1277,6 +1360,23 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         // survol suivant écraserait le jour qu'on vient de choisir.
         selection.freezeOn(enrichDailyPoint(pt) ?? pt);
     }, [idxAffiche, selectSeries, selection, enrichDailyPoint]);
+
+    const handleSelectExplanationMonth = useCallback(
+        (monthIdx: number) => {
+            const matchesMonth = (d: ProjectionChartPoint) =>
+                (typeof d.hostMonthIndex === 'number'
+                    ? Math.trunc(d.hostMonthIndex)
+                    : Math.trunc(d.monthIndex)) === monthIdx;
+            const target =
+                selectSeries.find((d) => matchesMonth(d) && d.dayIsReal !== true) ??
+                selectSeries.find(matchesMonth) ??
+                (displayData as ProjectionChartPoint[]).find((d) => Math.trunc(d.monthIndex) === monthIdx);
+            if (target) {
+                selection.freezeOn(enrichDailyPoint(target) ?? target);
+            }
+        },
+        [selectSeries, displayData, selection, enrichDailyPoint],
+    );
 
     /**
      * [FUTUR-DETAIL-STEP-DAY] Ouvre le panneau de détail SUR un point donné.
@@ -2069,7 +2169,17 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                             {modeCourbe === 'empilee' && isVisible('ImpotLatent') && <Area type="monotone" dataKey="ImpotLatent" stroke={couleurSerie('ImpotLatent')} strokeWidth={1.25} fill={couleurSerie('ImpotLatent')} fillOpacity={0.16} strokeDasharray="3 3" name="Impôt latent" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out"/>}
                             {modeCourbe === 'empilee' && isVisible('FluxImpots') && <Bar dataKey="FluxImpots" fill={couleurSerie('FluxImpots')} fillOpacity={0.8} name="Paiement impôts" barSize={4} isAnimationActive={false} />}
 
-                            {runMC && isVisible('montecarlo') && (
+                            {grandCalculByMonth !== null && isVisible('montecarlo') ? (
+                                <>
+                                    <Area type="monotone" dataKey="P95" stroke="var(--repere)" strokeWidth={1.15} strokeOpacity={0.55} strokeDasharray="3 3" fill="url(#gfMonteCarloBandGrad)" fillOpacity={0.75} dot={false} name="Optimiste extrême (P95)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
+                                    <Line type="monotone" dataKey="P5" stroke="var(--alerte-texte)" strokeWidth={1.15} strokeOpacity={0.65} strokeDasharray="3 3" dot={false} name="Pessimiste extrême (P5)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
+                                    <Area type="monotone" dataKey="P90" stroke={couleurSerie('montecarlo')} strokeWidth={1.25} strokeDasharray="5 4" fill="url(#gfMonteCarloBandGrad)" fillOpacity={0.9} dot={false} name="Optimiste (P90)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
+                                    <Line type="monotone" dataKey="P75" stroke={couleurSerie('montecarlo')} strokeWidth={1} strokeOpacity={0.5} strokeDasharray="2 3" dot={false} name="Quartile supérieur (P75)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
+                                    <Line type="monotone" dataKey="P25" stroke={couleurSerie('montecarlo')} strokeWidth={1} strokeOpacity={0.5} strokeDasharray="2 3" dot={false} name="Quartile inférieur (P25)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
+                                    <Line type="monotone" dataKey="P10" stroke="var(--erreur-texte)" strokeWidth={1.25} strokeDasharray="5 4" dot={false} name="Pessimiste (P10)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
+                                    <Line type="monotone" dataKey="P50" stroke={couleurSerie('montecarlo')} strokeWidth={1.75} dot={false} name="Scénario médian (P50)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
+                                </>
+                            ) : runMC && isVisible('montecarlo') && (
                                 <>
                                     <Area type="monotone" dataKey="P90" stroke="#7c93f2" strokeWidth={1.25} strokeDasharray="5 4" fill="url(#gfMonteCarloBandGrad)" fillOpacity={1} dot={false} name="Optimiste (P90)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
                                     <Line type="monotone" dataKey="P10" stroke="#f87171" strokeWidth={1.25} strokeDasharray="5 4" dot={false} name="Pessimiste (P10)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
@@ -2125,7 +2235,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
 
                 <div className={modeCourbe === 'nette' ? 'sr-only' : ''}>
                     <FutureLegendDrawer
-                        runMC={runMC}
+                        runMC={runMC || grandCalculByMonth !== null}
                         hiddenSeries={hiddenSeries}
                         isVisible={isVisible}
                         toggleSeries={toggleSeries}
@@ -2273,15 +2383,21 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                     d'ensemble (date + libellé d'un coup, sans tabuler 29 pastilles), sans
                     échantillonnage (bornée par le cap visuel des icônes). */}
                 {(shownLifeEvents.length > 0 || shownFlowEvents.length > 0) && (
-                    <ul className="sr-only">
-                        <li>Jalons de la projection :</li>
-                        {[...shownLifeEvents, ...shownFlowEvents]
-                            .slice()
-                            .sort((a, b) => a.monthIndex - b.monthIndex)
-                            .map((e, i) => (
-                                <li key={`ms-sr-${i}`}>{e.dateLabel ? `${e.dateLabel} : ` : ''}{e.label}</li>
-                            ))}
-                    </ul>
+                    isPrivacyMode ? (
+                        <p className="sr-only">
+                            {shownLifeEvents.length + shownFlowEvents.length} jalons masqués en mode discret.
+                        </p>
+                    ) : (
+                        <ul className="sr-only">
+                            <li>Jalons de la projection :</li>
+                            {[...shownLifeEvents, ...shownFlowEvents]
+                                .slice()
+                                .sort((a, b) => a.monthIndex - b.monthIndex)
+                                .map((e, i) => (
+                                    <li key={`ms-sr-${i}`}>{e.dateLabel ? `${e.dateLabel} : ` : ''}{e.label}</li>
+                                ))}
+                        </ul>
+                    )
                 )}
 
                 {detailPoint && (
@@ -2308,6 +2424,21 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                     {bandeauKpi('mobile-pied')}
                 </div>
             )}
+
+            <Suspense fallback={<Skeleton variant="kpi" className="h-48" />}>
+                <GrandCalculPanels
+                    params={params}
+                    showBands={showGrandCalculBands}
+                    onToggleBands={setShowGrandCalculBands}
+                />
+                <CurveExplanationPanel
+                    chartData={chartData}
+                    grandCalculResult={grandCalculResult}
+                    selectedPoint={jourAffiche?.point ?? null}
+                    selectedOrigin={jourAffiche?.origine ?? 'ancre'}
+                    onSelectMonth={handleSelectExplanationMonth}
+                />
+            </Suspense>
 
             <FinancialGoalsProgressSection goals={financialGoals} todayIso={todayIso} />
 
@@ -2610,6 +2741,16 @@ const FutureCurveTooltip = React.memo(({ active, payload }: FutureCurveTooltipPr
                                     <PrivateAmount>{formatCompactCAD(pt.P10)}</PrivateAmount>
                                     {' – '}
                                     <PrivateAmount>{formatCompactCAD(pt.P90)}</PrivateAmount>
+                                </span>
+                            </div>
+                        )}
+                        {typeof pt.P5 === 'number' && Number.isFinite(pt.P5) && typeof pt.P95 === 'number' && Number.isFinite(pt.P95) && (
+                            <div className="gf-tooltip-row">
+                                <span className="text-texte-doux">Bande P5 – P95</span>
+                                <span className="font-mono text-ink-200 tabular-nums">
+                                    <PrivateAmount>{formatCompactCAD(pt.P5)}</PrivateAmount>
+                                    {' – '}
+                                    <PrivateAmount>{formatCompactCAD(pt.P95)}</PrivateAmount>
                                 </span>
                             </div>
                         )}

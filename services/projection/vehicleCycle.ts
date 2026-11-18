@@ -13,6 +13,7 @@ export function processAutoVehicleReplacement(
     monthsSinceLast: number,
     vehicleReplacementEnabled: boolean | undefined,
     simInflation: number,
+    skipLogs: boolean = false,
 ): { cost: number; resetCounter: boolean; logMsg?: string } {
     if (!vehicleReplacementEnabled || m === 0 || monthsSinceLast < 120) {
         return { cost: 0, resetCounter: false };
@@ -21,6 +22,6 @@ export function processAutoVehicleReplacement(
     return {
         cost: vehicleCost,
         resetCounter: true,
-        logMsg: `🚗 Remplacement véhicule: -${formatCAD(Math.round(vehicleCost))}`,
+        logMsg: skipLogs ? undefined : `🚗 Remplacement véhicule: -${formatCAD(Math.round(vehicleCost))}`,
     };
 }

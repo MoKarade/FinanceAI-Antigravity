@@ -15,11 +15,17 @@ import type {
     StrategySearchResult,
     ConfigResult,
 } from '../projection';
+import type {
+    GrandCalculConfig,
+    GrandCalculResult,
+    GrandCalculShardResult,
+} from './types';
 import { logError } from '../errorLogger';
 
 let _worker: Worker | null = null;
 let _nextRequestId = 1;
 let _workerDead = false;
+let _workerInitialized = false;
 
 function getWorker(): Worker | null {
     if (_worker && !_workerDead) return _worker;
@@ -27,6 +33,7 @@ function getWorker(): Worker | null {
     try {
         _worker = new Worker(new URL('../projection.worker.ts', import.meta.url), { type: 'module' });
         _workerDead = false;
+        _workerInitialized = false;
         _worker.addEventListener('error', (e) => {
             logError({ source: 'projection', severity: 'warning', message: `Worker projection en erreur (recréation au prochain appel): ${e.message}` });
             _workerDead = true;
@@ -206,6 +213,7 @@ async function computeProjectionAsync(
         const onMessage = (e: MessageEvent) => {
             // Ne réagir qu'au message correspondant à ce requestId
             if (!e.data || e.data.__requestId !== id) return;
+            _workerInitialized = true;
             cleanup();
             if (e.data.__error) reject(reconstructWorkerError(e.data));
             else resolve(e.data.result);
@@ -213,6 +221,16 @@ async function computeProjectionAsync(
         const onError = (e: ErrorEvent) => {
             cleanup();
             _workerDead = true; // forcera la recréation
+            if (!_workerInitialized) {
+                // Si le script Worker n'a jamais pu démarrer (réseau/CSP/module), repli synchrone
+                // pour la projection légère plutôt que de laisser la vue Futur sans courbe.
+                import('../projection')
+                    .then(({ calculateFutureProjection }) =>
+                        resolve(calculateFutureProjection(params, runMC, selectedIdx, onlyStratTypes)),
+                    )
+                    .catch((err) => reject(err instanceof Error ? err : new Error(String(err))));
+                return;
+            }
             reject(new Error(e.message || 'Worker error'));
         };
         const onMessageError = (e: MessageEvent) => {
@@ -290,8 +308,11 @@ export async function runStrategySearchAsync(
     const effIters = opts.iterations ?? 1000;
 
     // Détermine le parallélisme effectif (borné par le nb de configs).
+    // Plafonné à 4 workers dans Chromium : au-delà (6–8+), les Web Workers d'un même onglet
+    // saturent le processus Renderer, gèlent le thread principal (14–47 s) et divisent le débit par 2.
+    const GRAND_CALCUL_MAX_DEFAULT_WORKERS = 4;
     const hardware = typeof navigator !== 'undefined' && navigator.hardwareConcurrency
-        ? navigator.hardwareConcurrency
+        ? Math.min(navigator.hardwareConcurrency, GRAND_CALCUL_MAX_DEFAULT_WORKERS)
         : 4;
     const requested = opts.maxWorkers ?? hardware;
     const nWorkers = Math.max(1, Math.min(requested, total || 1));
@@ -361,6 +382,7 @@ export async function runStrategySearchAsync(
         };
 
         shards.forEach((shard, k) => {
+            if (settled) return;
             let worker: Worker;
             try {
                 worker = new Worker(new URL('../projection.worker.ts', import.meta.url), { type: 'module' });
@@ -371,6 +393,7 @@ export async function runStrategySearchAsync(
             workers.push(worker);
 
             const armWatchdog = () => {
+                if (settled) return;
                 clearTimeout(watchdogs[k]);
                 watchdogs[k] = setTimeout(
                     () => fail(new Error(`Recherche: worker ${k} sans progrès depuis ${IDLE_MS}ms`)),
@@ -378,10 +401,11 @@ export async function runStrategySearchAsync(
                 );
             };
             const onMessage = (e: MessageEvent) => {
-                if (!e.data || e.data.__requestId !== k) return;
+                if (settled || !e.data || e.data.__requestId !== k) return;
                 if (e.data.__progress) {
                     perShardDone[k] = e.data.__progress.done;
                     emitProgress();
+                    if (settled) return;
                     armWatchdog();
                     return;
                 }
@@ -522,4 +546,415 @@ export async function runTournamentStrategySearchAsync(
             { round: 3, candidatesIn: r3Configs.length, candidatesOut: finalRanked.length, iterationsPerCandidate: r3Iters },
         ],
     };
+}
+
+// ── Grand Calcul (50 000–100 000 trajectoires sur pool de Web Workers) ────────
+
+/** Erreur sentinelle : le Grand Calcul a été annulé par l'appelant (pas un échec). */
+export const GRAND_CALCUL_CANCELLED = '__GRAND_CALCUL_CANCELLED__';
+
+export interface GrandCalculProgress {
+    done: number;
+    total: number;
+    pct: number;
+    simPerSec: number | null;
+    etaMs: number | null;
+}
+
+export interface IterationShard {
+    startIter: number;
+    count: number;
+}
+
+/**
+ * Découpe un intervalle `[0, totalCount)` en `n` plages d'itérations contiguës et équilibrées,
+ * sans allouer de tableau intermédiaire (les premiers shards absorbent le reste).
+ */
+export function shardIterationRanges(totalCount: number, n: number): IterationShard[] {
+    if (!Number.isFinite(totalCount) || totalCount <= 0) return [];
+    const total = Math.floor(totalCount);
+    const workers = Math.max(1, Math.floor(Number.isFinite(n) ? n : 1));
+    const base = Math.floor(total / workers);
+    const remainder = total % workers;
+    const ranges: IterationShard[] = [];
+    let offset = 0;
+    for (let i = 0; i < workers; i++) {
+        const count = base + (i < remainder ? 1 : 0);
+        if (count > 0) {
+            ranges.push({ startIter: offset, count });
+            offset += count;
+        }
+    }
+    return ranges;
+}
+
+function canonicalizeForSig(
+    value: unknown,
+    ancestors: WeakSet<object>,
+    skipKeys?: ReadonlySet<string>,
+): unknown {
+    if (value === null) return null;
+    switch (typeof value) {
+        case 'string':
+        case 'boolean':
+            return value;
+        case 'number':
+            if (Number.isNaN(value)) return '__NaN__';
+            if (value === Infinity) return '__Inf__';
+            if (value === -Infinity) return '__-Inf__';
+            return Object.is(value, -0) ? 0 : value;
+        case 'bigint':
+            return `${value.toString()}n`;
+        case 'undefined':
+        case 'function':
+        case 'symbol':
+            return '__undef__';
+        case 'object': {
+            const obj = value as object;
+            if (ancestors.has(obj)) return '[Circular]';
+            ancestors.add(obj);
+            try {
+                if (obj instanceof Date) {
+                    return Number.isNaN(obj.getTime()) ? '__InvalidDate__' : obj.toISOString();
+                }
+                if (Array.isArray(obj)) {
+                    return obj.map((item) => canonicalizeForSig(item, ancestors));
+                }
+                if (ArrayBuffer.isView(obj)) {
+                    const view = obj instanceof DataView
+                        ? new Uint8Array(obj.buffer, obj.byteOffset, obj.byteLength)
+                        : (obj as unknown as ArrayLike<number | bigint>);
+                    return Array.from(view, (item) => canonicalizeForSig(item, ancestors));
+                }
+                if (obj instanceof Set) {
+                    return Array.from(obj, (item) => canonicalizeForSig(item, ancestors));
+                }
+                if (obj instanceof Map) {
+                    return Array.from(obj.entries()).map(([k, v]) => [
+                        canonicalizeForSig(k, ancestors),
+                        canonicalizeForSig(v, ancestors),
+                    ]);
+                }
+                const out: Record<string, unknown> = {};
+                const record = obj as Record<string, unknown>;
+                const keys = Object.keys(record).sort();
+                for (const key of keys) {
+                    if (skipKeys?.has(key)) continue;
+                    const prop = record[key];
+                    if (prop === undefined || typeof prop === 'function' || typeof prop === 'symbol') {
+                        continue;
+                    }
+                    out[key] = canonicalizeForSig(prop, ancestors);
+                }
+                return out;
+            } finally {
+                ancestors.delete(obj);
+            }
+        }
+        default:
+            return '__undef__';
+    }
+}
+
+/**
+ * Calcule une signature déterministe des paramètres et de la configuration du Grand Calcul.
+ * Ignore `params.entreesRefusees`, normalise `-0`, distingue `NaN`/`Infinity`/`-Infinity`,
+ * reste insensible à l'ordre des clés ou aux propriétés `undefined`, et tolère les cycles.
+ */
+export function computeGrandCalculParamsSig(
+    params: SimulationParams,
+    config: Pick<GrandCalculConfig, 'iterations' | 'enableMacroRegimes' | 'includeHistoricalCrises' | 'seed'>,
+): string {
+    try {
+        const rawIters = config?.iterations;
+        const normalizedIters = typeof rawIters === 'number' && Number.isFinite(rawIters)
+            ? Math.max(50_000, Math.min(100_000, Math.round(rawIters)))
+            : 50_000;
+        const normalizedConfig: Record<string, unknown> = {
+            iterations: normalizedIters,
+            enableMacroRegimes: Boolean(config?.enableMacroRegimes),
+            includeHistoricalCrises: Boolean(config?.includeHistoricalCrises),
+        };
+        if (typeof config?.seed === 'number' && Number.isFinite(config.seed)) {
+            normalizedConfig.seed = Math.trunc(config.seed);
+        }
+
+        const canonicalPayload = {
+            params: canonicalizeForSig(params, new WeakSet<object>(), new Set(['entreesRefusees'])),
+            config: canonicalizeForSig(normalizedConfig, new WeakSet<object>()),
+        };
+        const json = JSON.stringify(canonicalPayload) ?? '';
+
+        // Double FNV-1a 32 bits pour minimiser le risque de collision tout en restant 100% synchrone.
+        let h1 = 0x811c9dc5;
+        let h2 = 0x050c5d1f;
+        for (let i = 0; i < json.length; i++) {
+            const code = json.charCodeAt(i);
+            h1 ^= code;
+            h1 = Math.imul(h1, 0x01000193);
+            h2 ^= code + (i & 0xff);
+            h2 = Math.imul(h2, 0x01000193);
+        }
+        return `gc1:${(h1 >>> 0).toString(36)}:${(h2 >>> 0).toString(36)}:${json.length.toString(36)}`;
+    } catch {
+        return 'gc1:invalid';
+    }
+}
+
+function buildGrandCalculProgress(done: number, total: number, startMs: number): GrandCalculProgress {
+    const safeTotal = Math.max(0, total);
+    const clampedDone = Math.max(0, Math.min(safeTotal, Math.round(done)));
+    const pct = safeTotal > 0 ? Math.min(100, Math.round((clampedDone / safeTotal) * 1000) / 10) : 0;
+    const elapsedMs = Math.max(1, Date.now() - startMs);
+    const simPerSec = clampedDone > 0 ? Math.round(clampedDone / (elapsedMs / 1000)) : null;
+    const etaMs = clampedDone > 0
+        ? (clampedDone >= safeTotal ? 0 : Math.max(0, Math.round((elapsedMs * (safeTotal - clampedDone)) / clampedDone)))
+        : null;
+    return {
+        done: clampedDone,
+        total: safeTotal,
+        pct,
+        simPerSec,
+        etaMs,
+    };
+}
+
+/**
+ * Exécute le « Grand Calcul » (50 000 à 100 000 trajectoires Monte Carlo) sur un pool
+ * dédié de Web Workers avec transfert zero-copy, progression temps réel, watchdog par cœur
+ * et annulation propre via `AbortSignal`. Fallback chunké en JS pur si `Worker` est absent.
+ */
+export async function runGrandCalculAsync(
+    params: SimulationParams,
+    config: GrandCalculConfig,
+    opts: {
+        paramsSig: string;
+        signal?: AbortSignal;
+        onProgress?: (p: GrandCalculProgress) => void;
+        maxWorkers?: number;
+    },
+): Promise<GrandCalculResult> {
+    const { signal } = opts;
+    if (signal?.aborted) {
+        throw new Error(GRAND_CALCUL_CANCELLED);
+    }
+    if (params.entreesRefusees && params.entreesRefusees.length > 0) {
+        throw new ProjectionEntreeRefuseeError(messageDeRefus(params.entreesRefusees));
+    }
+
+    const {
+        clampGrandCalculIterations,
+        mergeGrandCalculShards,
+        computeGrandCalculDeterministicBaseline,
+        runGrandCalculShard,
+    } = await import('../projection');
+
+    if (signal?.aborted) {
+        throw new Error(GRAND_CALCUL_CANCELLED);
+    }
+
+    const totalIterations = clampGrandCalculIterations(config.iterations);
+    const normalizedConfig: GrandCalculConfig = {
+        iterations: totalIterations,
+        enableMacroRegimes: Boolean(config.enableMacroRegimes),
+        includeHistoricalCrises: Boolean(config.includeHistoricalCrises),
+        ...(config.seed !== undefined ? { seed: config.seed } : {}),
+    };
+
+    const startMs = Date.now();
+    const { deterministicEstate } = computeGrandCalculDeterministicBaseline(params);
+
+    const buildMergeMeta = () => ({
+        paramsSig: opts.paramsSig,
+        durationMs: Math.max(0, Date.now() - startMs),
+        regimesEnabled: normalizedConfig.enableMacroRegimes,
+        historicalCrisesEnabled: normalizedConfig.includeHistoricalCrises,
+        startYear: params.startYear,
+        startMonth: params.startMonth,
+        currentAge: params.config?.users?.[0]?.age || 30,
+        nMonths: Math.max(0, (params.projection?.years ?? 0) * 12),
+        financialGoals: params.financialGoals,
+        deterministicEstate,
+    });
+
+    if (typeof Worker === 'undefined') {
+        const targetChunks = Math.max(4, Math.min(20, Math.ceil(totalIterations / 2500)));
+        const chunks = shardIterationRanges(totalIterations, Math.min(targetChunks, totalIterations));
+        const shards: GrandCalculShardResult[] = [];
+        let completedBefore = 0;
+
+        for (let idx = 0; idx < chunks.length; idx++) {
+            if (signal?.aborted) {
+                throw new Error(GRAND_CALCUL_CANCELLED);
+            }
+            const chunk = chunks[idx];
+            const shard = runGrandCalculShard(
+                params,
+                normalizedConfig,
+                chunk.startIter,
+                chunk.count,
+                (done) => {
+                    opts.onProgress?.(buildGrandCalculProgress(completedBefore + done, totalIterations, startMs));
+                },
+            );
+            shards.push(shard);
+            completedBefore += chunk.count;
+            opts.onProgress?.(buildGrandCalculProgress(completedBefore, totalIterations, startMs));
+
+            if (idx < chunks.length - 1) {
+                await new Promise<void>((r) => setTimeout(r, 0));
+                if (signal?.aborted) {
+                    throw new Error(GRAND_CALCUL_CANCELLED);
+                }
+            }
+        }
+
+        return mergeGrandCalculShards(shards, buildMergeMeta());
+    }
+
+    // Plafonné à 4 workers dans Chromium : au-delà (6–8+), les Web Workers d'un même onglet
+    // saturent le processus Renderer, gèlent le thread principal (14–47 s) et divisent le débit par 2.
+    const GRAND_CALCUL_MAX_DEFAULT_WORKERS = 4;
+    const hardware = typeof navigator !== 'undefined' && navigator.hardwareConcurrency
+        ? Math.min(navigator.hardwareConcurrency, GRAND_CALCUL_MAX_DEFAULT_WORKERS)
+        : 4;
+    const requestedWorkers = typeof opts.maxWorkers === 'number' && Number.isFinite(opts.maxWorkers)
+        ? Math.max(1, Math.floor(opts.maxWorkers))
+        : hardware;
+    const nWorkers = Math.max(1, Math.min(requestedWorkers, totalIterations));
+    const ranges = shardIterationRanges(totalIterations, nWorkers);
+
+    const workers: Worker[] = [];
+    const watchdogs: Array<ReturnType<typeof setTimeout> | undefined> = new Array(ranges.length).fill(undefined);
+    const perShardDone = new Array<number>(ranges.length).fill(0);
+    const shardResults: Array<GrandCalculShardResult | null> = new Array(ranges.length).fill(null);
+
+    const emitPoolProgress = () => {
+        const done = perShardDone.reduce((sum, val) => sum + val, 0);
+        opts.onProgress?.(buildGrandCalculProgress(done, totalIterations, startMs));
+    };
+
+    return new Promise<GrandCalculResult>((resolve, reject) => {
+        const IDLE_MS = 15 * 60_000;
+        let settled = false;
+
+        const cleanupAll = () => {
+            for (let i = 0; i < watchdogs.length; i++) {
+                if (watchdogs[i] !== undefined) {
+                    clearTimeout(watchdogs[i]);
+                    watchdogs[i] = undefined;
+                }
+            }
+            for (const w of workers) {
+                w.terminate();
+            }
+            signal?.removeEventListener('abort', onAbort);
+        };
+
+        const fail = (err: Error) => {
+            if (settled) return;
+            settled = true;
+            cleanupAll();
+            reject(err);
+        };
+
+        function onAbort() {
+            fail(new Error(GRAND_CALCUL_CANCELLED));
+        }
+
+        if (signal) {
+            if (signal.aborted) {
+                fail(new Error(GRAND_CALCUL_CANCELLED));
+                return;
+            }
+            signal.addEventListener('abort', onAbort, { once: true });
+        }
+
+        const tryResolve = () => {
+            if (settled) return;
+            if (shardResults.some((r) => r === null)) return;
+            settled = true;
+            cleanupAll();
+            try {
+                resolve(mergeGrandCalculShards(shardResults as GrandCalculShardResult[], buildMergeMeta()));
+            } catch (err) {
+                reject(err instanceof Error ? err : new Error(String(err)));
+            }
+        };
+
+        for (let k = 0; k < ranges.length; k++) {
+            if (settled) break;
+            const range = ranges[k];
+            let worker: Worker;
+            try {
+                worker = new Worker(new URL('../projection.worker.ts', import.meta.url), { type: 'module' });
+            } catch (err) {
+                fail(new Error('Pool worker Grand Calcul indisponible: ' + String(err)));
+                break;
+            }
+            workers.push(worker);
+
+            const armWatchdog = () => {
+                if (settled) return;
+                if (watchdogs[k] !== undefined) clearTimeout(watchdogs[k]);
+                watchdogs[k] = setTimeout(
+                    () => fail(new Error(`Grand Calcul : worker ${k} sans progrès depuis ${IDLE_MS}ms`)),
+                    IDLE_MS,
+                );
+            };
+
+            const onMessage = (e: MessageEvent) => {
+                if (settled || !e.data || e.data.__requestId !== k) return;
+                if (e.data.__progress) {
+                    const rawDone = Number(e.data.__progress.done);
+                    perShardDone[k] = Math.min(range.count, Math.max(0, Number.isFinite(rawDone) ? rawDone : 0));
+                    try {
+                        emitPoolProgress();
+                    } catch (err) {
+                        fail(err instanceof Error ? err : new Error(String(err)));
+                        return;
+                    }
+                    if (settled) return;
+                    armWatchdog();
+                    return;
+                }
+                if (e.data.__error) {
+                    fail(reconstructWorkerError(e.data, `Worker ${k}: `));
+                    return;
+                }
+                if (watchdogs[k] !== undefined) {
+                    clearTimeout(watchdogs[k]);
+                    watchdogs[k] = undefined;
+                }
+                shardResults[k] = e.data.result as GrandCalculShardResult;
+                perShardDone[k] = range.count;
+                try {
+                    emitPoolProgress();
+                } catch (err) {
+                    fail(err instanceof Error ? err : new Error(String(err)));
+                    return;
+                }
+                tryResolve();
+            };
+
+            worker.addEventListener('message', onMessage);
+            worker.addEventListener('error', (e) => fail(new Error(`Worker ${k} error: ${e.message}`)));
+            worker.addEventListener('messageerror', () => fail(new Error(`Worker ${k} messageerror`)));
+
+            armWatchdog();
+            try {
+                worker.postMessage({
+                    __requestId: k,
+                    params,
+                    mode: 'grandCalculShard',
+                    grandCalculConfig: normalizedConfig,
+                    startIter: range.startIter,
+                    count: range.count,
+                });
+            } catch (err) {
+                fail(err instanceof Error ? err : new Error(String(err)));
+                break;
+            }
+        }
+    });
 }

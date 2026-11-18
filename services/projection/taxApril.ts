@@ -46,6 +46,7 @@ export function processAprilSettlement(
     m: number,
     taxPreviousYear: { revenu: number; gains: number; divers: number; reer: number; donCredit: number },
     state: AprilSettlementMutator,
+    skipLogs: boolean = false,
 ): AprilSettlementResult {
     if (currentMonthIndex !== 3 || m === 0) {
         return {
@@ -71,7 +72,9 @@ export function processAprilSettlement(
     if (fluxImpots !== 0) {
         state.subtractLiquid(fluxImpots);
         if (fluxImpots < 0) {
-            state.logFlow(`💸 Remboursement d'impôt: +${formatCAD(Math.abs(fluxImpots))}`, TAX_DUE_DAY);
+            if (!skipLogs) {
+                state.logFlow(`💸 Remboursement d'impôt: +${formatCAD(Math.abs(fluxImpots))}`, TAX_DUE_DAY);
+            }
             // Le remboursement de salaire (excédent retenu) est réinvesti dans nonReg.
             // M-8 (2026-06) : subtractLiquid(fluxImpots) ci-dessus a déjà crédité TOUT le
             // remboursement au liquide ; on retire donc la part réinvestie du liquide, sinon
@@ -91,7 +94,7 @@ export function processAprilSettlement(
                 // (`PARTAGER-LE-MONTANT-PAS-SES-REFLETS`).
                 reinvestedNonReg = reinvest;
             }
-        } else {
+        } else if (!skipLogs) {
             state.logFlow(`🏛️ Fisc: Régularisation de ${formatCAD(fluxImpots)} payée.`, TAX_DUE_DAY);
         }
     }

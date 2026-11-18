@@ -151,6 +151,8 @@ export interface RealEstateCtx {
     /** PH4-FUT-B-4 — true UNIQUEMENT au mois exact de la retraite si le levier downsizing est actif :
      *  déclenche la vente+rachat-plus-petit de la résidence principale (cf. DOWNSIZE_RELEASE_PCT). */
     downsizeThisMonth?: boolean;
+    /** Saute la génération de messages texte (mode MC allégé). */
+    skipLogs?: boolean;
 }
 
 // PH4-FUT-B-4 — fraction de l'équité de la résidence principale LIBÉRÉE en placements lors du
@@ -181,6 +183,7 @@ export function processRealEstate(
         skipRapForPurchase = false,
         downsizeThisMonth = false,
         taxFilers = ctx.activeUsersCount,
+        skipLogs = false,
     } = ctx;
 
     // PH4-FUT-B-4 — DOWNSIZING (au mois exact de la retraite) : vendre la résidence principale et
@@ -200,9 +203,11 @@ export function processRealEstate(
                 prop.currentValue = equity - released;    // bien plus petit, payé cash
                 prop.mortgage = 0;
                 prop.calculatedPmt = 0;                   // plus d'hypothèque à payer
-                state.lifeEventLogs.push(
-                    `🏠 Downsizing retraite : équité libérée +${formatCAD(Math.round(released))} → placements`,
-                );
+                if (!skipLogs) {
+                    state.lifeEventLogs.push(
+                        `🏠 Downsizing retraite : équité libérée +${formatCAD(Math.round(released))} → placements`,
+                    );
+                }
             }
         }
     }
@@ -248,7 +253,7 @@ export function processRealEstate(
             // §6.7 — Remboursement TPS/TVQ pour résidence neuve (réduit le coût net)
             const newHomeRebate = calculateNewHomeRebateTotal(goal.price, !!goal.isNewConstruction);
             const totalCashNeeded = Math.max(0, goal.downPayment + goal.totalClosingCosts + welcomeFees - newHomeRebate);
-            if (newHomeRebate > 0) {
+            if (!skipLogs && newHomeRebate > 0) {
                 state.lifeEventLogs.push(
                     `💰 Rembours. TPS/TVQ neuve §6.7 (${goal.id}): -${formatCAD(Math.round(newHomeRebate))}`,
                 );
@@ -256,7 +261,7 @@ export function processRealEstate(
 
             if (state.celiapp > 0) {
                 state.liquid += state.celiapp;
-                state.flowEventLogs.push(`💰 Retrait CELIAPP (FHSA) pour l'achat : +${formatCAD(Math.round(state.celiapp))}`);
+                if (!skipLogs) state.flowEventLogs.push(`💰 Retrait CELIAPP (FHSA) pour l'achat : +${formatCAD(Math.round(state.celiapp))}`);
                 state.celiapp = 0;
                 state.fhsaClosingYear = loopYear;
             }
@@ -291,7 +296,7 @@ export function processRealEstate(
                             state.retraitReerMois += rapAmount;
                             state.contribLiquid += rapAmount;
                             remainingShortfall -= rapAmount;
-                            state.flowEventLogs.push(`🏦 ↳ Retrait REER via le RAP, sans impôt : +${formatCAD(Math.round(rapAmount))}`);
+                            if (!skipLogs) state.flowEventLogs.push(`🏦 ↳ Retrait REER via le RAP, sans impôt : +${formatCAD(Math.round(rapAmount))}`);
                         }
                     }
                 }
@@ -306,7 +311,7 @@ export function processRealEstate(
                     state.retraitCeliMois += celiAmount;
                     state.contribLiquid += celiAmount;
                     remainingShortfall -= celiAmount;
-                    state.flowEventLogs.push(`🏦 ↳ Retrait CELI pour l'achat : +${formatCAD(Math.round(celiAmount))}`);
+                    if (!skipLogs) state.flowEventLogs.push(`🏦 ↳ Retrait CELI pour l'achat : +${formatCAD(Math.round(celiAmount))}`);
                 }
 
                 // Phase 3: NonReg
@@ -316,7 +321,7 @@ export function processRealEstate(
                     state.withdrawalNonReg += nonRegAmount;
                     state.contribLiquid += nonRegAmount;
                     remainingShortfall -= nonRegAmount;
-                    state.flowEventLogs.push(`🏦 ↳ Retrait du compte non-enregistré pour l'achat : +${formatCAD(Math.round(nonRegAmount))}`);
+                    if (!skipLogs) state.flowEventLogs.push(`🏦 ↳ Retrait du compte non-enregistré pour l'achat : +${formatCAD(Math.round(nonRegAmount))}`);
                 }
 
                 // Phase 4: REER imposable (dernier recours)
@@ -354,7 +359,7 @@ export function processRealEstate(
                         state.taxCurrentYearReer += withholding;
                         state.rrspWithholdingMois += withholding;
                         state.impotReerMois += withholding;
-                        state.flowEventLogs.push(`🚨 ↳ Retrait REER imposable pour l'achat : -${formatCAD(Math.round(drawn))} brut (retenue ${formatCAD(Math.round(withholding))}, solde réglé en avril)`);
+                        if (!skipLogs) state.flowEventLogs.push(`🚨 ↳ Retrait REER imposable pour l'achat : -${formatCAD(Math.round(drawn))} brut (retenue ${formatCAD(Math.round(withholding))}, solde réglé en avril)`);
                     }
                 }
             }
@@ -372,10 +377,12 @@ export function processRealEstate(
                 });
                 if (schl.required) {
                     pState.mortgage += schl.premium;
-                    state.lifeEventLogs.push(
-                        `🏦 Prime SCHL §6.5 (${goal.id}): +${formatCAD(Math.round(schl.premium))} ` +
-                        `(${(schl.rate * 100).toFixed(2)}% sur LTV ${(schl.ltv * 100).toFixed(1)}%)`,
-                    );
+                    if (!skipLogs) {
+                        state.lifeEventLogs.push(
+                            `🏦 Prime SCHL §6.5 (${goal.id}): +${formatCAD(Math.round(schl.premium))} ` +
+                            `(${(schl.rate * 100).toFixed(2)}% sur LTV ${(schl.ltv * 100).toFixed(1)}%)`,
+                        );
+                    }
                 }
 
                 const n = goal.amortization * 12;
@@ -384,8 +391,10 @@ export function processRealEstate(
                 // c'est lui (jamais `goal.mortgageRate` directement) que l'intérêt mensuel consomme,
                 // sinon un renouvellement à taux différent affame le capital en silence.
                 pState.currentRatePct = goal.mortgageRate;
-                state.lifeEventLogs.push(`🏠 Achat ${goal.name || 'de la propriété'} : -${formatCAD(Math.round(totalCashNeeded))} (argent sorti de tes comptes)`);
-                state.flowEventLogs.push(`📌 Mise de fonds : -${formatCAD(goal.downPayment)} · Frais de notaire + taxe de bienvenue : -${formatCAD(Math.round(goal.totalClosingCosts + welcomeFees))}`);
+                if (!skipLogs) {
+                    state.lifeEventLogs.push(`🏠 Achat ${goal.name || 'de la propriété'} : -${formatCAD(Math.round(totalCashNeeded))} (argent sorti de tes comptes)`);
+                    state.flowEventLogs.push(`📌 Mise de fonds : -${formatCAD(goal.downPayment)} · Frais de notaire + taxe de bienvenue : -${formatCAD(Math.round(goal.totalClosingCosts + welcomeFees))}`);
+                }
                 if (goal.isPrimaryResidence) state.hasPurchasedPrimary = true;
 
                 // §6.6 — Stress test OSFI B-20 (qualifying rate + GDS/TDS).
@@ -596,7 +605,7 @@ export function processRealEstate(
                     if (aRembourser > 0 && state.nonReg > 0) {
                         const call = handleNonRegSale(state, aRembourser);
                         state.smithManoeuvreDebt = Math.max(0, state.smithManoeuvreDebt - call);
-                        state.flowEventLogs.push(`🚨 Appel de marge (règle B20) : vente forcée de ${formatCAD(Math.round(call))} (compte non-enregistré)`);
+                        if (!skipLogs) state.flowEventLogs.push(`🚨 Appel de marge (règle B20) : vente forcée de ${formatCAD(Math.round(call))} (compte non-enregistré)`);
                     }
                 }
             }
@@ -656,9 +665,11 @@ export function processRealEstate(
             // fiscal est déjà celui de la règle, pas celui du mois.
             state.rapRepaymentDueTotal -= amnt;
             state.rapMissedRepaymentAdd += amnt;
-            state.flowEventLogs.push(
-                `⚠️ Versement RAP non fait, ajouté à ton revenu imposable : ${formatCAD(Math.round(amnt))}`,
-            );
+            if (!skipLogs) {
+                state.flowEventLogs.push(
+                    `⚠️ Versement RAP non fait, ajouté à ton revenu imposable : ${formatCAD(Math.round(amnt))}`,
+                );
+            }
         }
     }
 

@@ -703,6 +703,8 @@ export const FISCAL_MODULES_HORS_PERIMETRE = [
     // donc invisible aux deux bouts, ce qui rendait à moitié fausse mon affirmation « le ratchet a
     // attrapé mon propre code » : il en avait attrapé UN des DEUX littéraux du même commit.
     { file: 'services/projection/buildSimulationParams.ts', literals: 1, reason: 'assemblage des paramètres, aucun barème' },
+    { file: 'services/projection/macroRegimes.ts', literals: 99, reason: 'matrice de transition markovienne, corrélations et chocs de régimes macroéconomiques, aucun barème' },
+    { file: 'services/projection/grandCalcul.ts', literals: 26, reason: 'bornes T-Digest, échantillonnage borné et seuils de quantiles Monte Carlo, aucun barème' },
 ] as const;
 
 /**

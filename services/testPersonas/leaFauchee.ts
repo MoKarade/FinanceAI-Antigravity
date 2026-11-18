@@ -63,8 +63,8 @@ export function buildLeaFauchee(): Partial<AppState> {
         travelGoals: [],
         lifeEvents: [],
         financialGoals: [
-            { id: 'lea-fg1', name: 'Fonds urgence 3 mois', target: 6000, current: 1200, accountType: 'CELI', deadline: '2028-12-31' },
-        ] as unknown as AppState['financialGoals'],
+            { id: 'lea-fg1', name: 'Fonds urgence 3 mois', type: 'LIQUIDITY', targetAmount: 6000, manualCurrentAmount: 1200, targetAccount: 'CELI', deadline: '2028-12-31' },
+        ],
         // [R6] Locataire, sans enfant ni projet (a une dette étudiante) → opt-out immo/enfant/projets.
         setupOptOut: { realEstate: true, children: true, lifeProjects: true },
         ...emptyCollections(),

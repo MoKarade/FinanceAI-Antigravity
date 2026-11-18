@@ -62,8 +62,30 @@ export function proRataByWeights(amount: number, weights: number[]): number[] {
 
 /** Ajoute `delta` (réparti au prorata de `weights`) à un accumulateur par conjoint. Σ exact. */
 export function addByWeights(acc: number[], delta: number, weights: number[]): number[] {
-    const part = proRataByWeights(delta, weights);
-    return acc.map((v, i) => (Number.isFinite(v) ? v : 0) + (part[i] ?? 0));
+    const n = acc.length;
+    const a = Math.max(0, Number.isFinite(delta) ? delta : 0);
+    const wLen = Math.max(1, weights.length);
+    let total = 0;
+    for (let i = 0; i < weights.length; i++) {
+        const w = weights[i];
+        if (Number.isFinite(w) && w > 0) total += w;
+    }
+    const out = new Array<number>(n);
+    if (!(total > 0)) {
+        const eq = a / wLen;
+        for (let i = 0; i < n; i++) {
+            const v = acc[i];
+            out[i] = (Number.isFinite(v) ? v : 0) + (i < wLen ? eq : 0);
+        }
+        return out;
+    }
+    for (let i = 0; i < n; i++) {
+        const v = acc[i];
+        const w = i < weights.length ? weights[i] : 0;
+        const p = i < weights.length ? a * ((Number.isFinite(w) && w > 0 ? w : 0) / total) : 0;
+        out[i] = (Number.isFinite(v) ? v : 0) + p;
+    }
+    return out;
 }
 
 /**
@@ -78,13 +100,31 @@ export function stepReerByUser(
     opts: { withdrawal: number; contribution: number; poolEnd: number; shares: number[] },
 ): number[] {
     const { withdrawal, contribution, poolEnd, shares } = opts;
-    const prevSum = prev.reduce((s, x) => s + (Number.isFinite(x) ? x : 0), 0);
+    const n = prev.length;
+    let prevSum = 0;
+    for (let i = 0; i < n; i++) {
+        const x = prev[i];
+        if (Number.isFinite(x)) prevSum += x;
+    }
     const w = Math.max(0, Number.isFinite(withdrawal) ? withdrawal : 0);
     const c = Math.max(0, Number.isFinite(contribution) ? contribution : 0);
-    const afterFlows = prev.map((bal, i) => {
-        const b = Math.max(0, Number.isFinite(bal) ? bal : 0);
-        const wShare = prevSum > 0 ? (b / prevSum) : (1 / Math.max(1, prev.length));
-        return b - w * wShare + c * (shares[i] ?? 0);
-    });
-    return reconcileToPool(afterFlows, poolEnd, shares);
+    const safePool = Math.max(0, Number.isFinite(poolEnd) ? poolEnd : 0);
+    const out = new Array<number>(n);
+    const fallbackShare = 1 / Math.max(1, n);
+    let flooredSum = 0;
+    for (let i = 0; i < n; i++) {
+        const bal = prev[i];
+        const b = Number.isFinite(bal) && bal > 0 ? bal : 0;
+        const wShare = prevSum > 0 ? (b / prevSum) : fallbackShare;
+        const afterFlow = b - w * wShare + c * (shares[i] ?? 0);
+        const f = Number.isFinite(afterFlow) && afterFlow > 0 ? afterFlow : 0;
+        out[i] = f;
+        flooredSum += f;
+    }
+    if (!(flooredSum > 0)) return splitByShares(safePool, shares);
+    const k = safePool / flooredSum;
+    for (let i = 0; i < n; i++) {
+        out[i] *= k;
+    }
+    return out;
 }

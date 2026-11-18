@@ -11,7 +11,7 @@ import { fusionnerEtatPersiste, surRehydratation, extrairePersistable } from './
 import { champsFxApres } from '../services/fx/ecritureFx';
 import { brancherCoutIa } from '../services/aiChat/coutIa';
 import type { FinanceState } from './types';
-export type { FinanceState, PendingFocus, ProjectionStatus } from './types';
+export type { FinanceState, PendingFocus, ProjectionStatus, GrandCalculStatus } from './types';
 
 
 // [GODFILE-STORE] Ré-exports de compatibilité : les consommateurs (composants, services, tests)
@@ -34,6 +34,10 @@ export const useFinanceStore = create<FinanceState>()(
             lockedProjection: null,
             isProjectionLocked: false,
             revealedProjectionSig: null,
+            grandCalculResult: null,
+            grandCalculStatus: 'idle',
+            grandCalculProgress: null,
+            grandCalculError: null,
             pendingFocus: null,
             isTestMode: false,
             realDataSnapshot: null,
@@ -67,6 +71,16 @@ export const useFinanceStore = create<FinanceState>()(
             // avec le contenu réel — si l'IDB est vide/illisible, r=null → on retombe déverrouillé).
             setLockedProjection: (r) => set({ lockedProjection: r, isProjectionLocked: r !== null }),
             setRevealedProjectionSig: (sig) => set({ revealedProjectionSig: sig }),
+            setGrandCalculResult: (r) => set({ grandCalculResult: r }),
+            setGrandCalculStatus: (s) => set({ grandCalculStatus: s }),
+            setGrandCalculProgress: (p) => set({ grandCalculProgress: p }),
+            setGrandCalculError: (err) => set({ grandCalculError: err }),
+            resetGrandCalcul: () => set({
+                grandCalculResult: null,
+                grandCalculStatus: 'idle',
+                grandCalculProgress: null,
+                grandCalculError: null,
+            }),
             navigateWithFocus: (tab, section) => {
                 if (typeof window !== 'undefined' && window.location.hash.replace('#', '') !== tab) {
                     window.location.hash = tab;
@@ -91,7 +105,16 @@ export const useFinanceStore = create<FinanceState>()(
             // `set` fait un merge superficiel et `initialState` (AppState) ne contient PAS les flags
             // propres au store (isTestMode/realDataSnapshot/activeTestPersonaId) → on les remet
             // explicitement, sinon un reset déclenché EN mode test n'en sortirait jamais (bannière figée).
-            resetState: () => set({ ...initialState, isTestMode: false, realDataSnapshot: null, activeTestPersonaId: null }),
+            resetState: () => set({
+                ...initialState,
+                isTestMode: false,
+                realDataSnapshot: null,
+                activeTestPersonaId: null,
+                grandCalculResult: null,
+                grandCalculStatus: 'idle',
+                grandCalculProgress: null,
+                grandCalculError: null,
+            }),
 
             ...creerActionsModeTest(set, get),
         }),

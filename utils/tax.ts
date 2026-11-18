@@ -253,6 +253,17 @@ export const calculateAgeAndPensionCredits = (
     year: number = 2026,
     realDeflator: number = 1,
 ): { fedCredit: number; qcCredit: number } => {
+    const { inflationFactor } = getIndexedBracketsForYear(year, realDeflator);
+    const safeDeflator = Number.isFinite(realDeflator) && realDeflator > 0 ? realDeflator : 1;
+    return calculateAgeAndPensionCreditsWithFactor(opts, netTaxableIncome, inflationFactor, safeDeflator);
+};
+
+const calculateAgeAndPensionCreditsWithFactor = (
+    opts: AgeCreditOptions,
+    netTaxableIncome: number,
+    inflationFactor: number,
+    safeDeflator: number,
+): { fedCredit: number; qcCredit: number } => {
     // Guard NaN/Infinity (audit silent-failure-hunter §6.2) : un NaN injecté via
     // opts (e.g. activeUsersCount = 0 → division NaN) polluerait tout le calcul.
     const safe = (v: number | undefined, fallback = 0): number => {
@@ -264,9 +275,8 @@ export const calculateAgeAndPensionCredits = (
     const pension = safe(opts.eligiblePensionIncome);
     const familyIncome = safe(opts.familyIncome, netTaxableIncome);
 
-    // Indexation des seuils et montants 2026 selon l'année (fact mutualisé
+    // Indexation des seuils et montants 2026 selon l'année (facteur partagé
     // avec getIndexedBracketsForYear pour cohérence avec les paliers).
-    const { inflationFactor } = getIndexedBracketsForYear(year, realDeflator);
     const ageAmountFed = AGE_AMOUNT_FED_2026 * inflationFactor;
     const ageThresholdFed = AGE_AMOUNT_FED_THRESHOLD_2026 * inflationFactor;
     const ageAmountQc = AGE_AMOUNT_QC_2026 * inflationFactor;
@@ -301,7 +311,6 @@ export const calculateAgeAndPensionCredits = (
         // qu'à 5,5 %/40 ans). Garde reprise de getIndexedBracketsForYear (même fichier) : un
         // deflator 0/NaN/négatif retombe sur 1 — sinon 2000/0 = Infinity et le min crédite la
         // pension ENTIÈRE, un nombre fini plausible qu'aucune garde aval ne voit.
-        const safeDeflator = Number.isFinite(realDeflator) && realDeflator > 0 ? realDeflator : 1;
         fedAmount += Math.min(PENSION_INCOME_AMOUNT_FED / safeDeflator, pension);
     }
 
@@ -802,13 +811,19 @@ export const calculateDetailedTax = (income: number, brackets: typeof FED_BRACKE
     return { totalTax, breakdown };
 };
 
-const bracketsCache: Record<string, {
-    fed: typeof FED_BRACKETS,
-    qc: typeof QC_BRACKETS,
-    basicFed: number,
-    basicQc: number,
-    inflationFactor: number
-}> = {};
+type CachedBracketsEntry = {
+    fed: typeof FED_BRACKETS;
+    qc: typeof QC_BRACKETS;
+    basicFed: number;
+    basicQc: number;
+    inflationFactor: number;
+};
+
+const bracketsNominalCache = new Map<number, CachedBracketsEntry>();
+const bracketsDeflatedCache = new Map<number, Map<number, CachedBracketsEntry>>();
+let lastBracketsYear = Number.NaN;
+let lastBracketsDeflator = Number.NaN;
+let lastBracketsEntry: CachedBracketsEntry | null = null;
 
 /**
  * [FISC-BRACKET-REALINDEX] `realDeflator` (optionnel, défaut 1 = rétrocompat bit-identique) :
@@ -819,17 +834,54 @@ const bracketsCache: Record<string, {
  * de 24 932 → 16 740 $/pers à l'an 30 — sens NON conservateur). Tout ce qui dérive du facteur
  * (paliers, BPA, crédits d'âge, ligne 361, RAMQ, FSS) suit automatiquement.
  */
-const getIndexedBracketsForYear = (year: number, realDeflator: number = 1) => {
+const getIndexedBracketsForYear = (year: number, realDeflator: number = 1): CachedBracketsEntry => {
     const deflator = Number.isFinite(realDeflator) && realDeflator > 0 ? realDeflator : 1;
-    const cacheKey = deflator === 1 ? String(year) : `${year}|${deflator.toPrecision(12)}`;
-    if (bracketsCache[cacheKey]) return bracketsCache[cacheKey];
-    const inflationFactor = Math.pow(1.02, Math.max(0, year - TAX_BASE_YEAR)) / deflator;
-    const indexedFed = FED_BRACKETS.map(b => ({ ...b, upTo: b.upTo === Infinity ? Infinity : b.upTo * inflationFactor }));
-    const indexedQc = QC_BRACKETS.map(b => ({ ...b, upTo: b.upTo === Infinity ? Infinity : b.upTo * inflationFactor }));
-    const basicFed = BASIC_PERSONAL_AMOUNT_FED * inflationFactor;
-    const basicQc = BASIC_PERSONAL_AMOUNT_QC * inflationFactor;
-    bracketsCache[cacheKey] = { fed: indexedFed, qc: indexedQc, basicFed, basicQc, inflationFactor };
-    return bracketsCache[cacheKey];
+    if (year === lastBracketsYear && deflator === lastBracketsDeflator && lastBracketsEntry !== null) {
+        return lastBracketsEntry;
+    }
+
+    let entry: CachedBracketsEntry | undefined;
+    if (deflator === 1) {
+        entry = bracketsNominalCache.get(year);
+        if (!entry) {
+            const inflationFactor = Math.pow(1.02, Math.max(0, year - TAX_BASE_YEAR));
+            entry = {
+                fed: FED_BRACKETS.map(b => ({ ...b, upTo: b.upTo === Infinity ? Infinity : b.upTo * inflationFactor })),
+                qc: QC_BRACKETS.map(b => ({ ...b, upTo: b.upTo === Infinity ? Infinity : b.upTo * inflationFactor })),
+                basicFed: BASIC_PERSONAL_AMOUNT_FED * inflationFactor,
+                basicQc: BASIC_PERSONAL_AMOUNT_QC * inflationFactor,
+                inflationFactor,
+            };
+            bracketsNominalCache.set(year, entry);
+        }
+    } else {
+        let byDeflator = bracketsDeflatedCache.get(year);
+        if (!byDeflator) {
+            byDeflator = new Map<number, CachedBracketsEntry>();
+            bracketsDeflatedCache.set(year, byDeflator);
+        }
+        entry = byDeflator.get(deflator);
+        if (!entry) {
+            if (byDeflator.size >= 64) {
+                const oldestKey = byDeflator.keys().next().value;
+                if (oldestKey !== undefined) byDeflator.delete(oldestKey);
+            }
+            const inflationFactor = Math.pow(1.02, Math.max(0, year - TAX_BASE_YEAR)) / deflator;
+            entry = {
+                fed: FED_BRACKETS.map(b => ({ ...b, upTo: b.upTo === Infinity ? Infinity : b.upTo * inflationFactor })),
+                qc: QC_BRACKETS.map(b => ({ ...b, upTo: b.upTo === Infinity ? Infinity : b.upTo * inflationFactor })),
+                basicFed: BASIC_PERSONAL_AMOUNT_FED * inflationFactor,
+                basicQc: BASIC_PERSONAL_AMOUNT_QC * inflationFactor,
+                inflationFactor,
+            };
+            byDeflator.set(deflator, entry);
+        }
+    }
+
+    lastBracketsYear = year;
+    lastBracketsDeflator = deflator;
+    lastBracketsEntry = entry;
+    return entry;
 };
 
 /**
@@ -872,12 +924,30 @@ export const getMarginalRate = (income: number, year: number = 2026, realDeflato
     // reste sans dépendance (pas de logError importé ici) — le repli explicite EST le signal.
     const safeIncome = Number.isFinite(income) ? income : 0;
     const { fed, qc } = getIndexedBracketsForYear(year, realDeflator);
-    const fedRate = fed.find(b => safeIncome <= b.upTo)?.rate || 0.33;
-    const qcRate = qc.find(b => safeIncome <= b.upTo)?.rate || 0.2575;
-    // Fédéral effectif au QC = taux fédéral diminué de l'abattement de 16,5 %.
-    const effectiveFedRate = fedRate * (1 - QC_FEDERAL_ABATEMENT_RATE);
-    return effectiveFedRate + qcRate;
+    return marginalRateFromBrackets(safeIncome, fed, qc);
 };
+
+function marginalRateFromBrackets(
+    safeIncome: number,
+    fed: typeof FED_BRACKETS,
+    qc: typeof QC_BRACKETS,
+): number {
+    let fedRate = 0.33;
+    for (let i = 0; i < fed.length; i++) {
+        if (safeIncome <= fed[i].upTo) {
+            fedRate = fed[i].rate;
+            break;
+        }
+    }
+    let qcRate = 0.2575;
+    for (let i = 0; i < qc.length; i++) {
+        if (safeIncome <= qc[i].upTo) {
+            qcRate = qc[i].rate;
+            break;
+        }
+    }
+    return fedRate * (1 - QC_FEDERAL_ABATEMENT_RATE) + qcRate;
+}
 
 /**
  * Montant personnel de base fédéral (BPA) avec dégressivité LIR 118(1.1).
@@ -954,8 +1024,9 @@ export const calculateFiscalReport = (
     // Crédits 65+ et revenu de retraite (audit §6.2). Calculés une seule fois,
     // appliqués au fédéral AVANT l'abatement QC et au provincial APRÈS le BPA.
     // L'année est propagée pour indexer seuils et montants ligne 361 + ligne 30100.
+    const safeDeflator = Number.isFinite(realDeflator) && realDeflator > 0 ? realDeflator : 1;
     const ageCredits = ageOpts
-        ? calculateAgeAndPensionCredits(ageOpts, netTaxable, year, realDeflator)
+        ? calculateAgeAndPensionCreditsWithFactor(ageOpts, netTaxable, inflationFactor, safeDeflator)
         : { fedCredit: 0, qcCredit: 0 };
 
     const fedData = calculateDetailedTax(netTaxable, indexedFedBrackets, skipBreakdown);
@@ -1021,7 +1092,7 @@ export const calculateFiscalReport = (
     // 2026, ce champ contredisait son propre rapport dès 2027 (mesuré : 36,12 % affiché pour un
     // 60 k$ nominal de 2035 dont le vrai marginal indexé est 25,69 %) — et il pilote la bascule
     // REER-first d'AUTO_MARGINAL (cashflowAllocation) et la retenue FERR (taxJanuary).
-    const marginalRate = getMarginalRate(netTaxable, year, realDeflator);
+    const marginalRate = marginalRateFromBrackets(netTaxable, indexedFedBrackets, indexedQcBrackets);
 
     return {
         grossIncome,

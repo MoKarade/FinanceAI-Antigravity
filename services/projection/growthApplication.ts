@@ -82,12 +82,12 @@ export function applyMonthlyGrowth(inputs: Readonly<GrowthInputs>): GrowthResult
     }
 
     return {
-        celi: { newVal: celi.newVal, growth: celi.growth, pct: celi.pct },
-        celiapp: { newVal: celiapp.newVal, growth: celiapp.growth, pct: celiapp.pct },
-        reer: { newVal: reer.newVal, growth: reer.growth, pct: reer.pct },
-        nonReg: { newVal: nonReg.newVal, growth: nonReg.growth, pct: nonReg.pct },
-        crypto: { newVal: crypto.newVal, growth: crypto.growth, pct: crypto.pct },
-        liquid: { newVal: liquid.newVal, growth: liquid.growth, pct: liquid.pct },
+        celi,
+        celiapp,
+        reer,
+        nonReg,
+        crypto,
+        liquid,
         reee: reeeGrowth,
         totalGrowth: celi.growth + reer.growth + nonReg.growth + crypto.growth + liquid.growth + celiapp.growth + reee.growth,
     };

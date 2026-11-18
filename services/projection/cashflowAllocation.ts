@@ -113,6 +113,8 @@ export interface CashflowCtx {
     contributionOrder?: ContributionOrder;
     /** Rembourser toutes les dettes avant d'investir (vs seulement toxiques >7%). */
     debtFirst?: boolean;
+    /** Saute la génération de messages texte (mode MC allégé). */
+    skipLogs?: boolean;
 }
 
 import { handleNonRegSale, handleCryptoSale } from './portfolioOps';
@@ -127,6 +129,7 @@ import { handleNonRegSale, handleCryptoSale } from './portfolioOps';
 interface CascadeEnCours {
     shortfall: number;
     runningGross: number;
+    skipLogs: boolean;
 }
 
 /** Pige dans les liquidités jusqu'au seuil critique. Rend le déficit RESTANT. */
@@ -164,7 +167,9 @@ function tirerReer(
     state.rrspWithholdingMois += actualWithholding; // acompte conservé au liquide (cf CF-2) + compteur d'affichage exact
     casc.runningGross += actualGross;
     casc.shortfall -= actualNet;
-    state.flowEventLogs.push(`🏦 ↳ Retrait REER (${label}) : +${formatCAD(Math.round(actualGross))} brut → +${formatCAD(Math.round(actualNet))} net après impôt`);
+    if (!casc.skipLogs) {
+        state.flowEventLogs.push(`🏦 ↳ Retrait REER (${label}) : +${formatCAD(Math.round(actualGross))} brut → +${formatCAD(Math.round(actualNet))} net après impôt`);
+    }
     return actualGross;
 }
 
@@ -214,13 +219,17 @@ function cascadeStandard(
             state.retraitCeliMois += drawn;
             state.withdrawalCELI += drawn;
             casc.shortfall -= drawn;
-            state.flowEventLogs.push(`🏦 ↳ Retrait CELI (sans impôt) : +${formatCAD(Math.round(drawn))}`);
+            if (!casc.skipLogs) {
+                state.flowEventLogs.push(`🏦 ↳ Retrait CELI (sans impôt) : +${formatCAD(Math.round(drawn))}`);
+            }
         } else if (bucket === 'NONREG' && state.nonReg > 0) {
             const drawnNonReg = handleNonRegSale(state, casc.shortfall);
             state.liquid += drawnNonReg;
             state.withdrawalNonReg += drawnNonReg;
             casc.shortfall -= drawnNonReg;
-            state.flowEventLogs.push(`🏦 ↳ Retrait du compte non-enregistré : +${formatCAD(Math.round(drawnNonReg))}`);
+            if (!casc.skipLogs) {
+                state.flowEventLogs.push(`🏦 ↳ Retrait du compte non-enregistré : +${formatCAD(Math.round(drawnNonReg))}`);
+            }
         } else if (bucket === 'REER' && state.reer > 0) {
             // OAS guard appliqué ici aussi: on respecte le plafond clawback.
             const reerCap = Math.max(0, oasCap - casc.runningGross);
@@ -233,7 +242,9 @@ function cascadeStandard(
             state.liquid += drawn;
             casc.shortfall -= drawn;
             state.withdrawalCrypto += drawn;
-            state.flowEventLogs.push(`🚨 Vente de crypto (dernier recours) : +${formatCAD(Math.round(drawn))}`);
+            if (!casc.skipLogs) {
+                state.flowEventLogs.push(`🚨 Vente de crypto (dernier recours) : +${formatCAD(Math.round(drawn))}`);
+            }
         }
     }
 }
@@ -282,7 +293,7 @@ function processShortfall(
             ? ((incomeRetirement * 12) + state.accRetraitsReerYear + accRentesYear)
             : ((grossMarcBaseAnnual + (survivorMode ? 0 : grossAnnaBaseAnnual)) * Math.pow(1 + simSalaryGrowth / 100, Math.floor(m / 12)) + state.accRetraitsReerYear);
 
-        const casc: CascadeEnCours = { shortfall, runningGross: currentAnnualGrossTotal };
+        const casc: CascadeEnCours = { shortfall, runningGross: currentAnnualGrossTotal, skipLogs: ctx.skipLogs === true };
         const pbmaThreshold = PBMA_THRESHOLD_PER_USER * liveFilers;
         const bracket1Top = SAFE_REER_BRACKET_TOP_PER_USER * liveFilers;
         // OAS clawback ne s'applique qu'aux 65+. On le proxy par isRetired puisque
@@ -349,8 +360,8 @@ function remplirCoussinEtBalayer(state: CashflowState, excess: number, targetEF:
 }
 
 /** Dettes toxiques (>7%) ou toutes si DEBT_FIRST — au taux le plus élevé d'abord. Rend le restant. */
-function rembourserDettes(state: CashflowState, activeDebts: Debt[], excess: number, debtFirstActive: boolean): number {
-    if (excess <= 0) return excess;
+function rembourserDettes(state: CashflowState, activeDebts: Debt[], excess: number, debtFirstActive: boolean, skipLogs: boolean): number {
+    if (excess <= 0 || activeDebts.length === 0) return excess;
     const sortedDebts = activeDebts
         .filter(d => d.balance > 0 && (d.interestRate > 7 || debtFirstActive))
         .sort((a, b) => b.interestRate - a.interestRate);
@@ -359,8 +370,10 @@ function rembourserDettes(state: CashflowState, activeDebts: Debt[], excess: num
         if (pay > 0) {
             d.balance -= pay;
             excess -= pay;
-            const label = d.interestRate > 7 ? 'dette à taux élevé' : 'remboursement accéléré';
-            state.flowEventLogs.push(`💸 Remboursement ${d.name} (${label}) : -${formatCAD(Math.round(pay))}`);
+            if (!skipLogs) {
+                const label = d.interestRate > 7 ? 'dette à taux élevé' : 'remboursement accéléré';
+                state.flowEventLogs.push(`💸 Remboursement ${d.name} (${label}) : -${formatCAD(Math.round(pay))}`);
+            }
         }
     }
     return excess;
@@ -401,9 +414,9 @@ function processExcess(
 
     let excess = remplirCoussinEtBalayer(state, monthlyCashflow, targetEF);
 
-    excess = rembourserDettes(state, activeDebts, excess, debtFirstActive);
+    excess = rembourserDettes(state, activeDebts, excess, debtFirstActive, ctx.skipLogs === true);
 
-    const hasRemainingDebtPostPay = activeDebts.some(d => d.balance > 0);
+    const hasRemainingDebtPostPay = activeDebts.length > 0 && activeDebts.some(d => d.balance > 0);
 
     // FHSA (sauf si DEBT_FIRST avec dettes restantes)
     if (excess > 0 && state.fhsaRoom > 0 && !isRetired && hasFuturePurchase && !hasPurchasedPrimary
@@ -457,7 +470,9 @@ function processExcess(
             state.celiRoom -= fill;
             excess -= fill;
             state.contribCELI += fill;
-            state.flowEventLogs.push(`💰 ↳ Surplus placé dans le CELI : +${formatCAD(Math.round(fill))}`);
+            if (!ctx.skipLogs) {
+                state.flowEventLogs.push(`💰 ↳ Surplus placé dans le CELI : +${formatCAD(Math.round(fill))}`);
+            }
         }
     }
 

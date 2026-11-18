@@ -73,8 +73,8 @@ export function buildCoupleDettes(): Partial<AppState> {
         travelGoals: [],
         lifeEvents: [],
         financialGoals: [
-            { id: 'cd-fg1', name: 'Éteindre la carte de crédit', target: 9000, current: 0, accountType: 'LIQUIDITE', deadline: '2027-12-31' },
-        ] as unknown as AppState['financialGoals'],
+            { id: 'cd-fg1', name: 'Éteindre la carte de crédit', type: 'LIQUIDITY', targetAmount: 9000, manualCurrentAmount: 0, targetAccount: 'NON-ENREG', deadline: '2027-12-31' },
+        ],
         // [R6] Locataire, sans enfant ni projet (a des dettes) → opt-out immo/enfant/projets.
         setupOptOut: { realEstate: true, children: true, lifeProjects: true },
         ...emptyCollections(),

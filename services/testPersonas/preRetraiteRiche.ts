@@ -87,8 +87,8 @@ export function buildPreRetraiteRiche(): Partial<AppState> {
         ] as unknown as AppState['travelGoals'],
         lifeEvents: [],
         financialGoals: [
-            { id: 'pr-fg1', name: 'Léguer 500 k$ aux enfants', target: 500000, current: 890000, accountType: 'NON-ENREG', deadline: '2055-12-31' },
-        ] as unknown as AppState['financialGoals'],
+            { id: 'pr-fg1', name: 'Léguer 500 k$ aux enfants', type: 'NET_WORTH', targetAmount: 500000, manualCurrentAmount: 890000, targetAccount: 'NON-ENREG', deadline: '2055-12-31' },
+        ],
         // [R6] Aucune dette / projet immo / enfant → opt-out explicite (pas de PageSetupGate sur ces pages).
         setupOptOut: { debts: true, realEstate: true, children: true },
         ...emptyCollections(),

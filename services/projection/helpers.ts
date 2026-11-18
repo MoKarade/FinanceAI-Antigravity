@@ -90,10 +90,13 @@ export function gaussianRandom(rng: () => number, mean: number, stdDev: number):
     return mean + stdDev * n;
 }
 
+const INV_12 = 1 / 12;
+const INV_SQRT12 = 1 / Math.sqrt(12);
+
 // ---- Applique un choc gaussien à un taux annuel et le ré-annualise ----
 export function applyShock(baseRateAnnual: number, sigmaAnnual: number, shock: number): number {
-    const muMonthly = Math.pow(1 + baseRateAnnual / 100, 1 / 12) - 1;
-    const sigmaMonthly = (sigmaAnnual / 100) / Math.sqrt(12);
+    const muMonthly = Math.pow(1 + baseRateAnnual / 100, INV_12) - 1;
+    const sigmaMonthly = (sigmaAnnual / 100) * INV_SQRT12;
     const monthlyRateWithShock = muMonthly + sigmaMonthly * shock;
     return (Math.pow(1 + monthlyRateWithShock, 12) - 1) * 100;
 }
@@ -118,11 +121,14 @@ export function applyMidMonthGrowth(startVal: number, endVal: number, rateAnnual
     // Taux inconnu = PAS de croissance, mais on PRÉSERVE le solde (`endVal`, déjà fini ci-dessus) — pas de perte.
     if (!Number.isFinite(rateAnnual)) return { newVal: endVal, growth: 0, pct: 0 };
     if (startVal <= 0 && endVal <= 0) return { newVal: 0, growth: 0, pct: 0 };
-    const monthlyRate = Math.pow(1 + rateAnnual / 100, 1 / 12) - 1;
+    const base = 1 + rateAnnual / 100;
+    const monthlyRate = Math.pow(base, 1 / 12) - 1;
     const netFlow = endVal - startVal;
     // Le solde initial croît le mois entier, les flux ne croissent qu'un demi-mois
     const growthOnStart = startVal * monthlyRate;
-    const growthOnFlow = netFlow * ((Math.pow(1 + rateAnnual / 100, 1 / 24)) - 1);
+    const growthOnFlow = (netFlow !== 0 || base < 0)
+        ? netFlow * (Math.pow(base, 1 / 24) - 1)
+        : 0;
     const merDeduction = applyMER ? (startVal + netFlow) * (MER / 12) : 0;
     const totalGrowth = growthOnStart + growthOnFlow - merDeduction;
     const newVal = Math.max(0, endVal + totalGrowth);

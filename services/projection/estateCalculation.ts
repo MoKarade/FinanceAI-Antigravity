@@ -41,6 +41,10 @@ export interface EstateCalcInputs {
     /** RE-GAIN-SUCC — gain latent BRUT des immeubles LOCATIFS (Σ max(0, valeur − coût)), imposable à
      *  50 % à la disposition réputée au décès. RP exclue par l'appelant. Absent → 0 (non-régression). */
     realEstateLatentGain?: number;
+    /** Récupération de DPA (100 % imposable, LIR 13(1)) des immeubles locatifs au décès projeté. */
+    rentalRecaptureTaxable?: number;
+    /** Vrai uniquement lors d'un décès stochastique précoce (tryMortality) avant la fin d'horizon. */
+    isDeceasedEarly?: boolean;
     smithManoeuvreDebt: number;
     /** [PV-6] Passif d'insolvabilité (découverts non couverts portés en dette). Absent → 0. */
     liquidDebt?: number;
@@ -129,10 +133,18 @@ export interface EstateCalcInputs {
     startingREEE: number;
 }
 
-interface EstateResult {
+export interface EstateResult {
     finalRawNetWorth: number;
     estateNetWorth: number;
     totalEstateTax: number;
+    fedEstateTax: number | null;
+    qcEstateTax: number | null;
+    taxableBreakdown: {
+        rrspRrif: number;
+        capitalGainsTaxable: number;
+        rentalRecapture: number;
+    };
+    projectedDeathAge: number;
     startNW: number;
 }
 
@@ -217,7 +229,9 @@ export function computeEstateNetWorth(
     // (Σ max(0, valeur − coût), fourni par l'appelant) est imposable à 50 %. La résidence principale
     // est EXEMPTE (exclue en amont). Absent → 0 (non-régression).
     const taxableRealEstateGain = fin(inputs.realEstateLatentGain ?? 0) * CAPITAL_GAINS_INCLUSION_STANDARD;
-    const totalEstateLiquidation = reer + taxableEstateGain + taxableCryptoGain + taxableRealEstateGain;
+    const rentalRecaptureTaxable = Math.max(0, fin(inputs.rentalRecaptureTaxable ?? 0));
+    const capitalGainsTaxable = taxableEstateGain + taxableCryptoGain + taxableRealEstateGain;
+    const totalEstateLiquidation = reer + capitalGainsTaxable + rentalRecaptureTaxable;
 
     // Phase 2: Double décès (fin de simulation). Impôt supporté par le survivant SEUL → toute la
     // liquidation est imposée sur UNE seule déclaration finale.
@@ -261,6 +275,13 @@ export function computeEstateNetWorth(
     const estateReportBase = calculateFiscalReport(estateCurrentIncome, 0, 0, finalYear, enableMonteCarlo, estateAgeOpts);
     const estateReportFinal = calculateFiscalReport((estateCurrentIncome + totalEstateLiquidation), 0, 0, finalYear, enableMonteCarlo, estateAgeOpts);
     const totalEstateTax = estateReportFinal.totalTax - estateReportBase.totalTax;
+    const hasTaxSplit =
+        typeof estateReportFinal.fedTax === 'number' && Number.isFinite(estateReportFinal.fedTax)
+        && typeof estateReportBase.fedTax === 'number' && Number.isFinite(estateReportBase.fedTax)
+        && typeof estateReportFinal.qcTax === 'number' && Number.isFinite(estateReportFinal.qcTax)
+        && typeof estateReportBase.qcTax === 'number' && Number.isFinite(estateReportBase.qcTax);
+    const fedEstateTax = hasTaxSplit ? Math.max(0, estateReportFinal.fedTax - estateReportBase.fedTax) : null;
+    const qcEstateTax = hasTaxSplit ? Math.max(0, estateReportFinal.qcTax - estateReportBase.qcTax) : null;
 
     // V60: NPV des rentes publiques futures (valeur invisible en fin de simulation avant 65 ans).
     // FA-5 (audit fiscal 2026-06-09) : `governmentPension` est déjà FAMILIAL dans tout le moteur
@@ -272,7 +293,7 @@ export function computeEstateNetWorth(
     const lifeExpectancy = Number.isFinite(inputs.lifeExpectancy) && (inputs.lifeExpectancy as number) > 0
         ? (inputs.lifeExpectancy as number)
         : DEFAULT_LIFE_EXPECTANCY;
-    const remainingYearsAtEnd = Math.max(0, lifeExpectancy - finalAge);
+    const remainingYearsAtEnd = inputs.isDeceasedEarly ? 0 : Math.max(0, lifeExpectancy - finalAge);
     // FA-8 (résolu) — les estimés PRÉCIS par rente priment, exactement comme retirementIncome.ts:207-212
     // (estimé per-personne × activeUsersCount = familial mensuel ; repli sur le split 65/35 de l'agrégé
     // `governmentPension` sinon — convention de MODÈLE GOV_PENSION_*_SHARE, FISCAL_REFERENCE §6). Avant :
@@ -518,6 +539,14 @@ export function computeEstateNetWorth(
         finalRawNetWorth: fin(finalRawNetWorth),
         estateNetWorth: fin(estateNetWorth),
         totalEstateTax: fin(totalEstateTax),
+        fedEstateTax,
+        qcEstateTax,
+        taxableBreakdown: {
+            rrspRrif: reer,
+            capitalGainsTaxable,
+            rentalRecapture: rentalRecaptureTaxable,
+        },
+        projectedDeathAge: finalAge,
         startNW,
     };
 }

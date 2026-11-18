@@ -4,14 +4,15 @@
  * bypass_onboarding  — pose le flag localStorage qui saute l'écran de bienvenue.
  * activate_test_mode — injecte les fixtures Alex/Sam via le store Zustand.
  */
-import { type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 // ⚠️ Le script est INJECTÉ comme source dans la page : il ne peut pas importer le registre, il
 // l'INTERPOLE. C'est la seule forme possible ici, et elle garde la source unique.
 import { STORAGE_KEYS } from '../../utils/storageKeys';
 
 /**
- * Bypass l'onboarding en injectant le flag localStorage avant le chargement
- * de la page. À appeler via page.addInitScript() avant page.goto().
+ * Bypass l'onboarding et le portail FirebaseAuthGate en injectant les flags
+ * localStorage / sessionStorage avant le chargement de la page.
+ * À appeler via page.addInitScript() avant page.goto().
  */
 export function scriptBypassOnboarding(): string {
   return `
@@ -19,6 +20,11 @@ export function scriptBypassOnboarding(): string {
       localStorage.setItem('${STORAGE_KEYS.onboardingDone}', 'true');
     } catch (e) {
       // localStorage indisponible — ne bloque pas le test
+    }
+    try {
+      sessionStorage.setItem('financeai:offline_bypass', '1');
+    } catch (e) {
+      // sessionStorage indisponible — ne bloque pas le test
     }
   `;
 }
@@ -62,9 +68,28 @@ export async function ecarterLeRail(page: Page): Promise<void> {
  * ES bundlé (le store Zustand n'est pas exposé sur window).
  */
 export async function activateTestMode(page: Page): Promise<void> {
+  // Filet anti-portail : injecte `financeai:offline_bypass` même si le spec n'a pas appelé
+  // `scriptBypassOnboarding()` avant `activateTestMode()` (idempotent avec `scriptBypassOnboarding`).
+  await page.addInitScript(() => {
+    try {
+      sessionStorage.setItem('financeai:offline_bypass', '1');
+    } catch {
+      // sessionStorage indisponible — le repli UI ci-dessous gère le portail
+    }
+  });
+
   // Navigation vers Configuration via le hash
   await page.goto('/#SETTINGS');
   await page.waitForLoadState('domcontentloaded');
+  await page
+    .evaluate(() => {
+      try {
+        sessionStorage.setItem('financeai:offline_bypass', '1');
+      } catch {
+        // sessionStorage indisponible
+      }
+    })
+    .catch(() => {});
   await ecarterLeRail(page);
 
   // [S5-REFONTE-REGLAGES] La carte du mode test est TOUJOURS visible dans Réglages (colonne de droite) :
@@ -73,9 +98,77 @@ export async function activateTestMode(page: Page): Promise<void> {
   // Alex/Sam) IMMÉDIATEMENT. Le flux de confirmation à 2 étapes ("Oui, charger
   // les fixtures") a été retiré avec l'arrivée du sélecteur de personas
   // (le menu déroulant charge directement). Cf components/settings/TestModePanel.tsx.
+  // Boucle bornée de repli si un spec appelle activateTestMode() sans scriptBypassOnboarding() :
+  // écarte le portail FirebaseAuthGate s'il s'affiche (y compris si setRequireGateScreen(true)
+  // démonte <App /> de manière asynchrone pendant l'attente ou le clic sur btnActivate).
+  const btnLocal = page.getByRole('button', { name: /Accéder directement à mon dossier local/i });
   const btnActivate = page.getByRole('button', { name: 'Activer le mode test' });
-  await btnActivate.waitFor({ state: 'visible', timeout: 8_000 });
-  await btnActivate.click();
+  const modeTestBanner = page.getByRole('status', { name: 'Mode test activé' });
+  const deadline = Date.now() + 16_000;
+  let activated = false;
+
+  while (Date.now() < deadline && !activated) {
+    const hasTestBanner = await page
+      .evaluate(() => document.body.innerText.includes('MODE TEST'))
+      .catch(() => false);
+    if (hasTestBanner) {
+      activated = true;
+      break;
+    }
+
+    const remaining = Math.max(500, deadline - Date.now());
+    await expect(btnActivate.or(btnLocal).or(modeTestBanner)).toBeVisible({ timeout: remaining });
+
+    if (await modeTestBanner.isVisible().catch(() => false)) {
+      activated = true;
+      break;
+    }
+
+    if (await btnLocal.isVisible().catch(() => false)) {
+      await btnLocal.click({ timeout: 2_000 }).catch(() => {});
+      continue;
+    }
+
+    if (await btnActivate.isVisible().catch(() => false)) {
+      try {
+        await btnActivate.click({ timeout: 2_000 });
+        await page
+          .waitForFunction(
+            () =>
+              document.body.innerText.includes('MODE TEST') ||
+              document.querySelector('[data-testid="firebase-auth-gate"]') !== null,
+            { timeout: 4_000 },
+          )
+          .catch(() => {});
+        const gateVisible = await btnLocal.isVisible().catch(() => false);
+        if (!gateVisible) {
+          activated = true;
+        }
+      } catch {
+        // Si FirebaseAuthGate a démonté <App /> pendant l'action, la boucle réessaye et gère btnLocal.
+      }
+    }
+  }
+
+  if (!activated) {
+    const alreadyActive =
+      (await page.evaluate(() => document.body.innerText.includes('MODE TEST')).catch(() => false)) ||
+      (await modeTestBanner.isVisible().catch(() => false));
+    if (!alreadyActive) {
+      if (await btnLocal.isVisible().catch(() => false)) {
+        await btnLocal.click({ timeout: 2_000 }).catch(() => {});
+      }
+      const activeAfterLocal =
+        (await page.evaluate(() => document.body.innerText.includes('MODE TEST')).catch(() => false)) ||
+        (await modeTestBanner.isVisible().catch(() => false));
+      if (!activeAfterLocal) {
+        await expect(btnActivate.or(modeTestBanner)).toBeVisible({ timeout: 4_000 });
+        if (!(await modeTestBanner.isVisible().catch(() => false))) {
+          await btnActivate.click();
+        }
+      }
+    }
+  }
 
   // Attendre que le banner "MODE TEST" apparaisse (confirmation visuelle)
   await page.waitForFunction(

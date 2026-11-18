@@ -17,6 +17,7 @@ import { PrivateAmount } from '../../ui/PrivateAmount';
 // [PRIV-PAYEE-MODE-DISCRET] Le NOM du marchand est de la donnée personnelle : « pharmacie X, le 3 »
 // dit déjà beaucoup, même sans le montant à côté. Décision Marc 2026-08-17.
 import { PrivateText } from '../../ui/PrivateText';
+import { useFinanceStore } from '../../../store/useFinanceStore';
 import { formatCAD, formatNumber } from '../../../utils/format';
 import { detteReductrice } from '../futureDetail/comptes';
 import { splitEventIcon } from '../ProjectionTooltip';
@@ -324,6 +325,7 @@ export const SectionComptes = ({ data }: { data: PointJour }) => {
 /* ─────────────────────────── ④ Ce jour-là (mouvements + événements) ─────────────────────────── */
 
 export const SectionMouvements = ({ data }: { data: PointJour }) => {
+    const isPrivacyMode = useFinanceStore((s) => s.isPrivacyMode);
     const isDailyPoint = data.isDailyPoint === true;
     // [FUTUR-DAILY-PAST-REAL] Un jour du PASSÉ est RECONSTRUIT depuis de vraies données ; un jour du
     // FUTUR est ventilé depuis le mois du moteur. Les présenter à l'identique reviendrait à faire
@@ -343,19 +345,27 @@ export const SectionMouvements = ({ data }: { data: PointJour }) => {
     return (
         <div className="space-y-2.5">
             {/* U4 — TOUS les événements du mois, pas juste le premier. Chaque ligne a son icône via
-                `splitEventIcon`. */}
+                `splitEventIcon`. En mode discret : garder le fait, taire le détail (montants/âges/noms). */}
             {events.length > 0 && (
                 <div className="space-y-1">
                     <TitreBloc>{events.length === 1 ? 'Événement' : `Événements (${events.length})`}</TitreBloc>
-                    {events.map((ev, i) => {
-                        const { icon, text } = splitEventIcon(ev);
-                        return (
-                            <div key={i} className="flex items-center gap-1.5 text-tiny text-alerte-texte bg-alerte-fond rounded-lg px-2 py-1.5 border border-alerte-texte/30">
-                                <span className="shrink-0" aria-hidden="true">{icon}</span>
-                                <span className="flex-1 font-semibold leading-tight">{text}</span>
-                            </div>
-                        );
-                    })}
+                    {isPrivacyMode ? (
+                        <div className="flex items-center gap-1.5 text-tiny text-alerte-texte bg-alerte-fond rounded-lg px-2 py-1.5 border border-alerte-texte/30">
+                            <span className="flex-1 italic leading-tight">
+                                {events.length === 1 ? '1 événement masqué' : `${events.length} événements masqués`} — désactivez le mode discret pour les lire.
+                            </span>
+                        </div>
+                    ) : (
+                        events.map((ev, i) => {
+                            const { icon, text } = splitEventIcon(ev);
+                            return (
+                                <div key={i} className="flex items-center gap-1.5 text-tiny text-alerte-texte bg-alerte-fond rounded-lg px-2 py-1.5 border border-alerte-texte/30">
+                                    <span className="shrink-0" aria-hidden="true">{icon}</span>
+                                    <span className="flex-1 font-semibold leading-tight">{text}</span>
+                                </div>
+                            );
+                        })
+                    )}
                 </div>
             )}
 

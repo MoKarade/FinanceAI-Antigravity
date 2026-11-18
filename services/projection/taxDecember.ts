@@ -67,6 +67,7 @@ export function computeOasClawback(
     // ⚠️ Un premier chiffrage disait +3 006 $ — il oubliait NONREG_DIVIDEND_DISTRIBUTION_SHARE
     // (0,3) dans l'assiette : re-mesuré avec la source unique (classe ECRIRE-UN-CHIFFRE).
     annualGrossedUpDividends: number = 0,
+    skipLogs: boolean = false,
 ): { clawbackAnnual: number; logMsg?: string } {
     if (currentMonthIndex !== 11 || m === 0 || !isRetired || age < PENSION_SPLIT_MIN_AGE) {
         return { clawbackAnnual: 0 };
@@ -146,7 +147,7 @@ export function computeOasClawback(
     if (clawbackAnnual > 1 || capInvalid) {
         return {
             clawbackAnnual,
-            logMsg: `⚠️ PSV Clawback prévu: -${formatCAD(Math.round(clawbackAnnual))}/an${invalidNote}`,
+            logMsg: skipLogs ? undefined : `⚠️ PSV Clawback prévu: -${formatCAD(Math.round(clawbackAnnual))}/an${invalidNote}`,
         };
     }
     return { clawbackAnnual };
@@ -173,6 +174,7 @@ export function processTaxLossHarvesting(
     nonReg: number,
     nonRegACB: number,
     currentNonRegRate: number,
+    skipLogs: boolean = false,
 ): { harvestedLoss: number; acbDelta: number; logMsg?: string } {
     if (currentMonthIndex !== 11 || m === 0) return { harvestedLoss: 0, acbDelta: 0 };
     if (currentNonRegRate >= 0 || !(nonReg > 0)) return { harvestedLoss: 0, acbDelta: 0 }; // !(>0) capte 0, négatif ET NaN
@@ -192,7 +194,7 @@ export function processTaxLossHarvesting(
     return {
         harvestedLoss,
         acbDelta,
-        logMsg: `🛡️ Perte Cristallisée (TLH): +${formatCAD(Math.round(harvestedLoss))} (Banque) | ACB −${formatCAD(Math.round(harvestedLoss))}`,
+        logMsg: skipLogs ? undefined : `🛡️ Perte Cristallisée (TLH): +${formatCAD(Math.round(harvestedLoss))} (Banque) | ACB −${formatCAD(Math.round(harvestedLoss))}`,
     };
 }
 
@@ -225,6 +227,7 @@ export function processGainHarvesting(opts: {
     /** [PV-2] Banque de pertes en capital (TLH) disponible — les gains récoltés la consomment
      *  D'ABORD (LIR 111(1)(b)) : part compensée = SANS impôt et HORS palier. Absent → 0. */
     capitalLossBank?: number;
+    skipLogs?: boolean;
 }): { harvestedGain: number; consumedLoss: number; logMsg?: string } {
     if (!opts.enabled) return { harvestedGain: 0, consumedLoss: 0 };
     const unrealized = opts.nonReg - opts.nonRegACB;
@@ -254,6 +257,12 @@ export function processGainHarvesting(opts: {
         : 0;
     const harvestedGain = freeGain + bracketGain;
     if (!(harvestedGain > 1)) return { harvestedGain: 0, consumedLoss: 0 };
+    if (opts.skipLogs) {
+        return {
+            harvestedGain,
+            consumedLoss: freeGain,
+        };
+    }
     const freeNote = freeGain > 0.5
         ? ` dont ${formatCAD(Math.round(freeGain))} compensés par la banque de pertes (${formatCAD(0)} d'impôt)`
         : '';
@@ -373,6 +382,8 @@ export interface DecemberContext {
     sideIncomeYearByUser?: [number, number];
     /** Retenue à la source provisoire totale de l'année sur le revenu variable */
     withheldVariableTaxYear?: number;
+    /** Saute la génération de messages texte (mode MC allégé). */
+    skipLogs?: boolean;
 }
 
 export interface DecemberHelpers {
@@ -658,7 +669,9 @@ export function processDecemberTaxFiling(
         // gardait déjà `Number.isFinite` ; ce site-ci ne le faisait pas. Un impôt non fini ne
         // devient JAMAIS un défaut numérique silencieux — on le dit et on retombe sur 0.
         if (!Number.isFinite(aprilSettlementRaw)) {
-            logs.push(`⚠️ Solde d'impôt d'avril NON FINI (impôt=${totalAnnualTax}, retenue=${estimatedWithholding}) → 0 retenu ; donnée amont corrompue.`);
+            if (!ctx.skipLogs) {
+                logs.push(`⚠️ Solde d'impôt d'avril NON FINI (impôt=${totalAnnualTax}, retenue=${estimatedWithholding}) → 0 retenu ; donnée amont corrompue.`);
+            }
             taxCurrent.revenu = 0;
         } else {
             // [ENG-TAXDEC-FLOOR-INDEX] Le plancher est un montant NOMINAL, comme le flux qu'il
@@ -670,7 +683,7 @@ export function processDecemberTaxFiling(
             // facteur < 1 (déflation) de RÉTRÉCIR le plancher du solde d'avril.
             const floor = -APRIL_SETTLEMENT_FLOOR_REAL * Math.max(1, inflationFactor);
             taxCurrent.revenu = Math.max(floor, aprilSettlementRaw);
-            if (aprilSettlementRaw < floor) {
+            if (!ctx.skipLogs && aprilSettlementRaw < floor) {
                 logs.push(`⚠️ Remboursement d'avril tronqué au plancher ${formatCAD(Math.round(floor))} (calculé: ${formatCAD(Math.round(aprilSettlementRaw))})`);
             }
         }
@@ -795,15 +808,19 @@ export function processDecemberTaxFiling(
                 if (maxTransfer > 1) {
                     // Recherche en grille du transfert optimal (impôt combiné convexe en T → 1 min).
                     const STEPS = 40;
+                    const cand: [number, number] = [0, 0];
+                    const eligCand: [number, number] = [0, 0];
                     for (let k = 1; k <= STEPS; k++) {
                         const tr = maxTransfer * (k / STEPS);
-                        const cand = taxableRealByUser.slice();
+                        cand[0] = taxableRealByUser[0];
+                        cand[1] = taxableRealByUser[1];
                         cand[H] -= tr; cand[L] += tr;
                         // PV-3 : le transfert `tr` est INTÉGRALEMENT de la pension admissible (borné par
                         // 0,5 × splittable[H]) → il déplace AUSSI l'assiette du crédit pension : le
                         // récipiendaire L gagne le crédit sur la pension reçue, le transféreur H le perd
                         // sur la part cédée (calculateFiscalReport plafonne chacun au max féd/QC).
-                        const eligCand = eligiblePensionRealByUser.slice();
+                        eligCand[0] = eligiblePensionRealByUser[0];
+                        eligCand[1] = eligiblePensionRealByUser[1];
                         // H : clamp défensif (jamais binding — tr ≤ 0,5×splittable[H] ≤ eligCand[H]).
                         // L : pas de clamp (eligCand[L] ≥ 0 et tr > 0 ⇒ somme toujours positive).
                         eligCand[H] = Math.max(0, eligCand[H] - tr);
@@ -834,7 +851,7 @@ export function processDecemberTaxFiling(
                 const floor = -APRIL_SETTLEMENT_FLOOR_REAL * Math.max(1, inflationFactor);
                 taxCurrent.revenu += Math.max(floor, reconciliation);
                 // Panel #558 : troncature journalisée (miroir du plancher de la phase active).
-                if (reconciliation < floor) {
+                if (!ctx.skipLogs && reconciliation < floor) {
                     logs.push(`⚠️ Régularisation retraité tronquée au plancher ${formatCAD(Math.round(floor))} (calculée: ${formatCAD(Math.round(reconciliation))})`);
                 }
             } else if (!Number.isFinite(reconciliation)) {
@@ -933,7 +950,9 @@ export function processDecemberTaxFiling(
             // que le total (nominale, celle de `divers`) — `ramqPerAdult` est en dollars RÉELS, et une
             // phrase « X/an (Y/adulte) » qui mêle les deux invite à une division fausse. Le nombre de
             // payeurs est nommé : c'est LUI que la division doit rendre.
-            logs.push(`💊 RAMQ médicaments: ${formatCAD(Math.round(ramqTotal))}/an (${payingAdults} adulte${payingAdults > 1 ? 's' : ''} × ${formatCAD(Math.round(ramqPerAdult * inflationFactor))})`);
+            if (!ctx.skipLogs) {
+                logs.push(`💊 RAMQ médicaments: ${formatCAD(Math.round(ramqTotal))}/an (${payingAdults} adulte${payingAdults > 1 ? 's' : ''} × ${formatCAD(Math.round(ramqPerAdult * inflationFactor))})`);
+            }
         }
     }
 
@@ -972,7 +991,9 @@ export function processDecemberTaxFiling(
         if (fssTotal > 0) {
             taxCurrent.divers += fssTotal;
             // [LOG-RAMQ-FSS-DEUX-UNITES-DANS-UNE-PHRASE] même unité que le total (voir la RAMQ ci-dessus).
-            logs.push(`🏥 FSS (ligne 446): ${formatCAD(Math.round(fssTotal))}/an (${ctx.activeUsersCount} adulte${ctx.activeUsersCount > 1 ? 's' : ''} × ${formatCAD(Math.round(fssPerAdult * inflationFactor))})`);
+            if (!ctx.skipLogs) {
+                logs.push(`🏥 FSS (ligne 446): ${formatCAD(Math.round(fssTotal))}/an (${ctx.activeUsersCount} adulte${ctx.activeUsersCount > 1 ? 's' : ''} × ${formatCAD(Math.round(fssPerAdult * inflationFactor))})`);
+            }
         }
     }
 
@@ -1081,7 +1102,7 @@ export function processDecemberTaxFiling(
         // familial). Actif < 65 → opts undefined → bit-identique à l'ancien calcul.
         const tax = incrementalBandTax(perAdultIncome, perAdultGains, incomeForGains, taxableCapGains);
         taxCurrent.gains += tax;
-        if (tax > 100) logs.push(`↳ Impôt Gains Cap Accumulés: +${formatCAD(Math.round(tax))}`);
+        if (!ctx.skipLogs && tax > 100) logs.push(`↳ Impôt Gains Cap Accumulés: +${formatCAD(Math.round(tax))}`);
     }
 
     // ---- 3. Dividendes Non-Reg (30% du rendement) ----
@@ -1162,7 +1183,7 @@ export function processDecemberTaxFiling(
         const offsettableTax = Math.max(0, safeGrossIncomeTax) + Math.max(0, safeGains);
         const appliedCredit = Math.min(donCredit, offsettableTax);
         taxCurrent.divers -= appliedCredit;
-        if (donCredit - appliedCredit > 1) {
+        if (!ctx.skipLogs && donCredit - appliedCredit > 1) {
             logs.push(`↳ Crédit dons plafonné à l'impôt dû: ${formatCAD(Math.round(appliedCredit))} appliqué, ${formatCAD(Math.round(donCredit - appliedCredit))} non utilisable`);
         }
     }
