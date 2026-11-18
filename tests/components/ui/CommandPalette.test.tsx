@@ -73,11 +73,11 @@ describe('CommandPalette', () => {
 });
 
 describe('makeNavigationActions', () => {
-    it('génère les actions de navigation principales (Phase F.12 — TRAVEL+LIFE_EVENTS fusionnés en LIFE_PROJECTS)', () => {
+    it('génère les actions de navigation principales (TRAVEL+LIFE_EVENTS→LIFE_PROJECTS, VALORIA→INVESTMENTS)', () => {
         const set = vi.fn();
         const actions = makeNavigationActions(set);
-        // Hors palette : TRAVEL et LIFE_EVENTS (forwardés vers LIFE_PROJECTS).
-        expect(actions.length).toBe(Object.keys(Tab).length - 2);
+        // Hors palette : TRAVEL, LIFE_EVENTS (forwardés vers LIFE_PROJECTS) et VALORIA (fusionné dans INVESTMENTS).
+        expect(actions.length).toBe(Object.keys(Tab).length - 3);
         actions.forEach(a => expect(a.group).toBe('Navigation'));
     });
 

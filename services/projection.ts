@@ -592,6 +592,9 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
 
     const psvResidencyYears: [number, number] = [setup.psvResidencyYearsBase[0], setup.psvResidencyYearsBase[1]];
     const { simInflation, baseRates } = setup;
+    const activeValoriaSchedule = (scenarioType !== 'ECONOMIC_WINTER' && scenarioType !== 'COMPOUND_STRESS')
+        ? params.valoriaSchedule
+        : undefined;
 
     let overrideRetirementAge = retirementGoal.targetAge || 65;
     if (scenarioType === 'LIBERTE_55') overrideRetirementAge = 55;
@@ -819,6 +822,18 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         const currentLoopDate = loopDates[m];
         const currentMonthIndex = loopMonths[m];
         const loopYear = loopYears[m];
+        const schedYear = Math.floor(m / 12);
+        const pickScheduleRate = (arr: ReadonlyArray<number>, fb: number) =>
+            arr.length > 0 ? (arr[Math.min(schedYear, arr.length - 1)] ?? fb) : fb;
+        const yearBaseRates = activeValoriaSchedule
+            ? {
+                celi: pickScheduleRate(activeValoriaSchedule.celiRatesByYear, baseRates.celi),
+                reer: pickScheduleRate(activeValoriaSchedule.reerRatesByYear, baseRates.reer),
+                nonReg: pickScheduleRate(activeValoriaSchedule.nonRegRatesByYear, baseRates.nonReg),
+                crypto: pickScheduleRate(activeValoriaSchedule.cryptoRatesByYear, baseRates.crypto),
+                cash: pickScheduleRate(activeValoriaSchedule.cashRatesByYear, baseRates.cash),
+            }
+            : baseRates;
 
 
         const age = currentAge + Math.floor(m / 12);
@@ -854,7 +869,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         // --- 1. GROWTH & MARKET SHOCKS ---
         // Cycle 27 split: chocs de marché + bootstrap historique + stress test inflation → ./projection/marketShocks
         const { mcCeliRate, mcReerRate, mcNonRegRate, mcCryptoRate, mcCashRate, currentInflation } =
-            computeMonthlyMarketRates(m, enableMonteCarlo, baseRates, simInflation, historicalSequence, stressTestConfig, rng, macroState);
+            computeMonthlyMarketRates(m, enableMonteCarlo, yearBaseRates, simInflation, historicalSequence, stressTestConfig, rng, macroState, activeValoriaSchedule);
 
         if (m > 0) {
             cumulativeCpiMultiplier *= Math.pow(Math.max(1e-6, 1 + currentInflation / 100), 1 / 12);
@@ -2176,7 +2191,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
                     incomeRetirementGisMonthly: incomeRetirementGis,
                     incomeRetirementPerUserMonthly: soloHousehold ? undefined : incomeRetirementPerUser,
                     incomeRetirementDbPerUserMonthly: dbPerUserMonthly(),
-                    nonReg, baseNonRegRate: baseRates.nonReg,
+                    nonReg, baseNonRegRate: yearBaseRates.nonReg,
                     accRrspYear, accFhsaYear, smithInterestDeductibleYear,
                     accRentesYear, accRetraitsReerYear, accCapitalGainsYear,
                     accRetraitsReerYearByUser: soloHousehold ? undefined : accRetraitsReerYearByUser,
@@ -2216,7 +2231,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
                     soloHousehold ? undefined : accRetraitsReerYearByUser,
                     capitalGainsRealizedThisYear,
                     pensionPSV - incomeRetirementGis,
-                    computeAnnualNonRegDividends(nonReg, baseRates.nonReg ?? 0) * getDividendGrossUpRate('eligible'),
+                    computeAnnualNonRegDividends(nonReg, yearBaseRates.nonReg ?? 0) * getDividendGrossUpRate('eligible'),
                     pointAllege,
                 );
                 oasClawbackNextPeriod = oasResult.clawbackAnnual;
@@ -2231,7 +2246,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             taxPreviousYear = { ...taxCurrentYear };
             taxCurrentYear = { revenu: 0, gains: 0, reer: 0, divers: 0, donCredit: 0 };
 
-            const currentNonRegRate = (enableMonteCarlo || historicalSequence !== null) ? mcNonRegRate : baseRates.nonReg;
+            const currentNonRegRate = (enableMonteCarlo || historicalSequence !== null) ? mcNonRegRate : yearBaseRates.nonReg;
             const tlhResult = processTaxLossHarvesting(currentMonthIndex, m, nonReg, nonRegACB, currentNonRegRate, pointAllege);
             if (tlhResult.harvestedLoss > 0) {
                 capitalLossBank += tlhResult.harvestedLoss;
@@ -2323,9 +2338,9 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         // Cycle 18 split: glidepath + taux effectifs → ./projection/glidepathRates
         const gr = computeGlidepathRates({
             m, retirementMonthIndex, isRetired, simInflation, enableMonteCarlo,
-            mcCeliRate, mcReerRate, mcNonRegRate, mcCryptoRate, mcCashRate, baseRates,
-            usEquityShareCeli: effProj.usEquityShareCeli,
-            usEquityDividendYield: effProj.usEquityDividendYield,
+            mcCeliRate, mcReerRate, mcNonRegRate, mcCryptoRate, mcCashRate, baseRates: yearBaseRates,
+            usEquityShareCeli: activeValoriaSchedule ? activeValoriaSchedule.usShareCeliPct : effProj.usEquityShareCeli,
+            usEquityDividendYield: activeValoriaSchedule ? activeValoriaSchedule.usDivYieldCeliPct : effProj.usEquityDividendYield,
             hasHistoricalSequence: historicalSequence !== null,
         });
         const { effectiveCeliRate, effectiveReerRate, effectiveNonRegRate, activeCeliRate, activeCryptoRate, activeCashRate } = gr;
@@ -2495,7 +2510,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
             // placement imposables (50% des gains capital + 100% des dividendes).
             // Approximation : rendement non-reg × 30% × balance, divisé par 12.
             // [FISC-DIV-DERIVED-BASES] 3e copie de la formule remplacée par la source unique.
-            dividendIncome = computeAnnualNonRegDividends(nonReg, baseRates.nonReg ?? 0) / 12;
+            dividendIncome = computeAnnualNonRegDividends(nonReg, yearBaseRates.nonReg ?? 0) / 12;
             taxableInvIncome = dividendIncome + (accCapitalGainsYear * CAPITAL_GAINS_INCLUSION_STANDARD) / 12;
 
             // Phase 3 Tier 3 — taux d'imposition marginal et effectif (PAR ADULTE)

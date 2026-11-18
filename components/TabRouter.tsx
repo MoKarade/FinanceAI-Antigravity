@@ -131,7 +131,7 @@ export const TabRouter: React.FC<TabRouterProps> = ({
                     <DebtManager debts={state.debts} setDebts={(d) => setAppState({ debts: d })} />
                 )}
 
-                {activeTab === Tab.INVESTMENTS && (
+                {(activeTab === Tab.INVESTMENTS || activeTab === Tab.VALORIA) && (
                     <Investments
                         assets={state.assets} setAssets={(a) => setAppState({ assets: a })}
                         investmentAccounts={state.investmentAccounts}
@@ -144,6 +144,7 @@ export const TabRouter: React.FC<TabRouterProps> = ({
                         config={state.config}
                         projection={state.projection}
                         setProjection={(p) => setAppState({ projection: p })}
+                        initialSubTab={activeTab === Tab.VALORIA ? 'quant_advisor' : undefined}
                     />
                 )}
 

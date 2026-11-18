@@ -254,6 +254,7 @@ export const FintableSyncCard: React.FC = () => {
             const { report: fresh, statePatch, incertaines: douteuses, echantillonsChampsInconnus } = await runFintableBrowserSync(current, effectiveToken, {
                 getFreshState: () => useFinanceStore.getState() as unknown as AppState,
                 backfill,
+                autoCreditCards: true,
             });
             // ⚠️ `?? []` : lecture DÉFENSIVE à la frontière. Un appelant plus ancien — ou un mock
             // de test — rend un résultat SANS ce champ neuf, et `undefined.length` faisait planter
@@ -340,8 +341,9 @@ export const FintableSyncCard: React.FC = () => {
         <Card icon={<Icon name="import" size={18} />} title="Sync bancaire Fintable">
             <div className="space-y-4">
                 <p className="text-meta text-ink-400">
-                    Importe automatiquement tes transactions, tes liquidités et le solde de tes cartes.
-                    Tout se passe dans le navigateur : rien à configurer ailleurs.
+                    Importe automatiquement tes transactions (y compris cartes de crédit détectées automatiquement),
+                    tes liquidités et le solde de tes cartes à l&apos;ouverture, toutes les 30 minutes et au retour
+                    sur l&apos;onglet. Tout se passe dans le navigateur : rien à configurer ailleurs.
                 </p>
 
                 {isTestMode && (

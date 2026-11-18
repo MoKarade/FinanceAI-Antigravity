@@ -18,6 +18,10 @@ const CurveExplanationPanel = lazyWithRetry(
     () => import('./projection/CurveExplanationPanel').then((m) => ({ default: m.CurveExplanationPanel })),
     'CurveExplanationPanel',
 );
+const FutureValoriaPlacementsPanel = lazyWithRetry(
+    () => import('./future/FutureValoriaPlacementsPanel').then((m) => ({ default: m.FutureValoriaPlacementsPanel })),
+    'FutureValoriaPlacementsPanel',
+);
 // [NAV-MERGE-SANTE-FUTUR] Résumé condensé de Santé, en tête de page — léger (pas de recharts),
 // import statique (pas de justification à le mettre derrière un lazy comme FutureHistorySection).
 import { FutureHealthSummary } from './future/FutureHealthSummary';
@@ -32,6 +36,8 @@ import { FutureYearAnatomyModal } from './future/FutureYearAnatomyModal';
 import { FuturePrescriptiveAdvisorCard } from './future/FuturePrescriptiveAdvisorCard';
 import { prefetchTab } from '../utils/tabPrefetch';
 import { PageHeader } from './ui/PageHeader';
+import { FUTURE_REQ_IDS } from './ProjectionEngine';
+import { REQUIREMENTS } from './setup/requirements';
 import { Drawer } from './ui/Drawer';
 import { OutilsProjection, type FutureDrawerId, tiroirDomId } from './future/OutilsProjection';
 import { TableJalons, CarteLeviers, type JalonProjection, type LevierAffiche } from './future/JalonsLeviers';
@@ -39,6 +45,7 @@ import { FinancialGoalsProgressSection } from './ui/FinancialGoalProgressRing';
 import { couleurSerie } from './future/seriesConfig';
 import type { VarianteBandeau } from './FutureKpiStrip';
 import { Badge } from './ui/Badge';
+import { Icon } from './ui/Icon';
 import { PrivateAmount } from './ui/PrivateAmount';
 import { Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, ReferenceArea, Line, ComposedChart, Bar, ReferenceDot } from 'recharts';
 import { GF_CROSSHAIR_CURSOR, GF_ACTIVE_DOT } from '../utils/chartTooltip';
@@ -317,8 +324,10 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     // monté dans App). Ce composant ne calcule plus : `isComputing`/`hasError` reflètent le
     // statut du moteur publié dans le store, lus par l'UI (bouton « calcul en cours », overlay,
     // garde d'erreur).
-    const isComputing = useFinanceStore(s => s.projectionStatus === 'computing');
-    const hasError = useFinanceStore(s => s.projectionStatus === 'error');
+    const projectionStatus = useFinanceStore(s => s.projectionStatus);
+    const isComputing = projectionStatus === 'computing';
+    const hasError = projectionStatus === 'error';
+    const reqsMet = useFinanceStore(s => FUTURE_REQ_IDS.every((id) => REQUIREMENTS[id].isMet(s)));
     // [ENG-INFINITY-NON-GARDE-A-LA-FRONTIERE] Motif du refus, publié par `ProjectionEngine` — il
     // NOMME le champ fautif, là où le message générique ci-dessous n'oriente vers rien.
     const projectionRefus = useFinanceStore(s => s.projectionRefus);
@@ -412,10 +421,22 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     // → sans la garde, les KPIs affichaient « Objectif FIRE 0k$ » / « 0.00M$ » avec assurance
     // (no-fake-data violé) et un graphe vide sans spinner. Jamais révélé → gate.
     const curveVisible = results !== null && (curveRevealed || (isStale && !isTestModeActive));
+    // Garde-fou anti-boucle infinie sur le spinner : si les prérequis manquent ou si le moteur reste inactif > 4 s, on sort de `curveRestoring`.
+    const [restoringTimedOut, setRestoringTimedOut] = useState(false);
+    useEffect(() => {
+        if (!reqsMet || hasError || results !== null || projectionStatus === 'computing') {
+            setRestoringTimedOut(false);
+            return;
+        }
+        const timer = window.setTimeout(() => {
+            setRestoringTimedOut(true);
+        }, 4000);
+        return () => window.clearTimeout(timer);
+    }, [reqsMet, hasError, results, projectionStatus]);
     // Fenêtre de RESTAURATION : révélé (sig persistée) mais AUCUN résultat encore (moteur en route,
     // gel IDB en lecture). On affiche une carte de chargement honnête — PAS l'écran d'amorçage, sinon
     // chaque reload donne l'impression que la projection a été perdue (l'inverse de la demande Marc).
-    const curveRestoring = (revealedSig !== null || effectiveAutoReveal) && !isTestModeActive && results === null;
+    const curveRestoring = reqsMet && !hasError && !restoringTimedOut && (revealedSig !== null || effectiveAutoReveal) && !isTestModeActive && results === null;
     const { chartData = [] as ProjectionChartPoint[], fireNumber = 0, allResults = [] as ProjectionResult[] } = results ?? {};
 
     // [PROJ-INSOLVENCY-BADGE] premier moment où le patrimoine net projeté passe sous 0 (plan
@@ -843,6 +864,8 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     // frame de zoom/pan — exactement la classe de fuite de perf déjà relevée en revue sur ce
     // chantier. Attrapé ici par `react-hooks/exhaustive-deps`, pas par mon jugement.
     const storeAssets = useFinanceStore(s => s.assets) ?? EMPTY_ASSETS;
+    const valoriaRiskProfile = useFinanceStore(s => s.valoriaRiskProfile);
+    const geminiApiKey = useFinanceStore(s => s.apiKeys.gemini) ?? '';
     // [FUTUR-DAILY-ROLLOVER, finding silent-failure #593] Dernier jour COUVERT par la sync bancaire
     // (date LOCALE de la dernière passe). Un jour réel postérieur porte `daySyncUnconfirmed` : après
     // minuit app ouverte, un « 0 $ dépensé hier » peut n'être qu'une sync pas encore passée — le
@@ -1759,7 +1782,20 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             <PageHeader
                 title="Projection"
                 badge={insolvencyBadge}
-                actions={<FutureHealthSummary />}
+                actions={
+                    <span className="flex flex-wrap items-center justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={() => useFinanceStore.getState().navigateWithFocus(Tab.INVESTMENTS, 'tab:intelligence')}
+                            onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                            className="touch-target min-h-11 px-3 py-1.5 rounded-full border border-bordure-champ bg-surface hover:bg-surface-douce text-xs font-semibold text-texte inline-flex items-center gap-1.5 whitespace-nowrap focus-ring"
+                        >
+                            <Icon name="sparkles" size={14} aria-hidden="true" />
+                            <span>Quant IA</span>
+                        </button>
+                        <FutureHealthSummary />
+                    </span>
+                }
             />
 
             {/* [REFONTE-NAV Lot 1] Chiffres de tête (ex-Accueil), fournis par l'hôte (TabRouter) :
@@ -1782,6 +1818,39 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             )}
             {!curveVisible && !curveRestoring && (
                 <div className="space-y-4">
+                    {!reqsMet && !isTestModeActive && (
+                        <section aria-label="Données requises pour la projection" className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-5 space-y-3">
+                            <div className="space-y-1">
+                                <h2 className="text-base font-bold text-ink-50">Complète ton dossier pour calculer ta trajectoire</h2>
+                                <p className="text-meta text-ink-300">
+                                    Aucune projection fictive n&apos;est affichée tant que ces données de base manquent :
+                                </p>
+                            </div>
+                            <ul className="flex flex-wrap gap-2 text-xs text-ink-200">
+                                {FUTURE_REQ_IDS.filter((id) => !REQUIREMENTS[id].isMet(useFinanceStore.getState())).map((id) => (
+                                    <li key={id} className="px-2.5 py-1 rounded-full bg-surface-douce border border-bordure font-medium">
+                                        {REQUIREMENTS[id].label}
+                                    </li>
+                                ))}
+                            </ul>
+                            <div className="flex flex-wrap gap-2 pt-1">
+                                <button
+                                    type="button"
+                                    onClick={() => naviguerVers(Tab.PROFILE)}
+                                    className="touch-target min-h-11 px-4 py-2 rounded-xl bg-accent hover:bg-accent-fonce text-sur-accent text-xs font-semibold focus-ring"
+                                >
+                                    Compléter Profil &amp; Retraite
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => naviguerVers(Tab.INVESTMENTS)}
+                                    className="touch-target min-h-11 px-4 py-2 rounded-xl border border-bordure-champ bg-fond hover:bg-surface-douce text-texte text-xs font-semibold focus-ring"
+                                >
+                                    Ajouter mes Placements
+                                </button>
+                            </div>
+                        </section>
+                    )}
                     <section className="gf-terminal-card rounded-2xl bg-surface border border-bordure text-center">
                         <div className="py-6 px-4 space-y-3 max-w-xl mx-auto">
                             <div className="text-4xl" aria-hidden="true">{isStale ? '🔄' : '🎯'}</div>
@@ -2044,8 +2113,8 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                     <stop offset="100%" stopColor={couleurSerie('NetWorth')} stopOpacity={0} />
                                 </linearGradient>
                                 <linearGradient id="gfMonteCarloBandGrad" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={couleurSerie('montecarlo')} stopOpacity={0.22} />
-                                    <stop offset="100%" stopColor="var(--repere)" stopOpacity={0.05} />
+                                    <stop offset="0%" stopColor={couleurSerie('montecarlo')} stopOpacity={0.16} />
+                                    <stop offset="100%" stopColor="var(--repere)" stopOpacity={0.02} />
                                 </linearGradient>
                             </defs>
                             <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
@@ -2181,8 +2250,8 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                 </>
                             ) : runMC && isVisible('montecarlo') && (
                                 <>
-                                    <Area type="monotone" dataKey="P90" stroke="#7c93f2" strokeWidth={1.25} strokeDasharray="5 4" fill="url(#gfMonteCarloBandGrad)" fillOpacity={1} dot={false} name="Optimiste (P90)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
-                                    <Line type="monotone" dataKey="P10" stroke="#f87171" strokeWidth={1.25} strokeDasharray="5 4" dot={false} name="Pessimiste (P10)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
+                                    <Area type="monotone" dataKey="P90" stroke={couleurSerie('montecarlo')} strokeWidth={1.25} strokeDasharray="5 4" fill="url(#gfMonteCarloBandGrad)" fillOpacity={1} dot={false} name="Optimiste (P90)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
+                                    <Line type="monotone" dataKey="P10" stroke="var(--erreur-texte)" strokeWidth={1.25} strokeDasharray="5 4" dot={false} name="Pessimiste (P10)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
                                     <Line type="monotone" dataKey="P50" stroke={couleurSerie('montecarlo')} strokeWidth={1.75} dot={false} name="Scénario médian (P50)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
                                 </>
                             )}
@@ -2441,6 +2510,17 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             </Suspense>
 
             <FinancialGoalsProgressSection goals={financialGoals} todayIso={todayIso} />
+
+            <Suspense fallback={<Skeleton variant="chart" className="h-48" />}>
+                <FutureValoriaPlacementsPanel
+                    assets={storeAssets}
+                    fxRates={fxRates}
+                    projection={projection}
+                    valoriaRiskProfile={valoriaRiskProfile}
+                    apiKey={geminiApiKey}
+                    onUpdateProjection={(patch) => handleInstantScenarioUpdate({ ...projection, ...patch })}
+                />
+            </Suspense>
 
             <FuturePrescriptiveAdvisorCard
                 params={params}

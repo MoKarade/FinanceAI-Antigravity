@@ -24,6 +24,12 @@ export interface LigneTitre {
     poids: number;
     /** Série de cours réels pour la mini-courbe de variation. */
     historique?: ReadonlyArray<number>;
+    /** Signal quantitatif Valoria calculé pour ce titre. */
+    valoria?: {
+        score100: number;
+        signal: 'RENFORCER' | 'CONSERVER' | 'ALLEGER';
+        labelCourt: string;
+    };
 }
 
 /** Libellé et couleur des comptes (couleurs des séries du graphe). */
@@ -70,69 +76,89 @@ export const TitresDetenus: React.FC<{
     couple: boolean;
     etroit: boolean;
     onSelectSymbole?: (symbole: string) => void;
-}> = ({ lignes, couple, etroit, onSelectSymbole }) => {
+    onInspectValoria?: (symbole: string) => void;
+}> = ({ lignes, couple, etroit, onSelectSymbole, onInspectValoria }) => {
     const hasHoldingDetails = lignes.some((l) => typeof l.quantite === 'number' && l.quantite > 0);
+    const hasValoriaSignals = lignes.some((l) => Boolean(l.valoria));
+    const classeSignalValoria = (sig?: 'RENFORCER' | 'CONSERVER' | 'ALLEGER') =>
+        sig === 'RENFORCER' ? 'gf-delta-up' : sig === 'ALLEGER' ? 'gf-delta-down' : 'gf-delta-neutral';
     if (etroit) {
         return (
-            <section aria-labelledby="titres-titre" className="rounded-2xl bg-surface border border-bordure px-4 pt-4 pb-1 min-w-0">
+            <section aria-labelledby="titres-titre" className="rounded-2xl bg-surface border border-bordure px-3.5 pt-4 pb-1 min-w-0">
                 <h2 id="titres-titre" className="text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-400 pb-2">Titres détenus</h2>
                 <ul>
                     {lignes.map((l) => {
                         const c = compteDe(l.compte);
                         const posGain = (l.gainPct ?? 0) >= 0;
                         const mini = construireMiniCourbe(l.historique);
+                        const decAchat = l.prixAchat && l.prixAchat >= 1000 ? 0 : 2;
+                        const decCours = l.coursActuel && l.coursActuel >= 1000 ? 0 : 2;
                         return (
-                            <li key={l.cle} className="flex items-center gap-3 py-3 border-t border-bordure">
-                                <span className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ background: c.couleur }} aria-hidden="true" />
-                                <span className="flex-1 min-w-0 flex flex-col gap-0.5">
-                                    <span className="flex items-center gap-2 min-w-0">
-                                        <span className="font-mono font-bold text-ink-50 truncate">{l.symbole}</span>
+                            <li key={l.cle} className="py-3 border-t border-bordure space-y-1.5 min-w-0">
+                                <div className="flex items-center justify-between gap-2 min-w-0">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <span className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ background: c.couleur }} aria-hidden="true" />
+                                        <span className="font-mono font-bold text-ink-50 shrink-0">{l.symbole}</span>
                                         {typeof l.quantite === 'number' && l.quantite > 0 && (
                                             <span className="font-mono text-[11px] px-1.5 py-0.5 rounded-sm bg-surfaceHighlight text-ink-200 shrink-0">
                                                 <PrivateAmount>{qteTexte(l.quantite)}</PrivateAmount>
                                             </span>
                                         )}
-                                    </span>
-                                    <span className="text-meta text-ink-400 truncate">
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        {mini && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onSelectSymbole?.(l.symbole)}
+                                                aria-label={`Afficher la courbe de ${l.symbole}`}
+                                                className="touch-target px-1 flex items-center justify-center shrink-0 rounded-lg hover:bg-surface-douce focus-ring"
+                                            >
+                                                <svg width="56" height="22" viewBox="0 0 72 24" aria-hidden="true" className="overflow-visible">
+                                                    <polyline
+                                                        fill="none"
+                                                        stroke={mini.positif ? 'var(--gf-vert)' : 'var(--gf-rouge)'}
+                                                        strokeWidth="1.75"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        points={mini.points}
+                                                    />
+                                                </svg>
+                                            </button>
+                                        )}
+                                        <PrivateAmount className="font-mono font-bold text-ink-50 whitespace-nowrap">{formatCAD(l.valeur)}</PrivateAmount>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-wrap items-center justify-between gap-2 min-w-0 pl-4">
+                                    <div className="text-meta text-ink-400 min-w-0 flex-1 basis-[150px]">
                                         {l.prixAchat && l.coursActuel ? (
-                                            <PrivateAmount>
-                                                {`Acheté ${formatNumber(l.prixAchat, { decimals: 2 })} → ${formatNumber(l.coursActuel, { decimals: 2 })} ${l.devise || ''}`}
+                                            <PrivateAmount as="div" className="truncate">
+                                                {`${formatNumber(l.prixAchat, { decimals: decAchat })} → ${formatNumber(l.coursActuel, { decimals: decCours })} ${l.devise || ''}`}
                                             </PrivateAmount>
                                         ) : (
-                                            `${c.libelle}${couple && l.proprietaire ? ` · ${l.proprietaire}` : ''}`
+                                            <span className="block truncate">{`${c.libelle}${couple && l.proprietaire ? ` · ${l.proprietaire}` : ''}`}</span>
                                         )}
-                                    </span>
-                                </span>
-                                {mini && (
-                                    <button
-                                        type="button"
-                                        onClick={() => onSelectSymbole?.(l.symbole)}
-                                        aria-label={`Afficher la courbe de ${l.symbole}`}
-                                        className="touch-target px-1 flex items-center justify-center shrink-0 rounded-lg hover:bg-surface-douce focus-ring"
-                                    >
-                                        <svg width="64" height="24" viewBox="0 0 72 24" aria-hidden="true" className="overflow-visible">
-                                            <polyline
-                                                fill="none"
-                                                stroke={mini.positif ? 'var(--gf-vert)' : 'var(--gf-rouge)'}
-                                                strokeWidth="1.75"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                points={mini.points}
-                                            />
-                                        </svg>
-                                    </button>
-                                )}
-                                <span className="flex flex-col items-end shrink-0 gap-0.5">
-                                    <PrivateAmount className="font-mono font-bold text-ink-50">{formatCAD(l.valeur)}</PrivateAmount>
-                                    <span className="flex items-center gap-1.5 font-mono text-meta">
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0 font-mono text-meta">
                                         {l.gainPct != null && Number.isFinite(l.gainPct) && (
                                             <span className={posGain ? 'text-succes-texte font-semibold' : 'text-erreur-texte font-semibold'}>
-                                                <PrivateAmount>{`${posGain ? '+' : ''}${l.gainPct.toFixed(2)} %`}</PrivateAmount>
+                                                <PrivateAmount>{`${posGain ? '+' : ''}${l.gainPct.toFixed(1)} %`}</PrivateAmount>
                                             </span>
                                         )}
                                         <span className="text-ink-400"><PrivateAmount>{poidsTexte(l.poids)}</PrivateAmount></span>
-                                    </span>
-                                </span>
+                                        {l.valoria && onInspectValoria && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onInspectValoria(l.symbole)}
+                                                className={`touch-target min-h-11 inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold whitespace-nowrap focus-ring ${classeSignalValoria(l.valoria.signal)}`}
+                                            >
+                                                {/* NOMBRE-NON-MONETAIRE : score quantitatif public Valoria */}
+                                                <span>{l.valoria.labelCourt} · {l.valoria.score100}</span>
+                                                <span className="sr-only"> — Rayon-X Valoria de {l.symbole}</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
                             </li>
                         );
                     })}
@@ -142,19 +168,21 @@ export const TitresDetenus: React.FC<{
     }
     return (
         <section aria-label="Titres détenus" className="rounded-2xl bg-surface border border-bordure overflow-hidden min-w-0">
-            <table className="w-full text-body">
+            <div className="overflow-x-auto">
+            <table className="w-full text-xs sm:text-sm">
                 <caption className="sr-only">Titres détenus : compte, {couple ? 'propriétaire, ' : ''}valeur et poids dans le portefeuille</caption>
                 <thead>
                     <tr className="text-left text-[11px] font-semibold tracking-[0.06em] uppercase text-ink-400">
-                        <th scope="col" className="px-5 h-12 font-semibold">Titre</th>
-                        <th scope="col" className="px-3 font-semibold text-center">Tendance</th>
-                        {hasHoldingDetails && <th scope="col" className="px-3 font-semibold text-right">Détenu</th>}
-                        {hasHoldingDetails && <th scope="col" className="px-3 font-semibold text-right">Acheté → Cours</th>}
-                        {hasHoldingDetails && <th scope="col" className="px-3 font-semibold text-right">Gain / Perte</th>}
-                        <th scope="col" className="px-3 font-semibold">Compte</th>
-                        {couple && <th scope="col" className="px-3 font-semibold">Propriétaire</th>}
-                        <th scope="col" className="px-3 font-semibold text-right">Valeur</th>
-                        <th scope="col" className="px-5 font-semibold text-right">Poids</th>
+                        <th scope="col" className="pl-4 pr-2.5 h-12 font-semibold">Titre</th>
+                        <th scope="col" className="px-2.5 font-semibold text-center">Tendance</th>
+                        {hasHoldingDetails && <th scope="col" className="px-2.5 font-semibold text-right whitespace-nowrap">Détenu</th>}
+                        {hasHoldingDetails && <th scope="col" className="px-2.5 font-semibold text-right whitespace-nowrap">Acheté → Cours</th>}
+                        {hasHoldingDetails && <th scope="col" className="px-2.5 font-semibold text-right whitespace-nowrap">Gain / Perte</th>}
+                        {hasValoriaSignals && <th scope="col" className="px-2.5 font-semibold text-center whitespace-nowrap">Quant IA</th>}
+                        <th scope="col" className="px-2.5 font-semibold">Compte</th>
+                        {couple && <th scope="col" className="px-2.5 font-semibold">Propriétaire</th>}
+                        <th scope="col" className="px-2.5 font-semibold text-right whitespace-nowrap">Valeur</th>
+                        <th scope="col" className="pl-2.5 pr-4 font-semibold text-right whitespace-nowrap">Poids</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -162,15 +190,17 @@ export const TitresDetenus: React.FC<{
                         const c = compteDe(l.compte);
                         const posGain = (l.gainPct ?? 0) >= 0;
                         const mini = construireMiniCourbe(l.historique);
+                        const decAchat = l.prixAchat && l.prixAchat >= 1000 ? 0 : 2;
+                        const decCours = l.coursActuel && l.coursActuel >= 1000 ? 0 : 2;
                         return (
                             <tr key={l.cle} className="border-t border-bordure hover:bg-surface-douce/50 transition-colors">
-                                <th scope="row" className="px-5 h-[52px] text-left font-mono font-bold text-ink-50">
-                                    <div className="flex flex-col">
-                                        <span>{l.symbole}</span>
-                                        {l.nom && <span className="font-sans font-normal text-[11px] text-ink-400 truncate max-w-[180px]">{l.nom}</span>}
+                                <th scope="row" className="pl-4 pr-2.5 h-[52px] text-left font-mono font-bold text-ink-50">
+                                    <div className="flex flex-col min-w-0">
+                                        <span className="whitespace-nowrap">{l.symbole}</span>
+                                        {l.nom && <span className="font-sans font-normal text-[11px] text-ink-400 truncate max-w-[180px] xl:max-w-[260px]">{l.nom}</span>}
                                     </div>
                                 </th>
-                                <td className="px-3 text-center">
+                                <td className="px-2.5 text-center">
                                     {mini ? (
                                         <button
                                             type="button"
@@ -199,23 +229,23 @@ export const TitresDetenus: React.FC<{
                                     )}
                                 </td>
                                 {hasHoldingDetails && (
-                                    <td className="px-3 text-right font-mono text-ink-100">
+                                    <td className="px-2.5 text-right font-mono text-ink-100 whitespace-nowrap">
                                         {typeof l.quantite === 'number' && l.quantite > 0 ? (
                                             <PrivateAmount>{qteTexte(l.quantite)}</PrivateAmount>
                                         ) : '—'}
                                     </td>
                                 )}
                                 {hasHoldingDetails && (
-                                    <td className="px-3 text-right font-mono text-meta text-ink-300">
+                                    <td className="px-2.5 text-right font-mono text-meta text-ink-300 whitespace-nowrap">
                                         {l.prixAchat && l.coursActuel ? (
                                             <PrivateAmount>
-                                                {`${formatNumber(l.prixAchat, { decimals: 2 })} → ${formatNumber(l.coursActuel, { decimals: 2 })} ${l.devise || ''}`}
+                                                {`${formatNumber(l.prixAchat, { decimals: decAchat })} → ${formatNumber(l.coursActuel, { decimals: decCours })} ${l.devise || ''}`}
                                             </PrivateAmount>
                                         ) : '—'}
                                     </td>
                                 )}
                                 {hasHoldingDetails && (
-                                    <td className="px-3 text-right font-mono text-meta">
+                                    <td className="px-2.5 text-right font-mono text-meta whitespace-nowrap">
                                         {l.gainPct != null && Number.isFinite(l.gainPct) ? (
                                             <div className="flex flex-col items-end">
                                                 <span className={posGain ? 'text-succes-texte font-semibold' : 'text-erreur-texte font-semibold'}>
@@ -230,19 +260,37 @@ export const TitresDetenus: React.FC<{
                                         ) : '—'}
                                     </td>
                                 )}
-                                <td className="px-3">
+                                {hasValoriaSignals && (
+                                    <td className="px-2.5 text-center">
+                                        {l.valoria && onInspectValoria ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => onInspectValoria(l.symbole)}
+                                                className={`touch-target min-h-11 px-2.5 py-1 inline-flex items-center justify-center rounded-full text-meta font-mono font-semibold whitespace-nowrap focus-ring ${classeSignalValoria(l.valoria.signal)}`}
+                                            >
+                                                {/* NOMBRE-NON-MONETAIRE : score quantitatif public Valoria */}
+                                                <span>{l.valoria.labelCourt} · {l.valoria.score100}</span>
+                                                <span className="sr-only"> — Rayon-X Valoria de {l.symbole}</span>
+                                            </button>
+                                        ) : (
+                                            <span className="text-ink-400 text-xs font-mono">—</span>
+                                        )}
+                                    </td>
+                                )}
+                                <td className="px-2.5 whitespace-nowrap">
                                     <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-surfaceHighlight text-meta text-ink-200">
                                         <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.couleur }} aria-hidden="true" />{c.libelle}
                                     </span>
                                 </td>
-                                {couple && <td className="px-3 text-ink-300">{l.proprietaire}</td>}
-                                <td className="px-3 text-right"><PrivateAmount className="font-mono text-ink-50">{formatCAD(l.valeur)}</PrivateAmount></td>
-                                <td className="px-5 text-right font-mono text-ink-300"><PrivateAmount>{poidsTexte(l.poids)}</PrivateAmount></td>
+                                {couple && <td className="px-2.5 text-ink-300 whitespace-nowrap">{l.proprietaire}</td>}
+                                <td className="px-2.5 text-right whitespace-nowrap"><PrivateAmount className="font-mono text-ink-50">{formatCAD(l.valeur)}</PrivateAmount></td>
+                                <td className="pl-2.5 pr-4 text-right font-mono text-ink-300 whitespace-nowrap"><PrivateAmount>{poidsTexte(l.poids)}</PrivateAmount></td>
                             </tr>
                         );
                     })}
                 </tbody>
             </table>
+            </div>
         </section>
     );
 };

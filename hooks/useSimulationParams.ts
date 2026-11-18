@@ -16,6 +16,7 @@ import { avecHorizonEsperanceDeVie } from '../services/projection/horizon';
 import { buildBehavioralProfileFromTransactions } from '../services/projection/behavioralProfile';
 import { computeAccountReturnRatesForMode } from '../services/assetFundamentals';
 import type { SimulationParams } from '../services/projection';
+import { computeValoriaFutureForecast } from '../services/projection/valoriaFutureEngine';
 import type { Transaction, User } from '../types';
 import { usePastPortfolioHistory } from './usePastPortfolioHistory';
 import { deriveStartingBalancesFromHistory } from '../services/history/startingBalancesFromHistory';
@@ -150,6 +151,7 @@ export function useSimulationParams(calculatedMonthlySavings: number): Simulatio
     const fxPourRegime = useFinanceStore((s) => s.fxRates);
     const fxSourcePourRegime = useFinanceStore((s) => s.fxRatesSource);
     const fxEstimePourRegime = useFinanceStore((s) => s.fxRatesEstimated);
+    const valoriaRiskProfile = useFinanceStore((s) => s.valoriaRiskProfile);
     const autorite = useMemo(
         () => appliquerAutoriteCourtier(
             soldesReconstruits,
@@ -208,17 +210,33 @@ export function useSimulationParams(calculatedMonthlySavings: number): Simulatio
     // Lot 0 — assemblage AppState → SimulationParams = fonction PURE (réutilisable hors React).
     const params = useMemo<SimulationParams>(() => {
         const retMode = storeProjection?.returnAssumptionsMode;
-        const projection = retMode === 'iqpf' || retMode === 'real_holdings'
+        const baseHorizonProj = avecHorizonEsperanceDeVie(storeProjection, config, retirementGoal);
+        const valoriaForecast = retMode === 'valoria_agents'
+            ? computeValoriaFutureForecast({
+                assets: assetsPourRegime ?? EMPTY_ARRAY,
+                fxRates: fxPourRegime ?? {},
+                riskProfile: valoriaRiskProfile,
+                appliedReturnProfile: baseHorizonProj?.appliedReturnProfile,
+                horizonYears: baseHorizonProj?.years ?? 30,
+                cashRatePct: baseHorizonProj?.returnRates?.cash,
+            })
+            : null;
+        const projection = valoriaForecast
             ? {
-                ...storeProjection,
-                returnRates: computeAccountReturnRatesForMode(
-                    retMode,
-                    storeProjection.returnRates,
-                    assetsPourRegime ?? EMPTY_ARRAY,
-                    fxPourRegime ?? {},
-                ),
+                ...baseHorizonProj,
+                returnRates: valoriaForecast.summaryRates,
             }
-            : storeProjection;
+            : (retMode === 'iqpf' || retMode === 'real_holdings')
+                ? {
+                    ...baseHorizonProj,
+                    returnRates: computeAccountReturnRatesForMode(
+                        retMode,
+                        baseHorizonProj.returnRates,
+                        assetsPourRegime ?? EMPTY_ARRAY,
+                        fxPourRegime ?? {},
+                    ),
+                }
+                : baseHorizonProj;
 
         const expMode = projection?.expenseProjectionMode;
         const behavioralProfile = expMode === 'real' || expMode === 'hybrid'
@@ -235,7 +253,7 @@ export function useSimulationParams(calculatedMonthlySavings: number): Simulatio
             })()
             : undefined;
 
-        const acbOverrides = retMode === 'real_holdings' && (assetsPourRegime?.length ?? 0) > 0
+        const acbOverrides = (retMode === 'real_holdings' || retMode === 'valoria_agents') && (assetsPourRegime?.length ?? 0) > 0
             ? (() => {
                 const acbs = derivePortfolioStartingACBs(
                     assetsPourRegime ?? EMPTY_ARRAY,
@@ -279,8 +297,9 @@ export function useSimulationParams(calculatedMonthlySavings: number): Simulatio
             privateBusinesses,
             behavioralProfile,
             ...acbOverrides,
+            ...(valoriaForecast ? { valoriaSchedule: valoriaForecast.schedule } : {}),
         });
-    }, [storeProjection, calculatedStartingCash, ledgerCash.termesFautifs, liveCSVBalances, realEstateGoals, debts, childGoals, travelGoals, lifeEvents, retirementGoal, config, budgetItems, calculatedMonthlySavings, insurancePolicies, vehicleReplacements, majorRenovations, charitableGoals, rentalProperties, privateBusinesses, financialGoals, startYear, startMonth, todayIsoPourDettes, transactions, assetsPourRegime, fxPourRegime]);
+    }, [storeProjection, calculatedStartingCash, ledgerCash.termesFautifs, liveCSVBalances, realEstateGoals, debts, childGoals, travelGoals, lifeEvents, retirementGoal, config, budgetItems, calculatedMonthlySavings, insurancePolicies, vehicleReplacements, majorRenovations, charitableGoals, rentalProperties, privateBusinesses, financialGoals, startYear, startMonth, todayIsoPourDettes, transactions, assetsPourRegime, fxPourRegime, valoriaRiskProfile]);
 
     return {
         params, pastHistory, liveCSVBalances, calculatedStartingCash,

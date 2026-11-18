@@ -67,10 +67,31 @@ type AutoSyncOutcome =
     | { ran: false; reason: 'no-token' | 'test-mode' | 'fresh' | 'cooldown' | 'in-flight' | 'error' }
     | { ran: true; report: FintableSyncReport };
 
+export interface AutoSyncOptions {
+    now?: () => number;
+    ignoreCooldown?: boolean;
+    /** Délai max avant qu'une passe réussie soit jugée périmée (défaut : 24 h). */
+    maxAgeMs?: number;
+    /** Plancher entre deux tentatives automatiques (défaut : 1 h). */
+    attemptCooldownMs?: number;
+    /** Active l'auto-routage et la récupération des cartes de crédit bloquées par la bascule. */
+    autoCreditCards?: boolean;
+}
+
 /** Exporté pour test : la passe réussie d'hier déclenche, celle d'il y a 2 h non. */
-export function isDailySyncDue(report: FintableSyncReport | undefined, now: number): boolean {
+export function isDailySyncDue(
+    report: FintableSyncReport | undefined,
+    now: number,
+    maxAgeMs: number = DAILY_MS,
+): boolean {
     if (!report || report.error !== null) return true; // jamais réussi (ou dernier = échec) → dû
-    return now - report.at >= DAILY_MS;
+    return now - report.at >= maxAgeMs;
+}
+
+function hasPendingCreditCardRecovery(report: FintableSyncReport | undefined): boolean {
+    if (!report || report.error !== null) return false;
+    if ((report.accountsWithoutRole ?? 0) > 0) return true;
+    return (report.warnings ?? []).some((w) => w.includes('retard de postage'));
 }
 
 /**
@@ -154,7 +175,7 @@ export async function withCrossTabLock<T>(
  * Appelable sans crainte depuis un effet React qui re-tire.
  */
 export async function maybeRunDailyFintableSync(
-    opts: { now?: () => number; ignoreCooldown?: boolean } = {},
+    opts: AutoSyncOptions = {},
 ): Promise<AutoSyncOutcome> {
     // ⚠️ Le verrou enveloppe TOUTES les gardes, cooldown compris : le protéger seulement autour du
     // réseau laisserait la course là où elle est — entre la LECTURE et l'ÉCRITURE du cooldown.
@@ -165,9 +186,11 @@ export async function maybeRunDailyFintableSync(
 }
 
 async function runDailyFintableSyncGuarded(
-    opts: { now?: () => number; ignoreCooldown?: boolean } = {},
+    opts: AutoSyncOptions = {},
 ): Promise<AutoSyncOutcome> {
     const now = opts.now ?? (() => Date.now());
+    const maxAgeMs = opts.maxAgeMs ?? DAILY_MS;
+    const cooldownMs = opts.attemptCooldownMs ?? ATTEMPT_COOLDOWN_MS;
     // [SVC-STORE-COUPLING] Pas de cast : `FinanceState extends AppState`, `getState()` EST un
     // AppState — les `as unknown as` historiques désactivaient tsc sur ces lectures pour rien.
     const state = useFinanceStore.getState();
@@ -178,12 +201,14 @@ async function runDailyFintableSyncGuarded(
 
     if (!token) return { ran: false, reason: 'no-token' };
     if (isTestModeNow()) return { ran: false, reason: 'test-mode' };
-    if (!isDailySyncDue(state.fintableSyncReport, now())) return { ran: false, reason: 'fresh' };
+    const dueByAge = isDailySyncDue(state.fintableSyncReport, now(), maxAgeMs);
+    const dueForCards = Boolean(opts.autoCreditCards) && hasPendingCreditCardRecovery(state.fintableSyncReport);
+    if (!dueByAge && !dueForCards) return { ran: false, reason: 'fresh' };
     const erreurAncienProxyOuCsp = Boolean(
         state.fintableSyncReport?.error?.includes('[MALFORMED]') ||
         state.fintableSyncReport?.error?.includes('[NETWORK]'),
     );
-    if (!opts.ignoreCooldown && !erreurAncienProxyOuCsp && now() - readLastAttempt() < ATTEMPT_COOLDOWN_MS) {
+    if (!opts.ignoreCooldown && !erreurAncienProxyOuCsp && now() - readLastAttempt() < cooldownMs) {
         return { ran: false, reason: 'cooldown' };
     }
     if (!acquireFintableSyncLock()) return { ran: false, reason: 'in-flight' };
@@ -214,6 +239,7 @@ async function runDailyFintableSyncGuarded(
         // soit pas écrasée (le verrou de sync ne protège que contre une autre PASSE).
         const { report, statePatch } = await runFintableBrowserSync(current, freshToken, {
             getFreshState: () => useFinanceStore.getState(),
+            ...(opts.autoCreditCards ? { autoCreditCards: true } : {}),
         });
 
         // ⚠️ [Finding security-privacy #545, ÉLEVÉ, PROUVÉ par sonde] Re-vérifier le mode démo

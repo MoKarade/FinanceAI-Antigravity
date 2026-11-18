@@ -67,7 +67,7 @@ export function makeNavigationActions(setActiveTab: (t: Tab) => void): CommandAc
         { tab: Tab.TRANSACTIONS, label: 'Transactions', icon: <Icon name="transactions" size={sz} />, keywords: ['transac', 'depense', 'achats'] },
         { tab: Tab.BUDGET, label: 'Budget', icon: <Icon name="budget" size={sz} />, keywords: ['budget', 'depenses', 'abonnements', 'charges fixes', 'objectifs', 'planification'] },
         { tab: Tab.DEBT, label: 'Dettes', icon: <Icon name="debt" size={sz} />, keywords: ['debt', 'pret', 'credit'] },
-        { tab: Tab.INVESTMENTS, label: 'Placements', icon: <Icon name="investments" size={sz} />, keywords: ['invest', 'investissements', 'bourse', 'actions'] },
+        { tab: Tab.INVESTMENTS, label: 'Placements', icon: <Icon name="investments" size={sz} />, keywords: ['invest', 'investissements', 'bourse', 'actions', 'valoria', 'quant', 'ia', '7 agents', 'd3', 'marche', 'conseiller'] },
         { tab: Tab.FUTURE, label: 'Futur', icon: <Icon name="future" size={sz} />, keywords: ['future', 'projection', 'simulation', 'mc'] },
         { tab: Tab.REAL_ESTATE, label: 'Immobilier', icon: <Icon name="real-estate" size={sz} />, keywords: ['immo', 'maison', 'hypotheque'] },
         // [REFONTE-NAV-L3] Projets d'achat futurs (Vie) — l'actuel reste sous « Immobilier ».
@@ -90,5 +90,64 @@ export function makeNavigationActions(setActiveTab: (t: Tab) => void): CommandAc
         keywords,
         onSelect: () => setActiveTab(tab),
     }));
+}
+
+/** Actions rapides et liens profonds Valoria pour la palette Ctrl+K (sans alourdir le bundle d'entrée). */
+export function makeValoriaCommandActions(
+    navigateWithFocus: (tab: Tab, section?: string) => void,
+    assets?: ReadonlyArray<{ symbol?: string; name?: string }>,
+    watchlist?: ReadonlyArray<string>,
+): CommandAction[] {
+    const sz = 16;
+    const views: Array<{ id: string; section: string; label: string; keywords: string[] }> = [
+        { id: 'tab:recommendations', section: 'tab:recommendations', label: 'Valoria : Conseils & Recommandés', keywords: ['valoria', 'conseil', 'recommande', 'acheter', 'alleger'] },
+        { id: 'tab:ai_proof', section: 'tab:ai_proof', label: 'Valoria : Preuve IA à l’aveugle', keywords: ['valoria', 'preuve', 'aveugle', 'gemini'] },
+        { id: 'tab:intelligence', section: 'tab:intelligence', label: 'Valoria : Comité des 7 Agents & Futur 2031', keywords: ['valoria', 'agents', 'futur', 'inflation', 'causal'] },
+        { id: 'lab:backtest', section: 'lab:backtest', label: 'Valoria : Backtest historique ($ CAD)', keywords: ['valoria', 'backtest', 'historique'] },
+        { id: 'lab:montecarlo', section: 'lab:montecarlo', label: 'Valoria : Monte Carlo (10 000 scénarios)', keywords: ['valoria', 'monte carlo', 'simulation'] },
+        { id: 'lab:quant_models', section: 'lab:quant_models', label: 'Valoria : Modèles Black-Litterman & Fama-French', keywords: ['valoria', 'black-litterman', 'fama', 'quant'] },
+    ];
+
+    const out: CommandAction[] = views.map((v) => ({
+        id: `valoria:${v.id}`,
+        label: v.label,
+        group: 'Placements · Quant IA',
+        icon: <Icon name="sparkles" size={sz} />,
+        keywords: v.keywords,
+        onSelect: () => navigateWithFocus(Tab.INVESTMENTS, v.section),
+    }));
+
+    const seen = new Set<string>();
+    for (const a of assets ?? []) {
+        const sym = (a.symbol ?? '').trim().toUpperCase();
+        if (!sym || seen.has(sym)) continue;
+        seen.add(sym);
+        const nom = (a.name ?? '').trim();
+        out.push({
+            id: `valoria:asset:${sym}`,
+            label: nom ? `Rayon-X Valoria : ${sym} — ${nom}` : `Rayon-X Valoria : ${sym}`,
+            group: 'Placements · Quant IA',
+            icon: <Icon name="chart" size={sz} />,
+            keywords: ['valoria', 'rayon-x', 'titre', sym.toLowerCase(), nom.toLowerCase()].filter(Boolean),
+            onSelect: () => navigateWithFocus(Tab.INVESTMENTS, `asset:${sym}`),
+        });
+        if (seen.size >= 25) break;
+    }
+
+    for (const w of watchlist ?? []) {
+        const sym = w.trim().toUpperCase();
+        if (!sym || seen.has(sym) || seen.size >= 25) continue;
+        seen.add(sym);
+        out.push({
+            id: `valoria:watch:${sym}`,
+            label: `Rayon-X Valoria (Suivi) : ${sym}`,
+            group: 'Placements · Quant IA',
+            icon: <Icon name="chart" size={sz} />,
+            keywords: ['valoria', 'watchlist', 'suivi', 'rayon-x', sym.toLowerCase()],
+            onSelect: () => navigateWithFocus(Tab.INVESTMENTS, `asset:${sym}`),
+        });
+    }
+
+    return out;
 }
 

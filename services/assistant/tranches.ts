@@ -337,4 +337,7 @@ export const TRANCHES_EXCLUES: Record<string, string> = {
     isTestMode: 'mode test (bascule d\'interface)',
     realDataSnapshot: 'instantané des vraies données pendant le mode test — jamais exposé',
     activeTestPersonaId: 'mode test',
+    // Valoria : préférences pilotées directement dans l'onglet Valoria.
+    valoriaWatchlist: 'liste de suivi Valoria pilotée directement dans l onglet Valoria',
+    valoriaRiskProfile: 'profil de risque Valoria piloté directement dans l onglet Valoria',
 };

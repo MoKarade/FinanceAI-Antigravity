@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Tab } from '../types';
-import { quotaStorage } from '../services/quotaStorage';
+import { unlimitedStateStorage } from '../services/unlimitedStateStorage';
 import { saveLockedProjection, clearLockedProjection } from '../services/lockedProjectionStore';
 import { STORAGE_KEYS } from '../utils/storageKeys';
 import { initialState } from './etatParDefaut';
@@ -120,7 +120,7 @@ export const useFinanceStore = create<FinanceState>()(
         }),
         {
             name: STORAGE_KEYS.persistStore,
-            storage: createJSONStorage(() => quotaStorage),
+            storage: createJSONStorage(() => unlimitedStateStorage),
             // Schema versioning: incrémenter à chaque changement non-rétrocompatible
             // de la forme du state, et ajouter une étape dans `migrate`.
             // Sans version, toute évolution casse silencieusement le boot des

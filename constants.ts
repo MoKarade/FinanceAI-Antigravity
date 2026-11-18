@@ -22,6 +22,7 @@ export const TAB_LABELS: Record<Tab, string> = {
     [Tab.TAX]: 'Impôts',
     [Tab.SETTINGS]: 'Réglages', // [S5-REFONTE] libellés de navigation des maquettes
     [Tab.PROFILE]: 'Profil',
+    [Tab.VALORIA]: 'Valoria · Quant IA',
 };
 
 // ============================================================

@@ -13,7 +13,7 @@ import { saveApiKeys } from './services/secureKeyStore';
 import { useShallow } from 'zustand/shallow';
 import { useDerivedFinancials } from './utils/useDerivedFinancials';
 import { TabRouter } from './components/TabRouter';
-import { useCommandPalette, makeNavigationActions } from './components/ui/commandPaletteActions';
+import { useCommandPalette, makeNavigationActions, makeValoriaCommandActions } from './components/ui/commandPaletteActions';
 import { useAppBootEffects } from './hooks/useAppBootEffects';
 import { useTabNavigation } from './hooks/useTabNavigation';
 import { useAssetDataHydration } from './hooks/useAssetDataHydration';
@@ -55,8 +55,11 @@ export const App: React.FC = () => {
     // Préchargement progressif de tous les onglets en tâche de fond après le premier rendu
     useEffect(() => scheduleIdleTabPrefetch(), []);
 
+    const navigateWithFocus = state.navigateWithFocus;
+
     const cmdActions = useMemo(() => [
         ...makeNavigationActions(handleSetTab),
+        ...makeValoriaCommandActions(navigateWithFocus, state.assets, state.valoriaWatchlist),
         {
             id: 'action:privacy',
             label: isPrivacyMode ? 'Désactiver le mode privé' : 'Activer le mode privé',
@@ -81,7 +84,7 @@ export const App: React.FC = () => {
             },
         },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    ], [isPrivacyMode, handleSetTab]);
+    ], [isPrivacyMode, handleSetTab, navigateWithFocus, state.assets, state.valoriaWatchlist]);
 
     const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus);
     useEffect(() => subscribeSyncStatus(setSyncStatus), []);

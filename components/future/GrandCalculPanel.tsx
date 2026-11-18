@@ -1,7 +1,8 @@
-import React, { useEffect, useId, useState } from 'react';
-import type { GrandCalculConfig, GrandCalculResult } from '../../services/projection/types';
+import React, { useEffect, useId, useMemo, useState } from 'react';
+import type { GrandCalculConfig, GrandCalculResult, GrandCalculMonthlyBand } from '../../services/projection/types';
 import type { GrandCalculProgress } from '../../services/projection/runAsync';
 import type { GrandCalculStatus } from '../../store/types';
+import { useFinanceStore } from '../../store/useFinanceStore';
 import {
     GRAND_CALCUL_ITERATIONS_MAX,
     GRAND_CALCUL_ITERATIONS_MIN,
@@ -29,8 +30,6 @@ export interface GrandCalculPanelProps {
     refusMessage: string | null;
 }
 
-const PRESET_ITERATIONS = [50_000, 75_000, 100_000] as const;
-
 function formatEta(etaMs: number | null): string {
     if (etaMs === null || !Number.isFinite(etaMs) || etaMs < 0) return '—';
     const totalSec = Math.max(0, Math.round(etaMs / 1000));
@@ -51,6 +50,82 @@ function formatDurationMs(durationMs: number): string {
     return `${mins} min ${remSec} s`;
 }
 
+interface FanSvgGeometry {
+    width: number;
+    height: number;
+    outerPoly: string;
+    midPoly: string;
+    iqrPoly: string;
+    p90Line: string;
+    p50Line: string;
+    p10Line: string;
+    zeroY: number | null;
+}
+
+function buildMonteCarloFanSvg(bands: ReadonlyArray<GrandCalculMonthlyBand>): FanSvgGeometry | null {
+    if (bands.length < 2) return null;
+    const width = 640;
+    const height = 112;
+    const padY = 8;
+    const usableH = height - padY * 2;
+
+    const sampleStep = bands.length > 72 ? Math.ceil(bands.length / 72) : 1;
+    const sampled: GrandCalculMonthlyBand[] = [];
+    for (let i = 0; i < bands.length; i += sampleStep) {
+        sampled.push(bands[i]);
+    }
+    if (sampled[sampled.length - 1] !== bands[bands.length - 1]) {
+        sampled.push(bands[bands.length - 1]);
+    }
+
+    let minVal = Number.POSITIVE_INFINITY;
+    let maxVal = Number.NEGATIVE_INFINITY;
+    for (const b of sampled) {
+        const vals = [b.p5, b.p10, b.p25, b.p50, b.p75, b.p90, b.p95];
+        for (const v of vals) {
+            if (Number.isFinite(v)) {
+                if (v < minVal) minVal = v;
+                if (v > maxVal) maxVal = v;
+            }
+        }
+    }
+    if (!Number.isFinite(minVal) || !Number.isFinite(maxVal)) return null;
+    const span = maxVal - minVal > 1 ? maxVal - minVal : 1;
+
+    const xAt = (idx: number): number =>
+        sampled.length <= 1 ? 0 : Number(((idx / (sampled.length - 1)) * width).toFixed(1));
+    const yAt = (val: number): number => {
+        const safe = Number.isFinite(val) ? val : minVal;
+        const norm = (safe - minVal) / span;
+        return Number((padY + usableH * (1 - norm)).toFixed(1));
+    };
+
+    const bandPolygon = (upperKey: 'p95' | 'p90' | 'p75', lowerKey: 'p5' | 'p10' | 'p25'): string => {
+        const top = sampled.map((b, i) => `${xAt(i)},${yAt(b[upperKey])}`);
+        const bot = [...sampled]
+            .reverse()
+            .map((b, revI) => `${xAt(sampled.length - 1 - revI)},${yAt(b[lowerKey])}`);
+        return [...top, ...bot].join(' ');
+    };
+
+    const linePath = (key: 'p90' | 'p50' | 'p10'): string =>
+        sampled.map((b, i) => `${xAt(i)},${yAt(b[key])}`).join(' ');
+
+    const zeroY = minVal < 0 && maxVal > 0 ? yAt(0) : null;
+
+    return {
+        width,
+        height,
+        outerPoly: bandPolygon('p95', 'p5'),
+        midPoly: bandPolygon('p90', 'p10'),
+        iqrPoly: bandPolygon('p75', 'p25'),
+        p90Line: linePath('p90'),
+        p50Line: linePath('p50'),
+        p10Line: linePath('p10'),
+        zeroY,
+    };
+}
+
 export const GrandCalculPanel: React.FC<GrandCalculPanelProps> = ({
     result,
     status,
@@ -69,6 +144,7 @@ export const GrandCalculPanel: React.FC<GrandCalculPanelProps> = ({
     isSaving = false,
     refusMessage,
 }) => {
+    const isPrivacyMode = useFinanceStore((s) => s.isPrivacyMode);
     const titleId = useId();
     const iterInputId = useId();
     const [iterDraft, setIterDraft] = useState<string>(() => String(config.iterations));
@@ -102,19 +178,55 @@ export const GrandCalculPanel: React.FC<GrandCalculPanelProps> = ({
     const hasBands = Boolean(result && result.monthlyBands.length > 0);
     const disabledControls = isRunning || isRestoring;
 
+    const lastBand = useMemo(() => {
+        if (!result || result.monthlyBands.length === 0) return null;
+        return result.monthlyBands[result.monthlyBands.length - 1] ?? null;
+    }, [result]);
+
+    const fanSvg = useMemo(
+        () => (result ? buildMonteCarloFanSvg(result.monthlyBands) : null),
+        [result],
+    );
+
+    const safeSurvivalPct =
+        result && result.survivalRatePct !== null && Number.isFinite(result.survivalRatePct)
+            ? Math.min(100, Math.max(0, result.survivalRatePct))
+            : null;
+    const survivalBarClass =
+        safeSurvivalPct === null
+            ? 'bg-texte-doux'
+            : safeSurvivalPct >= 85
+              ? 'bg-succes-texte'
+              : safeSurvivalPct >= 65
+                ? 'bg-alerte-texte'
+                : 'bg-erreur-texte';
+
     return (
         <section
             aria-labelledby={titleId}
             className="rounded-2xl bg-surface border border-bordure px-3.5 py-4 sm:px-5 sm:py-5 space-y-4"
         >
+            {/* En-tête unifié avec badges et actions post-calcul */}
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1 min-w-0">
-                    <h2 id={titleId} className="text-h2 text-texte">
-                        Grand Calcul Monte Carlo
-                    </h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h2 id={titleId} className="text-h2 text-texte">
+                            Grand Calcul Monte Carlo
+                        </h2>
+                        {result?.regimesEnabled && (
+                            <span className="inline-flex items-center rounded-full bg-surface-douce border border-bordure px-2.5 py-0.5 text-tiny text-texte-doux">
+                                Régimes macroéconomiques
+                            </span>
+                        )}
+                        {result?.historicalCrisesEnabled && (
+                            <span className="inline-flex items-center rounded-full bg-surface-douce border border-bordure px-2.5 py-0.5 text-tiny text-texte-doux">
+                                Crises historiques
+                            </span>
+                        )}
+                    </div>
                     <p className="text-meta text-texte-doux">
                         {/* NOMBRE-NON-MONETAIRE : plage technique d'itérations Monte Carlo */}
-                        Simulation approfondie à la demande ({formatNumber(GRAND_CALCUL_ITERATIONS_MIN)} à{' '}
+                        Simulation approfondie ({formatNumber(GRAND_CALCUL_ITERATIONS_MIN)} à{' '}
                         {/* NOMBRE-NON-MONETAIRE : borne supérieure d'itérations Monte Carlo */}
                         {formatNumber(GRAND_CALCUL_ITERATIONS_MAX)} trajectoires) en tâche de fond via Web Worker.
                     </p>
@@ -122,26 +234,41 @@ export const GrandCalculPanel: React.FC<GrandCalculPanelProps> = ({
 
                 {result && (
                     <div className="flex flex-wrap items-center gap-2">
-                        {result.regimesEnabled && (
-                            <span className="inline-flex items-center rounded-full bg-surface-douce border border-bordure px-2.5 py-1 text-tiny text-texte-doux">
-                                Régimes macroéconomiques
-                            </span>
+                        {hasBands && (
+                            <button
+                                type="button"
+                                aria-pressed={showBands}
+                                onClick={() => onToggleBands(!showBands)}
+                                className={`touch-target min-h-11 px-3.5 py-2 rounded-xl border text-meta font-medium transition-colors focus-ring ${
+                                    showBands
+                                        ? 'border-bordure-champ bg-repere-doux text-repere'
+                                        : 'border-bordure bg-surface-douce text-texte-doux hover:text-texte'
+                                }`}
+                            >
+                                Afficher les bandes P5–P95 sur la courbe
+                            </button>
                         )}
-                        {result.historicalCrisesEnabled && (
-                            <span className="inline-flex items-center rounded-full bg-surface-douce border border-bordure px-2.5 py-1 text-tiny text-texte-doux">
-                                Crises historiques
-                            </span>
+                        {!isRunning && (
+                            <button
+                                type="button"
+                                disabled={isSaving}
+                                onClick={() => void onClear()}
+                                className="touch-target min-h-11 px-3.5 py-2 rounded-xl border border-bordure-champ bg-surface-douce text-texte-doux hover:text-texte text-meta font-medium transition-colors focus-ring disabled:opacity-50"
+                            >
+                                Effacer les résultats
+                            </button>
                         )}
                     </div>
                 )}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
-                <div className="lg:col-span-5 space-y-2">
-                    <label htmlFor={iterInputId} className="block text-meta font-medium text-texte">
-                        Nombre de trajectoires
-                    </label>
-                    <div className="flex flex-wrap items-center gap-2">
+            {/* Barre de commande compacte sans boutons redondants */}
+            <div className="rounded-xl border border-bordure bg-surface-douce/60 p-3 flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex flex-wrap items-center gap-2.5">
+                    <div className="flex items-center gap-2">
+                        <label htmlFor={iterInputId} className="text-meta font-medium text-texte whitespace-nowrap">
+                            Nombre de trajectoires
+                        </label>
                         <input
                             id={iterInputId}
                             type="number"
@@ -164,51 +291,24 @@ export const GrandCalculPanel: React.FC<GrandCalculPanelProps> = ({
                                 }
                             }}
                             onBlur={commitIterations}
-                            className="touch-target min-h-11 w-36 rounded-lg border border-bordure-champ bg-surface-douce px-3 py-2 text-body font-mono text-texte tabular-nums focus-ring disabled:opacity-50"
+                            className="touch-target min-h-11 w-32 rounded-lg border border-bordure-champ bg-fond px-3 py-2 text-body font-mono text-texte tabular-nums focus-ring disabled:opacity-50"
                         />
-                        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Préréglages du nombre de trajectoires">
-                            {PRESET_ITERATIONS.map((preset) => {
-                                const active = config.iterations === preset;
-                                return (
-                                    <button
-                                        key={preset}
-                                        type="button"
-                                        aria-pressed={active}
-                                        disabled={disabledControls}
-                                        onClick={() => {
-                                            setIterDraft(String(preset));
-                                            onUpdateConfig({ iterations: preset });
-                                        }}
-                                        className={`touch-target min-h-11 px-3 py-2 rounded-lg border text-meta font-mono tabular-nums transition-colors focus-ring disabled:opacity-50 ${
-                                            active
-                                                ? 'bg-accent text-sur-accent border-accent font-semibold'
-                                                : 'bg-surface-douce text-texte border-bordure-champ hover:bg-bordure'
-                                        }`}
-                                    >
-                                        {/* NOMBRE-NON-MONETAIRE : préréglage technique du nombre de trajectoires */}
-                                        {formatNumber(preset)}
-                                    </button>
-                                );
-                            })}
-                        </div>
                     </div>
-                </div>
 
-                <div className="lg:col-span-7 flex flex-wrap items-center gap-2.5">
                     <button
                         type="button"
                         role="switch"
                         aria-checked={config.enableMacroRegimes}
                         disabled={disabledControls}
                         onClick={() => onUpdateConfig({ enableMacroRegimes: !config.enableMacroRegimes })}
-                        className="touch-target min-h-11 inline-flex items-center gap-2.5 px-3 py-2 rounded-lg border border-bordure bg-surface-douce text-meta text-texte transition-colors focus-ring hover:bg-bordure disabled:opacity-50"
+                        className="touch-target min-h-11 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-bordure bg-fond text-meta text-texte transition-colors focus-ring hover:bg-bordure disabled:opacity-50"
                     >
                         <span
                             aria-hidden="true"
                             className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full border p-0.5 transition-colors ${
                                 config.enableMacroRegimes
                                     ? 'justify-end border-accent bg-accent text-sur-accent'
-                                    : 'justify-start border-bordure-champ bg-fond text-texte-doux'
+                                    : 'justify-start border-bordure-champ bg-surface-douce text-texte-doux'
                             }`}
                         >
                             <span
@@ -226,14 +326,14 @@ export const GrandCalculPanel: React.FC<GrandCalculPanelProps> = ({
                         aria-checked={config.includeHistoricalCrises}
                         disabled={disabledControls}
                         onClick={() => onUpdateConfig({ includeHistoricalCrises: !config.includeHistoricalCrises })}
-                        className="touch-target min-h-11 inline-flex items-center gap-2.5 px-3 py-2 rounded-lg border border-bordure bg-surface-douce text-meta text-texte transition-colors focus-ring hover:bg-bordure disabled:opacity-50"
+                        className="touch-target min-h-11 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-bordure bg-fond text-meta text-texte transition-colors focus-ring hover:bg-bordure disabled:opacity-50"
                     >
                         <span
                             aria-hidden="true"
                             className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full border p-0.5 transition-colors ${
                                 config.includeHistoricalCrises
                                     ? 'justify-end border-accent bg-accent text-sur-accent'
-                                    : 'justify-start border-bordure-champ bg-fond text-texte-doux'
+                                    : 'justify-start border-bordure-champ bg-surface-douce text-texte-doux'
                             }`}
                         >
                             <span
@@ -245,53 +345,27 @@ export const GrandCalculPanel: React.FC<GrandCalculPanelProps> = ({
                         <span>Crises historiques</span>
                     </button>
                 </div>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                    type="button"
-                    onClick={handleLaunchClick}
-                    disabled={isRunning || isRestoring || isSaving || Boolean(refusMessage)}
-                    className="touch-target min-h-11 px-4 py-2 rounded-xl bg-accent hover:bg-accent-fonce text-sur-accent font-semibold text-body transition-colors focus-ring disabled:opacity-50"
-                >
-                    {result ? 'Relancer le Grand Calcul' : 'Lancer le Grand Calcul'}
-                </button>
-
-                {isRunning && (
+                <div className="flex flex-wrap items-center gap-2">
                     <button
                         type="button"
-                        onClick={onCancel}
-                        className="touch-target min-h-11 px-4 py-2 rounded-xl border border-bordure-champ bg-surface-douce text-texte font-medium text-body transition-colors focus-ring hover:bg-bordure"
+                        onClick={handleLaunchClick}
+                        disabled={isRunning || isRestoring || isSaving || Boolean(refusMessage)}
+                        className="touch-target min-h-11 px-4 py-2 rounded-xl bg-accent hover:bg-accent-fonce text-sur-accent font-semibold text-body transition-colors focus-ring disabled:opacity-50"
                     >
-                        Annuler
+                        {result ? 'Relancer le Grand Calcul' : 'Lancer le Grand Calcul'}
                     </button>
-                )}
 
-                {hasBands && (
-                    <button
-                        type="button"
-                        aria-pressed={showBands}
-                        onClick={() => onToggleBands(!showBands)}
-                        className={`touch-target min-h-11 px-3.5 py-2 rounded-xl border text-meta font-medium transition-colors focus-ring ${
-                            showBands
-                                ? 'border-bordure-champ bg-repere-doux text-repere'
-                                : 'border-bordure bg-surface-douce text-texte-doux hover:text-texte'
-                        }`}
-                    >
-                        Afficher les bandes P5–P95 sur la courbe
-                    </button>
-                )}
-
-                {result && !isRunning && (
-                    <button
-                        type="button"
-                        disabled={isSaving}
-                        onClick={() => void onClear()}
-                        className="touch-target min-h-11 px-3.5 py-2 rounded-xl border border-bordure-champ bg-surface-douce text-texte-doux hover:text-texte text-meta font-medium transition-colors focus-ring disabled:opacity-50"
-                    >
-                        Effacer les résultats
-                    </button>
-                )}
+                    {isRunning && (
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            className="touch-target min-h-11 px-4 py-2 rounded-xl border border-bordure-champ bg-surface text-texte font-medium text-body transition-colors focus-ring hover:bg-bordure"
+                        >
+                            Annuler
+                        </button>
+                    )}
+                </div>
             </div>
 
             {isRestoring && (
@@ -368,52 +442,166 @@ export const GrandCalculPanel: React.FC<GrandCalculPanelProps> = ({
             )}
 
             {result ? (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                    <div className="rounded-xl border border-bordure bg-surface-douce px-3.5 py-3 space-y-1">
-                        <div className="text-tiny text-texte-doux">Simulations effectuées</div>
-                        <div className="text-body font-mono font-semibold text-texte tabular-nums">
-                            {/* NOMBRE-NON-MONETAIRE : nombre de trajectoires simulées */}
-                            {formatNumber(result.iterationsRun)} simulations
+                <div className="space-y-3 pt-1">
+                    {/* Ligne 1 : 4 tuiles KPI synthétiques + jauge de survie */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="rounded-xl border border-bordure bg-surface-douce px-3.5 py-3 space-y-1.5 min-w-0">
+                            <div className="text-tiny text-texte-doux">Taux de survie</div>
+                            <div className="text-lg font-mono font-bold text-texte tabular-nums">
+                                <PrivateAmount>
+                                    {result.survivalRatePct !== null
+                                        ? formatPercent(result.survivalRatePct, 1)
+                                        : '—'}
+                                </PrivateAmount>
+                            </div>
+                            <div className="h-1.5 w-full rounded-full bg-fond overflow-hidden border border-bordure/60">
+                                <div
+                                    className={`h-full rounded-full transition-all duration-300 ${survivalBarClass}`}
+                                    style={{ width: `${isPrivacyMode || safeSurvivalPct === null ? 0 : safeSurvivalPct}%` }}
+                                />
+                            </div>
                         </div>
-                        <div className="text-tiny text-texte-doux font-mono tabular-nums">
-                            {/* NOMBRE-NON-MONETAIRE : durée technique d'exécution */}
-                            Durée : {formatDurationMs(result.durationMs)}
+
+                        <div className="rounded-xl border border-bordure bg-surface-douce px-3.5 py-3 space-y-1 min-w-0">
+                            <div className="text-tiny text-texte-doux">Médiane à l&apos;horizon (P50)</div>
+                            <div className="text-lg font-mono font-bold text-texte tabular-nums">
+                                <PrivateAmount>{lastBand ? formatCAD(lastBand.p50) : '—'}</PrivateAmount>
+                            </div>
+                            <div className="text-tiny text-texte-doux truncate">
+                                Scénario central en fin de projection
+                            </div>
+                        </div>
+
+                        <div className="rounded-xl border border-bordure bg-surface-douce px-3.5 py-3 space-y-1 min-w-0">
+                            <div className="text-tiny text-texte-doux">Plancher prudent (P10)</div>
+                            <div className="text-lg font-mono font-bold text-texte tabular-nums">
+                                <PrivateAmount>{lastBand ? formatCAD(lastBand.p10) : '—'}</PrivateAmount>
+                            </div>
+                            <div className="text-tiny text-texte-doux truncate">
+                                Seuil bas hors décile défavorable
+                            </div>
+                        </div>
+
+                        <div className="rounded-xl border border-bordure bg-surface-douce px-3.5 py-3 space-y-1 min-w-0">
+                            <div className="text-tiny text-texte-doux">CVaR 95 % (queue pessimiste)</div>
+                            <div className="text-lg font-mono font-bold text-texte tabular-nums">
+                                <PrivateAmount>
+                                    {result.cvar95 !== null ? formatCAD(result.cvar95) : '—'}
+                                </PrivateAmount>
+                            </div>
+                            <div className="text-tiny text-texte-doux font-mono tabular-nums truncate">
+                                {/* NOMBRE-NON-MONETAIRE : nombre de trajectoires simulées et durée technique */}
+                                {formatNumber(result.iterationsRun)} simulations · Durée : {formatDurationMs(result.durationMs)}
+                            </div>
                         </div>
                     </div>
 
-                    <div className="rounded-xl border border-bordure bg-surface-douce px-3.5 py-3 space-y-1">
-                        <div className="text-tiny text-texte-doux">Taux de survie</div>
-                        <div className="text-body font-mono font-semibold text-texte tabular-nums">
-                            <PrivateAmount>
-                                {result.survivalRatePct !== null
-                                    ? formatPercent(result.survivalRatePct, 1)
-                                    : '—'}
-                            </PrivateAmount>
-                        </div>
-                    </div>
+                    {/* Ligne 2 : Cône probabiliste SVG (P5 -> P95) + spectre des quantiles finaux */}
+                    {lastBand && (
+                        <div className="rounded-xl border border-bordure bg-surface-douce/60 p-3.5 sm:p-4 space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-meta font-semibold text-texte">
+                                    Éventail probabiliste du patrimoine (P5 → P95)
+                                </span>
+                                <span className="text-tiny text-texte-doux">
+                                    Médiane, quartiles et bandes extrêmes sur tout l&apos;horizon
+                                </span>
+                            </div>
 
-                    <div className="rounded-xl border border-bordure bg-surface-douce px-3.5 py-3 space-y-1">
-                        <div className="text-tiny text-texte-doux">CVaR 95 % (queue pessimiste)</div>
-                        <div className="text-body font-mono font-semibold text-texte tabular-nums">
-                            <PrivateAmount>
-                                {result.cvar95 !== null ? formatCAD(result.cvar95) : '—'}
-                            </PrivateAmount>
+                            {fanSvg && !isPrivacyMode && (
+                                <svg
+                                    viewBox={`0 0 ${fanSvg.width} ${fanSvg.height}`}
+                                    preserveAspectRatio="none"
+                                    aria-hidden="true"
+                                    className="w-full h-24 sm:h-28 rounded-lg bg-fond/70 border border-bordure/60"
+                                >
+                                    {fanSvg.zeroY !== null && (
+                                        <line
+                                            x1={0}
+                                            x2={fanSvg.width}
+                                            y1={fanSvg.zeroY}
+                                            y2={fanSvg.zeroY}
+                                            stroke="var(--bordure-champ)"
+                                            strokeWidth="1"
+                                            strokeDasharray="3 3"
+                                        />
+                                    )}
+                                    <polygon points={fanSvg.outerPoly} fill="var(--repere)" fillOpacity="0.10" />
+                                    <polygon points={fanSvg.midPoly} fill="var(--accent)" fillOpacity="0.16" />
+                                    <polygon points={fanSvg.iqrPoly} fill="var(--accent)" fillOpacity="0.26" />
+                                    <polyline
+                                        points={fanSvg.p90Line}
+                                        fill="none"
+                                        stroke="var(--succes-texte)"
+                                        strokeWidth="1.25"
+                                        strokeDasharray="4 3"
+                                    />
+                                    <polyline
+                                        points={fanSvg.p10Line}
+                                        fill="none"
+                                        stroke="var(--erreur-texte)"
+                                        strokeWidth="1.25"
+                                        strokeDasharray="4 3"
+                                    />
+                                    <polyline
+                                        points={fanSvg.p50Line}
+                                        fill="none"
+                                        stroke="var(--accent)"
+                                        strokeWidth="2.2"
+                                    />
+                                </svg>
+                            )}
+
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                                <div className="rounded-lg border border-bordure bg-fond px-2.5 py-2 space-y-0.5 min-w-0">
+                                    <div className="text-tiny text-texte-doux">P5 (stress)</div>
+                                    <div className="text-meta font-mono font-semibold text-erreur-texte tabular-nums truncate">
+                                        <PrivateAmount>{formatCAD(lastBand.p5)}</PrivateAmount>
+                                    </div>
+                                </div>
+                                <div className="rounded-lg border border-bordure bg-fond px-2.5 py-2 space-y-0.5 min-w-0">
+                                    <div className="text-tiny text-texte-doux">P10 (prudent)</div>
+                                    <div className="text-meta font-mono font-semibold text-alerte-texte tabular-nums truncate">
+                                        <PrivateAmount>{formatCAD(lastBand.p10)}</PrivateAmount>
+                                    </div>
+                                </div>
+                                <div className="rounded-lg border border-accent/40 bg-surface px-2.5 py-2 space-y-0.5 min-w-0 col-span-2 sm:col-span-1">
+                                    <div className="text-tiny font-semibold text-texte">P50 (médiane)</div>
+                                    <div className="text-meta font-mono font-bold text-texte tabular-nums truncate">
+                                        <PrivateAmount>{formatCAD(lastBand.p50)}</PrivateAmount>
+                                    </div>
+                                </div>
+                                <div className="rounded-lg border border-bordure bg-fond px-2.5 py-2 space-y-0.5 min-w-0">
+                                    <div className="text-tiny text-texte-doux">P90 (favorable)</div>
+                                    <div className="text-meta font-mono font-semibold text-succes-texte tabular-nums truncate">
+                                        <PrivateAmount>{formatCAD(lastBand.p90)}</PrivateAmount>
+                                    </div>
+                                </div>
+                                <div className="rounded-lg border border-bordure bg-fond px-2.5 py-2 space-y-0.5 min-w-0">
+                                    <div className="text-tiny text-texte-doux">P95 (porteur)</div>
+                                    <div className="text-meta font-mono font-semibold text-succes-texte tabular-nums truncate">
+                                        <PrivateAmount>{formatCAD(lastBand.p95)}</PrivateAmount>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    <div className="rounded-xl border border-bordure bg-surface-douce px-3.5 py-3 space-y-1">
-                        <div className="text-tiny text-texte-doux">Aucun calcul enregistré</div>
-                        <div className="text-body font-mono font-semibold text-texte tabular-nums">
+                <div className="rounded-xl border border-bordure bg-surface-douce/50 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-tiny text-texte-doux">
+                        <span>Aucun calcul enregistré</span>
+                        <span aria-hidden="true">·</span>
+                        <span className="font-mono font-semibold text-texte tabular-nums">
                             <PrivateAmount>{'—'}</PrivateAmount>
-                        </div>
+                        </span>
                     </div>
-                    <div className="rounded-xl border border-bordure bg-surface-douce px-3.5 py-3 space-y-1">
-                        <div className="text-tiny text-texte-doux">Dernier résultat</div>
-                        <div className="text-body font-mono font-semibold text-texte tabular-nums">
+                    <div className="flex items-center gap-2 text-tiny text-texte-doux">
+                        <span>Dernier résultat</span>
+                        <span aria-hidden="true">·</span>
+                        <span className="font-mono font-semibold text-texte tabular-nums">
                             <PrivateAmount>{'—'}</PrivateAmount>
-                        </div>
+                        </span>
                     </div>
                 </div>
             )}

@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ComposedChart,
     CartesianGrid,
@@ -56,7 +56,7 @@ import { presentTermesOfGoal, monthsSince } from '../services/projection/pastPur
 import { assetValueCad, computeMonthlyBudgetAggregates, toCurrencyFactor } from '../services/portfolio';
 import { computePurchaseStats } from '../utils/assetPurchases';
 import { monthlyConsumptionExpenses } from '../utils/healthRatios';
-import { formatCAD, formatCompactCAD, formatPercent } from '../utils/format';
+import { formatCAD, formatCompactCAD, formatNumber, formatPercent } from '../utils/format';
 import { maskedTick } from '../utils/chartPrivacy';
 import { MASKED_AMOUNT_LABEL } from '../utils/privacyAria';
 import { PrivateAmount } from './ui/PrivateAmount';
@@ -69,8 +69,15 @@ import { HubConnexionsModal } from './future/HubConnexionsModal';
 import { useFirebaseAuth } from './auth/FirebaseAuthGate';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { prefetchTab } from '../utils/tabPrefetch';
+import type { ValoriaQuickSignal } from '../services/valoria/valoriaIntegration';
 
 const EMPTY_CHART_POINTS: ProjectionChartPoint[] = [];
+
+function classePastilleValoria(sig: 'RENFORCER' | 'CONSERVER' | 'ALLEGER'): string {
+    if (sig === 'RENFORCER') return 'gf-delta-up';
+    if (sig === 'ALLEGER') return 'gf-delta-down';
+    return 'gf-delta-neutral';
+}
 const X_AXIS_DOMAIN: ['dataMin', 'dataMax'] = ['dataMin', 'dataMax'];
 const RENDER_MAX_POINTS = 700;
 const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'] as const;
@@ -268,6 +275,36 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     const isProjectionLocked = useFinanceStore((s) => s.isProjectionLocked);
     const fintableSyncAt = useFinanceStore((s) => s.fintableSyncReport?.at);
     const activeTab = useFinanceStore((s) => s.activeTab);
+    const navigateWithFocus = useFinanceStore((s) => s.navigateWithFocus);
+    const [valoriaSignals, setValoriaSignals] = useState<Record<string, ValoriaQuickSignal>>({});
+    useEffect(() => {
+        const hasAssets = (state.assets ?? []).length > 0;
+        const hasWatch = (state.valoriaWatchlist ?? []).length > 0;
+        if (!hasAssets && !hasWatch) {
+            setValoriaSignals({});
+            return;
+        }
+        let cancelled = false;
+        void import('../services/valoria/valoriaIntegration')
+            .then(({ computeValoriaQuickSignals }) => {
+                if (cancelled) return;
+                setValoriaSignals(
+                    computeValoriaQuickSignals({
+                        assets: state.assets ?? [],
+                        watchlistSymbols: state.valoriaWatchlist ?? [],
+                        fxRates: state.fxRates ?? {},
+                        riskProfile: state.valoriaRiskProfile,
+                        appliedReturnProfile: state.projection?.appliedReturnProfile,
+                    })
+                );
+            })
+            .catch(() => {
+                // Non-bloquant sur l'Accueil
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [state.assets, state.valoriaWatchlist, state.fxRates, state.valoriaRiskProfile, state.projection?.appliedReturnProfile]);
     const todayIso = useTodayIsoLocal();
     const {
         pastHistory,
@@ -1042,9 +1079,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     typeof a.quantity === 'number' && a.quantity > 0
                         ? `${Number.isInteger(a.quantity) ? a.quantity : a.quantity.toFixed(2)} act.`
                         : '';
+                const decAchat = stats.averageCost >= 1000 ? 0 : 2;
+                const decCours = a.currentPrice >= 1000 ? 0 : 2;
                 const pruStr =
                     stats.averageCost > 0 && a.currentPrice > 0
-                        ? `${stats.averageCost.toFixed(2)} → ${a.currentPrice.toFixed(2)} ${a.currency || 'CAD'}`
+                        // MONTANT-MASQUE-AILLEURS : `sousTitreDetail` (`pos.nom`) est rendu dans `<PrivateAmount>` plus bas.
+                        ? `${formatNumber(stats.averageCost, { decimals: decAchat })} → ${formatNumber(a.currentPrice, { decimals: decCours })} ${a.currency || 'CAD'}`
                         : '';
                 const sousTitreDetail = [qteStr, pruStr].filter(Boolean).join(' · ') || nomBrut;
                 return {
@@ -2265,81 +2305,172 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         ({positionsSuivies.length})
                                     </span>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveTab(Tab.INVESTMENTS)}
-                                    onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
-                                    className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 focus-ring"
-                                >
-                                    <span>Placements</span>
-                                    <Icon name="chevron-right" size={14} aria-hidden="true" />
-                                </button>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => navigateWithFocus(Tab.INVESTMENTS, 'tab:portfolio')}
+                                        onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                                        className="touch-target min-h-11 px-3.5 py-1.5 rounded-full border border-bordure-champ bg-surface hover:bg-surface-douce text-xs font-medium text-texte inline-flex items-center gap-1.5 focus-ring"
+                                    >
+                                        <Icon name="sparkles" size={14} aria-hidden="true" />
+                                        <span>Conseiller 7 Agents</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveTab(Tab.INVESTMENTS)}
+                                        onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                                        className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-medium text-ink-100 inline-flex items-center gap-1.5 focus-ring"
+                                    >
+                                        <span>Placements</span>
+                                        <Icon name="chevron-right" size={14} aria-hidden="true" />
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="divide-y divide-bordure">
-                                {positionsSuivies.slice(0, 8).map((pos) => (
-                                    <button
-                                        key={`left-${pos.id}`}
-                                        type="button"
-                                        onClick={() => setActiveTab(pos.tab)}
-                                        onMouseEnter={() => prefetchTab(pos.tab)}
-                                        className="gf-row touch-target w-full px-6 py-3.5 flex items-center justify-between gap-4 text-left focus-ring"
-                                    >
-                                        <div className="min-w-0 flex-1 space-y-0.5">
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-mono text-sm font-bold text-ink-50 truncate">
-                                                    {pos.symbole}
-                                                </span>
-                                                <span className="text-xs text-ink-400 font-mono">
-                                                    {pos.compte}
-                                                </span>
-                                            </div>
-                                            <div className="text-xs text-ink-400 truncate">
-                                                <PrivateAmount>{pos.nom}</PrivateAmount>
-                                            </div>
-                                        </div>
-
-                                        <svg
-                                            width="56"
-                                            height="22"
-                                            viewBox="0 0 48 22"
-                                            aria-hidden="true"
-                                            className="shrink-0 overflow-visible hidden sm:block"
+                                {positionsSuivies.slice(0, 8).map((pos) => {
+                                    const sig = valoriaSignals[pos.symbole.toUpperCase()];
+                                    const isHeldAsset = pos.id.startsWith('asset-');
+                                    return (
+                                        <div
+                                            key={`left-${pos.id}`}
+                                            className="gf-row px-4 sm:px-6 py-3 flex items-center justify-between gap-2.5 sm:gap-3 min-w-0"
                                         >
-                                            <polyline
-                                                fill="none"
-                                                stroke={pos.variationPct == null ? 'var(--gf-bleu)' : pos.positif ? 'var(--gf-vert)' : 'var(--gf-rouge)'}
-                                                strokeWidth="1.8"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                points={pos.pointsSparkline}
-                                            />
-                                        </svg>
-
-                                        <div className="text-right font-mono tabular-nums shrink-0 space-y-0.5">
-                                            <div className="text-sm font-bold text-ink-50">
-                                                <PrivateAmount>{formatCompactCAD(pos.valeur)}</PrivateAmount>
-                                            </div>
-                                            <span
-                                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                                    pos.variationPct == null
-                                                        ? 'gf-delta-neutral'
-                                                        : pos.positif
-                                                          ? 'gf-delta-up'
-                                                          : 'gf-delta-down'
-                                                }`}
+                                            <button
+                                                type="button"
+                                                onClick={() => setActiveTab(pos.tab)}
+                                                onMouseEnter={() => prefetchTab(pos.tab)}
+                                                className="touch-target min-h-11 min-w-0 flex-1 flex items-center justify-between gap-2.5 sm:gap-4 text-left focus-ring rounded-lg py-0.5"
                                             >
-                                                {pos.variationPct != null ? (
-                                                    <PrivateAmount>
-                                                        {`${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)}`}
-                                                    </PrivateAmount>
-                                                ) : (
-                                                    <span>{`${pos.poidsPct} %`}</span>
-                                                )}
-                                            </span>
+                                                <div className="min-w-0 flex-1 space-y-0.5">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <span className="font-mono text-sm font-bold text-ink-50 shrink-0">
+                                                            {pos.symbole}
+                                                        </span>
+                                                        <span className="text-xs text-ink-400 font-mono truncate">
+                                                            {pos.compte}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-xs text-ink-400 min-w-0">
+                                                        <PrivateAmount as="div" className="truncate">{pos.nom}</PrivateAmount>
+                                                    </div>
+                                                </div>
+
+                                                <svg
+                                                    width="56"
+                                                    height="22"
+                                                    viewBox="0 0 48 22"
+                                                    aria-hidden="true"
+                                                    className="shrink-0 overflow-visible hidden sm:block"
+                                                >
+                                                    <polyline
+                                                        fill="none"
+                                                        stroke={pos.variationPct == null ? 'var(--gf-bleu)' : pos.positif ? 'var(--gf-vert)' : 'var(--gf-rouge)'}
+                                                        strokeWidth="1.8"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        points={pos.pointsSparkline}
+                                                    />
+                                                </svg>
+
+                                                <div className="text-right font-mono tabular-nums shrink-0 space-y-0.5">
+                                                    <div className="text-sm font-bold text-ink-50">
+                                                        <PrivateAmount>{formatCompactCAD(pos.valeur)}</PrivateAmount>
+                                                    </div>
+                                                    <span
+                                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                                            pos.variationPct == null
+                                                                ? 'gf-delta-neutral'
+                                                                : pos.positif
+                                                                  ? 'gf-delta-up'
+                                                                  : 'gf-delta-down'
+                                                        }`}
+                                                    >
+                                                        {pos.variationPct != null ? (
+                                                            <PrivateAmount>
+                                                                {`${pos.positif ? '+' : ''}${formatPercent(pos.variationPct)}`}
+                                                            </PrivateAmount>
+                                                        ) : (
+                                                            <span>{`${pos.poidsPct} %`}</span>
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            </button>
+
+                                            {isHeldAsset && sig && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigateWithFocus(Tab.INVESTMENTS, `asset:${pos.symbole}`)}
+                                                    onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                                                    className={`touch-target min-h-11 px-2.5 py-1 rounded-full text-xs font-mono font-semibold shrink-0 whitespace-nowrap focus-ring ${classePastilleValoria(sig.signal)}`}
+                                                >
+                                                    {/* NOMBRE-NON-MONETAIRE : score quantitatif public Valoria */}
+                                                    <span>{sig.labelCourt} · {sig.score100}</span>
+                                                    <span className="sr-only"> — Rayon-X Valoria de {pos.symbole}</span>
+                                                </button>
+                                            )}
                                         </div>
-                                    </button>
-                                ))}
+                                    );
+                                })}
+
+                                {/* Liste suivie Valoria synchronisée */}
+                                {(() => {
+                                    const heldRoots = new Set(
+                                        positionsSuivies
+                                            .filter((p) => p.id.startsWith('asset-'))
+                                            .map((p) => p.symbole.toUpperCase().split('.')[0])
+                                    );
+                                    const watchlistOnly = (state.valoriaWatchlist ?? []).filter(
+                                        (sym) => !heldRoots.has(sym.trim().toUpperCase().split('.')[0])
+                                    );
+                                    if (watchlistOnly.length === 0) return null;
+                                    return (
+                                        <div className="px-6 py-3.5 bg-fond/40 space-y-2">
+                                            <div className="flex items-center justify-between gap-2 text-xs text-ink-400">
+                                                <span className="font-semibold text-ink-200">
+                                                    Liste suivie Valoria ({watchlistOnly.length})
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigateWithFocus(Tab.INVESTMENTS, 'tab:market')}
+                                                    className="touch-target min-h-11 px-2 text-xs font-medium text-ink-200 hover:text-ink-50 underline underline-offset-2 focus-ring rounded-md"
+                                                >
+                                                    Explorer les marchés
+                                                </button>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {watchlistOnly.slice(0, 6).map((sym) => {
+                                                    const sig = valoriaSignals[sym.trim().toUpperCase()];
+                                                    return (
+                                                        <button
+                                                            key={`watch-${sym}`}
+                                                            type="button"
+                                                            onClick={() => navigateWithFocus(Tab.INVESTMENTS, `asset:${sym}`)}
+                                                            onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                                                            className="touch-target min-h-11 px-3 py-1.5 rounded-full border border-bordure bg-surface hover:bg-surface-douce text-xs font-mono text-ink-100 inline-flex items-center gap-2 focus-ring"
+                                                        >
+                                                            <span className="font-bold">{sym}</span>
+                                                            {sig && (
+                                                                <>
+                                                                    <span className="text-ink-400">
+                                                                        {/* MONTANT-PUBLIC : cours public de marché */}
+                                                                        {formatCAD(sig.spotPriceCad)}
+                                                                    </span>
+                                                                    <span
+                                                                        className={`px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${classePastilleValoria(sig.signal)}`}
+                                                                    >
+                                                                        {/* NOMBRE-NON-MONETAIRE : score quantitatif public Valoria */}
+                                                                        {sig.score100}
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         </section>
 
@@ -2506,9 +2637,9 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         onMouseEnter={() => prefetchTab(prio.tab)}
                                         className="gf-row touch-target w-full px-6 py-4 text-left flex items-center justify-between gap-4 focus-ring group"
                                     >
-                                        <div className="min-w-0 flex-1 space-y-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-sm font-semibold text-ink-50 truncate group-hover:underline">
+                                        <div className="min-w-0 flex-1 space-y-1.5">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className="text-sm font-semibold text-ink-50 line-clamp-2 leading-snug group-hover:underline">
                                                     {prio.titre}
                                                 </span>
                                             </div>

@@ -170,7 +170,7 @@ const ExplanationCard: React.FC<{
     const categoryLabel = CATEGORY_LABELS[exp.category] ?? exp.category;
 
     return (
-        <article className="rounded-xl border border-bordure bg-surface-douce p-3.5 sm:p-4 space-y-3">
+        <article className="rounded-xl border border-bordure bg-surface-douce p-3 sm:p-3.5 space-y-2.5 h-full flex flex-col justify-between">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2 min-w-0">
                     {badge && (
@@ -302,9 +302,9 @@ export const CurveExplanationPanel: React.FC<CurveExplanationPanelProps> = ({
                     Aucune inflexion future disponible pour le moment.
                 </div>
             ) : (
-                <ol className="space-y-3">
+                <ol className={explanations.length === 1 ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-1 lg:grid-cols-2 gap-3'}>
                     {explanations.map((exp) => (
-                        <li key={exp.id}>
+                        <li key={exp.id} className="h-full">
                             <ExplanationCard
                                 exp={exp}
                                 onSelectMonth={onSelectMonth}

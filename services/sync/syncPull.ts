@@ -16,6 +16,7 @@ import { saveApiKeys } from '../secureKeyStore';
 // App.tsx via initAutoBackup) → le dynamic import ne créait aucun chunk séparé (INEFFECTIVE_DYNAMIC_IMPORT).
 import { createBackupNow } from '../backupAuto';
 import { STORAGE_KEYS } from '../../utils/storageKeys';
+import { unlimitedStateStorage } from '../unlimitedStateStorage';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { sanitizePersistEnvelope } from '../personaSanitizer';
 import { logError } from '../errorLogger';
@@ -99,7 +100,7 @@ async function applyPulledPayload(payload: unknown, apiKeys?: ApiKeys): Promise<
             texte: `${pullPurge.removedTotal} donnée(s) de test (persona) retirée(s) de ta copie Drive avant restauration (backup pris avant).`,
         });
     }
-    localStorage.setItem(STORE_KEY, JSON.stringify(cleanPayload));
+    unlimitedStateStorage.setItem(STORE_KEY, JSON.stringify(cleanPayload));
     // Restaurer des données = utilisateur EXISTANT → ne JAMAIS réafficher l'onboarding « nouvel
     // utilisateur ». Sans ça, l'onboarding s'affichait puis, en se terminant, faisait un setAppState
     // qui ÉCRASAIT les profils (config.users) ET les clés API restaurés par des valeurs vides du

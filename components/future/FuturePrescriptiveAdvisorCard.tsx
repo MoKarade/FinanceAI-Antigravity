@@ -134,7 +134,15 @@ export const FuturePrescriptiveAdvisorCard: React.FC<FuturePrescriptiveAdvisorCa
                     Aucune optimisation additionnelle détectée sur cet horizon avec les données actuelles de ton dossier.
                 </div>
             ) : (
-                <div className="grid gap-3 lg:grid-cols-2">
+                <div
+                    className={`grid gap-3 ${
+                        visibleItems.length === 1
+                            ? 'grid-cols-1'
+                            : visibleItems.length === 3
+                              ? 'grid-cols-1 xl:grid-cols-3'
+                              : 'grid-cols-1 lg:grid-cols-2'
+                    }`}
+                >
                     {visibleItems.map((item) => {
                         const meta = HORIZON_META[item.horizon];
                         const isApplied = Boolean(appliedIds[item.id]);

@@ -107,7 +107,7 @@ describe('GrandCalculPanel (R1)', () => {
         expect(onUpdateConfig).toHaveBeenCalledWith({ includeHistoricalCrises: false });
     });
 
-    it('borne les trajectoires entre 50 000 et 100 000 au blur et supporte les préréglages', () => {
+    it('borne les trajectoires entre 50 000 et 100 000 au blur et met à jour les saisies valides sans boutons redondants', () => {
         const onUpdateConfig = vi.fn();
         render(
             <GrandCalculPanel
@@ -138,8 +138,8 @@ describe('GrandCalculPanel (R1)', () => {
         expect(input.value).toBe('50000');
         expect(onUpdateConfig).toHaveBeenCalledWith({ iterations: 50_000 });
 
-        fireEvent.click(screen.getByRole('button', { name: /100\s*000/ }));
-        expect(onUpdateConfig).toHaveBeenCalledWith({ iterations: 100_000 });
+        fireEvent.change(input, { target: { value: '90000' } });
+        expect(onUpdateConfig).toHaveBeenCalledWith({ iterations: 90_000 });
     });
 
     it('n’affiche pas « régimes activés » ni « crises activées » lorsque désactivés', () => {
@@ -359,5 +359,30 @@ describe('GrandCalculPanel (R1)', () => {
             />,
         );
         expect(screen.getByText(/Durée : —/)).toBeInTheDocument();
+    });
+
+    it('affiche l’éventail probabiliste P5–P95 + SVG cône et masque tout en mode discret', () => {
+        const multiBandResult: GrandCalculResult = {
+            ...sampleResult,
+            monthlyBands: [
+                { monthIndex: 0, year: 2026, age: 35, p5: 90_000, p10: 95_000, p25: 100_000, p50: 110_000, p75: 120_000, p90: 130_000, p95: 140_000 },
+                { monthIndex: 120, year: 2036, age: 45, p5: 180_000, p10: 210_000, p25: 250_000, p50: 320_000, p75: 400_000, p90: 490_000, p95: 560_000 },
+            ],
+        };
+
+        const { container, rerender } = render(
+            <GrandCalculPanel {...makeProps({ result: multiBandResult, status: 'ready' })} />,
+        );
+        expect(screen.getByText(/Éventail probabiliste du patrimoine/i)).toBeInTheDocument();
+        expect(screen.getByText(/P5 \(stress\)/i)).toBeInTheDocument();
+        expect(screen.getByText(/P50 \(médiane\)/i)).toBeInTheDocument();
+        expect(screen.getByText(/P95 \(porteur\)/i)).toBeInTheDocument();
+        expect(container.querySelector('svg polyline')).toBeInTheDocument();
+
+        useFinanceStore.setState({ isPrivacyMode: true });
+        rerender(<GrandCalculPanel {...makeProps({ result: multiBandResult, status: 'ready' })} />);
+        expect(container.querySelector('svg polyline')).not.toBeInTheDocument();
+        expect(container.textContent).not.toContain('320');
+        expect(container.textContent).not.toContain('560');
     });
 });

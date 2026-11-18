@@ -59,11 +59,15 @@ describe('Lot 6 — Composants UI Futur 2.0 (F22, F23, F24)', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Normes IQPF 2026' }));
         expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ returnAssumptionsMode: 'iqpf' }));
 
-        fireEvent.click(screen.getByRole('button', { name: /Deep \(10/i }));
+        const mcSelect = screen.getByRole('combobox', { name: /Puissance Monte Carlo/i });
+        fireEvent.change(mcSelect, { target: { value: 'deep_search' } });
         expect(setRunMC).toHaveBeenCalledWith(true);
         expect(onUpdate).toHaveBeenCalledWith(
             expect.objectContaining({ mcPowerTier: 'deep_search', monteCarloIterations: 10000 }),
         );
+
+        fireEvent.change(mcSelect, { target: { value: 'off' } });
+        expect(setRunMC).toHaveBeenCalledWith(false);
 
         fireEvent.click(screen.getByRole('button', { name: /Anatomie d'une année/i }));
         expect(onOpenAnatomy).toHaveBeenCalledTimes(1);

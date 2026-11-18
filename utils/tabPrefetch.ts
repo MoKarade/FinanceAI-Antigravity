@@ -8,6 +8,7 @@ const COMPONENT_MODULES = import.meta.glob([
     '../components/*.tsx',
     '../components/budget/*.tsx',
     '../components/life/*.tsx',
+    '../components/valoria/*.tsx',
 ]);
 
 function loadComponentModule(path: string): Promise<unknown> {
@@ -25,6 +26,7 @@ const TAB_LOADERS: Partial<Record<Tab, () => Promise<unknown>>> = {
     [Tab.BUDGET]: () => loadComponentModule('../components/budget/BudgetWorkspace.tsx'),
     [Tab.DEBT]: () => loadComponentModule('../components/DebtManager.tsx'),
     [Tab.INVESTMENTS]: () => loadComponentModule('../components/Investments.tsx'),
+    [Tab.VALORIA]: () => loadComponentModule('../components/Investments.tsx'),
     [Tab.RETIREMENT]: () => loadComponentModule('../components/Retirement.tsx'),
     [Tab.REAL_ESTATE]: () => loadComponentModule('../components/RealEstate.tsx'),
     [Tab.REAL_ESTATE_PROJECTS]: () => loadComponentModule('../components/life/RealEstateProjects.tsx'),
@@ -58,7 +60,11 @@ export const ORDERED_NAV_TABS: Tab[] = [
 
 /** Retourne l'onglet précédent et l'onglet suivant dans l'ordre logique de navigation. */
 export function getAdjacentTabs(activeTab: Tab): { prev: Tab; next: Tab } {
-    const normalized = activeTab === Tab.REAL_ESTATE_PROJECTS ? Tab.REAL_ESTATE : activeTab;
+    const normalized = activeTab === Tab.REAL_ESTATE_PROJECTS
+        ? Tab.REAL_ESTATE
+        : activeTab === Tab.VALORIA
+            ? Tab.INVESTMENTS
+            : activeTab;
     const idx = ORDERED_NAV_TABS.indexOf(normalized);
     if (idx === -1) {
         return { prev: Tab.SETTINGS, next: Tab.TRANSACTIONS };

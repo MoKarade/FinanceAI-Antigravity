@@ -27,6 +27,8 @@ import { requestPersistentStorage } from '../services/storagePersistence';
 import { ecritureFxSelonLecture } from '../services/fx/ecritureFx';
 import { modeDonneesFictives } from '../store/modeTestActif';
 import { surveillerSessionAccess } from '../utils/sessionAccess';
+import { STORAGE_KEYS } from '../utils/storageKeys';
+import type { AppState } from '../types';
 
 /** Tous les effets de boot d'App : handlers d'erreur, courbe verrouillée, service worker, purge
  *  persona, init sync Drive, filets migration/hydratation, provider marché, clés API chiffrées,
@@ -136,6 +138,53 @@ export function useAppBootEffects(): void {
         // (jamais de throw), état lisible dans Réglages › Système & diagnostics. Sans elle, le coffre
         // chiffré (IndexedDB + localStorage) est « best-effort » et évictable sous pression disque.
         void requestPersistentStorage();
+
+        // Stockage illimité : réhydrate l'état complet depuis IndexedDB si le miroir localStorage
+        // a été compacté, et charge l'empreinte protégée hors localStorage.
+        void (async () => {
+            try {
+                const { readFullStateFromIdb, isLocalMirrorCompacted } = await import('../services/unlimitedStateStorage');
+                void import('../services/dataRecovery')
+                    .then((m) => m.hydrateProtectedDossierCacheFromIdb())
+                    .catch(() => {});
+                const compacted = isLocalMirrorCompacted();
+                const fullJson = await readFullStateFromIdb(STORAGE_KEYS.persistStore);
+                if (!fullJson || useFinanceStore.getState().isTestMode) return;
+                const parsed = JSON.parse(fullJson) as { state?: Record<string, unknown> } | null;
+                const idbState = parsed?.state;
+                if (!idbState || typeof idbState !== 'object') return;
+                const current = useFinanceStore.getState();
+                const idbTx = Array.isArray(idbState.transactions) ? idbState.transactions : null;
+                const idbAssets = Array.isArray(idbState.assets) ? idbState.assets : null;
+                const idbLedger = Array.isArray(idbState.brokerLedger) ? idbState.brokerLedger : null;
+                const idbHistory = Array.isArray(idbState.fintableBrokerHistory) ? idbState.fintableBrokerHistory : null;
+                const idbDocs = Array.isArray(idbState.documents) ? idbState.documents : null;
+                const needsTransactions = idbTx !== null && idbTx.length > current.transactions.length;
+                const needsLedger = idbLedger !== null && idbLedger.length > (current.brokerLedger?.length ?? 0);
+                const needsHistory = idbHistory !== null && idbHistory.length > (current.fintableBrokerHistory?.length ?? 0);
+                const needsAssets = idbAssets !== null && idbAssets.some((a, idx) => {
+                    const cur = current.assets[idx];
+                    const aRec = a as Record<string, unknown> | undefined;
+                    const idbLen = Array.isArray(aRec?.priceHistory) ? aRec.priceHistory.length : 0;
+                    const curLen = Array.isArray(cur?.priceHistory) ? cur.priceHistory.length : 0;
+                    return idbLen > curLen;
+                });
+                const needsDocs = idbDocs !== null && idbDocs.length > (current.documents?.length ?? 0);
+                if (compacted || needsTransactions || needsLedger || needsHistory || needsAssets || needsDocs) {
+                    const patch: Partial<AppState> = {};
+                    if (needsTransactions) patch.transactions = idbTx as AppState['transactions'];
+                    if (needsLedger) patch.brokerLedger = idbLedger as AppState['brokerLedger'];
+                    if (needsHistory) patch.fintableBrokerHistory = idbHistory as AppState['fintableBrokerHistory'];
+                    if (needsAssets) patch.assets = idbAssets as AppState['assets'];
+                    if (needsDocs) patch.documents = idbDocs as AppState['documents'];
+                    if (Object.keys(patch).length > 0) {
+                        useFinanceStore.getState().setAppState(patch);
+                    }
+                }
+            } catch {
+                /* best-effort : le miroir synchrone localStorage reste disponible */
+            }
+        })();
 
         // Sync Google Drive — inerte si VITE_GOOGLE_CLIENT_ID absent. Init + sync silencieuse au
         // boot (uniquement si déjà connecté), puis push debouncé sur chaque changement du store.
@@ -274,34 +323,93 @@ export function useAppBootEffects(): void {
         return () => { cancelled = true; };
     }, []);
 
-    // [FINTABLE-7 Lot 3] Sync bancaire AUTOMATIQUE à l'ouverture, throttlée 1×/jour (demande Marc).
-    // Effet RÉACTIF au jeton (hydraté ASYNC depuis le coffre par l'effet ci-dessus) — un timer au
-    // boot lirait un store encore vide et ne partirait jamais. Toutes les gardes (mode test, passe
-    // réussie < 24 h, cooldown de tentative 1 h, mutex) vivent dans le service ; ici on ne fait que
-    // déclencher et montrer un signal DISCRET (compte de transactions, jamais de montant).
+    // [FINTABLE-7 + AUTO-CONTINUE] Sync bancaire AUTOMATIQUE à l'ouverture, toutes les 15–30 min,
+    // au retour sur l'onglet (`focus` / `visibilitychange` / `online`) et dès que les rôles changent.
     const fintableToken = useFinanceStore((s) => s.apiKeys?.fintable ?? '');
+    const fintableRoles = useFinanceStore((s) => s.fintableRoles);
+    const initialBootReportChecked = useRef(false);
+    const prevRolesRef = useRef(fintableRoles);
     useEffect(() => {
         if (!fintableToken) return;
         let cancelled = false;
-        // [Finding code-reviewer #545 §3] Debounce 3 s : `saveToken` persiste le jeton à CHAQUE
-        // frappe → sans délai, taper le jeton à la main déclencherait une passe réseau avec un jeton
-        // incomplet (faux « jeton refusé » dans Diagnostics). Une frappe suivante annule et re-arme.
+        const FINTABLE_AUTO_MAX_AGE_MS = 30 * 60_000;
+        const FINTABLE_AUTO_INTERVAL_MS = 15 * 60_000;
+        const FINTABLE_AUTO_COOLDOWN_MS = 10 * 60_000;
+
+        const triggerAutoSync = async (forceImmediate = false) => {
+            if (cancelled) return;
+            const prevReport = useFinanceStore.getState().fintableSyncReport;
+            const needsInitialCatchup = !initialBootReportChecked.current && (
+                (prevReport?.skippedBeforeCutover ?? 0) > 0 ||
+                (prevReport?.accountsWithoutRole ?? 0) > 0 ||
+                (prevReport?.warnings ?? []).some((w) => w.includes('retard de postage'))
+            );
+            initialBootReportChecked.current = true;
+            const outcome = await maybeRunDailyFintableSync({
+                maxAgeMs: forceImmediate || needsInitialCatchup ? 0 : FINTABLE_AUTO_MAX_AGE_MS,
+                attemptCooldownMs: FINTABLE_AUTO_COOLDOWN_MS,
+                ignoreCooldown: forceImmediate,
+                autoCreditCards: true,
+            });
+            if (cancelled || !outcome.ran) return;
+            if (outcome.report.error === null && outcome.report.transactionsAdded > 0) {
+                showToast(`Sync bancaire : ${outcome.report.transactionsAdded} transaction(s) importée(s).`, 'success');
+            }
+        };
+
+        // Debounce 1,5 s : évite les faux appels pendant la frappe du jeton tout en démarrant vite au boot.
+        const bootTimer = setTimeout(() => { void triggerAutoSync(false); }, 1500);
+        const intervalId = setInterval(() => {
+            if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+                void triggerAutoSync(false);
+            }
+        }, FINTABLE_AUTO_INTERVAL_MS);
+        const onWake = () => {
+            if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+                void triggerAutoSync(false);
+            }
+        };
+        if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onWake);
+        if (typeof window !== 'undefined') {
+            window.addEventListener('focus', onWake);
+            window.addEventListener('online', onWake);
+        }
+        return () => {
+            cancelled = true;
+            clearTimeout(bootTimer);
+            clearInterval(intervalId);
+            if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onWake);
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('focus', onWake);
+                window.removeEventListener('online', onWake);
+            }
+        };
+    }, [fintableToken]);
+
+    // Déclenche une synchronisation immédiate lorsque l'utilisateur modifie ses rôles de comptes Fintable.
+    useEffect(() => {
+        if (prevRolesRef.current === fintableRoles) return;
+        prevRolesRef.current = fintableRoles;
+        if (!fintableToken) return;
+        let cancelled = false;
         const timer = setTimeout(() => {
             void (async () => {
-                // `autoSync` est LÉGER (store + gardes) — import statique, pas de chunk à risque ; le
-                // LOURD (browserSync → client HTTP + mapper) est chargé DANS le service via importWithRetry.
-                const outcome = await maybeRunDailyFintableSync();
+                const outcome = await maybeRunDailyFintableSync({
+                    maxAgeMs: 0,
+                    ignoreCooldown: true,
+                    autoCreditCards: true,
+                });
                 if (cancelled || !outcome.ran) return;
                 if (outcome.report.error === null && outcome.report.transactionsAdded > 0) {
                     showToast(`Sync bancaire : ${outcome.report.transactionsAdded} transaction(s) importée(s).`, 'success');
                 }
-                // Échec : PAS de toast d'erreur à chaque boot (le rapport est visible dans Réglages →
-                // Sync Fintable / Diagnostics, et logError a tracé) — un échec récurrent de sync AUTO ne
-                // doit pas devenir une bannière quotidienne anxiogène ; le manuel reste disponible.
             })();
-        }, 3000);
-        return () => { cancelled = true; clearTimeout(timer); };
-    }, [fintableToken]);
+        }, 1500);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [fintableRoles, fintableToken]);
 
     // Taux FX au boot (une fois). L'état FX est lu DANS l'effet (`getState`), sans abonnement :
     // voir le commentaire ci-dessous, c'est la différence entre « lire une fois » et « re-rendre

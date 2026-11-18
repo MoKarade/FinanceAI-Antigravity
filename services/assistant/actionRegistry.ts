@@ -453,6 +453,25 @@ const actionsApplication: ActionAssistant[] = [
         schema: z.object({}).strict(),
         executer: async () => ({ pourModele: facadeStoreAssistant.tauxChange() }),
     },
+    {
+        nom: 'consulter_diagnostic_valoria',
+        description: 'Consulte le diagnostic quantitatif Valoria (Comité des 7 Agents, signaux Renforcer/Conserver/Alléger par titre, efficacité fiscale QC/CA CELI/REER/Non-enregistré et comparaison projection Futur 5 ans). Optionnellement filtré sur un symbole boursier.',
+        type: 'lecture', tranches: [],
+        schema: z.object({ symbole: z.string().min(1).max(24).optional() }).strict(),
+        executer: async (etat, args: { symbole?: string }) => {
+            const { buildValoriaAssistantDiagnostic } = await import('../valoria/valoriaIntegration');
+            const proj = facadeStoreAssistant.etatProjection();
+            const lastProj = proj.chartData ? ({ chartData: proj.chartData } as never) : null;
+            const valoriaWatchlist = facadeStoreAssistant.lire('valoriaWatchlist') as AppState['valoriaWatchlist'] | undefined;
+            const valoriaRiskProfile = facadeStoreAssistant.lire('valoriaRiskProfile') as AppState['valoriaRiskProfile'] | undefined;
+            const etatAvecValoria: AppState = {
+                ...etat,
+                ...(Array.isArray(valoriaWatchlist) ? { valoriaWatchlist } : {}),
+                ...(valoriaRiskProfile ? { valoriaRiskProfile } : {}),
+            };
+            return { pourModele: enveloppeDonnees(buildValoriaAssistantDiagnostic(etatAvecValoria, new Date().getFullYear(), args.symbole, lastProj)) };
+        },
+    },
 ];
 
 // ── Registre ───────────────────────────────────────────────────────────────

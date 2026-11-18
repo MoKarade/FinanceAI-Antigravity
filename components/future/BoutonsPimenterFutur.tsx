@@ -5,8 +5,8 @@ import { Icon } from '../ui/Icon';
 interface BoutonsPimenterFuturProps {
     projection: ProjectionConfig;
     retirementGoal: RetirementGoal;
-    runMC: boolean;
-    setRunMC: (v: boolean) => void;
+    runMC?: boolean;
+    setRunMC?: (v: boolean) => void;
     /** Applique immédiatement les changements de projection/retraite et révèle la courbe future sans latence. */
     onInstantUpdate: (nextProjection: ProjectionConfig, nextRetirementGoal?: RetirementGoal) => void;
     /** Valeur nette projetée en fin d'horizon (pour retour visuel instantané). */
@@ -24,8 +24,6 @@ interface BoutonsPimenterFuturProps {
 export const BoutonsPimenterFutur: React.FC<BoutonsPimenterFuturProps> = ({
     projection,
     retirementGoal,
-    runMC,
-    setRunMC,
     onInstantUpdate,
     onOpenDeepControls,
     deepControlsOpen,
@@ -58,8 +56,7 @@ export const BoutonsPimenterFutur: React.FC<BoutonsPimenterFuturProps> = ({
         (retraiteDevanceeActive ? 1 : 0) +
         (rendementBoostActif ? 1 : 0) +
         (chocBoursierActif ? 1 : 0) +
-        (levierSmithActif ? 1 : 0) +
-        (runMC ? 1 : 0);
+        (levierSmithActif ? 1 : 0);
 
     const basculerEpargneBoost = () => {
         const suivant = epargneBoostActif ? 1 : 1.25;
@@ -139,13 +136,7 @@ export const BoutonsPimenterFutur: React.FC<BoutonsPimenterFuturProps> = ({
         });
     };
 
-    const basculerMonteCarlo = () => {
-        setRunMC(!runMC);
-        onInstantUpdate(projection);
-    };
-
     const toutReinitialiser = () => {
-        if (runMC) setRunMC(false);
         onInstantUpdate(
             {
                 ...projection,
@@ -222,17 +213,6 @@ export const BoutonsPimenterFutur: React.FC<BoutonsPimenterFuturProps> = ({
             >
                 <Icon name="refresh" size={14} aria-hidden="true" />
                 <span>Manœuvre Smith</span>
-            </button>
-
-            <button
-                type="button"
-                aria-pressed={runMC}
-                onClick={basculerMonteCarlo}
-                className={`gf-chip touch-target whitespace-nowrap ${runMC ? 'gf-chip-active' : ''}`}
-                title="Afficher le couloir d’incertitude probabiliste Monte Carlo (P10 / P50 / P90)"
-            >
-                <Icon name="dice" size={14} aria-hidden="true" />
-                <span>Couloir Monte Carlo</span>
             </button>
 
             {nbActifs > 0 && (

@@ -51,6 +51,7 @@ export const GrandCalculPredictionsPanel: React.FC<GrandCalculPredictionsPanelPr
     unreadableStorage = false,
 }) => {
     const projectionRefus = useFinanceStore((s) => s.projectionRefus);
+    const isPrivacyMode = useFinanceStore((s) => s.isPrivacyMode);
     const sectionTitleId = useId();
     const fiTitleId = useId();
     const goalsTitleId = useId();
@@ -64,6 +65,10 @@ export const GrandCalculPredictionsPanel: React.FC<GrandCalculPredictionsPanelPr
     const fiAge = result?.fiAge ?? null;
     const gp = result?.guaranteedPurchasingPower ?? null;
     const estate = result?.estateTax ?? null;
+    const ppMax =
+        gp && gp.p50SecurityMonthlyNetReal !== null && gp.p50SecurityMonthlyNetReal > 0
+            ? gp.p50SecurityMonthlyNetReal
+            : null;
 
     return (
         <section
@@ -124,6 +129,13 @@ export const GrandCalculPredictionsPanel: React.FC<GrandCalculPredictionsPanelPr
                                 </PrivateAmount>
                             </strong>
                         </span>
+                    </div>
+
+                    <div className="h-1.5 w-full rounded-full bg-fond overflow-hidden border border-bordure/60">
+                        <div
+                            className="h-full rounded-full bg-accent transition-all duration-300"
+                            style={{ width: `${isPrivacyMode || !fiAge || fiAge.reachedPct === null || !Number.isFinite(fiAge.reachedPct) ? 0 : Math.min(100, Math.max(0, fiAge.reachedPct))}%` }}
+                        />
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -222,6 +234,18 @@ export const GrandCalculPredictionsPanel: React.FC<GrandCalculPredictionsPanelPr
                                                     </span>
                                                 </span>
                                             </div>
+                                            <div className="h-1.5 w-full rounded-full bg-surface-douce overflow-hidden">
+                                                <div
+                                                    className={`h-full rounded-full transition-all duration-300 ${
+                                                        g.probabilityPct !== null && g.probabilityPct >= 80
+                                                            ? 'bg-succes-texte'
+                                                            : g.probabilityPct !== null && g.probabilityPct >= 50
+                                                              ? 'bg-accent'
+                                                              : 'bg-alerte-texte'
+                                                    }`}
+                                                    style={{ width: `${isPrivacyMode || g.probabilityPct === null || !Number.isFinite(g.probabilityPct) ? 0 : Math.min(100, Math.max(0, g.probabilityPct))}%` }}
+                                                />
+                                            </div>
                                         </article>
                                     </li>
                                 );
@@ -245,7 +269,7 @@ export const GrandCalculPredictionsPanel: React.FC<GrandCalculPredictionsPanelPr
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                        <div className="rounded-lg border border-bordure bg-fond px-3 py-2.5 space-y-1">
+                        <div className="rounded-lg border border-bordure bg-fond px-3 py-2.5 space-y-1.5">
                             <div className="text-tiny text-texte-doux">P95 (sécurité 95 %)</div>
                             <div className="text-body font-mono font-semibold text-texte tabular-nums">
                                 <PrivateAmount>
@@ -255,9 +279,15 @@ export const GrandCalculPredictionsPanel: React.FC<GrandCalculPredictionsPanelPr
                                 </PrivateAmount>
                                 <span className="text-tiny font-normal text-texte-doux"> / mois</span>
                             </div>
+                            <div className="h-1 w-full rounded-full bg-surface-douce overflow-hidden">
+                                <div
+                                    className="h-full rounded-full bg-succes-texte transition-all duration-300"
+                                    style={{ width: `${isPrivacyMode || !ppMax || gp?.p95SecurityMonthlyNetReal === null || gp?.p95SecurityMonthlyNetReal === undefined ? 0 : Math.min(100, Math.max(0, Math.round((gp.p95SecurityMonthlyNetReal / ppMax) * 100)))}%` }}
+                                />
+                            </div>
                         </div>
 
-                        <div className="rounded-lg border border-bordure bg-fond px-3 py-2.5 space-y-1">
+                        <div className="rounded-lg border border-bordure bg-fond px-3 py-2.5 space-y-1.5">
                             <div className="text-tiny text-texte-doux">P90 (sécurité 90 %)</div>
                             <div className="text-body font-mono font-semibold text-texte tabular-nums">
                                 <PrivateAmount>
@@ -267,9 +297,15 @@ export const GrandCalculPredictionsPanel: React.FC<GrandCalculPredictionsPanelPr
                                 </PrivateAmount>
                                 <span className="text-tiny font-normal text-texte-doux"> / mois</span>
                             </div>
+                            <div className="h-1 w-full rounded-full bg-surface-douce overflow-hidden">
+                                <div
+                                    className="h-full rounded-full bg-accent transition-all duration-300"
+                                    style={{ width: `${isPrivacyMode || !ppMax || gp?.p90SecurityMonthlyNetReal === null || gp?.p90SecurityMonthlyNetReal === undefined ? 0 : Math.min(100, Math.max(0, Math.round((gp.p90SecurityMonthlyNetReal / ppMax) * 100)))}%` }}
+                                />
+                            </div>
                         </div>
 
-                        <div className="rounded-lg border border-bordure bg-fond px-3 py-2.5 space-y-1">
+                        <div className="rounded-lg border border-bordure bg-fond px-3 py-2.5 space-y-1.5">
                             <div className="text-tiny text-texte-doux">P50 (médiane)</div>
                             <div className="text-body font-mono font-semibold text-texte tabular-nums">
                                 <PrivateAmount>
@@ -278,6 +314,12 @@ export const GrandCalculPredictionsPanel: React.FC<GrandCalculPredictionsPanelPr
                                         : '—'}
                                 </PrivateAmount>
                                 <span className="text-tiny font-normal text-texte-doux"> / mois</span>
+                            </div>
+                            <div className="h-1 w-full rounded-full bg-surface-douce overflow-hidden">
+                                <div
+                                    className="h-full rounded-full bg-repere transition-all duration-300"
+                                    style={{ width: `${isPrivacyMode || !ppMax ? 0 : 100}%` }}
+                                />
                             </div>
                         </div>
                     </div>
@@ -303,6 +345,7 @@ export const GrandCalculPredictionsPanel: React.FC<GrandCalculPredictionsPanelPr
                         Impôt successoral latent au décès
                     </h3>
 
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="rounded-lg border border-bordure bg-fond p-3">
                         <table
                             aria-label="Impôt successoral déterministe"
@@ -400,6 +443,7 @@ export const GrandCalculPredictionsPanel: React.FC<GrandCalculPredictionsPanelPr
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
                     </div>
 
                     <div className="rounded-lg border border-bordure bg-fond p-3 space-y-1.5">

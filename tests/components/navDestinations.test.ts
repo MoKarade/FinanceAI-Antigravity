@@ -31,6 +31,14 @@ describe('navDestinations — non-perte (source unique de la nav)', () => {
         expect(navItemOfTab(Tab.REAL_ESTATE_PROJECTS)?.tab).toBe(Tab.REAL_ESTATE);
     });
 
+    it('Placements unifie le suivi et Valoria · Quant IA sans doubler la barre latérale', () => {
+        expect(navItemOfTab(Tab.INVESTMENTS)?.label).toBe('Placements');
+        expect(navItemOfTab(Tab.VALORIA)?.tab).toBe(Tab.INVESTMENTS);
+        const allLabels = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.label));
+        expect(allLabels.filter((l) => l === 'Placements').length).toBe(1);
+        expect(allLabels).not.toContain('Valoria · Quant IA');
+    });
+
     it('le Profil passe par la carte, pas par un groupe', () => {
         expect(navItemOfTab(PROFILE_TAB)).toBeUndefined();
         expect(NAV_TABS_ATTEIGNABLES).toContain(PROFILE_TAB);

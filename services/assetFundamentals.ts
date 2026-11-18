@@ -506,7 +506,7 @@ export function resolveAssetFundamental(symbol: string): AssetFundamental {
  *   dans chaque enveloppe (`CELI`/`CELIAPP`, `REER`, `NON_ENREG`, `CRYPTO`), avec repli IQPF 2026 si vide.
  */
 export function computeAccountReturnRatesForMode(
-    mode: 'custom' | 'iqpf' | 'real_holdings' | undefined,
+    mode: 'custom' | 'iqpf' | 'real_holdings' | 'valoria_agents' | undefined,
     currentRates: ProjectionConfig['returnRates'],
     assets: readonly Asset[] = [],
     fxRates: Record<string, number> = {},

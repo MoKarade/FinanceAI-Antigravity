@@ -29,7 +29,7 @@ export function isChunkLoadError(err: unknown): boolean {
     if (!err || typeof err !== 'object') return false;
     const msg = (err as Error).message ?? '';
     // « Unable to preload » = échec de preload d'une DÉPENDANCE (CSS ou module) signalé par Vite.
-    return /Failed to fetch dynamically imported module|Loading chunk \d+ failed|Importing a module script failed|Unable to preload/i.test(msg);
+    return /Failed to fetch dynamically imported module|Loading chunk \d+ failed|Importing a module script failed|Unable to preload|Failed to load module script|MIME type/i.test(msg);
 }
 
 // Reload auto autorisé ? — jamais deux fois en moins de RELOAD_MIN_INTERVAL_MS.

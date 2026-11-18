@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { PageHeader } from './ui/PageHeader';
 import { ProjectionStaleBanner } from './ui/ProjectionStaleBanner';
-import { type IconName } from './ui/Icon';
+import { Icon, type IconName } from './ui/Icon';
 import { SubTabs, TabPanel } from './ui/SubTabs';
 import { PrivateAmount } from './ui/PrivateAmount';
 import { VieCurveLink } from './vie/VieCurveLink';
@@ -82,6 +82,7 @@ export const Retirement: React.FC<RetirementProps> = ({
     // Configuration (Phase C.1) sera l'endroit canonique pour le modifier ; le
     // slider local reste pour rétrocompat et exploration rapide.
     const retirementGoalStore = useFinanceStore(s => s.retirementGoal);
+    const navigateWithFocus = useFinanceStore(s => s.navigateWithFocus);
     const lifeExpectancy = retirementGoalStore?.lifeExpectancy ?? DEFAULT_LIFE_EXPECTANCY;
     // States Goal Seeker / Asset Location déplacés dans leurs sous-composants
     // (refactor architecture cycle 2 — réduction Retirement.tsx de 700→527 lignes).
@@ -285,6 +286,14 @@ export const Retirement: React.FC<RetirementProps> = ({
                             <span className="h-9 px-3.5 rounded-full bg-surface border border-bordure text-ink-200 text-[13px] flex items-center whitespace-nowrap">Scénario : {activeScenarioName}</span>
                         )}
                         {statut}
+                        <button
+                            type="button"
+                            onClick={() => navigateWithFocus(Tab.INVESTMENTS, 'tab:intelligence')}
+                            className="touch-target min-h-11 px-3 py-1.5 rounded-full border border-bordure-champ bg-surface hover:bg-surface-douce text-xs font-semibold text-texte inline-flex items-center gap-1.5 whitespace-nowrap focus-ring"
+                        >
+                            <Icon name="sparkles" size={14} aria-hidden="true" />
+                            <span>Quant IA · 7 Agents</span>
+                        </button>
                         <VieCurveLink />
                     </span>
                 )}

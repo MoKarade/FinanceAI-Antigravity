@@ -9,6 +9,7 @@ import { useFinanceStore } from '../../store/useFinanceStore';
 import { hasMeaningfulData } from '../../utils/onboarding';
 import { sanitizePersistEnvelope } from '../personaSanitizer';
 import { STORAGE_KEYS } from '../../utils/storageKeys';
+import { getLatestPersistedStateJson } from '../unlimitedStateStorage';
 
 // [STORAGE-KEYS-NO-REGISTRY] Le commentaire qui vivait ici — « doit correspondre au `name` du
 // persist Zustand et à backupAuto » — demandait de la VIGILANCE à trois endroits. C'est l'aveu
@@ -122,12 +123,7 @@ interface LocalPayload {
 
 /** @internal — snapshot local désinfecté prêt à pousser. Partagé par syncPush + syncLifecycle (runDecision). */
 export function getLocalPayload(): LocalPayload {
-    let raw: string | null = null;
-    try {
-        raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORE_KEY) : null;
-    } catch {
-        raw = null;
-    }
+    const raw = getLatestPersistedStateJson(STORE_KEY);
     let parsed: unknown = null;
     if (raw) {
         try {

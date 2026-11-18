@@ -29,6 +29,7 @@ const TICKER_PAR_TITRE: Record<string, { code: string; bourse: string }> = {
     Transactions: { code: 'FLUX:TX', bourse: 'TRÉSORERIE · CAD' },
     Budget: { code: 'BUDG:MENS', bourse: 'FLUX MENSUELS · CAD' },
     Placements: { code: 'PORTF:CAD', bourse: 'TSX / NYSE · CAD' },
+    'Valoria · Quant IA': { code: 'QUANT:CAD', bourse: 'AGENTS & D3 · CAD' },
     Immobilier: { code: 'IMMO:QC', bourse: 'FONCIER · QUÉBEC' },
     'Projets immo': { code: 'IMMO:PRJ', bourse: 'ACQUISITION · QUÉBEC' },
     Dettes: { code: 'PASSIF:DET', bourse: 'AMORTISSEMENT · CAD' },
@@ -49,7 +50,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     const ticker = TICKER_PAR_TITRE[title] ?? { code: 'COTE:CAD', bourse: 'DOSSIER PERSONNEL · CAD' };
     return (
         <header className={`gf-page-header flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 ${className}`}>
-            <div className={`min-w-0 flex-1 ${nav ? 'lg:flex-none' : ''}`}>
+            <div className={`min-w-[min(220px,100%)] flex-1 ${nav ? 'lg:flex-none' : ''}`}>
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 sm:gap-x-3 sm:gap-y-2">
                     <span className="gf-ticker-symbol shrink-0" aria-hidden="true">
                         {ticker.code}
@@ -65,7 +66,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 ses actions (maquettes M-impots, M-enfants, M-profil). */}
             {nav && <div className="order-last lg:order-none basis-full lg:basis-auto min-w-0 lg:ml-3 lg:mr-auto">{nav}</div>}
             {actions && (
-                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 max-w-full">
                     {actions}
                 </div>
             )}

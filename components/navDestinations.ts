@@ -38,7 +38,7 @@ export const NAV_GROUPS: NavGroup[] = [
             { tab: Tab.TRANSACTIONS, label: 'Transactions', icon: 'transactions' },
             { tab: Tab.BUDGET, label: 'Budget', icon: 'budget' },
             { tab: Tab.DEBT, label: 'Dettes', icon: 'debt' },
-            { tab: Tab.INVESTMENTS, label: 'Placements', icon: 'investments' },
+            { tab: Tab.INVESTMENTS, label: 'Placements', icon: 'investments', alsoActiveFor: [Tab.VALORIA] },
         ],
     },
     {

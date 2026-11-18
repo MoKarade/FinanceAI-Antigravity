@@ -329,7 +329,7 @@ export const FinancialGoalProgressRing: React.FC<FinancialGoalProgressRingProps>
 
             <div className="flex flex-col gap-1.5 min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2 min-w-0">
-                    <h3 className="text-body font-bold text-ink-50 tracking-normal truncate">{metriques.nom}</h3>
+                    <h3 className="text-body font-bold text-ink-50 tracking-normal line-clamp-2 break-words">{metriques.nom}</h3>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-ink-300">
@@ -382,6 +382,15 @@ export const FinancialGoalsProgressSection: React.FC<FinancialGoalsProgressSecti
 
     if (objectifsActifs.length === 0) return null;
 
+    const gridColsClass =
+        objectifsActifs.length === 1
+            ? 'grid-cols-1'
+            : objectifsActifs.length === 2
+              ? 'grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-bordure'
+              : objectifsActifs.length === 4
+                ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-bordure'
+                : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-bordure';
+
     return (
         <section
             aria-label="Progression des objectifs financiers"
@@ -394,7 +403,7 @@ export const FinancialGoalsProgressSection: React.FC<FinancialGoalsProgressSecti
                     {objectifsActifs.length} objectif{objectifsActifs.length > 1 ? 's' : ''}
                 </span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-bordure">
+            <div className={`grid ${gridColsClass}`}>
                 {objectifsActifs.map((goal) => (
                     <FinancialGoalProgressRing key={goal.id} goal={goal} todayIso={todayIso} />
                 ))}

@@ -36,6 +36,38 @@ export interface LiveCSVBalances {
     [key: string]: number;
 }
 
+/** Trajectoire multi-horizon produite par les 7 agents Valoria + Black-Litterman + Merton. */
+export interface ValoriaEngineSchedule {
+    /** Indexée par année de simulation (0..horizonYears), taux annuels nominaux nets en %. */
+    celiRatesByYear: number[];
+    reerRatesByYear: number[];
+    nonRegRatesByYear: number[];
+    cryptoRatesByYear: number[];
+    cashRatesByYear: number[];
+    /** Volatilités annuelles issues de Ledoit-Wolf shrinkage covariance (%). */
+    annualVolatilityPct: {
+        celi: number;
+        reer: number;
+        nonReg: number;
+        crypto: number;
+    };
+    /** Paramètres de sauts Merton Jump-Diffusion (krachs / queues épaisses) en décimal. */
+    mertonJump?: {
+        annualLambda: number;
+        meanJumpPct: number;
+        jumpVolPct: number;
+    };
+    /** Part US réelle dans le CELI [0..1] et rendement dividendaire US [0..0.1] pour retenue 15 %. */
+    usShareCeliPct: number;
+    usDivYieldCeliPct: number;
+    /** Score de consensus 0-100 des 7 agents sur le portefeuille actuel. */
+    portfolioConsensus100: number;
+    /** Alpha net attendu ans 1-5 vs long terme (%). */
+    shortTermAlphaPct: number;
+    /** Régime macro appliqué. */
+    regimeId: string;
+}
+
 export interface SimulationParams {
     entreesRefusees?: readonly EntreeRefusee[];
     projection: ProjectionConfig;
@@ -64,6 +96,8 @@ export interface SimulationParams {
     behavioralProfile?: BehavioralProfile;
     initialNonRegACB?: number;
     initialCryptoACB?: number;
+    /** Calendrier multi-horizon optionnel des 7 agents Valoria (uniquement en mode `'valoria_agents'`). */
+    valoriaSchedule?: ValoriaEngineSchedule;
 }
 
 

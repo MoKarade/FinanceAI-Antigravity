@@ -43,6 +43,8 @@ import type { FintableSnapshot } from './types';
 import { mapFintableSnapshot, FINTABLE_TAX_REGIMES, type FintableAccountRole, type FintableTaxRegime } from './mapSnapshot';
 import type { EchantillonCleInconnue } from './decode';
 import { decideCutoverDate, requestDateFrom, bornesEffectivesParCompte, libellesRoutes, plancherNonAttribuable, applyPayloadsIsolated } from './syncCore';
+import { cleCompte } from './deriveCutoverDate';
+import { detectInternalTransfers } from './detectTransfers';
 import { classerRattrapage, type ClassementRattrapage, type PaireIncertaine } from './backfillDedup';
 import { referenceDeltaPatch } from './applyStatePatch';
 import { toPersistableBrokerBalances } from './brokerBalances';
@@ -135,6 +137,31 @@ export interface BrowserSyncOptions {
      * ⚠️ Défaut `false` ⇒ la sync quotidienne est INCHANGÉE, bit pour bit.
      */
     backfill?: boolean;
+    /**
+     * Auto-route les comptes de carte de crédit non encore assignés en `{ kind: 'debt', debtName: '' }`
+     * et récupère sans doublon (via `classerRattrapage`) les dépenses de carte bloquées par la bascule
+     * ou les délais de comptabilisation des 30 derniers jours.
+     */
+    autoCreditCards?: boolean;
+}
+
+const DEBIT_OR_NON_CARD_RE = /\b(debit|d[eé]bit)\b/i;
+const CREDIT_CARD_ACCOUNT_RE = /\b(credit[\s_-]*card|creditcard|carte\s+(?:de\s+)?cr[eé]dit|visa|mastercard|amex|american\s+express)\b/i;
+const NON_CARD_CREDIT_LABEL_RE = /\b(line\s+of\s+credit|marge|loan|pr[eê]t|hypothe|mortgage)\b/i;
+
+/**
+ * Détecte de façon conservatrice si un compte Fintable est une carte de crédit afin d'importer
+ * automatiquement ses dépenses sans inventer ni écraser de solde de dette.
+ */
+export function isLikelyCreditCardAccount(
+    account: Pick<FintableSnapshot['accounts'][number], 'rawType' | 'label'>,
+): boolean {
+    const rawType = (account.rawType ?? '').trim();
+    const label = (account.label ?? '').trim();
+    const combined = `${rawType} ${label}`;
+    if (DEBIT_OR_NON_CARD_RE.test(combined)) return false;
+    if (CREDIT_CARD_ACCOUNT_RE.test(combined)) return true;
+    return rawType.toLowerCase() === 'credit' && !NON_CARD_CREDIT_LABEL_RE.test(label);
 }
 
 function describeError(err: unknown): string {
@@ -263,10 +290,31 @@ export async function runFintableBrowserSync(
         // ANCIENNE des bornes par compte (`requestDateFrom`) et non la globale : sinon l'API ne rend
         // même pas les lignes du compte qui poste en retard, et le filtre par compte du mapper
         // n'aurait rien à laisser passer — correctif vert en test, mort en production.
-        const dateFrom = opts.backfill
+        const autoCreditCards = opts.autoCreditCards === true;
+        const thirtyDaysAgoStr = new Date(now() - 30 * 86_400_000).toISOString().slice(0, 10);
+        const rawDateFrom = opts.backfill
             ? undefined
             : (requestDateFrom(cutover) ?? new Date(now() - LOOKBACK_DAYS * 86_400_000).toISOString().slice(0, 10));
+        const dateFrom = !opts.backfill && autoCreditCards && rawDateFrom && rawDateFrom > thirtyDaysAgoStr
+            ? thirtyDaysAgoStr
+            : rawDateFrom;
         const snapshot = await readFintableSnapshot(client, { dateFrom, dateTo: todayStr });
+
+        // Auto-routage conservateur des comptes carte de crédit sans rôle configuré :
+        // importe les transactions comme dépenses (`debtName: ''`) sans inventer de solde de dette.
+        const autoAssignedRoles: Record<string, FintableAccountRoleConfig> = {};
+        if (autoCreditCards) {
+            for (const acc of snapshot.accounts) {
+                if (state.fintableRoles?.[acc.id] === undefined && isLikelyCreditCardAccount(acc)) {
+                    autoAssignedRoles[acc.id] = { kind: 'debt', debtName: '' };
+                }
+            }
+        }
+        const effectiveRolesConfig: Record<string, FintableAccountRoleConfig> =
+            Object.keys(autoAssignedRoles).length > 0
+                ? { ...(state.fintableRoles ?? {}), ...autoAssignedRoles }
+                : (state.fintableRoles ?? {});
+        const mapperRoles = toMapperRoles(effectiveRolesConfig);
 
         // ⚠️ [revue #974] Le PLANCHER se calcule ici et pas plus tôt : il faut les libellés
         // RÉELLEMENT routés pour savoir quelles lignes du store ne sont rattachables à aucun compte
@@ -283,7 +331,7 @@ export async function runFintableBrowserSync(
         // Rien n'est écrasé (c'est une lecture de CONFIG, pas la base d'application), donc ça ne
         // relève pas de [FINTABLE-SYNC-STALE-BASE], qui visait la base d'ÉCRITURE.
         const { payloads, report: mapReport } = mapFintableSnapshot(snapshot, {
-            roles: toMapperRoles(state.fintableRoles),
+            roles: mapperRoles,
             // ⚠️ `null` en rattrapage : sans ça le mapper jetterait tout l'historique qu'on vient
             // justement d'aller chercher (`tx.date <= transactionsAfter`, filtre STRICT). Les deux
             // bornes — requête ET mapper — doivent tomber ENSEMBLE ; n'en lever qu'une donnerait un
@@ -297,6 +345,97 @@ export async function runFintableBrowserSync(
 
         // [FINTABLE-SYNC-STALE-BASE] Base RELUE ici, après le réseau — voir `getFreshState`.
         const baseState = opts.getFreshState?.() ?? state;
+
+        // Récupération sans doublon des transactions de cartes de crédit bloquées par la bascule
+        // globale/compte lent ou en devise étrangère convertible sur les 30 derniers jours.
+        let recoveredCardFromCutover = 0;
+        const recoveredCardAccounts = new Set<string>();
+        if (!opts.backfill && autoCreditCards) {
+            const accountById = new Map(snapshot.accounts.map((a) => [a.id, a]));
+            const { transferIds } = detectInternalTransfers(snapshot.transactions, mapperRoles);
+            const existingBankPayload = payloads.find(
+                (p): p is Extract<(typeof payloads)[number], { kind: 'bank_statement' }> => p.kind === 'bank_statement',
+            );
+            const alreadyMappedSigs = new Set(
+                (existingBankPayload?.transactions ?? []).map(
+                    (t) => `${t.date}|${Math.round(t.amount * 100)}|${t.accountName ?? ''}`,
+                ),
+            );
+            const fxKnown = fxFaitAutorite(fxSourceEffective(baseState));
+            const fxRates: Readonly<Record<string, number | undefined>> = {
+                CAD: baseState.fxRates?.CAD,
+                USD: baseState.fxRates?.USD,
+                EUR: baseState.fxRates?.EUR,
+            };
+
+            interface CardRecoveryCandidate {
+                date: string;
+                payee: string;
+                amount: number;
+                category?: string;
+                isTransfer?: boolean;
+                accountName?: string;
+                _fromCutover: boolean;
+            }
+
+            const cardCandidates: CardRecoveryCandidate[] = [];
+            for (const tx of snapshot.transactions) {
+                const role = mapperRoles[tx.accountId];
+                if (!role || role.kind !== 'debt') continue;
+                if (tx.date < thirtyDaysAgoStr || tx.date > todayStr) continue;
+
+                const accountLabel = accountById.get(tx.accountId)?.label;
+                const borneCompte = accountLabel !== undefined
+                    ? bornesEffectives[cleCompte(accountLabel)]
+                    : undefined;
+                const borne = borneCompte ?? cutoverDateUsed;
+                const isBeforeCutover = borne !== null && tx.date <= borne;
+                const txCurrency = tx.currency.toUpperCase();
+                const isForeignCurrency = txCurrency !== 'CAD';
+                if (!isBeforeCutover && !isForeignCurrency) continue;
+
+                let amountCad = tx.amount;
+                if (isForeignCurrency) {
+                    const rate = fxRates[txCurrency];
+                    if (!fxKnown || typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) {
+                        continue;
+                    }
+                    amountCad = Number((tx.amount * rate).toFixed(2));
+                }
+
+                const payee = tx.merchant?.trim() || tx.description.trim() || '(sans libellé)';
+                const sig = `${tx.date}|${Math.round(amountCad * 100)}|${accountLabel ?? ''}`;
+                if (alreadyMappedSigs.has(sig)) continue;
+                alreadyMappedSigs.add(sig);
+
+                cardCandidates.push({
+                    date: tx.date,
+                    payee,
+                    amount: amountCad,
+                    ...(tx.categoryName ? { category: tx.categoryName } : {}),
+                    ...(transferIds.has(tx.id) ? { isTransfer: true } : {}),
+                    ...(accountLabel ? { accountName: accountLabel } : {}),
+                    _fromCutover: isBeforeCutover,
+                });
+            }
+
+            if (cardCandidates.length > 0) {
+                const classement = classerRattrapage(baseState.transactions ?? [], cardCandidates);
+                if (classement.nouvelles.length > 0) {
+                    const rescued = classement.nouvelles.map(({ _fromCutover, ...txData }) => {
+                        if (_fromCutover) recoveredCardFromCutover += 1;
+                        if (txData.accountName) recoveredCardAccounts.add(txData.accountName);
+                        return txData;
+                    });
+                    // Respecte strictement l'ordre contractuel `bank_statement -> cash_balance -> debt` (`syncCore.ts`).
+                    payloads.unshift({
+                        kind: 'bank_statement',
+                        callerClassified: true,
+                        transactions: rescued,
+                    });
+                }
+            }
+        }
 
         // ⚠️ [FINTABLE-RATTRAPAGE] Le classement se fait ICI : après la relecture de la base (donc
         // contre les VRAIES transactions existantes, saisies manuelles comprises) et AVANT
@@ -323,12 +462,44 @@ export async function runFintableBrowserSync(
         const applied = applyPayloadsIsolated(baseState, payloads);
         const { nextState, transactionsAdded, cashUpdated, cashAnchorDelta, debtsUpdated, warnings: applyWarnings } = applied;
 
+        const adjustedSkippedBeforeCutover = Math.max(
+            0,
+            mapReport.transactions.skippedBeforeCutover - recoveredCardFromCutover,
+        );
+        const filteredMapWarnings = recoveredCardAccounts.size === 0 && recoveredCardFromCutover === 0
+            ? mapReport.warnings
+            : mapReport.warnings.flatMap((warning) => {
+                if (
+                    recoveredCardFromCutover > 0 &&
+                    warning.includes('plus ANCIENNES que la bascule')
+                ) {
+                    if (adjustedSkippedBeforeCutover === 0) return [];
+                    return [
+                        `${adjustedSkippedBeforeCutover} transaction(s) plus ANCIENNES que la bascule (${cutoverDateUsed}) `
+                        + 'ont été ignorées : la synchronisation ne remonte jamais avant ta transaction la plus '
+                        + 'récente. Utilise « Rattraper l\u2019historique » dans Réglages pour les récupérer.',
+                    ];
+                }
+                if (recoveredCardAccounts.size > 0 && warning.startsWith('Compte(s) en retard de postage sans historique connu : ')) {
+                    const rest = warning
+                        .slice('Compte(s) en retard de postage sans historique connu : '.length)
+                        .split('.')[0]
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter((label) => label !== '' && !recoveredCardAccounts.has(label));
+                    if (rest.length === 0) return [];
+                    const suffix = warning.slice(warning.indexOf('.'));
+                    return [`Compte(s) en retard de postage sans historique connu : ${rest.join(', ')}${suffix}`];
+                }
+                return [warning];
+            });
+
         const report: FintableSyncReport = {
             at: now(),
             cutoverDateUsed,
             // ⚠️ La fin du « 0 transactions en plus » trompeur : le compteur existait dans le
             // rapport du mapper depuis toujours, mais ne sortait que dans le script de dry-run.
-            skippedBeforeCutover: mapReport.transactions.skippedBeforeCutover,
+            skippedBeforeCutover: adjustedSkippedBeforeCutover,
             wasBackfill: opts.backfill === true,
             accountsSeen: snapshot.accounts.length,
             accountsWithoutRole: mapReport.accountsWithoutRole.length,
@@ -344,7 +515,7 @@ export async function runFintableBrowserSync(
             // [FINTABLE-INVESTMENTS-MUET] La cause d'un écran de placements VIDE, jusqu'ici
             // mesurée puis jetée. Source unique partagée avec l'autre chemin de sync.
             comptesSansPositions: comptesSansPositionsDuSnapshot(snapshot),
-            warnings: [...preflightWarnings, ...mapReport.warnings, ...applyWarnings],
+            warnings: [...preflightWarnings, ...filteredMapWarnings, ...applyWarnings],
             error: null,
         };
 
@@ -358,6 +529,10 @@ export async function runFintableBrowserSync(
             baseState.fxRates, !fxFaitAutorite(fxSourceEffective(baseState)),
         );
 
+        const nextFintableRoles = Object.keys(autoAssignedRoles).length > 0
+            ? { ...autoAssignedRoles, ...(baseState.fintableRoles ?? {}) }
+            : nextState.fintableRoles;
+
         // Delta par IDENTITÉ DE RÉFÉRENCE contre `baseState` — la base RÉELLE de l'application.
         // Le helper porte le pourquoi du delta (`applyStatePatch.ts`) ; ce qui se joue ici est le
         // choix de la BASE, et c'est précisément ce que [FINTABLE-SYNC-STALE-BASE] corrige.
@@ -368,6 +543,7 @@ export async function runFintableBrowserSync(
             echantillonsChampsInconnus: snapshot.unknownTransactionSamples,
             statePatch: referenceDeltaPatch(baseState, {
                 ...nextState,
+                ...(nextFintableRoles !== undefined ? { fintableRoles: nextFintableRoles } : {}),
                 fintableSyncReport: report,
                 fintableBrokerBalances: soldesCourtier,
                 // [FINTABLE-HISTORIQUE-COURTIER] La lecture du jour REJOINT l'historique au lieu de

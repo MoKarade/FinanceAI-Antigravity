@@ -10,7 +10,7 @@
 //
 // Note : ce SW est uniquement chargé en PROD (vite import.meta.env.PROD).
 
-const CACHE_NAME = 'financeai-v30'; // v30 : Futur 3.0 (Grand Calcul 50k-100k Markov/crises en Web Worker + IndexedDB chiffre, predictions FI/objectifs/pouvoir d'achat reel/succession ARC-RQ, explications double niveau) ; v29 : Futur 2.0
+const CACHE_NAME = 'financeai-v35'; // v35 : affichage Monte Carlo enrichi et consolidation des contrôles Futur ; v34 : consolidation UI, grilles pleine largeur et correction des débordements Desktop/Mobile ; v33 : fusion Placements, moteur Futur 7 Agents multi-horizon et durcissement anti-cache HTML sur /assets/* ; v32 : Valoria intégration profonde (signaux Placements/Accueil, modal confirmation CELI/REER, pont Futur/Retraite, assistant Gemini + Ctrl+K) ; v31 : Valoria Quant IA 100 %
 const PRECACHE_URLS = ['/manifest.json', '/icon.svg'];
 
 // [CF-ACCESS] Une réponse mettable en cache doit être une réponse DIRECTE de notre origine : ni redirigée (session
@@ -80,6 +80,11 @@ self.addEventListener('fetch', (event) => {
             caches.match(req).then((hit) => {
                 if (hit) return hit;
                 return fetch(req).then((res) => {
+                    const isAssetPath = url.pathname.startsWith('/assets/');
+                    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+                    if (isAssetPath && contentType.includes('text/html')) {
+                        return Response.error();
+                    }
                     if (!cacheable(res)) return res;
                     const clone = res.clone();
                     caches.open(CACHE_NAME).then((cache) => cache.put(req, clone)).catch(() => {});

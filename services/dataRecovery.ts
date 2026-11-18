@@ -24,10 +24,16 @@ import {
     readSyncFileRevision,
 } from './googleDrive/driveAppData';
 import { STORAGE_KEYS } from '../utils/storageKeys';
+import {
+    PROTECTED_DOSSIER_IDB_KEY,
+    readIdbEntry,
+    writeIdbEntry,
+} from './unlimitedStateStorage';
 import firebaseAppletConfig from '../firebase-applet-config.json';
 
-const PROTECTED_DOSSIER_STORAGE_KEY = 'financeai:protected_dossier:v1';
+const PROTECTED_DOSSIER_STORAGE_KEY = PROTECTED_DOSSIER_IDB_KEY;
 const GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY = 'financeai:google_drive_client_id:v1';
+let _protectedDossierCache: { timestamp: number; state: Partial<AppState> } | null = null;
 
 /**
  * Configure le Client ID OAuth Google Drive si présent, sans activer de sondage en arrière-plan
@@ -197,14 +203,60 @@ export function computeCandidateNetWorth(candidate: Partial<AppState>): number {
     return Math.round(globalNw + realEstateEquity);
 }
 
+function parseProtectedDossierJson(raw: string | null): { timestamp: number; state: Partial<AppState> } | null {
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw) as { timestamp?: number; state?: Partial<AppState> };
+        if (!parsed || typeof parsed.state !== 'object' || !parsed.state) return null;
+        if (isTestPersonaState(parsed.state as Record<string, unknown>)) return null;
+        const cleaned = cleanCandidateState(parsed.state);
+        if (!hasMeaningfulData(cleaned)) return null;
+        return {
+            timestamp: typeof parsed.timestamp === 'number' ? parsed.timestamp : Date.now(),
+            state: cleaned,
+        };
+    } catch {
+        return null;
+    }
+}
+
 /**
- * Enregistre automatiquement une empreinte protégée du dossier réel (hors mode test et hors gabarit Alex).
- * Le mode test et le gabarit de départ ne peuvent jamais écraser cette empreinte.
+ * Hydrate en mémoire le dossier protégé depuis IndexedDB (et migre/purge toute copie héritée
+ * de `localStorage` pour ne plus jamais saturer le quota synchrone).
+ */
+export async function hydrateProtectedDossierCacheFromIdb(): Promise<void> {
+    try {
+        const rawIdb = await readIdbEntry(PROTECTED_DOSSIER_STORAGE_KEY);
+        const parsedIdb = parseProtectedDossierJson(rawIdb);
+        if (parsedIdb && (!_protectedDossierCache || parsedIdb.timestamp >= _protectedDossierCache.timestamp)) {
+            _protectedDossierCache = parsedIdb;
+        }
+    } catch {
+        /* IndexedDB indisponible */
+    }
+    if (typeof localStorage === 'undefined') return;
+    try {
+        const rawLs = localStorage.getItem(PROTECTED_DOSSIER_STORAGE_KEY);
+        if (rawLs) {
+            const parsedLs = parseProtectedDossierJson(rawLs);
+            if (parsedLs && (!_protectedDossierCache || parsedLs.timestamp >= _protectedDossierCache.timestamp)) {
+                _protectedDossierCache = parsedLs;
+                void writeIdbEntry(PROTECTED_DOSSIER_STORAGE_KEY, JSON.stringify(parsedLs));
+            }
+            localStorage.removeItem(PROTECTED_DOSSIER_STORAGE_KEY);
+        }
+    } catch {
+        /* best-effort */
+    }
+}
+
+/**
+ * Enregistre automatiquement une empreinte protégée du dossier réel dans IndexedDB
+ * (hors mode test et hors gabarit Alex) et libère l'ancien doublon `localStorage`.
  */
 export function saveProtectedDossierSnapshot(
     state: Partial<AppState> & { isTestMode?: boolean; activeTestPersonaId?: string | null },
 ): void {
-    if (typeof localStorage === 'undefined') return;
     if (isTestPersonaState(state as Record<string, unknown>)) return;
     if (isStarterTemplateState(state)) return;
     if (hasInflatedStarterProperty(state)) return;
@@ -216,27 +268,31 @@ export function saveProtectedDossierSnapshot(
             timestamp: Date.now(),
             state: cleaned,
         };
-        localStorage.setItem(PROTECTED_DOSSIER_STORAGE_KEY, JSON.stringify(payload));
+        _protectedDossierCache = payload;
+        void writeIdbEntry(PROTECTED_DOSSIER_STORAGE_KEY, JSON.stringify(payload));
+        if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem(PROTECTED_DOSSIER_STORAGE_KEY);
+        }
     } catch {
-        // Ignorer si quota atteint
+        // Ignorer en environnement restreint
     }
 }
 
-/** Lit l'empreinte protégée du dossier réel si elle existe (et qu'elle n'est pas le gabarit Alex). */
+/** Lit l'empreinte protégée du dossier réel si elle existe (cache/IndexedDB ou migration unique localStorage). */
 function loadProtectedDossierSnapshot(): { timestamp: number; state: Partial<AppState> } | null {
+    if (_protectedDossierCache) return _protectedDossierCache;
     if (typeof localStorage === 'undefined') return null;
     try {
         const raw = localStorage.getItem(PROTECTED_DOSSIER_STORAGE_KEY);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw) as { timestamp?: number; state?: Partial<AppState> };
-        if (!parsed || typeof parsed.state !== 'object' || !parsed.state) return null;
-        if (isTestPersonaState(parsed.state as Record<string, unknown>)) return null;
-        const cleaned = cleanCandidateState(parsed.state);
-        if (!hasMeaningfulData(cleaned)) return null;
-        return {
-            timestamp: typeof parsed.timestamp === 'number' ? parsed.timestamp : Date.now(),
-            state: cleaned,
-        };
+        const migrated = parseProtectedDossierJson(raw);
+        if (migrated) {
+            _protectedDossierCache = migrated;
+            void writeIdbEntry(PROTECTED_DOSSIER_STORAGE_KEY, JSON.stringify(migrated));
+        }
+        if (raw !== null) {
+            localStorage.removeItem(PROTECTED_DOSSIER_STORAGE_KEY);
+        }
+        return migrated;
     } catch {
         return null;
     }
@@ -329,6 +385,7 @@ export async function listRecoverableSnapshots(): Promise<RecoverableSnapshotInf
         );
     }
 
+    await hydrateProtectedDossierCacheFromIdb();
     const protectedSnap = loadProtectedDossierSnapshot();
     if (protectedSnap) {
         addCandidate(

@@ -232,41 +232,44 @@ export const FutureKpiStrip: React.FC<{
 
     if (variante === 'mobile-tete') {
         return (
-            <section aria-label="Indicateurs clés" className="gf-quote-strip flex flex-col gap-1 rounded-xl bg-surface border border-bordure px-3 py-2.5">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-baseline gap-2 min-w-0">
-                        <p className="text-[10px] font-semibold tracking-[0.08em] uppercase text-ink-400 flex items-center gap-1 shrink-0">
-                            Patrimoine net<FxEstimateBadge />
-                            <span className="gf-badge-nouvelle" aria-hidden="true">CAD</span>
-                        </p>
-                        {Number.isFinite(net)
-                            ? (
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveTab(Tab.INVESTMENTS)}
-                                    onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
-                                    className="touch-target font-mono text-lg sm:text-[32px] leading-tight font-bold text-ink-50 hover:text-repere transition-colors focus-ring rounded-sm text-left"
-                                >
-                                    <AnimatedNetWorth value={net} as="span" testId="animated-mobile-net-worth" />
-                                </button>
-                            )
-                            : <div className="text-lg sm:text-[32px] font-bold text-ink-300"><span aria-hidden="true">—</span><span className="sr-only">{NO_DATA_LABEL}</span></div>}
-                    </div>
+            <section aria-label="Indicateurs clés" className="gf-quote-strip flex flex-col gap-1.5 rounded-xl bg-surface border border-bordure px-3.5 py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[10px] font-semibold tracking-[0.08em] uppercase text-ink-400 flex flex-wrap items-center gap-1.5">
+                        <span>Patrimoine net</span>
+                        <FxEstimateBadge />
+                        <span className="gf-badge-nouvelle shrink-0" aria-hidden="true">CAD</span>
+                    </p>
                     {Number.isFinite(monthlySavings) && (
                         <button
                             type="button"
                             onClick={() => setActiveTab(Tab.BUDGET)}
                             onMouseEnter={() => prefetchTab(Tab.BUDGET)}
-                            className={`touch-target px-2 py-0.5 rounded-full text-xs font-mono font-semibold whitespace-nowrap focus-ring ${monthlySavings >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}
+                            className={`touch-target min-h-11 px-2.5 py-1 rounded-full text-xs font-mono font-semibold whitespace-nowrap shrink-0 focus-ring ${monthlySavings >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}
                         >
                             <PrivateAmount>{`${monthlySavings > 0 ? '+' : ''}${formatCAD(monthlySavings)}`}</PrivateAmount>/mois
                         </button>
                     )}
                 </div>
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                    {hasRealEstate && <p className="text-tiny text-ink-400">équité immo incluse</p>}
-                    {ligneVariation}
+                <div className="flex items-center justify-between gap-2">
+                    {Number.isFinite(net)
+                        ? (
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab(Tab.INVESTMENTS)}
+                                onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
+                                className="touch-target min-h-11 inline-flex items-center font-mono text-2xl leading-tight font-bold text-ink-50 hover:text-repere transition-colors focus-ring rounded-sm text-left whitespace-nowrap"
+                            >
+                                <AnimatedNetWorth value={net} as="span" testId="animated-mobile-net-worth" />
+                            </button>
+                        )
+                        : <div className="text-2xl font-bold text-ink-300"><span aria-hidden="true">—</span><span className="sr-only">{NO_DATA_LABEL}</span></div>}
                 </div>
+                {(hasRealEstate || ligneVariation) && (
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                        {hasRealEstate && <p className="text-tiny text-ink-400">équité immo incluse</p>}
+                        {ligneVariation}
+                    </div>
+                )}
             </section>
         );
     }

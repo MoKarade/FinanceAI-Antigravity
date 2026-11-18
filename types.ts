@@ -415,8 +415,8 @@ export interface ProjectionConfig {
   // Futur 2.0 — Bandeau de commande de simulation (champs additifs optionnels, zéro migration requise)
   /** Base de projection des dépenses : budget cible, comportement réel observé (transactions), ou hybride (0-12m réel → budget). */
   expenseProjectionMode?: 'budget' | 'real' | 'hybrid';
-  /** Source des hypothèses de rendement : normes IQPF 2026, dérivé des actions/FNB réels détenus, ou personnalisé. */
-  returnAssumptionsMode?: 'iqpf' | 'real_holdings' | 'custom';
+  /** Source des hypothèses de rendement : normes IQPF 2026, dérivé des actions/FNB réels détenus, modèle 7 agents Valoria, ou personnalisé. */
+  returnAssumptionsMode?: 'iqpf' | 'real_holdings' | 'valoria_agents' | 'custom';
   /** Niveau de puissance Monte Carlo : éclair (250), standard (1 000), approfondi (5 000) ou deep_search (10 000). */
   mcPowerTier?: 'eclair' | 'standard' | 'approfondi' | 'deep_search';
 }
@@ -829,6 +829,7 @@ export enum Tab {
   // G22-N5 — SYSTEM retiré : fusionné dans Configuration (sous-onglet « Système & diagnostics »).
   // PH3 — onglet PROFIL unifié (regroupe tout le setup utilisateur, ex-« Profil de Configuration »).
   PROFILE = 'PROFILE',
+  VALORIA = 'VALORIA',
 }
 
 export interface CategorizationRule {
@@ -1110,6 +1111,9 @@ export interface BrokerAccountRegime {
   regime: BrokerAccountRegimeType;
 }
 
+/** Profil de risque Valoria persiste (union litterale ASCII sans accent ni point-virgule autour) */
+export type ValoriaRiskProfile = 'prudent' | 'equilibre' | 'dynamique' | 'offensif';
+
 export interface AppState {
   transactions: Transaction[];
   assets: Asset[];
@@ -1255,6 +1259,10 @@ export interface AppState {
    *  défaut `undefined` : tant qu'un compte porteur n'a pas de régime, la passerelle REFUSE le livre
    *  entier et les écrans gardent les placements saisis. ⚠️ TEXTUEL ET PERSISTÉ, voir CHAMPS_TEXTE. */
   brokerAccountRegimes?: BrokerAccountRegime[];
+  /** Liste des identifiants d'actifs suivis dans l'onglet Valoria (additif optionnel) */
+  valoriaWatchlist?: string[];
+  /** Profil de risque selectionne dans l'onglet Valoria (additif optionnel) */
+  valoriaRiskProfile?: ValoriaRiskProfile;
 }
 
 /**

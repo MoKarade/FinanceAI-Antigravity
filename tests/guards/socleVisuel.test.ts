@@ -33,7 +33,7 @@ const configTailwind = readFileSync(resolve(racine, 'tailwind.config.js'), 'utf8
  */
 const PLAFOND_PALETTE = 162;
 const PLAFOND_BLANC_NOIR = 232;
-const PLAFOND_HEX = 193;
+const PLAFOND_HEX = 191;
 
 const VARIABLES = [
     '--fond', '--surface', '--surface-douce', '--bordure', '--bordure-champ',

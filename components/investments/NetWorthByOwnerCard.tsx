@@ -68,9 +68,9 @@ export const NetWorthByOwnerCard: React.FC<NetWorthByOwnerCardProps> = ({ assets
                     <span key={b.label} className={b.barre} style={{ width: `${(b.value / bd.total) * 100}%` }} />
                 ))}
             </div>
-            <ul className="flex flex-col gap-2">
+            <ul className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 {buckets.map((b) => (
-                    <li key={b.label} className="flex items-center justify-between gap-3 text-body">
+                    <li key={b.label} className="rounded-xl border border-bordure bg-surface-douce/50 px-3.5 py-2.5 flex items-center justify-between gap-2 min-w-0 text-body">
                         <span className="flex items-center gap-2 min-w-0 text-ink-100">
                             <span className={`w-2.5 h-2.5 rounded-[3px] shrink-0 ${b.pastille}`} aria-hidden="true" />
                             <span className="truncate">{b.label}</span>

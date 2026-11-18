@@ -20,6 +20,7 @@
 import { getOrCreateDeviceKey, encryptJson, decryptJson } from './secureKeyStore';
 import { logError } from './errorLogger';
 import { sanitizePersistEnvelope } from './personaSanitizer';
+import { getLatestPersistedStateJson, unlimitedStateStorage } from './unlimitedStateStorage';
 
 // Tier 🟡 — n'avertir qu'UNE fois par session que les backups tombent en clair
 // (les auto-backups sont périodiques : éviter de spammer le log borné).
@@ -114,12 +115,7 @@ function makeId(): string {
 }
 
 function getCurrentPayload(): string | null {
-    try {
-        if (typeof localStorage === 'undefined') return null;
-        return localStorage.getItem(STORE_KEY_LOCALSTORAGE);
-    } catch {
-        return null;
-    }
+    return getLatestPersistedStateJson(STORE_KEY_LOCALSTORAGE);
 }
 
 // ─── S-A : chiffrement au repos du payload ───────────────────────────────────
@@ -356,8 +352,8 @@ export async function restoreBackup(id: string, donneesFictives: boolean): Promi
             // (contrat existant : le boot self-heal/migration tentera de récupérer).
             logError({ source: 'storage', severity: 'error', message: 'restoreBackup: backup illisible (JSON invalide) — restauré tel quel, cause probable de l\'état vide au reboot', error: e instanceof Error ? e : new Error(String(e)) });
         }
-        // Restaure
-        localStorage.setItem(STORE_KEY_LOCALSTORAGE, toRestore);
+        // Restaure via stockage illimité (IndexedDB + miroir compact localStorage)
+        unlimitedStateStorage.setItem(STORE_KEY_LOCALSTORAGE, toRestore);
         // Reload pour rehydrater
         if (typeof window !== 'undefined') window.location.reload();
         return true;

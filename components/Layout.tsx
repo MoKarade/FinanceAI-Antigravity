@@ -323,9 +323,9 @@ export const Layout: React.FC<LayoutProps> = ({
       <main
         id="main"
         tabIndex={-1}
-        className={`flex-1 ${margeMain} px-2.5 sm:px-4 lg:px-6 pb-20 lg:pb-6 ${isTestMode ? 'pt-12 sm:pt-14' : 'pt-2 sm:pt-3 lg:pt-4'} min-h-dvh relative z-0 focus:outline-hidden`}
+        className={`flex-1 min-w-0 ${margeMain} px-2.5 sm:px-4 lg:px-6 pb-20 lg:pb-6 ${isTestMode ? 'pt-12 sm:pt-14' : 'pt-2 sm:pt-3 lg:pt-4'} min-h-dvh relative z-0 focus:outline-hidden`}
       >
-        <div className="max-w-7xl mx-auto space-y-2.5 sm:space-y-3.5 lg:space-y-4">
+        <div className="w-full min-w-0 max-w-[1600px] mx-auto space-y-2.5 sm:space-y-3.5 lg:space-y-4">
           {/* Barre supérieure unique : fil d'Ariane + barre de recherche directe (masquée sur Accueil qui possède déjà son Omnibox) */}
           {activeTab !== Tab.DASHBOARD && (
           <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-bordure">
@@ -334,7 +334,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowMobileDrawer(true)}
-                  className="touch-target lg:hidden -ml-1.5 px-1.5 min-h-11 min-w-11 inline-flex items-center text-meta text-ink-400 hover:text-ink-100 focus-ring rounded-sm"
+                  className="touch-target lg:hidden px-1.5 min-h-11 min-w-11 inline-flex items-center text-meta text-ink-400 hover:text-ink-100 focus-ring rounded-sm"
                 >
                   ‹ Plus
                 </button>

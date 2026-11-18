@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, Suspense } from 'react';
 import {
     Asset,
     AppState,
@@ -17,6 +17,14 @@ import { ProjectionStaleBanner } from './ui/ProjectionStaleBanner';
 import { Icon, type IconName } from './ui/Icon';
 import { Pill } from './ui/Pill';
 import { SubTabs, panelId, tabId } from './ui/SubTabs';
+import { Skeleton } from './ui/Skeleton';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
+import { parseValoriaFocusSection, type ValoriaQuickSignal } from '../services/valoria/valoriaIntegration';
+
+const ValoriaWorkspace = lazyWithRetry(
+    () => import('./valoria/ValoriaWorkspace').then((m) => ({ default: m.ValoriaWorkspace })),
+    'ValoriaWorkspace',
+);
 import { Badge } from './ui/Badge';
 import { FxEstimateBadge } from './ui/FxEstimateBadge';
 import { CollapsibleSection } from './ui/CollapsibleSection';
@@ -64,6 +72,21 @@ import { PrivateAmount } from './ui/PrivateAmount';
 import { ChartDataTable, type ChartDataColumn } from './ui/ChartDataTable';
 import { MASKED_AMOUNT_LABEL } from '../utils/privacyAria';
 
+type PlacementsSubTab = 'overview' | 'allocation' | 'detail' | 'quant_advisor';
+
+const PLACEMENTS_TABS: Array<{ id: PlacementsSubTab; label: string; icon: IconName }> = [
+    { id: 'overview', label: "Vue d'ensemble", icon: 'chart' },
+    { id: 'allocation', label: 'Allocation et rééquilibrage', icon: 'goal' },
+    { id: 'detail', label: 'Détail', icon: 'investments' },
+    { id: 'quant_advisor', label: 'Conseiller & 7 Agents', icon: 'sparkles' },
+];
+
+function resolveValoriaPlacementsSubTab(section?: string | null): PlacementsSubTab | null {
+    const target = parseValoriaFocusSection(section);
+    if (!target.tab && !target.lab && !target.assetId) return null;
+    return 'quant_advisor';
+}
+
 interface InvestmentsProps {
     assets: Asset[];
     setAssets: (assets: Asset[]) => void;
@@ -77,6 +100,8 @@ interface InvestmentsProps {
     config: BudgetConfig;
     projection: AppState['projection'];
     setProjection: (projection: AppState['projection']) => void;
+    onOpenValoria?: () => void;
+    initialSubTab?: PlacementsSubTab;
 }
 
 // [Finding panel #496 — MOYEN] Couvre TOUTES les valeurs canoniques (CANONICAL_SECTORS/REGIONS) :
@@ -157,8 +182,9 @@ const DEFAULT_TARGET_MODEL: ReadonlyArray<TargetModelEntry> = [
 ];
 
 export const Investments: React.FC<InvestmentsProps> = ({
-    assets, setAssets, projection, setProjection, apiKey
+    assets, setAssets, projection, setProjection, apiKey, onOpenValoria, initialSubTab,
 }) => {
+    void onOpenValoria;
     // Phase E.7 — apiKey du store (fallback prop pour rétrocompat) pour appeler Gemini
     const geminiKeyFromStore = useFinanceStore(s => s.apiKeys.gemini || s.apiKeys.anthropic);
     const geminiKey = geminiKeyFromStore || apiKey || '';
@@ -185,7 +211,28 @@ export const Investments: React.FC<InvestmentsProps> = ({
     const [perfPeriod, setPerfPeriod] = useState<PerfPeriod>('24H');
     // Phase E.3 — sous-onglets pour aérer la page (doc directives §4)
     // PH4-INV-4 — « moins de pages » : Rééquilibrage fusionné dans Allocation (4 → 3 sous-onglets).
-    const [subTab, setSubTab] = useState<'overview' | 'allocation' | 'detail'>('overview');
+    const pendingFocus = useFinanceStore(s => s.pendingFocus);
+    const [subTab, setSubTab] = useState<PlacementsSubTab>(() => {
+        if (pendingFocus && (pendingFocus.tab === TabEnum.INVESTMENTS || pendingFocus.tab === TabEnum.VALORIA) && Date.now() <= pendingFocus.expiresAt) {
+            const matched = resolveValoriaPlacementsSubTab(pendingFocus.section);
+            if (matched) return matched;
+        }
+        return initialSubTab ?? 'overview';
+    });
+    useEffect(() => {
+        if (initialSubTab === 'quant_advisor') {
+            setSubTab('quant_advisor');
+        }
+    }, [initialSubTab]);
+    useEffect(() => {
+        if (!pendingFocus || (pendingFocus.tab !== TabEnum.INVESTMENTS && pendingFocus.tab !== TabEnum.VALORIA) || Date.now() > pendingFocus.expiresAt) {
+            return;
+        }
+        const matched = resolveValoriaPlacementsSubTab(pendingFocus.section);
+        if (matched) {
+            setSubTab(matched);
+        }
+    }, [pendingFocus]);
     const etroit = useViewportBelowLg();
     const configStore = useFinanceStore(s => s.config);
     // Phase E.6 — filtre interactif Geo/Sector cliqué dans la pie
@@ -196,6 +243,33 @@ export const Investments: React.FC<InvestmentsProps> = ({
     const navigateWithFocus = useFinanceStore(s => s.navigateWithFocus);
     // [ASSET-FX-DISPLAY] prix des actifs en devise NATIVE → conversion CAD pour toute valeur affichée.
     const fxRates = useFinanceStore(s => s.fxRates);
+    const valoriaRiskProfile = useFinanceStore(s => s.valoriaRiskProfile);
+    const [valoriaSignals, setValoriaSignals] = useState<Record<string, ValoriaQuickSignal>>({});
+    useEffect(() => {
+        if (assets.length === 0) {
+            setValoriaSignals({});
+            return;
+        }
+        let cancelled = false;
+        void import('../services/valoria/valoriaIntegration')
+            .then(({ computeValoriaQuickSignals }) => {
+                if (cancelled) return;
+                setValoriaSignals(
+                    computeValoriaQuickSignals({
+                        assets,
+                        fxRates,
+                        riskProfile: valoriaRiskProfile,
+                        appliedReturnProfile: projection?.appliedReturnProfile,
+                    })
+                );
+            })
+            .catch(() => {
+                // Non-bloquant : Placements reste entièrement fonctionnel sans signaux Valoria
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [assets, fxRates, valoriaRiskProfile, projection?.appliedReturnProfile]);
     // [HORIZON-ESPERANCE-DE-VIE] La projection va jusqu'à l'espérance de vie de la personne 1 :
     // même durée que le moteur (services/projection/horizon.ts), plus le curseur retiré.
     const agePersonne1 = useFinanceStore(s => s.config?.users?.[0]?.age);
@@ -654,11 +728,31 @@ export const Investments: React.FC<InvestmentsProps> = ({
     // D2 (activation) — sans aucun actif, la page affichait un score à 0, une allocation et des
     // graphes vides (barren). On propose un accueil clair « ajoute ton premier placement » +
     // le formulaire d'ajout. Early-return placé APRÈS tous les hooks.
-    if (assets.length === 0) {
+    if (assets.length === 0 && subTab !== 'quant_advisor') {
         return (
             <div className="space-y-6 stagger-in pb-10 relative">
                 <PageHeader
                     title={TAB_LABELS[TabEnum.INVESTMENTS]}
+                    nav={
+                        <SubTabs<PlacementsSubTab>
+                            idPrefix="placements"
+                            label="Vues Placements"
+                            tabs={PLACEMENTS_TABS}
+                            active={subTab}
+                            onSelect={setSubTab}
+                        />
+                    }
+                    actions={
+                        <button
+                            type="button"
+                            onClick={() => setSubTab('quant_advisor')}
+                            aria-label="Conseiller 7 Agents · Quant IA"
+                            className="touch-target min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-bordure-champ bg-surface hover:bg-surface-douce text-xs font-semibold text-texte transition-colors whitespace-nowrap focus-ring"
+                        >
+                            <Icon name="sparkles" size={14} aria-hidden="true" />
+                            <span>Quant IA</span>
+                        </button>
+                    }
                 />
                 <div className="gf-terminal-card premium-card p-6">
                     <div className="text-center py-12 px-4 space-y-4">
@@ -709,6 +803,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
             const prixAchat = stats?.averageCost ?? a.buyPrice;
             const gainCad = stats ? stats.totalGain * fx : undefined;
             const gainPct = stats ? stats.gainPct : null;
+            const matchedValoria = valoriaSignals[(a.symbol ?? '').trim().toUpperCase()];
             return {
                 cle: `${a.symbol}-${a.accountType ?? ''}-${i}`,
                 symbole: a.symbol,
@@ -724,6 +819,13 @@ export const Investments: React.FC<InvestmentsProps> = ({
                 valeur,
                 poids: 0,
                 historique: (a.priceHistory ?? []).map((p) => p.price).filter((v) => Number.isFinite(v) && v > 0),
+                valoria: matchedValoria
+                    ? {
+                          score100: matchedValoria.score100,
+                          signal: matchedValoria.signal,
+                          labelCourt: matchedValoria.labelCourt,
+                      }
+                    : undefined,
             };
         })
         .filter((l) => l.valeur > 0)
@@ -797,14 +899,10 @@ export const Investments: React.FC<InvestmentsProps> = ({
             <PageHeader
                 title={TAB_LABELS[TabEnum.INVESTMENTS]}
                 nav={
-                    <SubTabs<'overview' | 'allocation' | 'detail'>
+                    <SubTabs<PlacementsSubTab>
                         idPrefix="placements"
                         label="Vues Placements"
-                        tabs={[
-                            { id: 'overview', label: "Vue d'ensemble", icon: 'chart' },
-                            { id: 'allocation', label: 'Allocation et rééquilibrage', icon: 'goal' },
-                            { id: 'detail', label: 'Détail', icon: 'investments' },
-                        ]}
+                        tabs={PLACEMENTS_TABS}
                         active={subTab}
                         onSelect={setSubTab}
                     />
@@ -813,6 +911,17 @@ export const Investments: React.FC<InvestmentsProps> = ({
                     // [FX-FALLBACK-SILENCIEUX] : les totaux de cette page convertissent des avoirs
                     // étrangers en CAD — le signal doit vivre ICI (pastille à côté du score).
                     <span className="flex flex-wrap items-center justify-end gap-2">
+                        {subTab !== 'quant_advisor' && (
+                            <button
+                                type="button"
+                                onClick={() => setSubTab('quant_advisor')}
+                                aria-label="Conseiller 7 Agents · Quant IA"
+                                className="touch-target min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-bordure-champ bg-surface hover:bg-surface-douce text-xs font-semibold text-texte transition-colors whitespace-nowrap focus-ring"
+                            >
+                                <Icon name="sparkles" size={14} aria-hidden="true" />
+                                <span>Quant IA</span>
+                            </button>
+                        )}
                         <FxEstimateBadge size="md" />
                         {badgeScore}
                     </span>
@@ -820,10 +929,12 @@ export const Investments: React.FC<InvestmentsProps> = ({
             />
 
             {/* Ruban d'allocation par enveloppe style Google Finance Beta (défilement horizontal compact sur mobile) */}
-            <section
-                aria-label="Enveloppes fiscales et flux de dividendes"
-                className="gf-terminal-card bg-surface border border-bordure"
-            >
+            {subTab !== 'quant_advisor' && (
+                <>
+                    <section
+                        aria-label="Enveloppes fiscales et flux de dividendes"
+                        className="gf-terminal-card bg-surface border border-bordure"
+                    >
                 <div className="flex overflow-x-auto no-scrollbar lg:grid lg:grid-cols-5 divide-x divide-bordure">
                     {enveloppesAlloc.map((env) => {
                         const poidsEnv = valeurPortefeuille > 0 && env.id !== 'cash'
@@ -866,15 +977,22 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         );
                     })}
                 </div>
-            </section>
+                    </section>
 
-            {/* [CELI-ASSET-NUDGE] virements CELI détectés mais aucun avoir CELI saisi → CELI affiché 0. */}
-            <CeliAssetNudge onAddAsset={() => setShowAddStockForm(true)} />
+                    {/* [CELI-ASSET-NUDGE] virements CELI détectés mais aucun avoir CELI saisi → CELI affiché 0. */}
+                    <CeliAssetNudge onAddAsset={() => setShowAddStockForm(true)} />
 
-            {/* [FINTABLE-6 Lot 2] Le total du COURTIER fait autorité (demande Marc) : affiché en mode compact sur Vue d'ensemble et complet dans Détail. */}
-            <BrokerReconciliationCard variant={subTab === 'detail' ? 'full' : 'compact'} />
+                    {/* [FINTABLE-6 Lot 2] Le total du COURTIER fait autorité (demande Marc) : affiché en mode compact sur Vue d'ensemble et complet dans Détail. */}
+                    <BrokerReconciliationCard variant={subTab === 'detail' ? 'full' : 'compact'} />
+                </>
+            )}
 
             <div key={subTab} role="tabpanel" id={panelId('placements', subTab)} aria-labelledby={tabId('placements', subTab)} tabIndex={0} className="space-y-5 focus-ring rounded-card animate-tab-in stagger-in">
+            {subTab === 'quant_advisor' && (
+                <Suspense fallback={<Skeleton variant="chart" className="h-96" />}>
+                    <ValoriaWorkspace embeddedInPlacements />
+                </Suspense>
+            )}
 
             {/* [COURS-AU-TROMPEUR] Sur la Vue d'ensemble, « Sur 24 h » peut afficher « — » : dire pourquoi. */}
             {subTab === 'overview' && <CoursPerimesNotice titres={coursPerimes} />}
@@ -974,7 +1092,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
             )}
 
             {subTab === 'overview' && (
-                <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
+                <div className="space-y-5">
                     <TitresDetenus
                         lignes={lignesTitres}
                         couple={couple}
@@ -983,8 +1101,12 @@ export const Investments: React.FC<InvestmentsProps> = ({
                             setSelectedKeys(new Set([sym]));
                             document.getElementById('perf-comparee-titre')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                         }}
+                        onInspectValoria={(sym) => {
+                            navigateWithFocus(TabEnum.INVESTMENTS, `asset:${sym}`);
+                            setSubTab('quant_advisor');
+                        }}
                     />
-                    {/* CI-1000x Phase 1 (axe B) — répartition du portefeuille par personne (mode couple). */}
+                    {/* CI-1000x Phase 1 (axe B) — répartition du portefeuille par personne (mode couple), pleine largeur sans colonne vide. */}
                     <NetWorthByOwnerCard assets={assets} setAssets={setAssets} />
                 </div>
             )}

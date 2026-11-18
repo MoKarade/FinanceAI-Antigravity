@@ -42,6 +42,8 @@ import type {
     AppState,
 } from '../../types';
 import type { SimulationParams, LiveCSVBalances } from '../projection';
+import type { ValoriaEngineSchedule } from './types';
+import { computeValoriaFutureForecast } from './valoriaFutureEngine';
 import { derivePortfolioStartingBalances, derivePortfolioStartingACBs } from './startingBalancesFromAssets';
 import { buildBehavioralProfileFromTransactions, type BehavioralProfile } from './behavioralProfile';
 import { computeAccountReturnRatesForMode } from '../assetFundamentals';
@@ -115,6 +117,7 @@ export interface BuildSimulationParamsInputs {
     behavioralProfile?: BehavioralProfile;
     initialNonRegACB?: number;
     initialCryptoACB?: number;
+    valoriaSchedule?: ValoriaEngineSchedule;
 }
 
 
@@ -250,6 +253,7 @@ export function buildSimulationParams(inputs: BuildSimulationParamsInputs): Simu
         ...(inputs.behavioralProfile !== undefined ? { behavioralProfile: inputs.behavioralProfile } : {}),
         ...(inputs.initialNonRegACB !== undefined ? { initialNonRegACB: inputs.initialNonRegACB } : {}),
         ...(inputs.initialCryptoACB !== undefined ? { initialCryptoACB: inputs.initialCryptoACB } : {}),
+        ...(inputs.valoriaSchedule !== undefined ? { valoriaSchedule: inputs.valoriaSchedule } : {}),
     };
 
 
@@ -336,7 +340,7 @@ export function deriveSimulationInputsFromState(
 
     const acbFields: { initialNonRegACB?: number; initialCryptoACB?: number } = {};
     const retMode = state.projection?.returnAssumptionsMode;
-    if (opts?.includePortfolioACBs || retMode === 'real_holdings') {
+    if (opts?.includePortfolioACBs || retMode === 'real_holdings' || retMode === 'valoria_agents') {
         const startingAcbs = derivePortfolioStartingACBs(
             state.assets ?? [],
             state.fxRates ?? {},
@@ -347,17 +351,33 @@ export function deriveSimulationInputsFromState(
     }
 
     const baseHorizonProj = avecHorizonEsperanceDeVie(state.projection, state.config, state.retirementGoal);
-    const effectiveProjection = retMode === 'iqpf' || retMode === 'real_holdings'
+    const valoriaForecast = retMode === 'valoria_agents'
+        ? computeValoriaFutureForecast({
+            assets: state.assets ?? [],
+            fxRates: state.fxRates ?? {},
+            riskProfile: state.valoriaRiskProfile,
+            appliedReturnProfile: baseHorizonProj?.appliedReturnProfile,
+            horizonYears: baseHorizonProj?.years ?? 30,
+            cashRatePct: baseHorizonProj?.returnRates?.cash,
+        })
+        : null;
+
+    const effectiveProjection = valoriaForecast
         ? {
             ...baseHorizonProj,
-            returnRates: computeAccountReturnRatesForMode(
-                retMode,
-                baseHorizonProj.returnRates,
-                state.assets ?? [],
-                state.fxRates ?? {},
-            ),
+            returnRates: valoriaForecast.summaryRates,
         }
-        : baseHorizonProj;
+        : (retMode === 'iqpf' || retMode === 'real_holdings')
+            ? {
+                ...baseHorizonProj,
+                returnRates: computeAccountReturnRatesForMode(
+                    retMode,
+                    baseHorizonProj.returnRates,
+                    state.assets ?? [],
+                    state.fxRates ?? {},
+                ),
+            }
+            : baseHorizonProj;
 
     const calculatedMonthlySavings = computeMonthlySavings(state.config, state.budgetItems ?? []);
     const aujourdhuiIso = todayIsoLocal(now);
@@ -410,6 +430,7 @@ export function deriveSimulationInputsFromState(
         financialGoals: state.financialGoals ?? [],
         budgetItems: state.budgetItems ?? [],
         calculatedMonthlySavings,
+        ...(valoriaForecast ? { valoriaSchedule: valoriaForecast.schedule } : {}),
         startYear,
         startMonth,
         insurancePolicies: state.insurancePolicies ?? [],
