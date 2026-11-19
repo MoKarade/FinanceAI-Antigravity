@@ -1,42 +1,73 @@
 /**
- * Tests E2E — [FUTUR-ANCRE-AUJOURDHUI] Au repos, le panneau du jour montre AUJOURD'HUI.
+ * E2E Playwright — Ancre « Aujourd'hui » au repos et au clavier (Futur 4.0).
  *
- * Défaut trouvé le 25/09/2026 (refonte S5) : depuis [FUTUR-DAILY-ROLLOVER], la courbe au jour
- * porte les jours réels du mois courant AVANT aujourd'hui (abscisses [0, x du jour)). L'ancre du
- * panneau prenait « le premier point d'abscisse ≥ 0 » : le 1er du mois. Le 25/09, le panneau
- * « Aujourd'hui » affichait le 01/09, et la valeur flottante sur la courbe s'écartait de la tuile
- * Patrimoine net de tous les mouvements du mois.
- *
- * Horloge fixée au 12 août (milieu de mois) : l'ancienne règle rendait le 01/08, la bonne le 12/08.
+ * Vérifie qu'à l'horloge fixée au 12 août 2026 (`2026-08-12`), l'état au repos dans
+ * `[data-testid="google-finance-hero"]` ainsi que l'épinglage clavier (`Enter` sur la courbe)
+ * affichent bien le jour exact `12/08/2026` et JAMAIS le 1er du mois (`01/08/2026`).
  */
-import { test, expect } from '@playwright/test';
-import { scriptBypassOnboarding, activateTestMode } from './helpers/setup';
+
+import { test, expect, type Page } from '@playwright/test';
+import { activateTestMode, ecarterLeRail, scriptBypassOnboarding } from './helpers/setup';
 
 const localChromium = process.env.PW_LOCAL_CHROMIUM;
 if (localChromium) test.use({ launchOptions: { executablePath: localChromium } });
 
-test.describe('Futur — ancre « Aujourd\'hui » du panneau du jour', () => {
+function scriptFixerDate12Aout2026(): string {
+  return `
+    (function() {
+      const RealDate = Date;
+      const targetMs = new RealDate('2026-08-12T15:00:00Z').getTime();
+      const bootRealMs = RealDate.now();
+      class MockDate extends RealDate {
+        constructor(...args) {
+          if (args.length === 0) {
+            super(targetMs + (RealDate.now() - bootRealMs));
+          } else {
+            super(...args);
+          }
+        }
+        static now() {
+          return targetMs + (RealDate.now() - bootRealMs);
+        }
+      }
+      window.Date = MockDate;
+    })();
+  `;
+}
+
+async function openFutureWithFixedClock(page: Page): Promise<void> {
+  await page.addInitScript(scriptBypassOnboarding());
+  await page.addInitScript(scriptFixerDate12Aout2026());
+  await page.goto('/');
+  await page.waitForLoadState('domcontentloaded');
+  await activateTestMode(page);
+  await page.goto('/#FUTURE');
+  await page.waitForLoadState('domcontentloaded');
+  await ecarterLeRail(page);
+  await expect(page.getByRole('group', { name: /Courbe de vie/ })).toBeVisible({ timeout: 20_000 });
+}
+
+test.describe('Futur 4.0 — Ancre Aujourd’hui exacte au repos et au clavier', () => {
   test.setTimeout(120_000);
 
-  test('[FUTUR-ANCRE-AUJOURDHUI] au repos, le panneau porte la date du JOUR, pas le 1er du mois', async ({ page }) => {
-    await page.clock.install({ time: new Date(2026, 7, 12, 14, 0, 0) });
-    await page.addInitScript(scriptBypassOnboarding());
-    await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
-    await activateTestMode(page);
-    await page.goto('/#FUTURE');
-    await page.waitForLoadState('domcontentloaded');
+  test('affiche 12/08/2026 dans GoogleFinanceHero et dans l’infobulle épinglée par Entrée', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openFutureWithFixedClock(page);
 
-    const voirDirect = page.getByRole('button', { name: /projection actuelle.*sans optimiser/i });
-    await voirDirect.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
-    if (await voirDirect.isVisible().catch(() => false)) await voirDirect.click();
-    await page.locator('.recharts-cartesian-grid').first().waitFor({ state: 'visible', timeout: 15_000 });
+    const hero = page.getByTestId('google-finance-hero');
+    await expect(hero).toBeVisible();
+    await expect(hero).toContainText(/Aujourd[’']hui/);
+    await expect(hero).toContainText(/12\/08\/2026/);
+    await expect(hero).not.toContainText(/01\/08\/2026/);
 
-    const panneau = page.locator('[data-panneau-jour]');
-    await expect(panneau).toBeVisible();
-    // Aucun jour épinglé : c'est bien l'ANCRE qui est montrée.
-    await expect(page.locator('[data-jour-epingle]')).toHaveCount(0);
-    await expect(panneau).toContainText('12/08/2026');
-    await expect(panneau).not.toContainText('01/08/2026');
+    // L'appui sur Entrée sur le conteneur de la courbe épingle le point du jour courant
+    const courbe = page.getByRole('group', { name: /Courbe de vie/ });
+    await courbe.focus();
+    await page.keyboard.press('Enter');
+
+    const tooltip = page.locator('[data-testid="future-rich-tooltip"][data-pinned="true"]');
+    await expect(tooltip).toBeVisible({ timeout: 8_000 });
+    await expect(tooltip).toContainText(/12\/08\/2026/);
+    await expect(tooltip).not.toContainText(/01\/08\/2026/);
   });
 });

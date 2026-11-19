@@ -3,386 +3,352 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { GrandCalculPanel, type GrandCalculPanelProps } from '../../../components/future/GrandCalculPanel';
+import {
+    FutureScenarioHeader,
+    type FutureScenarioHeaderProps,
+} from '../../../components/future/FutureScenarioHeader';
 import { useFinanceStore } from '../../../store/useFinanceStore';
-import type { GrandCalculResult } from '../../../services/projection/types';
+import type {
+    DeepForecastReport,
+    DeepScenarioId,
+    DeepScenarioOutput,
+} from '../../../services/projection/deepForecastTypes';
 
-const sampleResult: GrandCalculResult = {
-    version: 1,
-    paramsSig: 'gc1:abc:def:10',
-    createdAt: '2026-11-17T00:00:00Z',
-    durationMs: 2_500,
-    iterationsRun: 75_000,
-    regimesEnabled: true,
-    historicalCrisesEnabled: false,
-    survivalRatePct: 91.5,
-    cvar95: 140_000,
-    monthlyBands: [
-        { monthIndex: 0, year: 2026, age: 35, p5: 100_000, p10: 110_000, p25: 125_000, p50: 140_000, p75: 155_000, p90: 170_000, p95: 185_000 },
-    ],
-    fiAge: { reachedPct: 85, p5Age: 52, p50Age: 58, p95Age: 66, horizonAge: 90 },
-    goalProbabilities: [],
-    guaranteedPurchasingPower: {
-        p95SecurityMonthlyNetReal: 3_000,
-        p90SecurityMonthlyNetReal: 3_400,
-        p50SecurityMonthlyNetReal: 4_200,
-        retirementMonthsEvaluated: 240,
-    },
-    estateTax: {
-        deterministicTotal: 60_000,
-        deterministicFed: 25_000,
-        deterministicQc: 35_000,
-        mcTotalP5: 30_000,
-        mcTotalP50: 62_000,
-        mcTotalP95: 110_000,
-        mcFedP50: 26_000,
-        mcQcP50: 36_000,
-        mcRealTotalP50: 42_000,
-        taxableBreakdown: { rrspRrif: 150_000, capitalGainsTaxable: 20_000, rentalRecapture: 0 },
-        projectedDeathAge: 90,
-    },
-};
-
-function makeProps(overrides: Partial<GrandCalculPanelProps> = {}): GrandCalculPanelProps {
+function makeScenario(
+    id: DeepScenarioId,
+    label: string,
+    shortDescription: string,
+    finalNetWorthP50: number | null,
+    fiAge: number | null,
+): DeepScenarioOutput {
     return {
-        result: null,
+        id,
+        label,
+        shortDescription,
+        assumptionsSummaryFr: 'Hypothèses simulées',
+        points: [
+            {
+                monthIndex: 0,
+                year: 2026,
+                age: 38,
+                netWorth: 250_000,
+                p10: 220_000,
+                p50: 250_000,
+                p90: 280_000,
+                mcRange: [220_000, 280_000],
+            },
+        ],
+        milestones: {
+            fiAge,
+            fiProbabilityPct: fiAge !== null ? 86 : null,
+            sustainableMonthlyNetRetirementCad: 4_100,
+            sustainableMonthlyNetP90Cad: 3_350,
+            goalsSummary: [],
+            finalNetWorthP50,
+            estateNetWorthP50: finalNetWorthP50,
+            estateTaxP50: 75_000,
+            ruinProbabilityPct: 3.5,
+        },
+        turningPoints: [],
+        appliedOptimizationsFr: [],
+    };
+}
+
+function makeReport(overrides: Partial<DeepForecastReport> = {}): DeepForecastReport {
+    return {
+        version: 1,
+        inputsSig: 'df1:scenario-header:1',
+        createdAt: '2026-11-18T14:00:00.000Z',
+        durationMs: 1_800,
+        trajectoriesRun: 100_000,
+        isDeepRun: true,
+        pastDiagnostic: {
+            transactionsAnalyzed: 12,
+            monthsCovered: 6,
+            firstTransactionDate: '2026-05-01',
+            lastTransactionDate: '2026-10-31',
+            observedMonthlyIncomeCad: 5_200,
+            observedMonthlyExpensesCad: 3_200,
+            budgetedMonthlyExpensesCad: 3_100,
+            monthlySpendingGapCad: 100,
+            observedSavingsRatePct: 38.5,
+            lifestyleCreepAnnualPct: 1.1,
+            fixedExpensesSharePct: 60,
+            discretionarySharePct: 40,
+            peakSpendingMonthLabel: 'Décembre',
+            lowSpendingMonthLabel: 'Février',
+            weightedMerPct: 0.2,
+            estimatedAnnualFeeAndTaxDragCad: 250,
+            expenseVolatilityPct: 6.5,
+            findingsFr: ['Épargne observée stable'],
+        },
+        newsBundle: {
+            collectedAtIso: '2026-11-18T14:00:00.000Z',
+            liveArticlesUsed: 0,
+            offlineFallbackUsed: true,
+            portfolioSentimentScore: null,
+            portfolioSentimentLabel: 'Neutre',
+            annualizedReturnAdjustmentPct: 0,
+            volatilityMultiplier: 1,
+            macroHeadlineFr: 'Contexte macro neutre',
+            keySignals: [],
+            aiSynthesisFr: null,
+            usedGemini: false,
+        },
+        valoriaSummary: null,
+        scenarios: {
+            real_trajectory: makeScenario(
+                'real_trajectory',
+                'Trajectoire réelle',
+                'Projection ancrée sur ton budget, tes comptes et la fiscalité réelle.',
+                1_320_000,
+                59,
+            ),
+            prudent_stress: makeScenario(
+                'prudent_stress',
+                'Prudent / Stress',
+                'Scénario défensif testant marchés difficiles, inflation et hausse de taux.',
+                890_000,
+                65,
+            ),
+            ai_optimized: makeScenario(
+                'ai_optimized',
+                'Optimisé IA',
+                'Pistes concrètes de placement fiscal, frais réduits et épargne réaliste.',
+                1_580_000,
+                56,
+            ),
+            favorable_tailwinds: makeScenario(
+                'favorable_tailwinds',
+                'Favorable',
+                'Marchés porteurs, inflation maîtrisée et discipline budgétaire maintenue.',
+                1_820_000,
+                53,
+            ),
+        },
+        concreteActions: [],
+        ...overrides,
+    };
+}
+
+function makeProps(overrides: Partial<FutureScenarioHeaderProps> = {}): FutureScenarioHeaderProps {
+    return {
+        report: makeReport(),
+        appliedReport: null,
+        pendingReport: null,
+        selectedScenario: 'real_trajectory',
+        onSelectScenario: vi.fn(),
         status: 'idle',
+        isApplying: false,
         progress: null,
         error: null,
-        config: {
-            iterations: 50_000,
-            enableMacroRegimes: true,
-            includeHistoricalCrises: true,
-        },
-        onUpdateConfig: vi.fn(),
-        isStale: false,
-        showBands: true,
-        onToggleBands: vi.fn(),
+        unreadableStorage: false,
+        isOutdated: false,
+        hasPendingToApply: false,
+        refusMessage: null,
         onLaunch: vi.fn(),
         onCancel: vi.fn(),
-        onClear: vi.fn(),
-        isRunning: false,
-        isRestoring: false,
-        refusMessage: null,
+        onApplyPending: vi.fn(),
+        onDiscardPending: vi.fn(),
         ...overrides,
     };
 }
 
 const initialStore = useFinanceStore.getState();
 
-describe('GrandCalculPanel (R1)', () => {
+describe('FutureScenarioHeader (remplace GrandCalculPanel — Futur 4.0)', () => {
     beforeEach(() => {
         useFinanceStore.setState(initialStore, true);
     });
 
-    it('rend une région sémantique avec valeurs « — » avant tout calcul (no-fake-data) et sans « survie »', () => {
-        const { container } = render(<GrandCalculPanel {...makeProps()} />);
-
-        expect(screen.getByRole('region', { name: /Grand Calcul/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Lancer le Grand Calcul/i })).toBeEnabled();
-        expect(screen.queryByRole('button', { name: /Annuler/i })).not.toBeInTheDocument();
-        expect(screen.queryByText(/0\s*%/)).not.toBeInTheDocument();
-        expect(screen.getAllByText('Pas de donnée').length).toBeGreaterThanOrEqual(2);
-        expect(container.textContent).not.toMatch(/survie/i);
-    });
-
-    it('expose des interrupteurs role="switch" >= 44px pour les régimes macroéconomiques et crises historiques', () => {
-        const onUpdateConfig = vi.fn();
-        render(<GrandCalculPanel {...makeProps({ onUpdateConfig })} />);
-
-        const switchRegimes = screen.getByRole('switch', { name: /Régimes macroéconomiques/i });
-        const switchCrises = screen.getByRole('switch', { name: /Crises historiques/i });
-
-        expect(switchRegimes).toHaveAttribute('aria-checked', 'true');
-        expect(switchCrises).toHaveAttribute('aria-checked', 'true');
-        expect(switchRegimes.className).toContain('touch-target');
-        expect(switchRegimes.className).toContain('min-h-11');
-        expect(switchCrises.className).toContain('touch-target');
-        expect(switchCrises.className).toContain('min-h-11');
-
-        fireEvent.click(switchRegimes);
-        expect(onUpdateConfig).toHaveBeenCalledWith({ enableMacroRegimes: false });
-
-        fireEvent.click(switchCrises);
-        expect(onUpdateConfig).toHaveBeenCalledWith({ includeHistoricalCrises: false });
-    });
-
-    it('borne les trajectoires entre 50 000 et 100 000 au blur et met à jour les saisies valides sans boutons redondants', () => {
-        const onUpdateConfig = vi.fn();
-        render(
-            <GrandCalculPanel
-                {...makeProps({
-                    config: {
-                        iterations: 75_000,
-                        enableMacroRegimes: true,
-                        includeHistoricalCrises: true,
-                    },
-                    onUpdateConfig,
-                })}
-            />,
-        );
-
-        const input = screen.getByRole('spinbutton', { name: /Nombre de trajectoires/i }) as HTMLInputElement;
-        fireEvent.change(input, { target: { value: '1000' } });
-        fireEvent.blur(input);
-        expect(input.value).toBe('50000');
-        expect(onUpdateConfig).toHaveBeenCalledWith({ iterations: 50_000 });
-
-        fireEvent.change(input, { target: { value: '500000' } });
-        fireEvent.blur(input);
-        expect(input.value).toBe('100000');
-        expect(onUpdateConfig).toHaveBeenCalledWith({ iterations: 100_000 });
-
-        fireEvent.change(input, { target: { value: '' } });
-        fireEvent.blur(input);
-        expect(input.value).toBe('50000');
-        expect(onUpdateConfig).toHaveBeenCalledWith({ iterations: 50_000 });
-
-        fireEvent.change(input, { target: { value: '90000' } });
-        expect(onUpdateConfig).toHaveBeenCalledWith({ iterations: 90_000 });
-    });
-
-    it('n’affiche pas « régimes activés » ni « crises activées » lorsque désactivés', () => {
-        const disabledResult: GrandCalculResult = {
-            ...sampleResult,
-            regimesEnabled: false,
-            historicalCrisesEnabled: false,
-        };
+    it('affiche les 4 scénarios uniques, sélectionne chacun et conserve l’état idle sans calcul en cours', () => {
+        const onSelectScenario = vi.fn();
+        const onLaunch = vi.fn();
         const { container } = render(
-            <GrandCalculPanel
-                {...makeProps({
-                    result: disabledResult,
-                    status: 'ready',
-                    config: {
-                        iterations: 75_000,
-                        enableMacroRegimes: false,
-                        includeHistoricalCrises: false,
-                    },
-                })}
-            />,
+            <FutureScenarioHeader {...makeProps({ onSelectScenario, onLaunch })} />,
         );
 
-        expect(container.textContent).not.toMatch(/régimes activés|crises activées/i);
+        expect(screen.getByRole('region', { name: /Scénarios de trajectoire future/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Trajectoire réelle/i })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: /Prudent \/ Stress/i })).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByRole('button', { name: /Optimisé IA/i })).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByRole('button', { name: /Favorable/i })).toHaveAttribute('aria-pressed', 'false');
+
+        // Gain Optimisé IA : 1 580 000 - 1 320 000 = +260 k$
+        expect(screen.getByRole('button', { name: /Optimisé IA/i }).textContent).toContain('260');
+        expect(container.textContent).not.toMatch(/survie/i);
+
+        fireEvent.click(screen.getByRole('button', { name: /Favorable/i }));
+        expect(onSelectScenario).toHaveBeenCalledWith('favorable_tailwinds');
+
+        const launchBtn = screen.getByRole('button', { name: /Lancer l’analyse profonde/i });
+        expect(launchBtn).toBeEnabled();
+        fireEvent.click(launchBtn);
+        expect(onLaunch).toHaveBeenCalledTimes(1);
     });
 
-    it('affiche la barre de progression et la télémétrie en cours d’exécution et masque le lancement', () => {
+    it('désactive le bouton Lancer pendant status="restoring" ou si refusMessage est défini', () => {
+        const { rerender } = render(<FutureScenarioHeader {...makeProps({ status: 'restoring' })} />);
+        expect(screen.getByRole('button', { name: /Lancer l’analyse profonde/i })).toBeDisabled();
+
+        rerender(<FutureScenarioHeader {...makeProps({ refusMessage: 'Salaire net invalide' })} />);
+        expect(screen.getByRole('button', { name: /Lancer l’analyse profonde/i })).toBeDisabled();
+        expect(screen.getByRole('alert')).toHaveTextContent(/Salaire net invalide/);
+    });
+
+    it('affiche la progression multi-phases avec ETA (minutes/secondes), borne NaN %, et annule via onCancel', () => {
         const onCancel = vi.fn();
-        render(
-            <GrandCalculPanel
+        const { rerender } = render(
+            <FutureScenarioHeader
                 {...makeProps({
-                    isRunning: true,
                     status: 'running',
-                    progress: { done: 30_000, total: 50_000, pct: 60, simPerSec: 15_000, etaMs: 2_000 },
+                    progress: {
+                        phase: 'monte_carlo_100k',
+                        phaseIndex: 3,
+                        phaseTotal: 4,
+                        phaseLabel: 'Simulation profonde multi-régimes',
+                        percent: 62.6,
+                        trajectoriesDone: 62_600,
+                        trajectoriesTotal: 100_000,
+                        etaSeconds: 95,
+                    },
                     onCancel,
                 })}
             />,
         );
 
         const bar = screen.getByRole('progressbar');
-        expect(bar).toHaveAttribute('aria-valuenow', '60');
+        expect(bar).toHaveAttribute('aria-valuenow', '63');
         expect(bar).toHaveAttribute('aria-valuemin', '0');
         expect(bar).toHaveAttribute('aria-valuemax', '100');
-        expect(screen.getByRole('status')).toHaveTextContent(/60\s*%.*sim\/s.*ETA/i);
-        expect(screen.getByRole('button', { name: /Lancer le Grand Calcul/i })).toBeDisabled();
+        expect(screen.getByRole('status')).toHaveTextContent(/Phase 3\/4 — Simulation profonde multi-régimes/);
+        expect(document.body.textContent).toContain('ETA ~1 min 35 s');
 
         fireEvent.click(screen.getByRole('button', { name: /Annuler/i }));
         expect(onCancel).toHaveBeenCalledTimes(1);
+
+        // Percent NaN borné à 0 % (jamais aria-valuenow="NaN")
+        rerender(
+            <FutureScenarioHeader
+                {...makeProps({
+                    status: 'running',
+                    progress: {
+                        phase: 'past_audit',
+                        phaseIndex: 1,
+                        phaseTotal: 4,
+                        phaseLabel: 'Audit du passé réel',
+                        percent: Number.NaN,
+                        trajectoriesDone: 0,
+                        trajectoriesTotal: 100_000,
+                        etaSeconds: null,
+                    },
+                })}
+            />,
+        );
+        const nanBar = screen.getByRole('progressbar');
+        expect(nanBar).toHaveAttribute('aria-valuenow', '0');
+        expect(nanBar.firstElementChild).toHaveStyle({ width: '0%' });
+        expect(document.body.textContent).not.toContain('NaN');
     });
 
-    it('affiche le badge obsolète et masque les montants en mode discret', () => {
-        useFinanceStore.setState({ isPrivacyMode: true });
-        const { container } = render(
-            <GrandCalculPanel
+    it('gère l’état staged (Appliquer et mémoriser / Ignorer) et désactive pendant isApplying', () => {
+        const onApplyPending = vi.fn();
+        const onDiscardPending = vi.fn();
+        const pendingReport = makeReport({ trajectoriesRun: 100_000, isDeepRun: true });
+
+        const { rerender } = render(
+            <FutureScenarioHeader
                 {...makeProps({
-                    result: sampleResult,
-                    status: 'ready',
-                    isStale: true,
+                    report: pendingReport,
+                    pendingReport,
+                    status: 'staged',
+                    hasPendingToApply: true,
+                    onApplyPending,
+                    onDiscardPending,
                 })}
             />,
         );
 
-        expect(screen.getByRole('status')).toHaveTextContent(/Paramètres modifiés/i);
-        expect(container.textContent).not.toContain('91,5');
-        expect(container.textContent).not.toContain('140');
-        expect(screen.getAllByText('Montant masqué').length).toBeGreaterThanOrEqual(2);
+        const applyBtn = screen.getByRole('button', { name: /Appliquer et mémoriser/i });
+        const discardBtn = screen.getByRole('button', { name: /Ignorer/i });
+        expect(applyBtn).toBeEnabled();
+        expect(discardBtn).toBeEnabled();
+
+        fireEvent.click(applyBtn);
+        expect(onApplyPending).toHaveBeenCalledTimes(1);
+
+        fireEvent.click(discardBtn);
+        expect(onDiscardPending).toHaveBeenCalledTimes(1);
+
+        rerender(
+            <FutureScenarioHeader
+                {...makeProps({
+                    report: pendingReport,
+                    pendingReport,
+                    status: 'staged',
+                    hasPendingToApply: true,
+                    isApplying: true,
+                })}
+            />,
+        );
+        const busyBtn = screen.getByRole('button', { name: /Appliquer et mémoriser/i });
+        expect(busyBtn).toBeDisabled();
+        expect(busyBtn).toHaveAttribute('aria-busy', 'true');
+        expect(screen.getByRole('button', { name: /Ignorer/i })).toBeDisabled();
     });
 
-    it('affiche les erreurs dans role="alert"', () => {
-        render(
-            <GrandCalculPanel
+    it('affiche la mémoire chiffrée, le badge isOutdated, le repli cancelled et les erreurs/stockage illisible', () => {
+        const appliedReport = makeReport();
+        const { rerender } = render(
+            <FutureScenarioHeader
+                {...makeProps({
+                    report: appliedReport,
+                    appliedReport,
+                    isOutdated: true,
+                })}
+            />,
+        );
+
+        expect(screen.getByText(/Analyse profonde en mémoire/i)).toBeInTheDocument();
+        expect(screen.getByText(/Données modifiées — tu peux relancer quand tu veux/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Relancer l’analyse profonde/i })).toBeInTheDocument();
+
+        rerender(<FutureScenarioHeader {...makeProps({ status: 'cancelled' })} />);
+        expect(screen.getByText(/Calcul interrompu — l’état précédent reste conservé/i)).toBeInTheDocument();
+
+        rerender(
+            <FutureScenarioHeader
                 {...makeProps({
                     status: 'error',
-                    error: 'Erreur lors du Grand Calcul : Worker indisponible',
+                    error: 'Erreur simulation worker',
+                    unreadableStorage: true,
                 })}
             />,
         );
-
-        expect(screen.getByRole('alert')).toHaveTextContent(/Worker indisponible/i);
+        expect(screen.getByRole('alert')).toHaveTextContent(/Erreur simulation worker/);
     });
 
-    it('désactive Relancer et Effacer et annonce la sauvegarde locale pendant isSaving', () => {
-        render(
-            <GrandCalculPanel
-                {...makeProps({
-                    result: sampleResult,
-                    status: 'ready',
-                    isSaving: true,
-                })}
-            />,
-        );
-
-        expect(screen.getByRole('button', { name: /Relancer le Grand Calcul/i })).toBeDisabled();
-        expect(screen.getByRole('button', { name: /Effacer les résultats/i })).toBeDisabled();
-        expect(screen.getByRole('status')).toHaveTextContent(/Sauvegarde locale en cours/i);
-    });
-
-    it('borne progress.pct non fini (NaN) sans émettre NaN % ni aria-valuenow="NaN"', () => {
-        render(
-            <GrandCalculPanel
-                {...makeProps({
-                    isRunning: true,
-                    status: 'running',
-                    progress: { done: 0, total: 50_000, pct: Number.NaN, simPerSec: null, etaMs: null },
-                })}
-            />,
-        );
-
-        const bar = screen.getByRole('progressbar');
-        expect(bar).toHaveAttribute('aria-valuenow', '0');
-        const fill = bar.firstElementChild as HTMLElement;
-        expect(fill.style.width).toBe('0%');
-        expect(screen.getByRole('status')).toHaveTextContent(/^0\s*%/);
-        expect(screen.getByRole('status').textContent).not.toContain('NaN');
-    });
-
-    it('borne et transmet iterDraft sale au clic sur Lancer sans blur préalable, gère refusMessage, onClear et onToggleBands', () => {
-        const onUpdateConfig = vi.fn();
-        const onLaunch = vi.fn();
-        const onClear = vi.fn();
-        const onToggleBands = vi.fn();
-
-        const { rerender } = render(
-            <GrandCalculPanel
-                {...makeProps({
-                    config: { iterations: 75_000, enableMacroRegimes: true, includeHistoricalCrises: true },
-                    onUpdateConfig,
-                    onLaunch,
-                })}
-            />,
-        );
-
-        // Saisie hors-plage sans blur -> clic direct sur Lancer borne à 50_000
-        const input = screen.getByRole('spinbutton', { name: /Nombre de trajectoires/i }) as HTMLInputElement;
-        fireEvent.change(input, { target: { value: '1000' } });
-        fireEvent.click(screen.getByRole('button', { name: /Lancer le Grand Calcul/i }));
-        expect(input.value).toBe('50000');
-        expect(onUpdateConfig).toHaveBeenCalledWith({ iterations: 50_000 });
-        expect(onLaunch).toHaveBeenCalledWith({ iterations: 50_000 });
-
-        // Saisie > max sans blur -> clic direct sur Lancer borne à 100_000
-        fireEvent.change(input, { target: { value: '500000' } });
-        fireEvent.click(screen.getByRole('button', { name: /Lancer le Grand Calcul/i }));
-        expect(input.value).toBe('100000');
-        expect(onLaunch).toHaveBeenLastCalledWith({ iterations: 100_000 });
-
-        // refusMessage désactive le bouton Lancer
-        rerender(<GrandCalculPanel {...makeProps({ refusMessage: 'Salaire net invalide' })} />);
-        expect(screen.getByRole('button', { name: /Lancer le Grand Calcul/i })).toBeDisabled();
-
-        // onClear et onToggleBands déclenchent leurs callbacks
-        rerender(
-            <GrandCalculPanel
-                {...makeProps({
-                    result: sampleResult,
-                    status: 'ready',
-                    showBands: true,
-                    onClear,
-                    onToggleBands,
-                })}
-            />,
-        );
-        fireEvent.click(screen.getByRole('button', { name: /Afficher les bandes P5–P95 sur la courbe/i }));
-        expect(onToggleBands).toHaveBeenCalledWith(false);
-        fireEvent.click(screen.getByRole('button', { name: /Effacer les résultats/i }));
-        expect(onClear).toHaveBeenCalledTimes(1);
-    });
-
-    it('formate correctement les bornes formatEta et formatDurationMs', () => {
-        const { rerender } = render(
-            <GrandCalculPanel
-                {...makeProps({
-                    isRunning: true,
-                    status: 'running',
-                    progress: { done: 10_000, total: 50_000, pct: 20, simPerSec: 1_000, etaMs: 95_000 },
-                })}
-            />,
-        );
-        expect(screen.getByRole('status')).toHaveTextContent(/ETA ~1 min 35 s/);
-
-        rerender(
-            <GrandCalculPanel
-                {...makeProps({
-                    isRunning: true,
-                    status: 'running',
-                    progress: { done: 10_000, total: 50_000, pct: 20, simPerSec: null, etaMs: -1 },
-                })}
-            />,
-        );
-        expect(screen.getByRole('status')).toHaveTextContent(/ETA —/);
-
-        rerender(
-            <GrandCalculPanel
-                {...makeProps({
-                    result: { ...sampleResult, durationMs: 450 },
-                    status: 'ready',
-                })}
-            />,
-        );
-        expect(screen.getByText(/Durée : 450 ms/)).toBeInTheDocument();
-
-        rerender(
-            <GrandCalculPanel
-                {...makeProps({
-                    result: { ...sampleResult, durationMs: 125_000 },
-                    status: 'ready',
-                })}
-            />,
-        );
-        expect(screen.getByText(/Durée : 2 min 5 s/)).toBeInTheDocument();
-
-        rerender(
-            <GrandCalculPanel
-                {...makeProps({
-                    result: { ...sampleResult, durationMs: Number.NaN },
-                    status: 'ready',
-                })}
-            />,
-        );
-        expect(screen.getByText(/Durée : —/)).toBeInTheDocument();
-    });
-
-    it('affiche l’éventail probabiliste P5–P95 + SVG cône et masque tout en mode discret', () => {
-        const multiBandResult: GrandCalculResult = {
-            ...sampleResult,
-            monthlyBands: [
-                { monthIndex: 0, year: 2026, age: 35, p5: 90_000, p10: 95_000, p25: 100_000, p50: 110_000, p75: 120_000, p90: 130_000, p95: 140_000 },
-                { monthIndex: 120, year: 2036, age: 45, p5: 180_000, p10: 210_000, p25: 250_000, p50: 320_000, p75: 400_000, p90: 490_000, p95: 560_000 },
-            ],
-        };
-
-        const { container, rerender } = render(
-            <GrandCalculPanel {...makeProps({ result: multiBandResult, status: 'ready' })} />,
-        );
-        expect(screen.getByText(/Éventail probabiliste du patrimoine/i)).toBeInTheDocument();
-        expect(screen.getByText(/P5 \(stress\)/i)).toBeInTheDocument();
-        expect(screen.getByText(/P50 \(médiane\)/i)).toBeInTheDocument();
-        expect(screen.getByText(/P95 \(porteur\)/i)).toBeInTheDocument();
-        expect(container.querySelector('svg polyline')).toBeInTheDocument();
-
+    it('masque les montants/âges en mode discret et n’invente jamais 0 $ si données absentes', () => {
         useFinanceStore.setState({ isPrivacyMode: true });
-        rerender(<GrandCalculPanel {...makeProps({ result: multiBandResult, status: 'ready' })} />);
-        expect(container.querySelector('svg polyline')).not.toBeInTheDocument();
-        expect(container.textContent).not.toContain('320');
-        expect(container.textContent).not.toContain('560');
+        const { rerender, container } = render(<FutureScenarioHeader {...makeProps()} />);
+
+        const txtPriv = (container.textContent || '').replace(/\u00a0/g, ' ');
+        expect(txtPriv).not.toContain('1,32');
+        expect(txtPriv).not.toContain('59 ans');
+        expect(txtPriv).not.toContain('$');
+        expect(screen.getAllByText('Montant masqué').length).toBeGreaterThanOrEqual(8);
+
+        useFinanceStore.setState({ isPrivacyMode: false });
+        const emptyReport = makeReport({
+            scenarios: {
+                real_trajectory: makeScenario('real_trajectory', 'Trajectoire réelle', 'Desc', null, null),
+                prudent_stress: makeScenario('prudent_stress', 'Prudent / Stress', 'Desc', Number.NaN, null),
+                ai_optimized: makeScenario('ai_optimized', 'Optimisé IA', 'Desc', null, null),
+                favorable_tailwinds: makeScenario('favorable_tailwinds', 'Favorable', 'Desc', null, null),
+            },
+        });
+        rerender(<FutureScenarioHeader {...makeProps({ report: emptyReport })} />);
+        expect(container.textContent).not.toMatch(/\b0\s*\$/);
+        expect(screen.getAllByText('Pas de donnée').length).toBeGreaterThanOrEqual(8);
     });
 });

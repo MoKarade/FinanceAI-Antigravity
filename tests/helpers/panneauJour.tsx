@@ -1,26 +1,19 @@
 // tests/helpers/panneauJour.tsx
-// [FUTUR-PANNEAU-FIXE] Monte le panneau du jour avec des props par défaut inoffensives.
-//
-// ⚠️ POURQUOI UN HELPER PARTAGÉ, et pourquoi ICI. Quatre fichiers de test montaient l'ancienne
-// infobulle avec un seul prop (`data`) ; le panneau en prend dix, dont la moitié n'intéresse aucun
-// d'eux (pas de navigation, callbacks). Recopier ce littéral quatre fois aurait été exactement la
-// duplication que le contrôle de qualité de la CI a refusée la veille sur ce même lot — et la
-// leçon `UN-CONTROLE-DE-DUPLICATION-EST-UNE-GARDE-CONTRE-LA-DUPLICATION-DE-GARDES` dit où le
-// mettre : `tests/helpers/`, l'endroit qu'on doit regarder AVANT d'écrire une garde.
-//
-// ⚠️ Les défauts sont choisis pour ne RIEN affirmer : `origine: 'epingle'` (l'état où tout est
-// visible, donc celui qui ne masque aucune section au test), flèches activées, callbacks vides.
-// Un test qui veut mesurer un de ces états le passe EXPLICITEMENT — le défaut ne doit jamais être
-// ce qu'on prétend vérifier.
+// Monte `<FutureRichTooltip>` avec des props par défaut inoffensives pour les tests unitaires
+// hérités du panneau du jour (section par défaut sélectionnable via `defaultSection`).
 import React from 'react';
 import { render } from '@testing-library/react';
-import { PanneauJour } from '../../components/projection/PanneauJour';
+import { FutureRichTooltip } from '../../components/future/FutureRichTooltip';
 import type { PointJour } from '../../components/projection/panneauJour/sections';
 import type { OrigineJour } from '../../components/future/jourAffiche';
 import type { PasNavigation } from '../../components/future/panneauPas';
+import type { SectionPanneauId } from '../../components/future/panneauSections';
 
 export interface OptionsPanneauJour {
     origine?: OrigineJour;
+    isOpen?: boolean;
+    scenarioLabel?: string;
+    defaultSection?: SectionPanneauId;
     userName1?: string;
     userName2?: string;
     onOpenDetail?: () => void;
@@ -33,10 +26,16 @@ export interface OptionsPanneauJour {
 }
 
 export function renderPanneauJour(data: PointJour | null, o: OptionsPanneauJour = {}) {
+    const origine = o.origine ?? 'epingle';
     return render(
-        <PanneauJour
-            data={data}
-            origine={o.origine ?? 'epingle'}
+        <FutureRichTooltip
+            point={data}
+            isOpen={o.isOpen ?? true}
+            isPinned={origine !== 'survol'}
+            origine={origine}
+            anchorXRatio={0.2}
+            scenarioLabel={o.scenarioLabel ?? 'Trajectoire réelle'}
+            defaultSection={o.defaultSection}
             userName1={o.userName1}
             userName2={o.userName2}
             onOpenDetail={o.onOpenDetail ?? (() => {})}
@@ -45,7 +44,7 @@ export function renderPanneauJour(data: PointJour | null, o: OptionsPanneauJour 
             onPasChange={o.onPasChange ?? (() => {})}
             canStepPrev={o.canStepPrev ?? true}
             canStepNext={o.canStepNext ?? true}
-            onRelease={o.onRelease ?? (() => {})}
+            onUnpin={o.onRelease ?? (() => {})}
         />,
     );
 }

@@ -5,13 +5,13 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { GoogleFinanceHero } from '../../../components/future/GoogleFinanceHero';
-import { BoutonsPimenterFutur } from '../../../components/future/BoutonsPimenterFutur';
+import { FutureScenarioHeader } from '../../../components/future/FutureScenarioHeader';
 import { HubConnexionsModal } from '../../../components/future/HubConnexionsModal';
 import { useFinanceStore } from '../../../store/useFinanceStore';
 import type { PointJour } from '../../../components/projection/panneauJour/sections';
-import type { ProjectionConfig, RetirementGoal } from '../../../types';
+import type { DeepForecastReport, DeepScenarioId } from '../../../services/projection/deepForecastTypes';
 
-describe('Refonte Google Finance — GoogleFinanceHero & BoutonsPimenterFutur', () => {
+describe('Refonte Google Finance — GoogleFinanceHero & FutureScenarioHeader', () => {
     beforeEach(() => {
         act(() => {
             useFinanceStore.getState().setPrivacyMode(false);
@@ -98,42 +98,105 @@ describe('Refonte Google Finance — GoogleFinanceHero & BoutonsPimenterFutur', 
         expect(screen.getByText(/Réinitialiser le zoom/i)).toBeInTheDocument();
     });
 
-    it('déclenche la mise à jour instantanée du futur au clic sur un bouton de scénario', () => {
-        const onInstantUpdate = vi.fn();
-        const setRunMC = vi.fn();
-        const projection: ProjectionConfig = {
-            years: 30,
-            returnRate: 6,
-            inflationRate: 2,
-            savingsMode: 'manual',
-            manualContribution: 1000,
-            usePortfolioRate: false,
-            returnRates: { celi: 6, reer: 6, nonReg: 6, crypto: 8, cash: 2 },
-        };
-        const retirementGoal: RetirementGoal = {
-            targetAge: 65,
-            targetMonthlyIncome: 4000,
-            governmentPension: 1200,
+    it('bascule entre les 4 scénarios uniques via FutureScenarioHeader sans anciens boutons IQPF/Hybride/Pimenter', () => {
+        const onSelectScenario = vi.fn();
+        const makeScen = (id: DeepScenarioId, label: string, finalNetWorthP50: number, fiAge: number) => ({
+            id,
+            label,
+            shortDescription: `Description ${label}`,
+            assumptionsSummaryFr: 'Résumé',
+            points: [],
+            milestones: {
+                fiAge,
+                fiProbabilityPct: 85,
+                sustainableMonthlyNetRetirementCad: 4_000,
+                sustainableMonthlyNetP90Cad: 3_300,
+                goalsSummary: [],
+                finalNetWorthP50,
+                estateNetWorthP50: finalNetWorthP50,
+                estateTaxP50: 50_000,
+                ruinProbabilityPct: 3,
+            },
+            turningPoints: [],
+            appliedOptimizationsFr: [],
+        });
+        const report: DeepForecastReport = {
+            version: 1,
+            inputsSig: 'sig:refonte',
+            createdAt: '2026-11-18T00:00:00.000Z',
+            durationMs: 250,
+            trajectoriesRun: 0,
+            isDeepRun: false,
+            pastDiagnostic: {
+                transactionsAnalyzed: 0,
+                monthsCovered: 0,
+                firstTransactionDate: null,
+                lastTransactionDate: null,
+                observedMonthlyIncomeCad: null,
+                observedMonthlyExpensesCad: null,
+                budgetedMonthlyExpensesCad: null,
+                monthlySpendingGapCad: null,
+                observedSavingsRatePct: null,
+                lifestyleCreepAnnualPct: null,
+                fixedExpensesSharePct: null,
+                discretionarySharePct: null,
+                peakSpendingMonthLabel: null,
+                lowSpendingMonthLabel: null,
+                weightedMerPct: null,
+                estimatedAnnualFeeAndTaxDragCad: null,
+                expenseVolatilityPct: null,
+                findingsFr: [],
+            },
+            newsBundle: {
+                collectedAtIso: '2026-11-18T00:00:00.000Z',
+                liveArticlesUsed: 0,
+                offlineFallbackUsed: true,
+                portfolioSentimentScore: null,
+                portfolioSentimentLabel: 'Neutre',
+                annualizedReturnAdjustmentPct: 0,
+                volatilityMultiplier: 1,
+                macroHeadlineFr: 'Neutre',
+                keySignals: [],
+                aiSynthesisFr: null,
+                usedGemini: false,
+            },
+            valoriaSummary: null,
+            scenarios: {
+                real_trajectory: makeScen('real_trajectory', 'Trajectoire réelle', 1_250_000, 60),
+                prudent_stress: makeScen('prudent_stress', 'Prudent / Stress', 850_000, 65),
+                ai_optimized: makeScen('ai_optimized', 'Optimisé IA', 1_490_000, 57),
+                favorable_tailwinds: makeScen('favorable_tailwinds', 'Favorable', 1_750_000, 54),
+            },
+            concreteActions: [],
         };
 
-        render(
-            <BoutonsPimenterFutur
-                projection={projection}
-                retirementGoal={retirementGoal}
-                runMC={false}
-                setRunMC={setRunMC}
-                onInstantUpdate={onInstantUpdate}
-                finalNetWorth={1_250_000}
+        const { container } = render(
+            <FutureScenarioHeader
+                report={report}
+                appliedReport={null}
+                pendingReport={null}
+                selectedScenario="real_trajectory"
+                onSelectScenario={onSelectScenario}
+                status="idle"
+                isApplying={false}
+                progress={null}
+                error={null}
+                unreadableStorage={false}
+                isOutdated={false}
+                hasPendingToApply={false}
+                refusMessage={null}
+                onLaunch={vi.fn()}
+                onCancel={vi.fn()}
+                onApplyPending={vi.fn()}
+                onDiscardPending={vi.fn()}
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: /Épargne \+25 %/i }));
-        expect(onInstantUpdate).toHaveBeenCalledTimes(1);
-        expect(onInstantUpdate.mock.calls[0][0].appliedSavingsMultiplier).toBe(1.25);
-
-        fireEvent.click(screen.getByRole('button', { name: /Retraite −3 ans/i }));
-        expect(onInstantUpdate).toHaveBeenCalledTimes(2);
-        expect(onInstantUpdate.mock.calls[1][1].targetAge).toBe(62);
+        expect(container.textContent).not.toMatch(/IQPF|Hybride|Pimenter|Épargne \+25|Retraite −3/i);
+        fireEvent.click(screen.getByRole('button', { name: /Optimisé IA/i }));
+        expect(onSelectScenario).toHaveBeenCalledWith('ai_optimized');
+        fireEvent.click(screen.getByRole('button', { name: /Prudent \/ Stress/i }));
+        expect(onSelectScenario).toHaveBeenCalledWith('prudent_stress');
     });
 
     it('affiche les 4 canaux de connexion et d’import rapide dans HubConnexionsModal sans IA ni Lia', () => {

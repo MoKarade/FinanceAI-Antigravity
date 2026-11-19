@@ -1,59 +1,54 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { Skeleton } from './ui/Skeleton';
-// [REFONTE-NAV-L2b] Sous-onglet « Historique » (évolution passée par compte, ex-Accueil) —
-// lazy : son pipeline (usePortfolioHistory + helpers immo/dettes) ne se paie qu'à l'affichage.
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { resolveDaySeriesIndex } from '../utils/daySeriesIndex';
 import { hasForeignCurrencyAssets } from '../services/portfolio';
+
 const FutureHistorySection = lazyWithRetry(() => import('./future/FutureHistorySection'), 'FutureHistorySection');
-const GrandCalculPanel = lazyWithRetry(
-    () => import('./future/GrandCalculPanel').then((m) => ({ default: m.GrandCalculPanel })),
-    'GrandCalculPanel',
-);
-const GrandCalculPredictionsPanel = lazyWithRetry(
-    () => import('./future/GrandCalculPredictionsPanel').then((m) => ({ default: m.GrandCalculPredictionsPanel })),
-    'GrandCalculPredictionsPanel',
-);
-const CurveExplanationPanel = lazyWithRetry(
-    () => import('./projection/CurveExplanationPanel').then((m) => ({ default: m.CurveExplanationPanel })),
-    'CurveExplanationPanel',
-);
-const FutureValoriaPlacementsPanel = lazyWithRetry(
-    () => import('./future/FutureValoriaPlacementsPanel').then((m) => ({ default: m.FutureValoriaPlacementsPanel })),
-    'FutureValoriaPlacementsPanel',
-);
-// [NAV-MERGE-SANTE-FUTUR] Résumé condensé de Santé, en tête de page — léger (pas de recharts),
-// import statique (pas de justification à le mettre derrière un lazy comme FutureHistorySection).
+
 import { FutureHealthSummary } from './future/FutureHealthSummary';
 import { FutureLegendDrawer } from './future/FutureLegendDrawer';
 import { useHiddenSeries } from '../hooks/useHiddenSeries';
 import { FuturePeriodSelector } from './future/FuturePeriodSelector';
 import { GoogleFinanceHero } from './future/GoogleFinanceHero';
-import { BoutonsPimenterFutur } from './future/BoutonsPimenterFutur';
 import { HubConnexionsModal } from './future/HubConnexionsModal';
-import { FutureSimulationControls } from './future/FutureSimulationControls';
 import { FutureYearAnatomyModal } from './future/FutureYearAnatomyModal';
-import { FuturePrescriptiveAdvisorCard } from './future/FuturePrescriptiveAdvisorCard';
+import { FutureScenarioHeader } from './future/FutureScenarioHeader';
+import { FutureRichTooltip } from './future/FutureRichTooltip';
+import { FutureCoreMilestonesGrid } from './future/FutureCoreMilestonesGrid';
+import { FutureUnifiedInsightsPanel } from './future/FutureUnifiedInsightsPanel';
 import { prefetchTab } from '../utils/tabPrefetch';
 import { PageHeader } from './ui/PageHeader';
 import { FUTURE_REQ_IDS } from './ProjectionEngine';
 import { REQUIREMENTS } from './setup/requirements';
 import { Drawer } from './ui/Drawer';
-import { OutilsProjection, type FutureDrawerId, tiroirDomId } from './future/OutilsProjection';
-import { TableJalons, CarteLeviers, type JalonProjection, type LevierAffiche } from './future/JalonsLeviers';
-import { FinancialGoalsProgressSection } from './ui/FinancialGoalProgressRing';
+import { type FutureDrawerId, tiroirDomId } from './future/OutilsProjection';
 import { couleurSerie } from './future/seriesConfig';
 import type { VarianteBandeau } from './FutureKpiStrip';
 import { Badge } from './ui/Badge';
 import { Icon } from './ui/Icon';
 import { PrivateAmount } from './ui/PrivateAmount';
-import { Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, ReferenceArea, Line, ComposedChart, Bar, ReferenceDot } from 'recharts';
+import {
+    Area,
+    XAxis,
+    YAxis,
+    Tooltip,
+    ResponsiveContainer,
+    CartesianGrid,
+    ReferenceLine,
+    ReferenceArea,
+    Line,
+    ComposedChart,
+    Bar,
+    ReferenceDot,
+} from 'recharts';
 import { GF_CROSSHAIR_CURSOR, GF_ACTIVE_DOT } from '../utils/chartTooltip';
 import { Tab, BudgetConfig, BudgetCategory, RealEstateGoal, RetirementGoal, Transaction, ProjectionConfig } from '../types';
-import { ProjectionResult, ProjectionChartPoint, type SimulationParams } from '../services/projection/types';
+import { ProjectionResult, ProjectionChartPoint } from '../services/projection/types';
+import type { DeepScenarioPoint, DeepTurningPoint } from '../services/projection/deepForecastTypes';
 import { useFinanceStore } from '../store/useFinanceStore';
+import { useDeepForecast } from '../hooks/useDeepForecast';
 import { logError } from '../services/errorLogger';
-import { loadRevealedProjection, saveRevealedProjection, clearRevealedProjection } from '../services/lockedProjectionStore';
 import { usePendingFocus } from '../utils/usePendingFocus';
 import { buildLockedByMonth } from '../utils/lockedCurveOverlay';
 import { computeForecastAccuracy } from '../services/projection/forecastAccuracy';
@@ -66,80 +61,8 @@ import { esperanceDeVieEffective } from '../services/projection/horizon';
 import { sampleEvenly } from '../utils/sampleEvenly';
 import { assignStackIndex } from '../utils/stackEventIcons';
 import { FutureCurveToolbar, FutureTimelineBrush, type ModeAffichageCourbe } from './future/FutureCurveControls';
-
-// Sprint 2 PH2 — constante stable pour éviter de créer un nouveau [] à chaque
-// render (qui invaliderait les useMemo deps en aval).
-const EMPTY_ARRAY: never[] = [];
-
-// [FUTUR-DAILY] Mêmes replis stables pour les sélecteurs du panneau quotidien. Les types
-// viennent du store lui-même (pas de re-déclaration locale qui pourrait diverger).
-type FinanceStoreState = ReturnType<typeof useFinanceStore.getState>;
-const EMPTY_ASSETS: FinanceStoreState['assets'] = [];
-const EMPTY_RECURRING: NonNullable<FinanceStoreState['subscriptions']> = [];
-const EMPTY_FX: Record<string, number> = {};
-const EMPTY_DEBTS: NonNullable<FinanceStoreState['debts']> = [];
-/** Domaine de l'axe X, en CONSTANTE de module : un littéral recréé à chaque rendu ferait comparer
- *  la prop par identité à recharts sur des re-rendus où les données n'ont PAS bougé (bascule d'une
- *  série via la légende, par exemple). */
-const X_AXIS_DOMAIN: ['dataMin', 'dataMax'] = ['dataMin', 'dataMax'];
-
-/** [FUTUR-DAILY lot B étape 2] Nombre maximal de points MENSUELS visibles pour que la courbe passe
- *  au JOUR. Exprimé en points — et non en mois — parce qu'il est COUPLÉ au plancher de zoom :
- *  `useTimeChartZoom` refuse de descendre sous `DEFAULT_MIN_POINTS = 5` d'ÉCART, ce qui laisse
- *  `5 + 1 = 6` points dans la fenêtre au zoom maximal.
- *  ⚠️ Un seuil inférieur à 6 rend la vue au jour tout simplement INATTEIGNABLE — bug attrapé par
- *  l'e2e de sélection, pas à la lecture : le code était « correct », la fonctionnalité juste
- *  jamais déclenchée. Le premier jet plafonnait à 4 mois.
- *  À 6 points = 5 mois raffinés, soit ~150 jours : la courbe reste lisible et chaque jour occupe
- *  encore ~6 px de large, donc reste VISABLE à la souris. */
-/**
- * [FUTUR-DAILY-NATIVE] Champs ventilés pour la COURBE (série quotidienne GLOBALE). Ce sont les
- * `dataKey` réellement tracés + l'identité du jour — rien d'autre. La restriction est une contrainte
- * MESURÉE : la ventilation complète (99 champs) de 30 ans coûte ~500 ms et ~180 Mo ; celle-ci
- * ~100 ms (bench 2026-08-12). L'infobulle, elle, reçoit un point COMPLET ventilé à la demande sur
- * le mois survolé (`enrichDailyPoint`) — même fonction moteur, mêmes entrées, donc aucune
- * divergence possible entre ce que la courbe trace et ce que l'infobulle détaille.
- * ⚠️ Ajouter une série au graphe = l'ajouter ICI, sinon elle ne se trace pas (garde-test
- * `tests/components/futureProjection.curveFields.test.ts` : chaque dataKey du render ∈ CURVE_FIELDS).
- */
-/** [FUTUR-DAILY-NATIVE] Plafond de points TRACÉS (≈ densité de l'ancienne courbe mensuelle sur
- *  30 ans). Au-delà, `decimateForRender` échantillonne le tracé — la sélection reste au jour exact
- *  sur la tranche complète. Mesuré : sans plafond, ~11 000 pts × 8 aires gèlent le main thread. */
-const RENDER_MAX_POINTS = 700;
-
-const CURVE_FIELDS: ReadonlySet<string> = new Set([
-    'Liquidites', 'CELI', 'CELIAPP', 'REER', 'REEE', 'NonReg', 'Crypto', 'Immobilier', 'Entreprise',
-    'ImpotLatent', 'FluxImpots', 'P5', 'P10', 'P25', 'P50', 'P75', 'P90', 'P95', 'NetWorth', 'lockedNetWorth',
-    // ⚠️ `DettesNonImmo` est entrée ici AVANT d'avoir la moindre courbe (elle en a une depuis
-    // `[FUTUR-COURBE-DETTE]`, 2026-09-18 — aire orange sous zéro) : sa vraie raison d'être dans ce
-    // set est que le patrimoine au jour est RECOMPOSÉ (`NetWorth = Σ NET_WORTH_DAILY_ASSETS − DettesNonImmo`) et que la
-    // recomposition s'ABSTIENT si un seul terme manque — une somme partielle serait un patrimoine
-    // faux et crédible. Sans ce champ, le correctif `[JOUR-BILAN-ROMPU-SOUS-HYPOTHEQUE]` était
-    // INERTE dans la vraie courbe : vert en test (qui ventile tout), sans effet en prod
-    // (`[CURVE-FIELDS-DETTE-MANQUANTE]`, 2026-08-19). La garde qui tient ce lien est
-    // `tests/services/bilanQuotidien.test.ts` — elle rejoue la ventilation avec CE set exact.
-    'DettesNonImmo',
-    // [DETTE-LEVIER-EXPLICITE] La part LEVIER de cette dette (marge Smith Manoeuvre), publiée à
-    // part par le moteur pour qu’une courbe puisse la distinguer de la dette qu’on REMBOURSE.
-    // ⚠️ SOUS-ENSEMBLE de `DettesNonImmo` : ce champ ne doit JAMAIS entrer dans la recomposition
-    // du patrimoine au jour (double comptage). Sa présence ici sert uniquement à ce que la série
-    // existe sur les points QUOTIDIENS — la ventilation est allégée à ce set exact, donc un champ
-    // absent d’ici est une courbe muette en prod (`CORRECTIF-VERT-EN-TEST-INERTE-EN-PROD`).
-    // Garde : `tests/components/futureCourbeLevier.test.ts`.
-    'DetteLevierSmith',
-    'year', 'age', 'isPast',
-]);
-
-/** [FUTUR-DAILY-FULL] Un point QUOTIDIEN de la courbe.
- *
- *  ⚠️ Le type vit désormais dans `services/projection/dailyLedger.ts`, avec le code qui le
- *  PRODUIT. La version locale décrivait un point qui ne portait que `NetWorth` ; depuis que la
- *  ventilation au jour couvre tous les champs du moteur, le contrat et sa construction ne peuvent
- *  plus diverger sans casser le typecheck. `Partial<>` reste la clé : un champ que le mois n'émet
- *  pas doit s'afficher « — », jamais « 0 $ ». */
 import { Tab as TabEnum } from '../types';
 import { ClickableEventIcon, RefLineLabel, TodayValueBadge } from './projection/ProjectionTooltip';
-import { PanneauJour } from './projection/PanneauJour';
 import { detteSousZero, COULEUR_DETTE, detteLevierSousZero, COULEUR_LEVIER, LIBELLE_LEVIER } from './future/detteSerie';
 import { NotesGraphe, notesGraphe } from './future/notesGraphe';
 import { estGesteSelectionJourClavier } from '../utils/chartKeyboardSelect';
@@ -151,110 +74,168 @@ import { indexAujourdhui, indexApresPas, PAS_PAR_DEFAUT, type PasNavigation } fr
 import { resolvePointByX } from '../utils/chartTooltip';
 import { ProjectionControls } from './projection/ProjectionControls';
 import { useSimulationParams, useTodayIsoLocal } from '../hooks/useSimulationParams';
-import { useGrandCalcul } from '../hooks/useGrandCalcul';
 import { buildPastPrefix } from '../services/history/buildPastPrefix';
 import { computePrivateBusinessValue } from '../services/projection/privateBusinessValue';
 import { mentionDettesPasse } from '../services/history/pastDebtNotice';
 import { mentionRaccord } from '../services/history/raccordNotice';
 import { deriveMilestoneIcons } from '../services/projection/milestoneIcons';
-import { ActionPlanDrilldown } from './projection/ActionPlanDrilldown';
-import { ProjectionExplains } from './projection/ProjectionExplains';
-import { StrategyOptimizerPanel } from './projection/StrategyOptimizerPanel';
-import { StressTestPanel } from './projection/StressTestPanel';
-import { CollapsibleSection } from './ui/CollapsibleSection';
-import { applyConfigToSettings, leverValueLabel, LEVER_LIBRARY, type StrategyConfig } from '../services/projection/strategyConfig';
 import { ChartDataTable, type ChartDataColumn } from './ui/ChartDataTable';
-import { isoDate, finiteAnchorRun, calendarFromMonthIndex, axisXForIso, axisXAtDay } from '../services/projection/dailyRefine';
+import { isoDate, finiteAnchorRun, calendarFromMonthIndex, axisXForIso, axisXAtDay, centeredWindowRange } from '../services/projection/dailyRefine';
 import { useViewportBelowSm } from '../hooks/useViewportBelowSm';
 import { useViewportBelowLg } from '../hooks/useViewportBelowLg';
 import { mergeDailyRealPoint, sliceDailyRangeByX, decimateForRender, realOnlyMonthPoints, buildEnrichedMonth } from '../services/projection/dailyCurve';
-import { centeredWindowRange } from '../services/projection/dailyRefine';
-import { buildDailyLedger } from '../services/projection/dailyLedger';
+import { buildDailyLedger, NET_WORTH_DAILY_ASSETS } from '../services/projection/dailyLedger';
 import { buildDailyPastLedger } from '../services/history/dailyPastLedger';
 import { reconstructRealEstateEquityByYear } from '../services/history/reconstructRealEstateEquity';
 import { MASKED_AMOUNT_LABEL } from '../utils/privacyAria';
-import { formatCAD, formatCompactCAD, formatSigned } from '../utils/format';
+import { formatCAD, formatCompactCAD } from '../utils/format';
 import { maskedTick } from '../utils/chartPrivacy';
 import { reperesRonds } from '../utils/reperesRonds';
 import { NO_DATA_LABEL } from './ui/emptyAware';
 import { dayVariation } from '../services/history/dayVariation';
 import { addDay } from '../services/history/reconstructCashHistory';
 
-const GrandCalculPanels: React.FC<{
-    params: SimulationParams;
-    showBands: boolean;
-    onToggleBands: (show: boolean) => void;
-}> = ({ params, showBands, onToggleBands }) => {
-    const grandCalcul = useGrandCalcul(params);
-    return (
-        <>
-            <GrandCalculPanel
-                result={grandCalcul.result}
-                status={grandCalcul.status}
-                progress={grandCalcul.progress}
-                error={grandCalcul.error}
-                config={grandCalcul.config}
-                onUpdateConfig={grandCalcul.updateConfig}
-                isStale={grandCalcul.isStale}
-                showBands={showBands}
-                onToggleBands={onToggleBands}
-                onLaunch={grandCalcul.launch}
-                onCancel={grandCalcul.cancel}
-                onClear={grandCalcul.clear}
-                isRunning={grandCalcul.isRunning}
-                isRestoring={grandCalcul.isRestoring}
-                isSaving={grandCalcul.isSaving}
-                refusMessage={grandCalcul.refusMessage}
-            />
-            <GrandCalculPredictionsPanel
-                result={grandCalcul.result}
-                isStale={grandCalcul.isStale}
-                unreadableStorage={grandCalcul.unreadableStorage}
-            />
-        </>
-    );
-};
+const EMPTY_ARRAY: never[] = [];
+type FinanceStoreState = ReturnType<typeof useFinanceStore.getState>;
+const EMPTY_ASSETS: FinanceStoreState['assets'] = [];
+const EMPTY_RECURRING: NonNullable<FinanceStoreState['subscriptions']> = [];
+const EMPTY_FX: Record<string, number> = {};
+const EMPTY_DEBTS: NonNullable<FinanceStoreState['debts']> = [];
 
-// [PROJECTION-PERSIST] Dédup MODULE-LEVEL de l'écriture du blob figé (finding code-reviewer) :
-// survit au démontage/remontage de l'onglet → pas de réécriture IDB (~1-2 Mo chiffrés) à chaque
-// visite quand le moteur n'a pas republié. Volontairement PAS dans le store (pur détail d'I/O).
-let _lastSavedRevealedResults: ProjectionResult | null = null;
+const X_AXIS_DOMAIN: ['dataMin', 'dataMax'] = ['dataMin', 'dataMax'];
+const RENDER_MAX_POINTS = 700;
+
+// Champs ventilés pour la série quotidienne de la courbe et le ruban [P10, P90].
+const CURVE_FIELDS: ReadonlySet<string> = new Set([
+    'Liquidites',
+    'CELI',
+    'CELIAPP',
+    'REER',
+    'REEE',
+    'NonReg',
+    'Crypto',
+    'Immobilier',
+    'Entreprise',
+    'ImpotLatent',
+    'FluxImpots',
+    'P5',
+    'P10',
+    'P25',
+    'P50',
+    'P75',
+    'P90',
+    'P95',
+    'NetWorth',
+    'lockedNetWorth',
+    'mcRange',
+    'DettesNonImmo',
+    'DetteLevierSmith',
+    'year',
+    'age',
+    'isPast',
+]);
 
 interface FutureProjectionProps {
-  initialBalances: Record<string, number>;
-  transactions: Transaction[];
-  budgetItems: BudgetCategory[];
-  config: BudgetConfig;
-  realEstateGoals: RealEstateGoal[];
-  setRealEstateGoals?: (g: RealEstateGoal[]) => void;
-  retirementGoal: RetirementGoal;
-  setRetirementGoal?: (g: RetirementGoal) => void;
-  calculatedMonthlySavings: number;
-  projection: ProjectionConfig;
-  setProjection: (p: ProjectionConfig) => void;
-  isPrivacyMode?: boolean;
-  /** Active l'affichage direct et la mise à jour instantanée de la courbe sans écran intermédiaire bloquant. */
-  autoReveal?: boolean;
-  /** [S5-REFONTE-FUTUR] Bandeau des chiffres de tête (FutureKpiStrip), rendu par l'hôte selon la
-   *  variante demandée : sous le titre au bureau, découpé tête / pied au téléphone (maquettes). */
-  bandeauKpi?: (variante: VarianteBandeau) => React.ReactNode;
+    initialBalances: Record<string, number>;
+    transactions: Transaction[];
+    budgetItems: BudgetCategory[];
+    config: BudgetConfig;
+    realEstateGoals: RealEstateGoal[];
+    setRealEstateGoals?: (g: RealEstateGoal[]) => void;
+    retirementGoal: RetirementGoal;
+    setRetirementGoal?: (g: RetirementGoal) => void;
+    calculatedMonthlySavings: number;
+    projection: ProjectionConfig;
+    setProjection: (p: ProjectionConfig) => void;
+    isPrivacyMode?: boolean;
+    autoReveal?: boolean;
+    bandeauKpi?: (variante: VarianteBandeau) => React.ReactNode;
+}
+
+type DisplayPointInput = {
+    monthIndex: number;
+    NetWorth?: number;
+    DettesNonImmo?: number;
+    year?: number;
+    age?: number;
+    dateLabel?: string;
+    isPast?: boolean;
+    [key: string]: unknown;
+};
+
+type EnrichedDisplayPoint = DisplayPointInput & {
+    lockedNetWorth?: number;
+};
+
+function mergeScenarioIntoChartPoint(
+    basePoint: DisplayPointInput,
+    scenPt: DeepScenarioPoint | undefined,
+    lockedVal: number | undefined,
+    scaleAccounts: boolean,
+): EnrichedDisplayPoint {
+    const next: EnrichedDisplayPoint = { ...basePoint };
+    if (lockedVal !== undefined) {
+        next.lockedNetWorth = lockedVal;
+    }
+    if (!scenPt) return next;
+
+    next.P10 = scenPt.p10;
+    next.P50 = scenPt.p50;
+    next.P90 = scenPt.p90;
+    next.NetWorth = scenPt.p50;
+
+    if (scaleAccounts || Math.abs((basePoint.NetWorth ?? scenPt.p50) - scenPt.p50) > 1) {
+        const debtVal =
+            typeof basePoint.DettesNonImmo === 'number' && Number.isFinite(basePoint.DettesNonImmo)
+                ? basePoint.DettesNonImmo
+                : 0;
+        const targetAssetsSum = scenPt.p50 + debtVal;
+        let origAssetsSum = 0;
+        const presentKeys: string[] = [];
+
+        for (const key of NET_WORTH_DAILY_ASSETS) {
+            const raw = basePoint[key];
+            if (typeof raw === 'number' && Number.isFinite(raw)) {
+                origAssetsSum += raw;
+                presentKeys.push(key);
+            }
+        }
+
+        if (targetAssetsSum >= 0 && origAssetsSum > 1) {
+            const ratio = targetAssetsSum / origAssetsSum;
+            for (const key of presentKeys) {
+                next[key] = Number(basePoint[key]) * ratio;
+            }
+        } else if (targetAssetsSum >= 0) {
+            for (const key of presentKeys) {
+                next[key] = 0;
+            }
+            next.Liquidites = targetAssetsSum;
+        } else {
+            for (const key of presentKeys) {
+                next[key] = 0;
+            }
+            next.DettesNonImmo = -scenPt.p50;
+        }
+    }
+
+    return next;
 }
 
 export const FutureProjection: React.FC<FutureProjectionProps> = ({
-    initialBalances = {}, transactions = [], budgetItems = [], config,
-    realEstateGoals = [], setRealEstateGoals, retirementGoal, setRetirementGoal,
-    calculatedMonthlySavings, projection, setProjection, isPrivacyMode = false, autoReveal = false, bandeauKpi,
+    initialBalances = {},
+    transactions = [],
+    budgetItems = [],
+    config,
+    realEstateGoals = [],
+    setRealEstateGoals,
+    retirementGoal,
+    calculatedMonthlySavings,
+    projection,
+    setProjection,
+    isPrivacyMode = false,
+    bandeauKpi,
 }) => {
-    // C6 fix (Sprint 1B) — La garde SAFETY CHECKS qui retournait du JSX avant
-    // tous les hooks ci-dessous était une violation flagrante de la règle des
-    // Hooks (21 violations remontées par ESLint react-hooks/rules-of-hooks).
-    // Si les props passaient d'un état non-init à init entre 2 renders, l'ordre
-    // des hooks se décalait → panique React, state corrompu.
-    //
-    // Fix : la garde est déplacée APRÈS tous les hooks, juste avant le return
-    // JSX final. Les hooks tolèrent les props undefined via `?.` et `|| 0`
-    // (déjà en place avant ce fix). Voir guard early-return ligne ~285.
-
     const updateProj = <K extends keyof ProjectionConfig>(key: K, val: ProjectionConfig[K]) => {
         setProjection({ ...projection, [key]: val });
     };
@@ -262,166 +243,48 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     const updateReturnRate = (key: string, val: number) => {
         setProjection({
             ...projection,
-            returnRates: { ...(projection.returnRates || { celi: 7, reer: 6.5, nonReg: 6.5, crypto: 10, cash: 3 }), [key]: val }
+            returnRates: { ...(projection.returnRates || { celi: 7, reer: 6.5, nonReg: 6.5, crypto: 10, cash: 3 }), [key]: val },
         });
     };
 
-    // baseNetAnnual / baseMonthlyExpenses / currentRentExpense ont migré dans
-    // l'adaptateur pur buildSimulationParams (Lot 0) — plus recalculés ici.
-    // [EP-10] baseGrossAnnual retiré avec AssetLocationPanel (son seul consommateur).
-
-    // A1/A3 — Soldes de placement de DÉPART du futur, dérivés de la MÊME
-    // reconstruction que la courbe passée (usePastPortfolioHistory) → garantit la
-    // continuité passé↔futur au mois 0 (le futur démarre sur le portefeuille réel).
-    //
-    // Bug historique (la « falaise ») : ces soldes étaient peuplés par un effet qui
-    // appelait fetchPortfolioHistory() — un stub mort renvoyant toujours [] — donc
-    // setLiveCSVBalances n'était JAMAIS appelé et le futur démarrait avec ZÉRO
-    // placement (REER/CELI/NonReg = 0), pendant que le passé affichait le vrai
-    // portefeuille (centaines de k$). Le futur perdait donc tout le portefeuille
-    // au mois 0, pour TOUS les personas/utilisateurs (et en mode réel aussi).
-    // PH2-c (clé de voûte) — params + dérivations passé/présent depuis la SOURCE UNIQUE partagée
-    // avec le moteur app-level (hooks/useSimulationParams). `params` sert ICI uniquement aux outils
-    // EN AMONT (écran d'amorçage « leviers-d'abord » : StrategyOptimizerPanel + StressTestPanel) ; le calcul de
-    // la courbe principale, lui, est fait par ProjectionEngine et lu via store.lastProjection.
     const {
-        params, pastHistory, liveCSVBalances, calculatedStartingCash,
-        startYear, startMonth, todayMonthIndex, mentionAutoriteCourtier,
+        params,
+        pastHistory,
+        liveCSVBalances,
+        calculatedStartingCash,
+        startYear,
+        startMonth,
+        todayMonthIndex,
+        mentionAutoriteCourtier,
     } = useSimulationParams(calculatedMonthlySavings);
-    const grandCalculResult = useFinanceStore((s) => s.grandCalculResult);
-    const [showGrandCalculBands, setShowGrandCalculBands] = useState<boolean>(true);
 
     const applyHistoricalRate = () => {
         if (liveCSVBalances.historicalRate > 0) {
             const rate = Number(liveCSVBalances.historicalRate.toFixed(1));
             setProjection({
                 ...projection,
-                returnRates: { ...projection.returnRates, celi: rate, reer: rate, nonReg: rate, crypto: rate, cash: 3 }
+                returnRates: { ...projection.returnRates, celi: rate, reer: rate, nonReg: rate, crypto: rate, cash: 3 },
             });
         }
     };
 
-    // [UI-SCEN] — plus de sélecteur d'index de scénario : la stratégie est un PARAMÈTRE
-    // (projection.withdrawalStrategy) ; le moteur ne calcule que ce scénario (allResults[0]).
-    // PH2-a — runMC REMONTÉ dans le store : le toggle Monte-Carlo survit aux changements
-    // d'onglet (ne se réinitialise plus au retour sur Futur) et au reload.
-    const runMC = useFinanceStore(s => s.projectionRunMC);
-    const setRunMC = useFinanceStore(s => s.setProjectionRunMC);
-    const financialGoals = useFinanceStore(s => s.financialGoals) ?? EMPTY_ARRAY;
+    const runMC = useFinanceStore((s) => s.projectionRunMC);
+    const setRunMC = useFinanceStore((s) => s.setProjectionRunMC);
 
-    // W5.x — Conteneurs étendus câblés au moteur
-    // Phase B2 — consomme un éventuel deep-link entrant (cf docs/UI_REFOUNDATION_PLAN.md §5)
     usePendingFocus(TabEnum.FUTURE);
 
-    // PH2-c (clé de voûte) — le CALCUL de la projection a déménagé dans le moteur app-level
-    // (components/ProjectionEngine.tsx + hooks/useSimulationParams.ts, monté dans App). Ce
-    // composant ne construit plus `params` ni n'appelle calculateFutureProjection : il LIT le
-    // résultat publié dans store.lastProjection (source unique, toujours peuplée quel que soit
-    // l'onglet). Les dérivations passé/présent ci-dessus (pastHistory, liveCSVBalances, startYear…)
-    // restent ici : elles servent l'AFFICHAGE (préfixe « passé réel », ligne « aujourd'hui »).
-
-    // PH2-c (clé de voûte) — le CALCUL a déménagé dans le moteur app-level (ProjectionEngine,
-    // monté dans App). Ce composant ne calcule plus : `isComputing`/`hasError` reflètent le
-    // statut du moteur publié dans le store, lus par l'UI (bouton « calcul en cours », overlay,
-    // garde d'erreur).
-    const projectionStatus = useFinanceStore(s => s.projectionStatus);
+    const projectionStatus = useFinanceStore((s) => s.projectionStatus);
     const isComputing = projectionStatus === 'computing';
     const hasError = projectionStatus === 'error';
-    const reqsMet = useFinanceStore(s => FUTURE_REQ_IDS.every((id) => REQUIREMENTS[id].isMet(s)));
-    // [ENG-INFINITY-NON-GARDE-A-LA-FRONTIERE] Motif du refus, publié par `ProjectionEngine` — il
-    // NOMME le champ fautif, là où le message générique ci-dessous n'oriente vers rien.
-    const projectionRefus = useFinanceStore(s => s.projectionRefus);
+    const reqsMet = useFinanceStore((s) => FUTURE_REQ_IDS.every((id) => REQUIREMENTS[id].isMet(s)));
+    const projectionRefus = useFinanceStore((s) => s.projectionRefus);
+    const liveResults = useFinanceStore((s) => s.lastProjection);
+    const hasForeignHoldings = useFinanceStore((s) => hasForeignCurrencyAssets(s.assets));
+    const isTestModeActive = useFinanceStore((s) => s.isTestMode);
 
-    // PH2-c — résultat LU depuis la SOURCE UNIQUE (publiée par ProjectionEngine, app-level).
-    // Plus aucun calcul ni repli local : la courbe affichée EST celle du moteur (sauf GEL, ci-dessous).
-    const liveResults = useFinanceStore(s => s.lastProjection);
-    // [FUTUR-REAL-HISTORY] La mention « change du jour » ne concerne QUE les titres en devise étrangère
-    // (facteur FX=1 pour CAD) → ne l'affiche pas pour un portefeuille 100 % CAD (finding code-reviewer :
-    // sinon on suggère un risque de change qui ne s'applique pas). Sélecteur booléen = re-render minimal.
-    const hasForeignHoldings = useFinanceStore(s => hasForeignCurrencyAssets(s.assets));
+    const results = liveResults;
+    const curveVisible = results !== null;
 
-    // [PROJECTION-PERSIST 2026-07-16, demande Marc] — la projection révélée RESTE (reload / changement
-    // de page / autre PC) et se FIGE quand les entrées changent (badge « pas à jour », choix Marc :
-    // figer, pas recalculer). Mécanique :
-    //   - `revealedProjectionSig` (store, PERSISTÉ + synchronisé Drive) remplace l'ancien useState
-    //     local : la révélation survit au reload et voyage entre appareils.
-    //   - signature courante = params entiers + runMC (inchangé, cf commentaire historique plus bas).
-    //   - PÉRIMÉ (sig ≠) → on affiche le BLOB FIGÉ (IndexedDB, record `revealed`) au lieu de la courbe
-    //     live ; s'il est absent (autre PC : le blob ~1-2 Mo ne se synchronise pas), repli honnête sur
-    //     la courbe live, toujours avec le badge.
-    //   - MODE TEST : jamais de gel (le blob porte les VRAIES données de Marc → l'afficher en démo
-    //     persona les fuiterait à l'écran ; et un persona ne doit pas écraser le blob réel).
-    // ⚠️ Signature = HASH COURT du JSON, pas le JSON lui-même (finding code-reviewer) : la sig est
-    // désormais PERSISTÉE + synchronisée Drive — stocker le JSON complet des params (~dizaines de Ko,
-    // duplicata de budgets/dettes/objectifs déjà dans le state) gonflerait localStorage et chaque push.
-    // L'égalité stricte suffit à détecter la péremption ; hash FNV-1a 32 bits + longueur (déterministe
-    // cross-PC : même stringify → même hash). Non-crypto assumé (détection de changement, pas sécurité).
-    const currentSig = useMemo<string | null>(() => {
-        try {
-            const json = JSON.stringify({ p: params, mc: runMC });
-            let h = 0x811c9dc5;
-            for (let i = 0; i < json.length; i++) {
-                h ^= json.charCodeAt(i);
-                h = Math.imul(h, 0x01000193);
-            }
-            return `v1:${(h >>> 0).toString(36)}:${json.length.toString(36)}`;
-        } catch { return null; } // illisible (inatteignable : params est sérialisable) → jamais révélé
-    }, [params, runMC]);
-    const revealedSig = useFinanceStore(s => s.revealedProjectionSig);
-    const setRevealedSig = useFinanceStore(s => s.setRevealedProjectionSig);
-    const isTestModeActive = useFinanceStore(s => s.isTestMode);
-    const [manualComposeMode, setManualComposeMode] = useState(false);
-    const effectiveAutoReveal = Boolean(autoReveal) && !manualComposeMode;
-    const curveRevealed =
-        effectiveAutoReveal
-            ? currentSig !== null
-            : revealedSig !== null && currentSig !== null && revealedSig === currentSig;
-    const isStale = !effectiveAutoReveal && revealedSig !== null && revealedSig !== currentSig; // calculé, puis entrées modifiées
-    const [frozenResults, setFrozenResults] = useState<ProjectionResult | null>(null);
-    useEffect(() => {
-        if (effectiveAutoReveal && currentSig && revealedSig !== currentSig && liveResults) {
-            setRevealedSig(currentSig);
-        }
-    }, [effectiveAutoReveal, currentSig, revealedSig, liveResults, setRevealedSig]);
-    // Restauration du gel : périmé (reload avec prix/paramètres qui ont bougé) et pas encore de blob
-    // en mémoire → relire l'IDB (best-effort ; 'empty'/'unreadable' → repli live, badge quand même).
-    useEffect(() => {
-        if (!isStale || isTestModeActive || frozenResults) return;
-        let cancelled = false;
-        void loadRevealedProjection().then((res) => {
-            if (!cancelled && res.status === 'ok') setFrozenResults(res.result);
-        });
-        return () => { cancelled = true; };
-    }, [isStale, isTestModeActive, frozenResults]);
-    // Miroir du gel : tant que la courbe est FRAÎCHE, le blob figé suit le résultat live (une écriture
-    // par VRAI recalcul moteur — ProjectionEngine ne republie que sur changement réel de params).
-    // Dès qu'un paramètre change (périmé), ce miroir s'arrête → le blob garde la dernière courbe vue.
-    // ⚠️ Dédup par RÉFÉRENCE au niveau MODULE (finding code-reviewer) : FutureProjection est démonté/
-    // remonté à chaque changement d'onglet (TabRouter) → avec une dédup locale au montage, CHAQUE visite
-    // de l'onglet réécrivait le blob chiffré (~1-2 Mo, AES-GCM) en IDB alors que rien n'avait changé.
-    // `lastProjection` vit dans le store APP-LEVEL : son identité survit aux montages → la comparaison
-    // module-level saute l'écriture tant que le moteur n'a pas VRAIMENT republié. (setFrozenResults
-    // reste nécessaire à chaque montage : état local remis à null au démontage.)
-    useEffect(() => {
-        if (curveRevealed && liveResults && !isTestModeActive) {
-            setFrozenResults(liveResults);
-            if (_lastSavedRevealedResults !== liveResults) {
-                _lastSavedRevealedResults = liveResults;
-                void saveRevealedProjection(liveResults);
-            }
-        }
-    }, [curveRevealed, liveResults, isTestModeActive]);
-    // Substitution UNIQUE : tout l'aval (chartData, KPIs, événements, insolvabilité, plan) consomme
-    // `results` → périmé = TOUT figé de façon cohérente, pas seulement la courbe.
-    const frozenUsable = isStale && !isTestModeActive ? frozenResults : null;
-    const results = frozenUsable ?? liveResults;
-    // Courbe visible = (fraîche OU périmée hors mode test) ET un résultat existe. La garde
-    // `results !== null` vaut pour les DEUX branches (finding silent-failure BLOQUANT) : au reload,
-    // la signature persistée révèle d'emblée mais le moteur n'a pas encore publié (~300 ms + calcul)
-    // → sans la garde, les KPIs affichaient « Objectif FIRE 0k$ » / « 0.00M$ » avec assurance
-    // (no-fake-data violé) et un graphe vide sans spinner. Jamais révélé → gate.
-    const curveVisible = results !== null && (curveRevealed || (isStale && !isTestModeActive));
-    // Garde-fou anti-boucle infinie sur le spinner : si les prérequis manquent ou si le moteur reste inactif > 4 s, on sort de `curveRestoring`.
     const [restoringTimedOut, setRestoringTimedOut] = useState(false);
     useEffect(() => {
         if (!reqsMet || hasError || results !== null || projectionStatus === 'computing') {
@@ -433,189 +296,160 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         }, 4000);
         return () => window.clearTimeout(timer);
     }, [reqsMet, hasError, results, projectionStatus]);
-    // Fenêtre de RESTAURATION : révélé (sig persistée) mais AUCUN résultat encore (moteur en route,
-    // gel IDB en lecture). On affiche une carte de chargement honnête — PAS l'écran d'amorçage, sinon
-    // chaque reload donne l'impression que la projection a été perdue (l'inverse de la demande Marc).
-    const curveRestoring = reqsMet && !hasError && !restoringTimedOut && (revealedSig !== null || effectiveAutoReveal) && !isTestModeActive && results === null;
-    const { chartData = [] as ProjectionChartPoint[], fireNumber = 0, allResults = [] as ProjectionResult[] } = results ?? {};
 
-    // [PROJ-INSOLVENCY-BADGE] premier moment où le patrimoine net projeté passe sous 0 (plan
-    // insoutenable, capital épuisé). null si solvable sur tout l'horizon → aucun badge (empty state honnête).
+    const curveRestoring =
+        (reqsMet || isTestModeActive) && !hasError && !restoringTimedOut && results === null;
+
+    const {
+        chartData = [] as ProjectionChartPoint[],
+        fireNumber = 0,
+        allResults = [] as ProjectionResult[],
+    } = results ?? {};
+
+    // Orchestration Futur 4.0 : 4 scénarios uniques + mémoire chiffrée + calcul profond 100k+.
+    const deepForecast = useDeepForecast(params, allResults[0] ?? results);
+    const activeScenarioOutput =
+        deepForecast.activeReport.scenarios[deepForecast.selectedScenario] ??
+        deepForecast.activeReport.scenarios.real_trajectory;
+
+    const activeScenarioByMonth = useMemo(() => {
+        const map = new Map<number, DeepScenarioPoint>();
+        for (const pt of activeScenarioOutput.points) {
+            map.set(Math.trunc(pt.monthIndex), pt);
+        }
+        return map;
+    }, [activeScenarioOutput.points]);
+
     const insolvency = useMemo(() => findInsolvencyPoint(chartData), [chartData]);
-
-    // [ENG-GOALSHORTFALLS-EXPOSE] (décision Marc 2026-09-04) objectifs que la projection n'a pas pu
-    // financer en entier — le moteur le publiait depuis PV-11 sans aucun lecteur. null = rien à
-    // afficher (aucun manque, champ absent d'un gel d'avant PV-11) : pas de bandeau.
     const alerteObjectifs = useMemo(
         () => construireAlerteObjectifsManques(allResults[0]?.goalShortfalls),
         [allResults],
     );
 
-    // PH2-d — courbe VERROUILLÉE (référence figée) : lue du store ; le moteur continue de publier
-    // `results` en direct (aperçu). Verrouiller/déverrouiller = snapshot + persistance IndexedDB.
-    const lockedProjection = useFinanceStore(s => s.lockedProjection);
-    const isProjectionLocked = useFinanceStore(s => s.isProjectionLocked);
-    const lockProjection = useFinanceStore(s => s.lockProjection);
-    const unlockProjection = useFinanceStore(s => s.unlockProjection);
+    const lockedProjection = useFinanceStore((s) => s.lockedProjection);
+    const isProjectionLocked = useFinanceStore((s) => s.isProjectionLocked);
+    const lockProjection = useFinanceStore((s) => s.lockProjection);
+    const unlockProjection = useFinanceStore((s) => s.unlockProjection);
 
-    // G21 C5 + [UI-SCEN] — « Appliquer » la stratégie gagnante de l'optimiseur aux
-    // paramètres réels : leviers orthogonaux via setters, ordre de retrait via le
-    // PARAMÈTRE withdrawalStrategy, report des rentes via rrqStartAge/psvStartAge (#210).
-    const handleApplyConfig = (config: StrategyConfig) => {
-        const applied = applyConfigToSettings(config, projection, retirementGoal);
-        // [UI-SCEN] — l'ordre de retrait devient le PARAMÈTRE withdrawalStrategy (plus de
-        // sélection de scénario) ; le report des rentes passe par les âges de début #210
-        // (rrqStartAge 72 / psvStartAge 70), cohérent avec le levier delayPensions du moteur.
-        setProjection({
-            ...applied.projection,
-            withdrawalStrategy: applied.strategy as ProjectionConfig['withdrawalStrategy'],
-        });
-        // delayPensions=false RÉINITIALISE les âges (sinon un « Appliquer » précédent avec
-        // report laisserait 72/70 en place — plan incohérent avec la config affichée).
-        setRetirementGoal?.(applied.delayPensions
-            ? { ...applied.retirementGoal, rrqStartAge: 72, psvStartAge: 70 }
-            : { ...applied.retirementGoal, rrqStartAge: undefined, psvStartAge: undefined });
-    };
-
-    // A1/A3 — passé réel reconstruit (valeur marché des placements) préfixé au
-    // graphe AVANT le début de projection (monthIndex < 0), sans toucher au futur
-    // (événements, lignes de référence, sélecteur de période restent intacts).
-    // On n'y trace QUE les comptes de placement (pas de fausse « valeur nette
-    // totale » : le cash/immo passé n'est pas reconstruit).
-    // G22-B1 — VALEUR NETTE passée complète : placements (reconstruits) + cash
-    // (flux de transactions à rebours) + équité immo (amortissement). La ligne VN
-    // ne démarre qu'à la 1re transaction connue (avant = données cash inconnues,
-    // VN laissée vide → pas de fausse ligne à 0). Carry-forward des placements pour
-    // une courbe continue. Le cash actuel = cash au début de projection (jan 2026).
-    // (pastHistory est déclaré plus haut — il sert aussi à amorcer liveCSVBalances.)
-    // [FUTUR-REAL-HISTORY, Option A] Dette hors hypothèque AU NIVEAU ACTUEL (source unique du moteur,
-    // `chartData[0].DettesNonImmo`) → soustraite du patrimoine net de CHAQUE point passé pour un raccord
-    // EXACT au présent (le futur soustrait la même dette dès le mois 0). Approximation assumée (dette
-    // supposée constante dans le passé, faute d'historique d'amortissement) — SIGNALÉE dans le bandeau.
-    // ⚠️ [FUTUR-PAST-DEBT-FREEZE 2026-07-29, audit demande Marc « le passé doit être exactement ce que
-    // c'était à cette date »] PRÉFÈRE `liveResults` (TOUJOURS frais) à `results`/`chartData` (qui peuvent
-    // être le blob FIGÉ de PROJECTION-PERSIST) : le segment PASSÉ doit refléter la dette RÉELLE actuelle
-    // même quand la courbe FUTURE affichée est gelée (badge « Pas à jour ») — sinon la ligne Valeur Nette
-    // du passé continue de soustraire une dette PÉRIMÉE tant que Marc ne relance pas le calcul.
-    // ⚠️ [finding financial-integrity, PR #531, MESURÉ par sonde de rendu] Ne JAMAIS retomber sur 0 quand
-    // `liveResults` n'est pas encore publié (fenêtre boot/reload : `lastProjection` est EXCLU de la
-    // persistance — `useFinanceStore.ts` partialize — donc `null` tant que ProjectionEngine n'a pas
-    // recalculé, ~300 ms+, alors que le blob figé restauré depuis IDB affiche DÉJÀ une courbe) : un
-    // repli sur 0 gonflerait le passé de TOUTE la dette hors hypothèque — exactement le MONEY-PHANTOM que
-    // ce fix ferme par ailleurs. Repli sur `chartData` (= ce que la courbe affiche déjà, live ou figé),
-    // jamais sur 0 — seul un état SANS AUCUNE donnée (ni live ni figé) reste à 0 (nominal, avant 1er calcul).
     const effectiveChartData = liveResults?.chartData?.length ? liveResults.chartData : chartData;
     const rawDebtNonImmo = effectiveChartData?.[0]?.DettesNonImmo;
     const currentDebtNonImmo = Number(rawDebtNonImmo) || 0;
     const debtAnomaly = (effectiveChartData?.length ?? 0) > 0 && !Number.isFinite(Number(rawDebtNonImmo));
-    // [PASSE-REEL-DETTE-1] `currentDebtNonImmo` reste LE total appliqué au passé (raccord EXACT
-    // inchangé, Option A) ; `storeDebts` (tableau brut, FRAIS) sert UNIQUEMENT à déterminer, mois par
-    // mois, QUELLES dettes en retrancher parce qu'elles n'existaient pas encore (`sumNotYetStarted
-    // DebtsAtMonth`/`...AtAbsoluteMonth` dans `buildPastPrefix`/`buildDailyPastLedger`) — jamais à
-    // resommer le total en entier (cf commentaire dédié dans `debtSchedule.ts`).
-    const storeDebts = useFinanceStore(s => s.debts) ?? EMPTY_DEBTS;
-    // [PAST-NW-BUSINESS-SANS-PRODUCTEUR] La valeur COURANTE des entreprises privées, portée PLATE sur
-    // tout le passé (même convention que l'immobilier reconstruit par paliers) — la JSDoc de
-    // `pastNetWorthAt` le promettait depuis août sans qu'aucun appelant ne la passe : marche de la
-    // valeur entière au raccord passé→futur. Même règle que le moteur (source unique).
-    const storePrivateBusinesses = useFinanceStore(s => s.privateBusinesses);
-    const privateBusinessValue = useMemo(() => computePrivateBusinessValue(storePrivateBusinesses), [storePrivateBusinesses]);
+    const storeDebts = useFinanceStore((s) => s.debts) ?? EMPTY_DEBTS;
+    const storePrivateBusinesses = useFinanceStore((s) => s.privateBusinesses);
+    const privateBusinessValue = useMemo(
+        () => computePrivateBusinessValue(storePrivateBusinesses),
+        [storePrivateBusinesses],
+    );
+
     useEffect(() => {
         if (debtAnomaly) {
-            logError({ source: 'ui', severity: 'warning', message: 'FutureProjection : DettesNonImmo (liveResults, repli chartData) non fini — dette du passé rabattue à 0', context: { rawDebtNonImmo } });
+            logError({
+                source: 'ui',
+                severity: 'warning',
+                message: 'FutureProjection : DettesNonImmo non fini — dette du passé rabattue à 0',
+                context: { rawDebtNonImmo },
+            });
         }
     }, [debtAnomaly, rawDebtNonImmo]);
-    // [FUTUR-DAILY-ROLLOVER] Aujourd'hui, RÉACTIF au passage de jour (demande Marc 2026-08-12 :
-    // « ça doit se mettre à jour à chaque jour pour le passé »). Figé au montage, une app laissée
-    // ouverte gardait la frontière réel/projeté au jour de l'ouverture — les jours écoulés
-    // restaient « projetés ». Toute la chaîne aval (passé réel, série quotidienne, ancrages) dépend
-    // de cette valeur : quand le jour change, elle se reconstruit d'elle-même.
+
     const todayIso = useTodayIsoLocal();
-    // ⚠️ HISSÉ au-dessus de `pastPrefix` le 2026-09-17 (`[DEBT-CADENCE-REELLE]`) : la courbe au MOIS
-    // consomme désormais le JOUR d'aujourd'hui, comme la courbe au jour. Un `const` lu avant sa
-    // déclaration aurait planté au montage — le déplacer était le correctif, pas une duplication.
-    // [FUTUR-HIST-WIRING-TEST] Assemblage du segment passé extrait en fonction PURE `buildPastPrefix`
-    // (unit-testable, hors composant) → le câblage money-critical (buckets → helper, dette soustraite,
-    // dates) se prouve sans rendre le composant. Vide → `EMPTY_ARRAY` (référence stable pour l'aval).
+
     const pastPrefix = useMemo(() => {
-        const built = buildPastPrefix({ pastHistoryPoints: pastHistory.points, transactions, calculatedStartingCash, realEstateGoals, startYear, startMonth, todayIso, currentDebtNonImmo, debts: storeDebts, privateBusinessValue });
-        // [PASSE-REEL-RACCORD-CHUTE-MENSUEL] Le lot 97 fait remonter `fluxPeriodeAnnulee` avec les
-        // points : la marche au raccord de la vue par MOIS annule TOUT le mois courant.
-        return { points: built.points.length ? built.points : EMPTY_ARRAY, fluxPeriodeAnnulee: built.fluxPeriodeAnnulee };
-    }, [pastHistory.points, startYear, startMonth, todayIso, transactions, calculatedStartingCash, realEstateGoals, currentDebtNonImmo, storeDebts, privateBusinessValue]);
-    // Référence STABLE pour l'aval : `pastPrefix` est un objet neuf à chaque memo, mais ses POINTS
-    // gardent `EMPTY_ARRAY` quand il n'y a pas de passé — c'est cette identité que les memos avals
-    // comparent, et la casser rendrait tout le graphe à chaque rendu.
+        const built = buildPastPrefix({
+            pastHistoryPoints: pastHistory.points,
+            transactions,
+            calculatedStartingCash,
+            realEstateGoals,
+            startYear,
+            startMonth,
+            todayIso,
+            currentDebtNonImmo,
+            debts: storeDebts,
+            privateBusinessValue,
+        });
+        return {
+            points: built.points.length ? built.points : EMPTY_ARRAY,
+            fluxPeriodeAnnulee: built.fluxPeriodeAnnulee,
+        };
+    }, [
+        pastHistory.points,
+        startYear,
+        startMonth,
+        todayIso,
+        transactions,
+        calculatedStartingCash,
+        realEstateGoals,
+        currentDebtNonImmo,
+        storeDebts,
+        privateBusinessValue,
+    ]);
     const pastPrefixPoints = pastPrefix.points;
 
-    // [DEBT-AMORTIZATION-CABLAGE] Ce que le bandeau peut HONNÊTEMENT affirmer des dettes du passé.
-    // Le fait vient du service qui décide de l'amortissement, pas d'une seconde lecture des champs.
     const mentionDettes = useMemo(
         () => mentionDettesPasse(storeDebts, startYear * 12 + startMonth, currentDebtNonImmo, todayIso, transactions),
         [storeDebts, startYear, startMonth, currentDebtNonImmo, todayIso, transactions],
     );
-    // PH2-d — index NetWorth de la courbe VERROUILLÉE par monthIndex (référence à superposer).
+
     const lockedByMonth = useMemo(
         () => buildLockedByMonth(lockedProjection, isProjectionLocked, (p) => p.NetWorth ?? NaN),
         [isProjectionLocked, lockedProjection],
     );
-    const grandCalculByMonth = useMemo(() => {
-        if (!showGrandCalculBands || !grandCalculResult?.monthlyBands?.length) return null;
-        return new Map(grandCalculResult.monthlyBands.map((b) => [b.monthIndex, b]));
-    }, [showGrandCalculBands, grandCalculResult]);
+
     const displayData = useMemo(() => {
         const base = pastPrefixPoints.length ? [...pastPrefixPoints, ...chartData] : chartData;
-        // Sous verrou ou bandes Grand Calcul : fusion typée par monthIndex.
-        if (!lockedByMonth && !grandCalculByMonth) return base;
+        const scaleAccounts = deepForecast.selectedScenario !== 'real_trajectory';
         return base.map((d) => {
-            const monthIdx = (d as { monthIndex: number }).monthIndex;
-            const band = grandCalculByMonth && monthIdx >= 0 ? grandCalculByMonth.get(monthIdx) : undefined;
-            return {
-                ...d,
-                ...(lockedByMonth ? { lockedNetWorth: lockedByMonth.get(monthIdx) } : null),
-                ...(band
-                    ? {
-                        P5: band.p5,
-                        P10: band.p10,
-                        P25: band.p25,
-                        P50: band.p50,
-                        P75: band.p75,
-                        P90: band.p90,
-                        P95: band.p95,
-                    }
-                    : null),
-            };
+            const mKey = Math.trunc(d.monthIndex);
+            const scenPt = d.monthIndex >= todayMonthIndex ? activeScenarioByMonth.get(mKey) : undefined;
+            const lockedVal = lockedByMonth ? lockedByMonth.get(d.monthIndex) : undefined;
+            if (!scenPt && lockedVal === undefined) return d;
+            return mergeScenarioIntoChartPoint(d, scenPt, lockedVal, scaleAccounts);
         });
-    }, [pastPrefixPoints, chartData, lockedByMonth, grandCalculByMonth]);
+    }, [
+        pastPrefixPoints,
+        chartData,
+        deepForecast.selectedScenario,
+        todayMonthIndex,
+        activeScenarioByMonth,
+        lockedByMonth,
+    ]);
     const pastStartIndex = pastPrefixPoints.length ? pastPrefixPoints[0].monthIndex : 0;
 
-    // PH2-c — la PUBLICATION dans store.lastProjection est faite par ProjectionEngine (app-level),
-    // plus par ce composant. Futur est désormais un pur CONSOMMATEUR de la source unique.
-
-    // G5 — un événement = une pastille (plus de fusion « A | B | C »). On garde
-    // year/age/dateLabel par événement pour la fiche au clic, et `subIdx` pour
-    // empiler verticalement les événements d'un même mois.
     const { lifeChartEvents, flowChartEvents } = useMemo(() => {
-        type ChartEvent = { monthIndex: number; year: number | undefined; age: number | undefined; dateLabel: string | undefined; val: number | undefined; netWorth: number | undefined; label: string; subIdx: number; index: number; kind: 'life' | 'flow'; color?: string; pinned?: boolean; /** [FUTUR-DAILY-EVENTS] Abscisse FRACTIONNAIRE du jour saisi/échéance — absente = pastille au mois. */ x?: number };
+        type ChartEvent = {
+            monthIndex: number;
+            year: number | undefined;
+            age: number | undefined;
+            dateLabel: string | undefined;
+            val: number | undefined;
+            netWorth: number | undefined;
+            label: string;
+            subIdx: number;
+            index: number;
+            kind: 'life' | 'flow';
+            color?: string;
+            pinned?: boolean;
+            x?: number;
+        };
         const lifes: ChartEvent[] = [];
         const flows: ChartEvent[] = [];
-        // Anti-spam : le moteur ré-émet certains labels (renouvellements, stress
-        // tests) plusieurs mois d'affilée. On collapse les répétitions du même
-        // label rapprochées (≤ DEDUP_GAP mois) pour ne garder qu'une pastille.
         const DEDUP_GAP = 3;
         const lastLife: Record<string, number> = {};
         const lastFlow: Record<string, number> = {};
-        // [R2] La pastille « FIRE atteint » vient du MOTEUR (lifeEvent 'Objectif FIRE Atteint 🔥', projection.ts —
-        // source UNIQUE, seuil inflaté + indexé). On NE la recalcule PAS côté UI : on la MET EN VALEUR — orange
-        // #f97316 + `pinned` (jamais écrêtée par thinEvents). Cohérent avec « Future = source unique ».
         const FIRE_RE = /\bfire\b/i;
+
         chartData.forEach((d: ProjectionChartPoint) => {
-            // `val` = coordonnée Y de la pastille → `NetWorth` : TOUTES les pastilles (vie ET flux) se posent
-            // SUR la courbe (visibles). [FUTUR-ICONS-RICH] avant, les flux étaient à `val=ImpotLatent` (position
-            // basse, quasi invisibles — une des causes du « je ne vois presque aucune icône »).
-            const meta = { monthIndex: d.monthIndex, year: d.year, age: d.age, dateLabel: d.dateLabel, val: d.NetWorth, netWorth: d.NetWorth };
-            // [FUTUR-DAILY-EVENTS] Jour connu (saisie datée, échéance fiscale) → abscisse du JOUR.
-            // Calendrier hissé hors de la closure : constant pour tout le mois (finding revue #594).
+            const scenPt = d.monthIndex >= todayMonthIndex ? activeScenarioByMonth.get(Math.trunc(d.monthIndex)) : undefined;
+            const nw = scenPt ? scenPt.p50 : d.NetWorth;
+            const meta = {
+                monthIndex: d.monthIndex,
+                year: d.year,
+                age: d.age,
+                dateLabel: d.dateLabel,
+                val: nw,
+                netWorth: nw,
+            };
             const cal = calendarFromMonthIndex(startYear, startMonth, d.monthIndex);
             const dayXOf = (label: string): number | undefined => {
                 const day = (d.eventDays ?? {})[label];
@@ -626,202 +460,105 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                 if (lastLife[label] != null && d.monthIndex - lastLife[label] <= DEDUP_GAP) return;
                 lastLife[label] = d.monthIndex;
                 const isFire = FIRE_RE.test(label);
-                lifes.push({ ...meta, label, subIdx: 0, index: 0, kind: 'life', x: dayXOf(label), ...(isFire ? { color: '#f97316', pinned: true } : null) });
+                lifes.push({
+                    ...meta,
+                    label,
+                    subIdx: 0,
+                    index: 0,
+                    kind: 'life',
+                    x: dayXOf(label),
+                    ...(isFire ? { color: 'var(--repere)', pinned: true } : null),
+                });
             });
-            // [FUTUR-ICONS-RICH, ADR-2] Gate RETIRÉ : il filtrait la quasi-totalité des flowEvents
-            // (`.includes('-')` cherchait un tiret ASCII alors que les messages portent un tiret cadratin « — »
-            // → seuls les mois à remboursement d'impôt passaient). La densité est gérée par sampleEvenly, pas ici.
             (d.flowEvents || []).forEach((label: string) => {
-                // Dédup par MOTIF (finding silent-failure) : le moteur émet un flowEvent de retrait CHAQUE mois
-                // avec un MONTANT UNIQUE (« Retrait REER … +5 605 $ », « +5 609 $ »…) → un dédup par chaîne EXACTE
-                // ne collapse jamais et inonde le cap flux. On normalise les nombres (→ « # ») avant dédup.
                 const dedupKey = label.replace(/\d[\d\s.,]*/g, '#');
                 if (lastFlow[dedupKey] != null && d.monthIndex - lastFlow[dedupKey] <= DEDUP_GAP) return;
                 lastFlow[dedupKey] = d.monthIndex;
                 flows.push({ ...meta, label, subIdx: 0, index: 0, kind: 'flow', x: dayXOf(label) });
             });
         });
-        // [FUTUR-ICONS-RICH] Jalons DÉRIVÉS des champs chartData (RRQ/PSV/1er retrait REER-CELI/locatif) —
-        // présentation pure (aucun recalcul $). Jamais retraite/FIRE/impôt (émis par le moteur → anti-doublon
-        // structurel). `pinned` : peu nombreux (one-time) → JAMAIS écrêtés par sampleEvenly, toujours visibles
-        // (finding silent-failure : sinon noyés par le volume de flowEvents dégatés).
-        const milestones = deriveMilestoneIcons(chartData);
-        lifes.push(...milestones.map((m) => ({ ...m, subIdx: 0, index: 0, pinned: true })));
-        // ⚠️ RE-TRI par monthIndex OBLIGATOIRE avant `sampleEvenly` (contrat « tableau ORDONNÉ », finding architect
-        // ÉLEVÉ : un merge non trié casse l'échantillonnage uniforme) + `index` (clé unique).
-        // ⚠️ [FUTUR-DAILY-STACK-X] `subIdx` n'est PLUS attribué ici : le rang d'empilement se calcule
-        // sur les pastilles RÉELLEMENT montrées (`assignStackIndex`, après fenêtre + écrêtage). Attribué
-        // ici, il survivait à ses voisins écrêtés et laissait une pastille flotter sur un étage vide.
+
+        const milestones = deriveMilestoneIcons(chartData).map((m) => {
+            const scenPt = m.monthIndex >= todayMonthIndex ? activeScenarioByMonth.get(Math.trunc(m.monthIndex)) : undefined;
+            return {
+                ...m,
+                val: scenPt ? scenPt.p50 : m.val,
+                netWorth: scenPt ? scenPt.p50 : m.netWorth,
+                subIdx: 0,
+                index: 0,
+                pinned: true,
+            };
+        });
+        lifes.push(...milestones);
+
         const finalize = (arr: ChartEvent[]): ChartEvent[] => {
             const sorted = [...arr].sort((a, b) => a.monthIndex - b.monthIndex);
             return sorted.map((e, i) => ({ ...e, subIdx: 0, index: i }));
         };
         return { lifeChartEvents: finalize(lifes), flowChartEvents: finalize(flows) };
-    // ⚠️ startYear/startMonth dans les deps (finding ÉLEVÉ revue #594) : l'horloge calendaire
-    // avance TOUTE SEULE (rollover) — sans ces deps, les abscisses des pastilles restaient
-    // calculées sur un ancrage périmé jusqu'au prochain recalcul de chartData.
-    }, [chartData, startYear, startMonth]);
+    }, [chartData, startYear, startMonth, todayMonthIndex, activeScenarioByMonth]);
 
-    // PH4-FUT — ANNOTATIONS sur la courbe (choix Marc : âge de retraite, épuisement d'un compte, bascule
-    // de phase). Calculées une fois depuis chartData ; rendues en lignes verticales discrètes (masquables
-    // via le toggle « Événements » de la légende). Les ÉVÉNEMENTS DE VIE restent les pastilles cliquables.
     const lifeMarkers = useMemo(() => {
         const markers: { monthIndex: number; label: string; color: string; jalon?: boolean }[] = [];
         let retDone = false;
         const accounts: Array<[keyof ProjectionChartPoint, string]> = [
-            ['REER', 'REER'], ['CELI', 'CELI'], ['NonReg', 'Non-enr.'], ['CELIAPP', 'CELIAPP'],
+            ['REER', 'REER'],
+            ['CELI', 'CELI'],
+            ['NonReg', 'Non-enr.'],
+            ['CELIAPP', 'CELIAPP'],
         ];
         const sig: Record<string, boolean> = {};
         const dep: Record<string, boolean> = {};
         for (const d of chartData as ProjectionChartPoint[]) {
-            if (d.monthIndex < 0) continue; // pas d'annotation sur le passé reconstruit
-            // [S5-REFONTE-FUTUR] Jalon « Retraite · 60 ans » en pastille au-dessus du tracé (maquette F-bureau).
-            // NOMBRE-NON-MONETAIRE : réglage saisi (âge ou horizon choisi), pas une valeur dérivée du dossier (âge de retraite)
-            if (!retDone && d.isRetired) { markers.push({ monthIndex: d.monthIndex, label: `Retraite${d.age ? ` · ${Math.floor(d.age)} ans` : ''}`, color: '#e6eaf2', jalon: true }); retDone = true; }
-            // [FUTUR-ICONS-RICH, ADR-3] RRQ/PSV retirés des lignes verticales → désormais icônes-jalons cliquables
-            // (`deriveMilestoneIcons`) : évite la double représentation (ligne + pastille) du même mois.
+            if (d.monthIndex < 0) continue;
+            // NOMBRE-NON-MONETAIRE : âge de retraite saisi, masqué en mode discret
+            if (!retDone && d.isRetired) {
+                markers.push({
+                    monthIndex: d.monthIndex,
+                    label: `Retraite${!isPrivacyMode && d.age ? ` · ${Math.floor(d.age)} ans` : ''}`,
+                    color: 'var(--accent)',
+                    jalon: true,
+                });
+                retDone = true;
+            }
             for (const [key, short] of accounts) {
                 const v = (d[key] as number | undefined) ?? 0;
                 if (v > 5000) sig[key as string] = true;
-                if (sig[key as string] && !dep[key as string] && v < 1000) { markers.push({ monthIndex: d.monthIndex, label: `${short} ⌀`, color: '#ef4444' }); dep[key as string] = true; }
+                if (sig[key as string] && !dep[key as string] && v < 1000) {
+                    markers.push({ monthIndex: d.monthIndex, label: `${short} ⌀`, color: 'var(--erreur-texte)' });
+                    dep[key as string] = true;
+                }
             }
         }
         return markers;
-    }, [chartData]);
+    }, [chartData, isPrivacyMode]);
 
-    // [S5-REFONTE-FUTUR] Le jalon FIRE (année, âge) est l'évènement que le MOTEUR émet (« Objectif FIRE
-    // Atteint »), déjà repéré pour la pastille de la courbe — pas un seuil recalculé côté écran.
     const jalonFire = useMemo(
         () => lifeChartEvents.find((e) => e.kind === 'life' && /\bfire\b/i.test(e.label)) ?? null,
         [lifeChartEvents],
     );
 
-    // G3 + PH4-FUT « leviers-d'abord » — 3 sous-onglets : Projection (composeur de leviers EN AMONT puis
-    // courbe + KPIs) ; Paramètres (hypothèses) ; Plan d'action (explications + checklist). Plus d'onglet
-    // « Optimisation » : le composeur de leviers est remonté dans l'écran d'amorçage du sous-onglet Projection.
-    // PH4-FUT « leviers-d'abord » — sous-onglet « Optimisation » RETIRÉ : le composeur de leviers est
-    // remonté dans l'écran d'amorçage du Graphique (en amont du calcul).
-    // [REFONTE-NAV-L2b] + 4e sous-onglet « Historique » (l'évolution PASSÉE, ex-Accueil).
-    // [FUTUR-NAV-TIROIRS] Remplace les anciens sous-onglets Hypothèses/Plan d'action/Historique :
-    // la courbe est désormais TOUJOURS affichée, ces trois-là s'ouvrent chacun en tiroir par-dessus.
     const [tiroirOuvert, setTiroirOuvert] = useState<FutureDrawerId | null>(null);
-    // PH4 (refonte Futur « leviers-d'abord », demande Marc) — la courbe ET les KPIs ne s'affichent
-    // QUE sur un calcul EXPLICITE : la révélation est liée à une SIGNATURE de ce qui PILOTE la courbe.
-    // Revue PH4 (MAJEUR) — on signe `params` ENTIER (la source UNIQUE, ~20 entrées du store) et NON un
-    // sous-ensemble cueilli à la main — sinon la courbe se remettrait à jour seule pour toute entrée non
-    // listée. `params` est mémoïsé par référence → le stringify ne se refait qu'au vrai changement.
-    // ⚠️ [PROJECTION-PERSIST 2026-07-16] : le calcul de currentSig/revealedSig/curveRevealed/isStale a
-    // DÉMÉNAGÉ en tête de composant (avant la lecture de `results`) — la signature pilote désormais la
-    // SUBSTITUTION live/figé. `revealedSig` n'est PLUS un useState local : il vit dans le store PERSISTÉ
-    // (survit au reload, synchronisé Drive). États : jamais calculé (null) → gate ; sig identique →
-    // courbe live ; sig ≠ → courbe FIGÉE + badge « pas à jour » (plus de ré-invite plein écran).
-    const revealCurve = () => {
-        setManualComposeMode(false);
-        setRevealedSig(currentSig);
-    };
-    // « Rechoisir mes leviers » (badge périmé) : on efface la révélation → retour à l'écran d'amorçage
-    // (composeur de leviers), et on purge le gel (mémoire + IDB) — la prochaine révélation refigera.
-    const regateToLevers = () => {
-        setManualComposeMode(true);
-        setRevealedSig(null);
-        setFrozenResults(null);
-        // ⚠️ Garde mode test (finding silent-failure ÉLEVÉ) : le record IDB `revealed` est un slot
-        // GLOBAL partagé réel/test — un clic « Ré-optimiser » pendant une démo persona SUPPRIMERAIT
-        // silencieusement le blob RÉEL de l'utilisateur (même classe d'incident que PERSONA-PURGE).
-        // Cohérent avec les effets voisins (restauration + miroir), déjà gatés `!isTestModeActive`.
-        if (!isTestModeActive) void clearRevealedProjection();
-    };
-    // PH4-FUT (leviers-d'abord) — « Appliquer la stratégie gagnante PUIS révéler la courbe » : on ne peut
-    // pas figer la signature dans le même tick que l'application (les params changent juste après).
-    // Un flag déclenche la révélation au render SUIVANT, quand currentSig reflète les params appliqués.
-    // Invariant : handleApplyConfig fait 2 setAppState (projection + retirementGoal) BATCHÉS en 1 render
-    // (handler synchrone, React 19) → currentSig recalculé une seule fois, COMPLET (pas de sig intermédiaire,
-    // pas de flash). ⚠️ Si un de ces set devenait async, ce flux re-cacherait la courbe (revue PH4-FUT).
-    const [revealAfterApply, setRevealAfterApply] = useState(false);
     const [showConnexionsModal, setShowConnexionsModal] = useState(false);
     const [anatomyOpen, setAnatomyOpen] = useState(false);
-    const [modeCourbe, setModeCourbe] = useState<ModeAffichageCourbe>('empilee');
+    const [modeCourbe, setModeCourbe] = useState<ModeAffichageCourbe>('nette');
     const [modeComparaison, setModeComparaison] = useState(false);
-    const [comparaisonPoints, setComparaisonPoints] = useState<{ a: ProjectionChartPoint | null; b: ProjectionChartPoint | null }>({ a: null, b: null });
+    const [comparaisonPoints, setComparaisonPoints] = useState<{
+        a: ProjectionChartPoint | null;
+        b: ProjectionChartPoint | null;
+    }>({ a: null, b: null });
     const dragStartPointRef = useRef<ProjectionChartPoint | null>(null);
-    useEffect(() => {
-        if (revealAfterApply) {
-            setManualComposeMode(false);
-            setRevealedSig(currentSig);
-            setRevealAfterApply(false);
-        }
-    }, [revealAfterApply, currentSig, setRevealedSig]);
-    const applyAndReveal = (cfg: StrategyConfig) => { handleApplyConfig(cfg); setRevealAfterApply(true); };
-    const handleInstantScenarioUpdate = useCallback((nextProj: ProjectionConfig, nextRetGoal?: RetirementGoal) => {
-        setProjection(nextProj);
-        if (nextRetGoal && setRetirementGoal) {
-            setRetirementGoal(nextRetGoal);
-        }
-        setRevealAfterApply(true);
-    }, [setProjection, setRetirementGoal]);
-    // A11y : à la révélation, déplacer le focus sur la zone courbe (le bouton « Calculer » se
-    // démonte → sinon le focus retombe sur <body> et le lecteur d'écran perd le contexte).
-    // [PROJECTION-PERSIST] le focus ne bouge que sur une TRANSITION false→true (révélation explicite,
-    // i.e. un clic) : avec la signature persistée, curveRevealed peut être vrai dès le montage (reload)
-    // → voler le focus à l'arrivée sur la page serait intrusif. Détection par ref « valeur précédente »
-    // initialisée à la valeur du MONTAGE — immune à la double-invocation d'effets de StrictMode (dev),
-    // contrairement à un flag « sauter le 1er passage » (finding a11y-auditor).
+    const [hoverXRatio, setHoverXRatio] = useState<number | null>(null);
+    const [pendingFocusMonth, setPendingFocusMonth] = useState<number | null>(null);
+
     const revealedRef = useRef<HTMLDivElement>(null);
-    const prevCurveRevealedRef = useRef(curveRevealed);
+    const prevCurveVisibleRef = useRef(curveVisible);
     useEffect(() => {
-        const was = prevCurveRevealedRef.current;
-        prevCurveRevealedRef.current = curveRevealed;
-        if (!was && curveRevealed) revealedRef.current?.focus();
-    }, [curveRevealed]);
+        const was = prevCurveVisibleRef.current;
+        prevCurveVisibleRef.current = curveVisible;
+        if (!was && curveVisible) revealedRef.current?.focus();
+    }, [curveVisible]);
 
-    // [FUTUR-MOBILE-PR4] Compte d'hypothèses modifiées pour le CTA collant de l'onglet Hypothèses
-    // mobile (« Recalculer (N modifiée·s) ») — capture un instantané des champs de l'onglet
-    // Hypothèses (`projection` + plafond immo) à CHAQUE transition vers `curveRevealed`, jamais
-    // ailleurs : c'est la SEULE définition de « depuis le dernier calcul » qui existe déjà dans ce
-    // composant (`isStale`), reconduite ici pour une grandeur COMPTÉE plutôt que booléenne. N'ajoute
-    // AUCUNE branche au mécanisme de révélation/gel existant (risque money-critical) — additif pur.
-    //
-    // ⚠️ RÉGRESSION trouvée et corrigée AVANT push : un `useState` ici (au lieu d'une `ref`) ajoute
-    // un cycle de rendu supplémentaire à CHAQUE révélation — `tests/components/FutureProjection.
-    // eventStack.test.tsx` a rougi (rangs d'empilement des pastilles dupliqués : le mock de test
-    // capture `ReferenceDot` à CHAQUE rendu, et `shownLifeEvents`/`assignStackIndex` ne sont PAS
-    // mémoïsés plus bas dans ce fichier — un rendu de plus change ce qui est capturé). Prouvé par
-    // swap vers `origin/main` : le test passe SANS mon diff, échoue avec `useState`, repasse avec
-    // `useRef` (une mutation de ref ne planifie AUCUN rendu). Aucune fonctionnalité perdue : le
-    // badge se lit au prochain rendu normal (déclenché par la prochaine modification d'hypothèse),
-    // largement avant que l'utilisateur puisse agir.
-    const hypothesesBaselineRef = useRef<{ projection: ProjectionConfig; maxValue: number | undefined } | null>(null);
-    useEffect(() => {
-        if (curveRevealed) hypothesesBaselineRef.current = { projection, maxValue: realEstateGoals[0]?.maxValue };
-    }, [curveRevealed, projection, realEstateGoals]);
-    const changedHypothesesCount = useMemo(() => {
-        const baseline = hypothesesBaselineRef.current;
-        if (!baseline) return 0;
-        // ⚠️ [DETTE-CAST-DAILYCURVE] Pas de `as unknown as Record<string, unknown>` (ratchet à 2
-        // casts MAX dans ce fichier, réservés aux deux handlers recharts) : `Object.keys` rend déjà
-        // `string[]` sans cast, et l'indexation reste typée via `keyof ProjectionConfig`.
-        const keys = new Set<keyof ProjectionConfig>([
-            ...Object.keys(baseline.projection) as Array<keyof ProjectionConfig>,
-            ...Object.keys(projection) as Array<keyof ProjectionConfig>,
-        ]);
-        let n = 0;
-        for (const k of keys) {
-            if (JSON.stringify(baseline.projection[k]) !== JSON.stringify(projection[k])) n++;
-        }
-        if (baseline.maxValue !== realEstateGoals[0]?.maxValue) n++;
-        return n;
-    // hypothesesBaselineRef.current est un ref lu intentionnellement sans déclencher de rendu — la
-    // règle exhaustive-deps ne l'exige pas (les refs en sont exemptées) ; le memo se réévalue déjà
-    // à chaque changement de `projection`/`realEstateGoals`, ce qui couvre les cas où la baseline
-    // vient de changer.
-    }, [projection, realEstateGoals]);
-
-    // [UI-SCEN] — bandeau « Verdict » et classement retirés : la comparaison des façons
-    // de gérer vit dans l'écran d'amorçage « leviers-d'abord » (StrategyOptimizerPanel).
-
-    // F10 (audit 2026-05-28) — index monthIndex → année pour le tickFormatter du XAxis.
-    // Avant : displayData.find() O(n) à CHAQUE tick, et recharts ré-appelle le formatter
-    // pendant le zoom/pan → O(ticks × n) par frame. Map O(1) mémoïsée sur displayData.
     const monthIndexToYear = useMemo(() => {
         const map = new Map<number, number>();
         for (const d of displayData as ProjectionChartPoint[]) {
@@ -830,88 +567,50 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         return map;
     }, [displayData]);
 
-    // G4 — zoom molette / pan / sélecteur de période sur la courbe (remplace <Brush>).
-    // A3 — consomme displayData (passé réel préfixé + futur projeté).
-    // [FUTUR-DAILY-ZOOM-DEEP] `minPoints: 1` (écart minimal) ⇒ on peut descendre jusqu'à DEUX points
-    // mensuels visibles = UN seul mois rendu au jour (~30 jours à l'écran, ~30 px par jour — chaque
-    // jour se vise à la souris). Demande Marc 2026-08-11 : « je veux pouvoir zoomer un peu plus pour
-    // pouvoir voir les jours individuels ». Le défaut du hook (5) reste en place pour les AUTRES
-    // graphes de l'app, où descendre à 2 points n'a pas de vue au jour pour le justifier.
-    // ⚠️ Le plancher ne peut pas passer SOUS le mois sans réécrire le zoom : le hook navigue par
-    // indices ENTIERS du tableau mensuel, et la construction des jours exige 2 ancres (la première
-    // sert de valeur d'entrée, non rendue).
     const zoom = useTimeChartZoom<ProjectionChartPoint>(displayData as ProjectionChartPoint[], { minPoints: 1 });
 
-    // [FUTUR-DAILY-NATIVE] La plage MENSUELLE ventilable : la plus longue plage contiguë de
-    // `displayData` à valeur nette FINIE. C'est la base de TOUTE la série quotidienne (courbe ET
-    // infobulle) — plus aucune dépendance au zoom : le jour est la résolution de BASE de la courbe
-    // (demande Marc 2026-08-12 : « je veux pas un bouton je veux pouvoir selectionner sur la
-    // courbe direct », cadrage 3/3 : clic = jour partout, survol = jour, courbe tracée au jour).
-    // ⚠️ `finiteAnchorRun` et NON `Number(p.NetWorth) || 0` (finding silent-failure #577) :
-    // `buildPastPrefix` laisse `NetWorth` à `undefined` AVANT la première transaction connue,
-    // exprès. Le coercer aurait ancré toute la ventilation sur un patrimoine de 0 $ inventé.
     const dailyAnchors = useMemo(
         () => finiteAnchorRun(displayData as ProjectionChartPoint[], startYear, startMonth),
         [displayData, startYear, startMonth],
     );
-    // [FUTUR-DAILY-ROLLOVER] Abscisse FRACTIONNAIRE d'aujourd'hui : sur une courbe au jour, poser
-    // « Aujourd'hui » et la fin de la bande « Passé réel » à l'ENTIER du mois les décalait de
-    // jusqu'à 30 jours du vrai jour courant. `null` (date imparsable) ⇒ repli sur l'ancrage mensuel.
-    const todayAxisX = useMemo(() => axisXForIso(startYear, startMonth, todayIso), [startYear, startMonth, todayIso]);
+    const todayAxisX = useMemo(
+        () => axisXForIso(startYear, startMonth, todayIso),
+        [startYear, startMonth, todayIso],
+    );
 
-    // ⚠️ Replis STABLES (constantes de module) et non `?? []` inline : un littéral crée une NOUVELLE
-    // référence à chaque rendu, ce qui ferait recalculer les `useMemo` qui en dépendent à chaque
-    // frame de zoom/pan — exactement la classe de fuite de perf déjà relevée en revue sur ce
-    // chantier. Attrapé ici par `react-hooks/exhaustive-deps`, pas par mon jugement.
-    const storeAssets = useFinanceStore(s => s.assets) ?? EMPTY_ASSETS;
-    const valoriaRiskProfile = useFinanceStore(s => s.valoriaRiskProfile);
-    const geminiApiKey = useFinanceStore(s => s.apiKeys.gemini) ?? '';
-    // [FUTUR-DAILY-ROLLOVER, finding silent-failure #593] Dernier jour COUVERT par la sync bancaire
-    // (date LOCALE de la dernière passe). Un jour réel postérieur porte `daySyncUnconfirmed` : après
-    // minuit app ouverte, un « 0 $ dépensé hier » peut n'être qu'une sync pas encore passée — le
-    // dire est le symétrique de `hasEstimatedPrice` côté prix. Jamais de sync ⇒ null ⇒ aucun flag
-    // (usage manuel : marquer tout le passé serait du bruit permanent).
-    const fintableSyncAt = useFinanceStore(s => s.fintableSyncReport?.at);
+    const storeAssets = useFinanceStore((s) => s.assets) ?? EMPTY_ASSETS;
+    const fintableSyncAt = useFinanceStore((s) => s.fintableSyncReport?.at);
     const syncConfirmedUntilIso = useMemo(() => {
         if (!Number.isFinite(fintableSyncAt)) return null;
         const d = new Date(fintableSyncAt as number);
         return isoDate(d.getFullYear(), d.getMonth(), d.getDate());
     }, [fintableSyncAt]);
-    const fxRates = useFinanceStore(s => s.fxRates) ?? EMPTY_FX;
-    const storeRecurring = useFinanceStore(s => s.subscriptions) ?? EMPTY_RECURRING;
-    // ⚠️ `netSalary` du store est MENSUEL (règle « unités argent » de CLAUDE.md). Marc est payé
-    // CHAQUE SEMAINE le jeudi (réponse A13, 2026-08-06) : c'est `weeklyDeltasForMonth` qui fait la
-    // conversion (×12/52 par versement), pas ce site — ici on ne fait que sommer le ménage.
+    const fxRates = useFinanceStore((s) => s.fxRates) ?? EMPTY_FX;
+    const storeRecurring = useFinanceStore((s) => s.subscriptions) ?? EMPTY_RECURRING;
     const dailyMonthlyNet = (config?.users ?? []).reduce((s, u) => s + (Number(u?.netSalary) || 0), 0);
     const dailyMonthlyDebt = useFinanceStore(
-        s => (s.debts ?? []).reduce((acc, d) => acc + (Number(d?.minimumPayment) || 0), 0),
+        (s) => (s.debts ?? []).reduce((acc, d) => acc + (Number(d?.minimumPayment) || 0), 0),
     );
 
-
-    // [A11Y-CHARTS] — colonnes de la table de données sr-only (alternative texte à la courbe Recharts,
-    // opaque aux lecteurs d'écran). Date (axe X) + chaque montant affiché (comptes empilés + Valeur Nette).
-    // Le mode privé masque les MONTANTS (parité avec l'axe/tooltip déjà masqués), pas la date.
+    // Colonnes de la table accessible sr-only (alignées sur la légende et le ruban [P10, P50, P90]).
     const dataColumns = useMemo<ChartDataColumn[]>(() => {
-        // ⚠️ `Number(v) || 0` transformait une valeur ABSENTE en « 0 $ » (finding revue) : la table
-        // aurait annoncé « CELI : 0 $ » là où la valeur est simplement inconnue.
-        // ⚠️ Le motif d'origine (« en vue quotidienne les colonnes par compte n'existent pas ») est
-        // PÉRIMÉ depuis [FUTUR-DAILY-FULL] : `dailyLedger` ventile les soldes par compte au jour, et
-        // ces colonnes se remplissent donc aussi en vue jour. Le garde reste nécessaire pour le
-        // PRÉFIXE PASSÉ, où `NetWorth` est légitimement absent avant la 1re transaction connue.
-        // ⚠️ Et ici le texte est LITTÉRAL (`NO_DATA_LABEL`), pas `emptyAware` : cette table est
-        // `sr-only`, donc invisible — c'est la convention INVERSE de celle des cellules visibles, où
-        // le libellé en clair polluerait l'écran. Le typecheck l'a d'ailleurs imposé : `format`
-        // renvoie une chaîne, pas un nœud React.
         const money = (v: unknown) => {
             if (v === undefined || v === null || !Number.isFinite(Number(v))) return NO_DATA_LABEL;
             return isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCompactCAD(Number(v));
         };
         return [
-            { key: 'dateLabel', label: 'Date', format: (_v, row) => {
-                const r = row as { dateLabel?: string; year?: number };
-                return r.dateLabel ?? (r.year !== undefined ? String(r.year) : '');
-            } },
+            {
+                key: 'dateLabel',
+                label: 'Date',
+                format: (_v, row) => {
+                    const r = row as { dateLabel?: string; year?: number };
+                    return r.dateLabel ?? (r.year !== undefined ? String(r.year) : '');
+                },
+            },
             { key: 'NetWorth', label: 'Valeur nette', format: money },
+            { key: 'P10', label: 'Scénario prudent (P10)', format: money },
+            { key: 'P50', label: 'Médiane (P50)', format: money },
+            { key: 'P90', label: 'Scénario favorable (P90)', format: money },
             { key: 'Liquidites', label: 'Cash', format: money },
             { key: 'CELI', label: 'CELI', format: money },
             { key: 'CELIAPP', label: 'CELIAPP (FHSA)', format: money },
@@ -921,125 +620,42 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             { key: 'Crypto', label: 'Crypto', format: money },
             { key: 'Immobilier', label: 'Équité Immo', format: money },
             { key: 'Entreprise', label: 'Entreprise privée', format: money },
-            // ⚠️ [FUTUR-COURBE-DETTE 2026-09-18] La dette EST une colonne, parce que le graphe l'a
-            // désormais comme série ET parce que l'`aria-label` du conteneur promet en toutes
-            // lettres « les mêmes données ». Sans elle, un utilisateur de lecteur d'écran obtient
-            // une table où la valeur nette ne se RECOMPOSE PAS par somme des comptes — le défaut
-            // corrigé la veille dans l'infobulle, laissé intact dans son alternative texte.
             { key: 'DettesNonImmo', label: 'Dettes (hors hypothèque)', format: money },
-            // ⚠️ [DETTE-LEVIER-EXPLICITE 2026-09-21] Colonne en PLUS de la précédente, dont elle est
-            // un SOUS-ENSEMBLE : elle ne se soustrait pas une seconde fois. Son absence laisserait
-            // la table `sr-only` incapable de dire POURQUOI la dette monte, alors que le graphe le
-            // montre — et l’`aria-label` du conteneur promet « les mêmes données ».
             { key: 'DetteLevierSmith', label: LIBELLE_LEVIER, format: money },
-            ...(grandCalculByMonth !== null
-                ? [
-                      { key: 'P5', label: 'Bande P5 (pessimiste)', format: money },
-                      { key: 'P50', label: 'Bande P50 (médiane)', format: money },
-                      { key: 'P95', label: 'Bande P95 (optimiste)', format: money },
-                  ]
-                : []),
         ];
-    }, [isPrivacyMode, grandCalculByMonth]);
+    }, [isPrivacyMode]);
 
-    // G5 — événement sélectionné (clic sur une pastille) → fiche détail.
     const [detailPoint, setDetailPoint] = useState<ProjectionChartPoint | null>(null);
-    /**
-     * [PASSE-REEL-TXN-DU-JOUR] Le JOUR cliqué, porté À PART du point de détail — et c'est
-     * indispensable, pas une préférence de style.
-     *
-     * ⚠️ `detailPointFor` REMPLACE volontairement un point quotidien par son point MENSUEL hôte
-     * (« un mois qui existe plutôt qu'un mois fantôme reconstitué depuis un jour »). Or `dayIso` et
-     * `hostMonthIndex` sont posés ENSEMBLE (`dailyLedger.ts`) : lire `dayIso` sur le point rebasé
-     * donne donc TOUJOURS `undefined`. Ma première version le faisait — la section « Transactions
-     * du jour » était rigoureusement INATTEIGNABLE en clic réel, alors que ses tests passaient
-     * (ils rendaient la modale avec une fixture portant `dayIso` à la main, court-circuitant tout
-     * le chemin). Classe `UX-UNREACHABLE-FEATURE`, trouvée par la revue.
-     *
-     * ⚠️ Le correctif n'est PAS de fusionner `{ ...pointMensuel, dayIso }` : ça fabriquerait un
-     * point hybride dont les montants sont mensuels et la date quotidienne — un faux, exactement ce
-     * que la règle no-fake-data interdit pour un objet. Le jour voyage donc SÉPARÉMENT.
-     */
     const [detailDayIso, setDetailDayIso] = useState<string | null>(null);
-    /**
-     * [FUTUR-DETAIL-STEP-DAY] Ancre de NAVIGATION du panneau — distincte de `detailDayIso`.
-     *
-     * ⚠️ `detailDayIso` est gated sur `dayIsReal` : il autorise à AFFIRMER des transactions
-     * mesurées, et un jour futur n'en a pas (no-fake-data). Se déplacer d'un jour à l'autre
-     * n'affirme rien, donc l'ancre est posée sur TOUT jour, projeté compris. Les fusionner ferait
-     * soit mentir l'affichage, soit geler les flèches dans le futur.
-     */
     const [detailAnchorIso, setDetailAnchorIso] = useState<string | null>(null);
     const [detailMonthIso, setDetailMonthIso] = useState<string | null>(null);
 
-
-
-    // [FUTUR-MOBILE-PR1] Extrait vers hooks/useHiddenSeries.ts (même clé localStorage, comportement inchangé).
     const { hiddenSeries, isVisible, toggleSeries, showAllSeries } = useHiddenSeries();
 
-    // G12 — clic n'importe où sur le graphique → modale détail (pas seulement
-    // sur une pastille d'événement). On résout le mois cliqué par GÉOMÉTRIE :
-    // position X du clic relative à la grille cartésienne → indice dans la
-    // tranche visible. Robuste (marche au tactile, sans survol préalable, là où
-    // recharts ne déclenche pas son `onClick` interne — la cause probable du bug
-    // « seul le clic sur un événement marche »). `lastHoverPointRef` (rempli par
-    // le survol recharts) sert de repli. On ignore les glissers (pan) via la
-    // distance parcourue depuis le mousedown.
     const lastHoverPointRef = useRef<ProjectionChartPoint | null>(null);
     const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
 
-    // [FUTUR-PANNEAU-FIXE] SÉLECTION d'un jour : survol = aperçu, clic = ÉPINGLE, Échap /
-    // clic-dehors = relâche (retour à aujourd'hui). Le contenu est rendu par le PANNEAU FIXE sous
-    // le graphe — plus aucune infobulle ne suit le curseur.
-    //
-    // ⚠️ Tout le POSITIONNEMENT a disparu avec elle (bornage au viewport, mesure de hauteur,
-    // mutation de `left`/`top` au mousemove, bottom sheet sur téléphone, remontage à la rotation) :
-    // un panneau dans le flux du document n'a ni bord d'écran à éviter ni position à recalculer.
-    // C'est aussi ce qui règle l'irritant n°1 de Marc — « elle disparaît / bouge quand je veux la
-    // lire » est STRUCTUREL à un objet qui suit le curseur.
-    const isNarrowViewport = useViewportBelowSm();
-    // [FUTUR-NAV-TIROIRS] Sous ce seuil (tablette portrait incluse), pas de place pour une barre
-    // latérale à côté d'un graphe lisible : la mise en page repasse en colonne empilée, comme sur
-    // téléphone. `isNarrowViewport` (téléphone strict, < 640px) continue de piloter ses propres
-    // réglages fins par-dessus, inchangé.
     const isBelowSidebarBreakpoint = useViewportBelowLg();
-    // [S5-REFONTE-FUTUR] Mise en page téléphone des maquettes (F-mobile) sous 1024 px.
+    const isNarrowViewport = useViewportBelowSm();
     const etroit = isBelowSidebarBreakpoint;
-    // Au téléphone (maquette F-mobile), pastille courte « FIRE ≈ 2036 » et pas d'étiquette sur le
-    // trait de la retraite : deux pastilles longues s'y chevauchaient (mesuré à 390 px).
-    // [PRIVACY-RATIOS-DUREES-UNIFORMES] Année et âge FIRE = dérivés du dossier : absents de la pastille en mode discret.
-    const libelleJalonFire = !isPrivacyMode && jalonFire?.year != null
-        ? `FIRE ≈ ${jalonFire.year}${!etroit && jalonFire.age != null ? ` · ${Math.floor(jalonFire.age)} ans` : ''}`
-        : 'FIRE';
+    // [PRIVACY-RATIOS-DUREES-UNIFORMES] Année et âge FIRE = dérivés du dossier : absents en mode discret.
+    const libelleJalonFire =
+        !isPrivacyMode && jalonFire?.year != null
+            ? `FIRE ≈ ${jalonFire.year}${!etroit && jalonFire.age != null ? ` · ${Math.floor(jalonFire.age)} ans` : ''}`
+            : 'FIRE';
+
     const selection = useSelectionJour<ProjectionChartPoint>({
         getKey: (p) => p.monthIndex,
         containerRef: zoom.containerEl,
     });
 
-    // [FUTUR-DAILY lot B étape 2] La COURBE elle-même au jour, quand la fenêtre est assez serrée.
-    // ⚠️ CORRECTION DE CAP (Marc, 2026-08-11) : « je veux pas voir dans l'info bulle le détail des
-    // jours de chaque mois, je veux pouvoir sélectionner chaque jour dans le graph ». La version
-    // précédente listait les jours DANS l'infobulle — c'était lire, pas sélectionner. Ici, chaque
-    // jour devient un POINT du graphe : on le survole, on le fige, on l'ouvre, comme un mois.
-    //
-    // ⚠️ Le zoom, lui, reste MENSUEL : `useTimeChartZoom` indexe le tableau mensuel et c'est sa
-    // fenêtre qui décide. On ne substitue que la SÉRIE RENDUE. Découpler les deux éviterait de
-    // réécrire la logique de zoom/pan pour un gain nul.
-    // [FUTUR-DAILY-PAST-REAL] Les jours du PASSÉ, reconstruits depuis les VRAIES données (demande
-    // Marc 2026-08-11 : « je veux aussi que ça marche pour le passé, en fonction de la valeur de mes
-    // comptes, de mes dépenses »). Sans ça, un jour d'hier était INTERPOLÉ entre deux points mensuels
-    // — un lissage là où l'app connaît la vérité au jour près (transactions datées, prix datés).
-    //
-    // [FUTUR-DAILY-NATIVE] Le passé RÉEL au jour, reconstruit UNE fois pour TOUTE la plage passée
-    // (plus seulement la fenêtre zoomée) : from = 1er mois ventilable du préfixe, to = aujourd'hui.
-    // ⚠️ Dépendances PRIMITIVES (`from`/`to`) : un objet intermédiaire recréé à chaque rendu
-    // rejouerait la reconstruction à chaque frame de zoom/pan (classe de fuite déjà vue ici).
     const dailyPastFrom = useMemo(() => {
         const first = dailyAnchors[0];
         if (!first) return null;
         const firstIso = isoDate(first.year, first.month, 1);
-        return firstIso < todayIso ? firstIso : null; // aucun passé ventilable → pas de reconstruction
+        return firstIso < todayIso ? firstIso : null;
     }, [dailyAnchors, todayIso]);
+
     const dailyPast = useMemo(() => {
         if (!dailyPastFrom) return null;
         const built = buildDailyPastLedger({
@@ -1057,48 +673,35 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         });
         return {
             byDate: built.rows.length ? new Map(built.rows.map((r) => [r.date, r])) : null,
-            // ⚠️ [FUTUR-DAILY-ANCHOR-CAVEAT] Sommes que l'ANCRE compte mais que la série quotidienne
-            // ne peut pas placer (transactions au MOIS seul, ou datées APRÈS aujourd'hui). Non nul ⇒
-            // tout le niveau passé est décalé d'autant — et le bandeau le DIT. L'avertissement vivait
-            // dans le panneau quotidien, supprimé par [FUTUR-DAILY-INFOBULLE-ONLY] : le retrait de la
-            // surface ne devait pas emporter l'honnêteté avec elle.
             undatedTotal: built.undatedTotal,
             flowsAfterNowDate: built.flowsAfterNowDate,
-            // [PASSE-REEL-CAP-400J] Le plafond de reconstruction a mordu : la courbe s'arrête
-            // AVANT la fin de la fenêtre demandée. Muet jusqu'ici — c'est précisément ce qui a
-            // fait qu'un trou de 7 mois est passé inaperçu jusqu'à ce que Marc le signale.
             truncatedFrom: built.truncatedFrom,
-            // [PASSE-REEL-RACCORD-CHUTE] Le flux du jour que la reconstruction a DÉFAIT pour produire
-            // la veille : c'est la marche visible au raccord (« je vois une grosse chute aujourd'hui
-            // jsp pourquoi »). Les deux points sont justes — c'est leur lecture qui manquait.
             fluxPeriodeAnnulee: built.fluxPeriodeAnnulee,
         };
-    }, [dailyPastFrom, todayIso, transactions, calculatedStartingCash, storeAssets, fxRates, realEstateGoals, startYear, currentDebtNonImmo, storeDebts, privateBusinessValue]);
+    }, [
+        dailyPastFrom,
+        todayIso,
+        transactions,
+        calculatedStartingCash,
+        storeAssets,
+        fxRates,
+        realEstateGoals,
+        startYear,
+        currentDebtNonImmo,
+        storeDebts,
+        privateBusinessValue,
+    ]);
     const dailyPastByDate = dailyPast?.byDate ?? null;
-    // [PASSE-REEL-RACCORD-CHUTE] Le fait est dérivé du module qui le PRODUIT ; le composant ne
-    // relit pas les transactions pour se faire une seconde opinion.
+
     const mentionRaccordJour = useMemo(
         () => (dailyPast === null ? '' : mentionRaccord(dailyPast.fluxPeriodeAnnulee)),
         [dailyPast],
     );
-    // [PASSE-REEL-RACCORD-CHUTE-MENSUEL] Même explication pour la vue par MOIS, où la marche est
-    // structurellement plus grosse (elle annule TOUT le mois courant) — et c'est la vue par défaut.
-    // ⚠️ Gaté sur `dailyPast === null` : quand la reconstruction au JOUR est en place, le dernier
-    // point du passé est une JOURNÉE, donc c'est la marche du jour que Marc voit et la mention
-    // mensuelle décrirait un raccord qui n'est pas à l'écran. Une phrase qui explique la mauvaise
-    // marche est pire que pas de phrase.
     const mentionRaccordMois = useMemo(
         () => (dailyPast !== null ? '' : mentionRaccord(pastPrefix.fluxPeriodeAnnulee)),
         [dailyPast, pastPrefix],
     );
-    /**
-     * [PASSE-REEL-VARIATION-DU-JOUR] La ventilation du jour ouvert, calculée à partir des lignes
-     * DÉJÀ reconstruites — aucune donnée nouvelle, aucun recalcul financier.
-     *
-     * ⚠️ Une variation est une DIFFÉRENCE : il faut la VEILLE. Si elle manque (premier jour
-     * reconstruit, ou trou dans la série), `dayVariation` rend `null` et la section ne s'affiche
-     * pas — plutôt qu'un 0 crédible et faux.
-     */
+
     const variationDuJour = useMemo(() => {
         if (!detailDayIso || !dailyPastByDate) return null;
         const jour = dailyPastByDate.get(detailDayIso);
@@ -1107,25 +710,20 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         return dayVariation(jour, dailyPastByDate.get(veilleIso));
     }, [detailDayIso, dailyPastByDate]);
 
-    // Contexte daté (paie/charges/dettes) — un objet STABLE pour la ventilation courbe + infobulle.
-    const dailyDated = useMemo(() => ({
-        recurring: storeRecurring,
-        monthlyNetSalary: dailyMonthlyNet,
-        monthlyDebtPayment: dailyMonthlyDebt,
-    }), [storeRecurring, dailyMonthlyNet, dailyMonthlyDebt]);
+    const dailyDated = useMemo(
+        () => ({
+            recurring: storeRecurring,
+            monthlyNetSalary: dailyMonthlyNet,
+            monthlyDebtPayment: dailyMonthlyDebt,
+        }),
+        [storeRecurring, dailyMonthlyNet, dailyMonthlyDebt],
+    );
 
-    /**
-     * [FUTUR-DAILY-NATIVE] LA série de la courbe : toute la projection ventilée au JOUR, une fois
-     * par changement de projection (~100 ms et ~15 champs/point pour 30 ans — mesuré ; la
-     * ventilation COMPLÈTE à 99 champs coûterait ~500 ms et ~180 Mo, elle est réservée à
-     * l'infobulle via `enrichDailyPoint`). Le zoom, lui, continue d'indexer le tableau MENSUEL :
-     * sa fenêtre découpe cette série par VALEUR d'abscisse (`sliceDailyByX`), jamais par indice.
-     */
     const dailyAll = useMemo<ProjectionChartPoint[]>(() => {
-        if (dailyAnchors.length < 2) return EMPTY_ARRAY;
+        if (dailyAnchors.length < 2) return [];
         const keep = new Set(dailyAnchors.map((a) => a.monthIndex));
         const months = (displayData as ProjectionChartPoint[]).filter((p) => keep.has(p.monthIndex));
-        if (months.length < 2) return EMPTY_ARRAY;
+        if (months.length < 2) return [];
 
         const days = buildDailyLedger({
             months,
@@ -1134,136 +732,108 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             dated: dailyDated,
             fields: CURVE_FIELDS,
         });
-        if (days.length === 0) return EMPTY_ARRAY;
+        if (days.length === 0) return [];
 
-        // [PASSE-REEL-1] `todayIso` transmis ⇒ une journée PASSÉE sans donnée réelle rend `null` et
-        // n'est PAS tracée (avant : elle affichait le point PROJETÉ, présenté comme du passé).
-        // La courbe commence donc où les données commencent — décision Marc 2026-08-13.
         const points = days
-            .map((d) => mergeDailyRealPoint(d, startYear, startMonth, dailyPastByDate, CURVE_FIELDS, syncConfirmedUntilIso, todayIso))
+            .map((d) =>
+                mergeDailyRealPoint(
+                    d,
+                    startYear,
+                    startMonth,
+                    dailyPastByDate,
+                    CURVE_FIELDS,
+                    syncConfirmedUntilIso,
+                    todayIso,
+                ),
+            )
             .filter((p): p is ProjectionChartPoint => p !== null);
-        if (points.length === 0) return EMPTY_ARRAY;
-        // ⚠️ `FluxImpots` ≈ 0 (tous les jours SAUF l'échéance, cadence monthEnd) devient ABSENT :
-        // recharts ne rend pas de rect pour une valeur absente — sinon la Bar créerait ~11 000
-        // rects DOM à hauteur nulle. Vérifié par la sonde perf (comptage des rects rendus).
+        if (points.length === 0) return [];
+
         for (const p of points) {
             const v = (p as Record<string, unknown>).FluxImpots;
-            if (typeof v === 'number' && Math.abs(v) < 0.005) delete (p as Record<string, unknown>).FluxImpots;
+            if (typeof v === 'number' && Math.abs(v) < 0.005) {
+                delete (p as Record<string, unknown>).FluxImpots;
+            }
         }
-        // [FUTUR-DAILY-NATIVE] Le mois ANCRE (1er de la série, non ventilable — pas de mois d'avant)
-        // n'est pas perdu pour autant : ses jours PASSÉS RÉELS sont construits depuis les données
-        // seules (no-fake), et à défaut le point MENSUEL d'origine tient la position — sinon la
-        // courbe ET la bande « Passé réel » commençaient un mois trop tard (e2e d'axe, bande 4 px).
+
         const anchorHost = months[0].monthIndex;
-        const anchorDays = realOnlyMonthPoints(anchorHost, startYear, startMonth, dailyPastByDate, CURVE_FIELDS, syncConfirmedUntilIso);
+        const anchorDays = realOnlyMonthPoints(
+            anchorHost,
+            startYear,
+            startMonth,
+            dailyPastByDate,
+            CURVE_FIELDS,
+            syncConfirmedUntilIso,
+        );
         if (anchorDays.length > 0) return [...anchorDays, ...points];
-        // ⚠️ `FluxImpots` RETIRÉ du point mensuel de repli (finding projection-validator #592) : ce
-        // point porte le TOTAL du mois à l'abscisse du 1er — au milieu de barres quotidiennes, une
-        // barre mensuelle pleine au mauvais jour est un faux visuel. Son échéance vit dans le mois
-        // suivant ventilé ; ici l'honnête est l'absence.
-        const { FluxImpots: _anchorFlux, ...anchorRest } = months[0] as ProjectionChartPoint & { FluxImpots?: number };
+        const { FluxImpots: _anchorFlux, ...anchorRest } = months[0] as ProjectionChartPoint & {
+            FluxImpots?: number;
+        };
         return [anchorRest as ProjectionChartPoint, ...points];
     }, [dailyAnchors, displayData, startYear, startMonth, dailyDated, dailyPastByDate, syncConfirmedUntilIso, todayIso]);
 
-    // [PASSE-REEL-2] Écart entre le passé MESURÉ et la prévision VERROUILLÉE. Calculé sur la série
-    // quotidienne — c'est elle qui porte les points réels (depuis `[PASSE-REEL-1]`, une journée
-    // passée non mesurée n'y est même plus présente, donc rien de projeté ne peut s'y glisser).
     const forecastAccuracy = useMemo(
         () => computeForecastAccuracy(dailyAll, lockedByMonth),
         [dailyAll, lockedByMonth],
     );
 
-
-    /**
-     * [FUTUR-DAILY-NATIVE] Infobulle : le point COMPLET (99 champs) du jour visé, ventilé À LA
-     * DEMANDE sur 3 mois autour du mois hôte (~10 ms la première fois, caché ensuite par mois).
-     * 3 mois et non 2 : les `diff*` du 1er jour du mois hôte exigent la veille, donc le mois
-     * précédent rendu — qui exige lui-même SON prédécesseur comme ancre d'entrée.
-     * Même moteur (`buildDailyLedger`), mêmes entrées que la courbe → aucune divergence possible
-     * (garde-test de parité). Le merge passé réel passe par la MÊME fonction que la courbe.
-     */
-    // ⚠️ `useMemo` et NON `useRef`+`useEffect` de purge (finding revue #592) : un effet s'exécute
-    // APRÈS la peinture — entre le rendu sur de nouvelles données et l'effet, un mousemove pouvait
-    // servir une entrée calculée sur les ANCIENNES données. Le useMemo se recrée PENDANT le rendu :
-    // la fenêtre de staleness n'existe pas, par construction.
-    const enrichCache = useMemo(() => ({
-        byHost: new Map<number, Map<string, ProjectionChartPoint>>(),
-        failLogged: new Set<number>(),
-        // Les deps SONT les entrées de l'enrichissement — un cache qui survivrait à l'une d'elles
-        // servirait des montants périmés. La règle les voit « inutiles » (la fabrique ne les lit
-        // pas) : c'est exact, et c'est le but — elles pilotent l'INVALIDATION, pas la valeur.
-        //
-        // ⚠️ [PASSE-REEL-1, panel #614] `todayIso` EN FAIT PARTIE, et je l'avais oublié — au point
-        // d'écrire dans le handover « ajouté aux DEUX useMemo » alors qu'il y en a TROIS. Sans lui :
-        // l'app reste ouverte, minuit passe, et la Map en cache pour ce mois a été construite avec
-        // l'ANCIEN `todayIso` — le jour qui vient de basculer au passé y porte encore sa valeur
-        // PROJETÉE. C'est le bug même que cette PR corrige, réapparu côté infobulle. Et comme
-        // l'infobulle FIGÉE sert de référence à l'écran, la fausse valeur héritait de
-        // l'autorité d'une « source unique ».
-        // ⚠️ Ça ne se voyait pas en pratique : `dailyPastByDate` est une NOUVELLE Map à chaque
-        // changement de `todayIso`, ce qui invalidait ce cache par ricochet. Une protection
-        // ACCIDENTELLE — mémoïser `dailyPast` plus finement un jour aurait réintroduit le bug en
-        // silence. Une dépendance ne doit pas reposer sur l'instabilité de référence d'une autre.
+    const enrichCache = useMemo(
+        () => ({
+            byHost: new Map<number, Map<string, ProjectionChartPoint>>(),
+            failLogged: new Set<number>(),
+        }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [displayData, dailyDated, dailyPastByDate, startYear, startMonth, syncConfirmedUntilIso, todayIso]);
-    const enrichDailyPoint = useCallback((p: ProjectionChartPoint | null): ProjectionChartPoint | null => {
-        if (!p) return null;
-        const host = p.hostMonthIndex;
-        const iso = p.dayIso;
-        if (typeof host !== 'number' || typeof iso !== 'string') return p; // pas un jour de la courbe
-        const cached = enrichCache.byHost.get(host);
-        if (cached) return cached.get(iso) ?? p;
+        [displayData, dailyDated, dailyPastByDate, startYear, startMonth, syncConfirmedUntilIso, todayIso],
+    );
 
-        // ⚠️ Toute la construction (y compris le cas ANCRE hostIdx=0, ventilé du réel seul) vit
-        // dans `buildEnrichedMonth` — PUR et testé. Finding CRITIQUE silent-failure #592 : la
-        // version précédente mettait en cache une Map VIDE pour le mois ancre (`buildDailyLedger`
-        // rend [] sur 1 seul mois) → l'infobulle de ce mois restait LÉGÈRE pour toujours, une
-        // paie réelle devenant invisible comme si elle était nulle. Règles : un échec ne se met
-        // JAMAIS en cache (le prochain survol retente), et il se JOURNALISE (une fois par mois
-        // hôte — pas au rythme du mousemove).
-        const byIso = buildEnrichedMonth(
-            displayData as ProjectionChartPoint[], host, startYear, startMonth,
-            dailyPastByDate, dailyDated, buildDailyLedger as never, syncConfirmedUntilIso, todayIso,
-        );
-        if (byIso === null) {
-            if (!enrichCache.failLogged.has(host)) {
-                enrichCache.failLogged.add(host);
-                logError({ source: 'ui', severity: 'warning', message: 'FUTUR-DAILY-NATIVE : enrichissement du mois impossible, infobulle en champs réduits', context: { host } });
+    const enrichDailyPoint = useCallback(
+        (p: ProjectionChartPoint | null): ProjectionChartPoint | null => {
+            if (!p) return null;
+            const host = p.hostMonthIndex;
+            const iso = p.dayIso;
+            if (typeof host !== 'number' || typeof iso !== 'string') return p;
+            const cached = enrichCache.byHost.get(host);
+            if (cached) return cached.get(iso) ?? p;
+
+            const byIso = buildEnrichedMonth(
+                displayData as ProjectionChartPoint[],
+                host,
+                startYear,
+                startMonth,
+                dailyPastByDate,
+                dailyDated,
+                buildDailyLedger as never,
+                syncConfirmedUntilIso,
+                todayIso,
+            );
+            if (byIso === null) {
+                if (!enrichCache.failLogged.has(host)) {
+                    enrichCache.failLogged.add(host);
+                    logError({
+                        source: 'ui',
+                        severity: 'warning',
+                        message: 'FUTUR-DAILY-NATIVE : enrichissement du mois impossible, infobulle en champs réduits',
+                        context: { host },
+                    });
+                }
+                return p;
             }
-            return p;
-        }
-        enrichCache.byHost.set(host, byIso);
-        return byIso.get(iso) ?? p;
-    }, [displayData, startYear, startMonth, dailyDated, dailyPastByDate, enrichCache, syncConfirmedUntilIso, todayIso]);
+            enrichCache.byHost.set(host, byIso);
+            return byIso.get(iso) ?? p;
+        },
+        [displayData, startYear, startMonth, dailyDated, dailyPastByDate, enrichCache, syncConfirmedUntilIso, todayIso],
+    );
 
-    /**
-     * Point à passer à la modale « Détail complet ».
-     *
-     * ⚠️ Finding CRITIQUE de la revue : `FutureDetailModal` joint sur `chartData.findIndex(d =>
-     * d.monthIndex === point.monthIndex)`. Sur un point QUOTIDIEN, `monthIndex` est fractionnaire →
-     * aucune correspondance sauf le 1er du mois, et la modale retombait alors sur ses `|| 0` :
-     * « Variation nette (mois) +0 $ » systématique, et surtout un `Math.max(0, 0 − NetWorth)` qui
-     * FABRIQUAIT un montant de dette égal au patrimoine net dès que celui-ci était négatif.
-     * On rabat donc sur le VRAI mois hôte : la modale est mensuelle, elle montre le mois — ce qui
-     * existe — au lieu d'un mois fantôme reconstitué à partir d'un jour.
-     */
-    const detailPointFor = useCallback((p: ProjectionChartPoint | null): ProjectionChartPoint | null => {
-        if (!p) return null;
-        const host = p.hostMonthIndex;
-        if (typeof host !== 'number') return p; // point mensuel : inchangé
-        return (displayData as ProjectionChartPoint[]).find((d) => d.monthIndex === host) ?? null;
-    }, [displayData]);
+    const detailPointFor = useCallback(
+        (p: ProjectionChartPoint | null): ProjectionChartPoint | null => {
+            if (!p) return null;
+            const host = p.hostMonthIndex;
+            if (typeof host !== 'number') return p;
+            return (displayData as ProjectionChartPoint[]).find((d) => d.monthIndex === host) ?? null;
+        },
+        [displayData],
+    );
 
-    /**
-     * [FUTUR-DAILY-NATIVE] Deux séries, deux rôles :
-     *  • `daysInWindow` — la tranche quotidienne COMPLÈTE de la fenêtre de zoom (bornes mensuelles,
-     *    découpe par valeur d'abscisse). C'est LA vérité de sélection : clic, Veille/Lendemain et
-     *    résolution géométrique y travaillent — le jour exact est sélectionnable à toute fenêtre.
-     *  • `chartSeries` — ce que recharts TRACE : la même tranche, DÉCIMÉE au-delà de
-     *    RENDER_MAX_POINTS (mesuré : ~11 000 pts × 8 aires gèlent le main thread au point que
-     *    `mouse.wheel` expire — clause annoncée à Marc au cadrage GO).
-     * Repli mensuel uniquement quand la ventilation est impossible (< 2 mois à valeur nette finie).
-     */
     const visLoMonth = zoom.visibleData[0]?.monthIndex;
     const visHiMonth = zoom.visibleData[zoom.visibleData.length - 1]?.monthIndex;
     const dailyWindowRange = useMemo<[number, number]>(() => {
@@ -1275,36 +845,64 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         [dailyAll, dailyWindowRange],
     );
     const isDailyCurve = daysInWindow.length >= 2;
+
     const chartSeries = useMemo<ProjectionChartPoint[]>(() => {
         if (!isDailyCurve) return zoom.visibleData as ProjectionChartPoint[];
         return decimateForRender(daysInWindow, dailyWindowRange[0], RENDER_MAX_POINTS);
     }, [isDailyCurve, daysInWindow, dailyWindowRange, zoom.visibleData]);
 
-    // [S5-REFONTE-FUTUR] Échelle Y « ronde » des maquettes (0, 10 M$, 20 M$…) sur ce qui est TRACÉ :
-    // séries visibles de la fenêtre affichée seulement — masquer une série ou zoomer réajuste
-    // l'échelle (« l'échelle s'ajuste », sous-titre de la carte). Le domaine colle aux données (plus
-    // de marge « auto » de recharts, qui descendait à −50 M$ pour une dette de quelques milliers).
+    const chartSeriesWithRibbon = useMemo<Array<Record<string, unknown>>>(() => {
+        return chartSeries.map((pt) => {
+            const p10 = pt.P10;
+            const p90 = pt.P90;
+            const hasBounds =
+                typeof p10 === 'number' &&
+                Number.isFinite(p10) &&
+                typeof p90 === 'number' &&
+                Number.isFinite(p90);
+            const mcRange: [number, number] | null = hasBounds
+                ? [Math.min(p10, p90), Math.max(p10, p90)]
+                : null;
+            return { ...pt, mcRange };
+        });
+    }, [chartSeries]);
+
+    // L'échelle Y inclut toujours P10 et P90 quand le ruban est visible pour éviter tout rognage.
     const echelleY = useMemo(() => {
-        // `hiddenSeries` (l'état) et non `isVisible` (fonction recréée à chaque rendu) : l'échelle ne se
-        // recalcule qu'au vrai changement de masquage ou de fenêtre.
         const vue = (k: string) => !hiddenSeries.has(k);
-        const empilees = modeCourbe === 'empilee'
-            ? (['Liquidites', 'CELI', 'CELIAPP', 'REER', 'REEE', 'NonReg', 'Crypto', 'Immobilier', 'Entreprise'] as const).filter((k) => vue(k))
-            : [];
-        const lignes: Array<'NetWorth' | 'P5' | 'P10' | 'P25' | 'P50' | 'P75' | 'P90' | 'P95' | 'ImpotLatent'> = [];
+        const empilees =
+            modeCourbe === 'empilee'
+                ? (
+                      [
+                          'Liquidites',
+                          'CELI',
+                          'CELIAPP',
+                          'REER',
+                          'REEE',
+                          'NonReg',
+                          'Crypto',
+                          'Immobilier',
+                          'Entreprise',
+                      ] as const
+                  ).filter((k) => vue(k))
+                : [];
+        const lignes: Array<'NetWorth' | 'P10' | 'P50' | 'P90' | 'ImpotLatent'> = [];
         if (vue('NetWorth') || modeCourbe === 'nette') lignes.push('NetWorth');
-        if (grandCalculByMonth !== null && vue('montecarlo')) {
-            lignes.push('P5', 'P10', 'P25', 'P50', 'P75', 'P90', 'P95');
-        } else if (runMC && vue('montecarlo')) {
-            lignes.push('P10', 'P50', 'P90');
+        if (vue('montecarlo')) {
+            lignes.push('P10', 'P90');
         }
         if (vue('ImpotLatent') && modeCourbe === 'empilee') lignes.push('ImpotLatent');
         const valeurs: number[] = [];
-        const garder = (v: unknown) => { if (typeof v === 'number' && Number.isFinite(v)) valeurs.push(v); };
+        const garder = (v: unknown) => {
+            if (typeof v === 'number' && Number.isFinite(v)) valeurs.push(v);
+        };
         for (const p of chartSeries) {
             if (empilees.length > 0) {
                 let pile = 0;
-                for (const k of empilees) { const v = p[k]; if (typeof v === 'number' && Number.isFinite(v)) pile += v; }
+                for (const k of empilees) {
+                    const v = p[k];
+                    if (typeof v === 'number' && Number.isFinite(v)) pile += v;
+                }
                 valeurs.push(pile);
             }
             for (const k of lignes) garder(p[k]);
@@ -1317,74 +915,49 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         const bas = Math.min(0, ...valeurs, ticks[0]);
         const haut = Math.max(...valeurs, ticks[ticks.length - 1]);
         return { ticks, domaine: [bas, haut] as [number, number] };
-    }, [chartSeries, hiddenSeries, runMC, grandCalculByMonth, fireNumber, modeCourbe]);
-    /** Série de RÉSOLUTION des interactions : les jours complets, ou le mensuel en repli. */
+    }, [chartSeries, hiddenSeries, fireNumber, modeCourbe]);
+
     const selectSeries = isDailyCurve ? daysInWindow : (zoom.visibleData as ProjectionChartPoint[]);
 
-
-    // [FUTUR-DAILY-SELECT-PATH] Depuis un point MENSUEL figé : zoomer la fenêtre sur CE mois → vue
-    // au jour, centrée là où l'utilisateur venait de cliquer, N'EXISTE PLUS : la courbe est au jour
-    // PARTOUT ([FUTUR-DAILY-NATIVE]) — le clic sélectionne directement le jour, sans étape.
-
-    // [FUTUR-PANNEAU-FIXE] L'ANCRE du panneau : aujourd'hui. C'est ce qu'il montre au repos —
-    // ni survol, ni épingle — choix de Marc en clic. La règle (« premier point d'abscisse ≥ 0,
-    // sinon le dernier ») vit dans `indexAujourdhui`, PARTAGÉE avec le geste clavier du graphe :
-    // écrites deux fois, les deux auraient fini par désigner deux jours différents.
-    // ⚠️ `enrichDailyPoint` : la série de la courbe est LÉGÈRE (seuls les champs tracés) — le
-    // panneau décrit toujours la version COMPLÈTE du jour.
-    // [FUTUR-ANCRE-AUJOURDHUI] L'abscisse du JOUR MÊME (courbe au jour) — la même que la ligne
-    // « Aujourd'hui » et la valeur flottante ; au mois (repli), le mois courant.
     const xAncre = isDailyCurve && todayAxisX !== null ? todayAxisX : todayMonthIndex;
     const idxAncre = useMemo(() => indexAujourdhui(selectSeries, xAncre), [selectSeries, xAncre]);
     const pointAncre = useMemo(() => {
         const brut = idxAncre === -1 ? null : selectSeries[idxAncre];
         return brut ? (enrichDailyPoint(brut) ?? brut) : null;
     }, [idxAncre, selectSeries, enrichDailyPoint]);
-    // ⚠️ `useMemo` OBLIGATOIRE, et ce n'est pas une micro-optimisation : `choisirJourAffiche` rend un
-    // littéral NEUF à chaque appel, donc sans lui `idxAffiche` (un `useMemo` qui en dépend) se
-    // recalculerait à CHAQUE rendu de cet écran — un `findIndex` sur `selectSeries`, la tranche NON
-    // décimée, qui peut compter des milliers de points. Le code retiré mémoïsait correctement sur
-    // des dépendances primitives ; le reproduire en moins bien aurait été une régression payée par
-    // le jank d'un écran qui se re-rend à chaque écriture du store.
+
     const jourAffiche = useMemo(
         () => choisirJourAffiche(selection.mode, selection.point, pointAncre),
         [selection.mode, selection.point, pointAncre],
     );
 
-    // [FUTUR-DAILY-SELECT-STEP] Veille / lendemain sans re-viser au pixel (à ~150 jours affichés,
-    // un jour ≈ 6 px — mesuré ; en vue 30 ans, ~0,3 px). Indispensable au DOIGT, où le zoom molette
-    // n'existe pas et où un mois vaut ≈ 0,7 px à l'horizon par défaut.
-    // ⚠️ L'index part du jour AFFICHÉ, pas du jour épinglé : au repos le panneau montre aujourd'hui,
-    // et les flèches doivent marcher DE LÀ. Se caler sur l'épingle les aurait laissées inertes tant
-    // que rien n'est épinglé — c'est-à-dire à l'ouverture de l'écran, le seul moment garanti.
-    // ⚠️ `selectSeries` (tranche COMPLÈTE) et non `chartSeries` (décimée) : les flèches avancent
-    // d'exactement un pas, y compris sur les jours que le tracé décimé ne rend pas.
     const [pasNavigation, setPasNavigation] = useState<PasNavigation>(PAS_PAR_DEFAUT);
     const idxAffiche = useMemo(() => {
         if (!jourAffiche) return -1;
         const x = jourAffiche.point.monthIndex;
         return selectSeries.findIndex((d) => d.monthIndex === x);
     }, [jourAffiche, selectSeries]);
-    // ⚠️ Mémoïsé pour la même raison que `idxAffiche` : sur un pas « mois » ou « année »,
-    // `indexApresPas` balaie la série jusqu'au bord dans la direction demandée. Écrits INLINE dans
-    // le JSX, ces deux appels faisaient deux balayages O(n) de plus à chaque rendu — et un bouton
-    // désactivé ne vaut pas qu'on rescanne des milliers de points pour l'apprendre.
-    const bornesPas = useMemo(() => ({
-        prev: idxAffiche !== -1 && indexApresPas(selectSeries, idxAffiche, -1, pasNavigation) !== -1,
-        next: idxAffiche !== -1 && indexApresPas(selectSeries, idxAffiche, 1, pasNavigation) !== -1,
-    }), [idxAffiche, selectSeries, pasNavigation]);
 
-    const stepJour = useCallback((dir: -1 | 1, pas: PasNavigation) => {
-        if (idxAffiche === -1) return;
-        const suivant = indexApresPas(selectSeries, idxAffiche, dir, pas);
-        if (suivant === -1) return;
-        const pt = selectSeries[suivant];
-        // ⚠️ Une navigation aux flèches ÉPINGLE : c'est un geste explicite, et sans l'épingle le
-        // survol suivant écraserait le jour qu'on vient de choisir.
-        selection.freezeOn(enrichDailyPoint(pt) ?? pt);
-    }, [idxAffiche, selectSeries, selection, enrichDailyPoint]);
+    const bornesPas = useMemo(
+        () => ({
+            prev: idxAffiche !== -1 && indexApresPas(selectSeries, idxAffiche, -1, pasNavigation) !== -1,
+            next: idxAffiche !== -1 && indexApresPas(selectSeries, idxAffiche, 1, pasNavigation) !== -1,
+        }),
+        [idxAffiche, selectSeries, pasNavigation],
+    );
 
-    const handleSelectExplanationMonth = useCallback(
+    const stepJour = useCallback(
+        (dir: -1 | 1, pas: PasNavigation) => {
+            if (idxAffiche === -1) return;
+            const suivant = indexApresPas(selectSeries, idxAffiche, dir, pas);
+            if (suivant === -1) return;
+            const pt = selectSeries[suivant];
+            selection.freezeOn(enrichDailyPoint(pt) ?? pt);
+        },
+        [idxAffiche, selectSeries, selection, enrichDailyPoint],
+    );
+
+    const focusMonthPointNow = useCallback(
         (monthIdx: number) => {
             const matchesMonth = (d: ProjectionChartPoint) =>
                 (typeof d.hostMonthIndex === 'number'
@@ -1401,96 +974,122 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         [selectSeries, displayData, selection, enrichDailyPoint],
     );
 
-    /**
-     * [FUTUR-DETAIL-STEP-DAY] Ouvre le panneau de détail SUR un point donné.
-     *
-     * ⚠️ Extrait pour être appelé de DEUX endroits — le bouton « Détail complet » de l'infobulle et
-     * les flèches Veille/Lendemain du panneau lui-même. Les trois états (point, jour, mois) doivent
-     * bouger ENSEMBLE : un `detailDayIso` qui resterait sur la veille afficherait les transactions
-     * d'un jour à côté du patrimoine d'un autre. Dupliquer ce trio à deux endroits, c'est
-     * garantir qu'un des deux oubliera un état.
-     */
-    const ouvrirDetailSur = useCallback((pt: ProjectionChartPoint | null | undefined) => {
-        if (!pt) return;
-        const p = pt as ProjectionChartPoint & { dayIso?: string; dayIsReal?: boolean };
-        const cal = calendarFromMonthIndex(startYear, startMonth, Math.floor(p.monthIndex ?? 0));
-        const moisIso = `${cal.year}-${String(cal.month + 1).padStart(2, '0')}`;
-        setDetailMonthIso(moisIso <= todayIso.slice(0, 7) ? moisIso : null);
-        setDetailDayIso(p.dayIsReal ? (p.dayIso ?? null) : null);
-        setDetailAnchorIso(p.dayIso ?? null);
-        setDetailPoint(detailPointFor(pt));
-    }, [startYear, startMonth, todayIso, detailPointFor]);
+    useEffect(() => {
+        if (pendingFocusMonth === null) return;
+        const target = pendingFocusMonth;
+        setPendingFocusMonth(null);
+        focusMonthPointNow(target);
+    }, [pendingFocusMonth, selectSeries, focusMonthPointNow]);
 
-    /**
-     * [FUTUR-DETAIL-STEP-DAY] Position du point AFFICHÉ DANS LE PANNEAU au sein de la série.
-     *
-     * ⚠️ Volontairement indépendant de `frozenSeriesIdx` (l'infobulle). Le panneau s'ouvre aussi
-     * depuis une pastille d'événement, sans infobulle figée — et une fois ouvert, l'infobulle peut
-     * être relâchée. Se caler sur elle laisserait les flèches inertes exactement dans ces cas.
-     * On résout par `dayIso` quand il existe (unique), sinon par `monthIndex`.
-     */
+    const handleSelectExplanationMonth = useCallback(
+        (monthIdx: number) => {
+            const lo = zoom.visibleData[0]?.monthIndex ?? Number.NEGATIVE_INFINITY;
+            const hi = zoom.visibleData[zoom.visibleData.length - 1]?.monthIndex ?? Number.POSITIVE_INFINITY;
+            if (zoom.isZoomed && (monthIdx < lo || monthIdx > hi)) {
+                zoom.reset();
+                setPendingFocusMonth(monthIdx);
+            } else {
+                focusMonthPointNow(monthIdx);
+            }
+            zoom.containerEl.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+        },
+        [zoom, focusMonthPointNow],
+    );
+
+    const activeTurningPointHint = useMemo(() => {
+        const pt = jourAffiche?.point;
+        if (!pt || activeScenarioOutput.turningPoints.length === 0) return null;
+        const ptMonth = typeof pt.hostMonthIndex === 'number' ? pt.hostMonthIndex : Math.trunc(pt.monthIndex);
+        if (ptMonth < 0) return null;
+        let best: DeepTurningPoint | null = null;
+        let bestDist = Infinity;
+        for (const tp of activeScenarioOutput.turningPoints) {
+            const dist = Math.abs(tp.monthIndex - ptMonth);
+            if (dist <= 6 && dist < bestDist) {
+                best = tp;
+                bestDist = dist;
+            }
+        }
+        return best ? `${best.title} — ${best.summaryFr}` : null;
+    }, [jourAffiche?.point, activeScenarioOutput.turningPoints]);
+
+    const pointAnchorXRatio = useMemo(() => {
+        const pt = jourAffiche?.point;
+        if (!pt || chartSeries.length < 2) return hoverXRatio;
+        const lo = chartSeries[0].monthIndex;
+        const hi = chartSeries[chartSeries.length - 1].monthIndex;
+        if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return hoverXRatio;
+        return Math.max(0, Math.min(1, (pt.monthIndex - lo) / (hi - lo)));
+    }, [jourAffiche?.point, chartSeries, hoverXRatio]);
+
+    const resolvedAnchorXRatio =
+        selection.mode === 'hovering' && hoverXRatio !== null ? hoverXRatio : pointAnchorXRatio;
+
+    const computeAnchorRatioFromClientX = useCallback(
+        (clientX: number): number | null => {
+            const grid = zoom.containerEl.current?.querySelector('.recharts-cartesian-grid');
+            const rect = grid?.getBoundingClientRect() ?? zoom.containerEl.current?.getBoundingClientRect();
+            if (!rect || rect.width <= 0) return null;
+            return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        },
+        [zoom.containerEl],
+    );
+
+    const ouvrirDetailSur = useCallback(
+        (pt: ProjectionChartPoint | null | undefined) => {
+            if (!pt) return;
+            const p = pt as ProjectionChartPoint & { dayIso?: string; dayIsReal?: boolean };
+            const cal = calendarFromMonthIndex(startYear, startMonth, Math.floor(p.monthIndex ?? 0));
+            const moisIso = `${cal.year}-${String(cal.month + 1).padStart(2, '0')}`;
+            setDetailMonthIso(moisIso <= todayIso.slice(0, 7) ? moisIso : null);
+            setDetailDayIso(p.dayIsReal ? (p.dayIso ?? null) : null);
+            setDetailAnchorIso(p.dayIso ?? null);
+            setDetailPoint(detailPointFor(pt));
+        },
+        [startYear, startMonth, todayIso, detailPointFor],
+    );
+
     const detailSeriesIdx = useMemo(
-        // ⚠️ L'ancre vient de `detailAnchorIso` (point d'ORIGINE), PAS de `detailPoint` — celui-ci
-        // est rebasé sur le mois par `detailPointFor` et n'a donc jamais de `dayIso`. Détail du
-        // défaut mesuré dans `utils/daySeriesIndex.ts`.
-        () => resolveDaySeriesIndex(
-            selectSeries,
-            detailAnchorIso,
-            detailPoint?.monthIndex,
-        ),
+        () => resolveDaySeriesIndex(selectSeries, detailAnchorIso, detailPoint?.monthIndex),
         [detailAnchorIso, detailPoint, selectSeries],
     );
 
-    /** Jour voisin DANS le panneau ouvert — demande de Marc (2026-08-17) : le panneau était un
-     *  cul-de-sac, il fallait le fermer, re-viser au pixel sur la courbe, et le rouvrir. */
-    const stepDetailDay = useCallback((dir: -1 | 1) => {
-        if (detailSeriesIdx === -1) return;
-        const next = selectSeries[detailSeriesIdx + dir];
-        if (next) ouvrirDetailSur(enrichDailyPoint(next) ?? next);
-    }, [detailSeriesIdx, selectSeries, enrichDailyPoint, ouvrirDetailSur]);
+    const stepDetailDay = useCallback(
+        (dir: -1 | 1) => {
+            if (detailSeriesIdx === -1) return;
+            const next = selectSeries[detailSeriesIdx + dir];
+            if (next) ouvrirDetailSur(enrichDailyPoint(next) ?? next);
+        },
+        [detailSeriesIdx, selectSeries, enrichDailyPoint, ouvrirDetailSur],
+    );
 
-    // [R3] Clic sur le graphe = FIGE le tooltip (avant : ouvrait directement la modale).
-    // La modale exhaustive s'ouvre désormais via le bouton « Détail complet » du tooltip
-    // figé, et via les pastilles d'événement (inchangées). On résout le mois cliqué par
-    // GÉOMÉTRIE (robuste tactile / sans survol), avec repli sur le dernier point survolé.
-    // On ignore les glissers (pan) via la distance depuis le mousedown.
-    /**
-     * [FUTUR-CLICK-AREA] ⚠️ `pointerup` et NON `click` — et ce n'est PAS un détail de style.
-     *
-     * MESURÉ (sonde Playwright, 2026-08-11) : quand le pointeur retombe sur une AIRE EMPILÉE
-     * (`path.recharts-curve.recharts-area-area`), le navigateur ne dispatche **aucun** événement
-     * `click` — pas même au niveau `document` en phase de capture. Sur l'espace vide du graphe
-     * (`svg.recharts-surface`), il le dispatche normalement. Cause : recharts re-rend le `<path>`
-     * entre le `pointerdown` et le `pointerup` (le survol change son état), donc les deux cibles ne
-     * sont plus le MÊME nœud DOM et le `click` n'est jamais synthétisé. `pointerup`, lui, arrive
-     * bien jusqu'au conteneur dans les deux cas — vérifié côté à côté.
-     *
-     * CONSÉQUENCE UTILISATEUR, antérieure à la vue au jour : cliquer sur la partie COLORÉE de la
-     * courbe ne figeait jamais l'infobulle. Seuls les clics dans le vide au-dessus de la pile
-     * marchaient. Le défaut est resté invisible parce que l'e2e cliquait justement dans le vide ;
-     * il est devenu criant en vue au jour, où les aires par compte couvrent presque tout le tracé.
-     */
+    const isInsideTooltip = (target: EventTarget | null): boolean =>
+        Boolean(selection.panneauRef.current && target instanceof Node && selection.panneauRef.current.contains(target));
+
     const resoudrePointClientX = (clientX: number): ProjectionChartPoint | null => {
         const grid = zoom.containerEl.current?.querySelector('.recharts-cartesian-grid');
         const rect = grid?.getBoundingClientRect();
-        const pt = resolvePointByX(
-            clientX,
-            rect ? { left: rect.left, width: rect.width } : null,
-            selectSeries,
-            (p) => p.monthIndex,
-        ) ?? lastHoverPointRef.current;
+        const pt =
+            resolvePointByX(
+                clientX,
+                rect ? { left: rect.left, width: rect.width } : null,
+                selectSeries,
+                (p) => p.monthIndex,
+            ) ?? lastHoverPointRef.current;
         return pt ? (enrichDailyPoint(pt) ?? pt) : null;
     };
 
     const handleChartContainerClick = (e: React.PointerEvent<HTMLDivElement>) => {
+        const down = pointerDownPosRef.current;
+        pointerDownPosRef.current = null;
         dragStartPointRef.current = null;
         if (zoom.isPinchActive()) return;
-        const down = pointerDownPosRef.current;
+        if (isInsideTooltip(e.target)) return;
         if (e.pointerType === 'touch' && !modeComparaison) {
             if (down && Math.abs(e.clientY - down.y) > 24) return;
         } else {
             const driftTol = selectSeries.length <= 190 ? 14 : 6;
-            if (down && (Math.abs(e.clientX - down.x) > driftTol || Math.abs(e.clientY - down.y) > driftTol)) return; // glisser = comparaison de plage
+            if (down && (Math.abs(e.clientX - down.x) > driftTol || Math.abs(e.clientY - down.y) > driftTol)) return;
         }
         if ((e.target as Element | null)?.closest?.('button, a, [role="button"]')) return;
         const complet = resoudrePointClientX(e.clientX);
@@ -1498,136 +1097,107 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             if (comparaisonPoints.a && comparaisonPoints.b) {
                 setComparaisonPoints({ a: null, b: null });
             }
+            const ratio = computeAnchorRatioFromClientX(e.clientX);
+            if (ratio !== null) setHoverXRatio(ratio);
             selection.freezeOn(complet);
         }
     };
 
-    // [D6-GRAPH] Sélection d'un jour AU CLAVIER. Le seul chaînon qui manquait : une fois un jour
-    // FIGÉ, tout est déjà clavier (l'infobulle figée est un dialogue focalisé avec Veille/
-    // Lendemain, « Détail complet » et Échap — le hook restitue le focus au conteneur au
-    // relâchement). Il manquait le PREMIER geste : figer un jour sans souris. Entrée/Espace/
-    // flèches sur le conteneur figent le jour d'AUJOURD'HUI (frontière passé/futur — l'ancre la
-    // plus parlante), ou le point le plus proche si la fenêtre zoomée ne le contient pas.
-    // ⚠️ `e.target === e.currentTarget` : les pastilles d'événement DANS le conteneur ont leurs
-    // propres touches (Entrée/Espace = modale) — on ne double pas leur geste.
     const figerAuClavier = useCallback(() => {
         if (selectSeries.length === 0) return;
-        const idxAujourdhui = selectSeries.findIndex((p) => p.monthIndex >= 0);
-        const point = selectSeries[idxAujourdhui === -1 ? selectSeries.length - 1 : idxAujourdhui];
-        // ⚠️ `parClavier` : le panneau est SOUS le graphe et peut être hors écran. À la souris on ne
-        // veut surtout pas faire défiler (l'utilisateur regarde la courbe qu'il vient de cliquer) ;
-        // au clavier, c'est l'inverse — sans défilement, le focus se pose dans un panneau invisible.
+        const point = pointAncre ?? selectSeries[selectSeries.length - 1];
         if (point) selection.freezeOn(enrichDailyPoint(point) ?? point, { parClavier: true });
-    }, [selectSeries, selection, enrichDailyPoint]);
-    // ⚠️ Le prédicat des touches vit dans `utils/chartKeyboardSelect.ts` — PAS inline : ce fichier
-    // rend un tablist, et la garde tablistMotifUniqueGuard interdit ici tout littéral de flèche
-    // (le clavier des bandeaux vit dans SubTabs ; celui du graphe n'est pas un bandeau).
+    }, [pointAncre, selectSeries, selection, enrichDailyPoint]);
+
     const handleChartKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.target !== e.currentTarget) return;
         if (!estGesteSelectionJourClavier(e.key)) return;
-        e.preventDefault(); // Espace/flèches : ne pas défiler la page pendant le geste
+        e.preventDefault();
         figerAuClavier();
     };
 
-    // C6 fix (Sprint 1B) — Garde déplacée ICI (après tous les hooks) pour
-    // respecter la règle des Hooks. Retourne un placeholder UI si les props
-    // critiques manquent. Avant ce fix, cette garde était ligne 46 (avant les
-    // 21 hooks ci-dessus) → 21 violations react-hooks/rules-of-hooks.
     if (!budgetItems || !projection || !config || !initialBalances) {
-        // SF-RESIDUS — routé vers logError (visible en prod). Context = QUELS champs manquent
-        // (booléens), pas les objets eux-mêmes (évite de loguer des données financières inutilement).
-        logError({ source: 'ui', severity: 'error', message: 'FutureProjection : données d\'initialisation critiques manquantes', context: { hasBudget: !!budgetItems, hasProjection: !!projection, hasConfig: !!config, hasBalances: !!initialBalances } });
-        return <div className="p-8 text-center text-erreur-texte font-bold bg-surface/50 rounded-2xl border border-erreur-texte/20">
-            ⚠️ Données d'initialisation manquantes. Veuillez vérifier vos comptes et votre budget.
-        </div>;
+        logError({
+            source: 'ui',
+            severity: 'error',
+            message: 'FutureProjection : données d’initialisation critiques manquantes',
+            context: {
+                hasBudget: !!budgetItems,
+                hasProjection: !!projection,
+                hasConfig: !!config,
+                hasBalances: !!initialBalances,
+            },
+        });
+        return (
+            <div className="p-8 text-center text-erreur-texte font-bold bg-surface/50 rounded-2xl border border-erreur-texte/20">
+                Données d&apos;initialisation manquantes. Veuillez vérifier vos comptes et votre budget.
+            </div>
+        );
     }
 
-    // F1 (audit 2026-05-28) + PH2-c — projection plantée : le moteur app-level (ProjectionEngine)
-    // ne publie PAS un résultat en erreur dans store.lastProjection (no-fake-data) ; il bascule
-    // `projectionStatus` à 'error'. On affiche donc une erreur honnête depuis ce statut plutôt que
-    // de rendre un graphe à $0. Dashboard/Investments/Budget gardent la dernière projection valide.
     if (hasError) {
-        // [ENG-INFINITY-NON-GARDE-A-LA-FRONTIERE] ⚠️ `projectionStatus === 'error'` recouvre
-        // désormais DEUX causes très différentes, et cet écran est le SEUL à ne pas les distinguer :
-        // les six autres onglets passent par `ProjectionRequired`, qui nomme le champ. Or c'est ici
-        // qu'on vient chercher « pourquoi ma projection ne marche plus ». Pire, le conseil
-        // « désactive Monte-Carlo » est une fausse piste devant une entrée illisible — il ne répare
-        // rien (finding panel #764).
-        return <div className="p-8 text-center bg-surface/50 rounded-2xl border border-erreur-texte/20 space-y-2">
-            <div className="text-2xl" aria-hidden="true">⚠️</div>
-            <div className="text-erreur-texte font-bold">
-                {projectionRefus ? 'Donnée illisible' : 'Le calcul de la projection a échoué.'}
+        return (
+            <div className="p-8 text-center bg-surface/50 rounded-2xl border border-erreur-texte/20 space-y-2">
+                <div className="text-2xl" aria-hidden="true">⚠</div>
+                <div className="text-erreur-texte font-bold">
+                    {projectionRefus ? 'Donnée illisible' : 'Le calcul de la projection a échoué.'}
+                </div>
+                <div className="text-sm text-texte-doux max-w-md mx-auto">
+                    {projectionRefus ?? (
+                        <>
+                            Vérifie tes paramètres (revenus, dépenses, comptes, objectifs). L&apos;erreur a été
+                            journalisée.{runMC ? ' Tu peux aussi désactiver le mode Monte-Carlo et réessayer.' : ''}
+                        </>
+                    )}
+                </div>
             </div>
-            <div className="text-sm text-ink-300 max-w-md mx-auto">
-                {projectionRefus ?? (<>
-                    Vérifie tes paramètres (revenus, dépenses, comptes, objectifs). L'erreur a été
-                    journalisée.{runMC ? ' Tu peux aussi désactiver le mode Monte-Carlo et réessayer.' : ''}
-                </>)}
-            </div>
-        </div>;
+        );
     }
 
-    // G4/G5 — fenêtre visible (en monthIndex) pour ne tracer que les événements
-    // dans la plage zoomée et borner le sélecteur de période.
     const visMinMonth = zoom.visibleData[0]?.monthIndex ?? Number.NEGATIVE_INFINITY;
     const visMaxMonth = zoom.visibleData[zoom.visibleData.length - 1]?.monthIndex ?? Number.POSITIVE_INFINITY;
     const visibleLifeEvents = lifeChartEvents.filter((e) => e.monthIndex >= visMinMonth && e.monthIndex <= visMaxMonth);
     const visibleFlowEvents = flowChartEvents.filter((e) => e.monthIndex >= visMinMonth && e.monthIndex <= visMaxMonth);
-    // Plafond de densité : en vue large on échantillonne uniformément (lisibilité
-    // + fluidité). En zoomant, la fenêtre contient moins d'événements → tous visibles.
-    // [FUTUR-ICON-DENSITY] `sampleEvenly` répartit EXACTEMENT `cap` icônes (bug Marc « pas assez
-    // d'icônes » : l'ancien pas entier `ceil(len/cap)` sous-remplissait — 25 events cap 24 → 13 montrés).
     const thinEvents = sampleEvenly;
-    // [R4] Cap de densité en vue dézoomée (décision Marc 2026-06-22 : 40/24 → 24/16) : la vue large
-    // reste « peu d'icônes » (échantillonnage uniforme) ; en zoomant, la fenêtre contient moins
-    // d'événements que le cap → tous affichés (« jusqu'à toutes »). Cap FIXE (densité écran ≈ constante),
-    // PAS proportionnel au span — un cap ∝ span ferait l'inverse (plus d'icônes dézoomé, moins en zoomant).
     const MAX_LIFE_ICONS = 24;
     const MAX_FLOW_ICONS = 16;
-    // [R2] Les événements `pinned` (ex. pastille FIRE) ne sont JAMAIS écrêtés par l'échantillonnage : sinon, en
-    // vue dézoomée (au-delà du cap), la pastille FIRE pouvait disparaître en silence (revue adversariale R2).
-    // pinned en FIN : rendus en dernier → dessinés AU-DESSUS (SVG painter) si un autre événement tombe le même mois.
-    // ⚠️ [FUTUR-DAILY-STACK-X] `assignStackIndex` EN DERNIER : le rang d'empilement décrit ce qui est
-    // à l'écran, pas ce que le moteur a produit. Vie et flux s'empilent dans des sens OPPOSÉS → deux
-    // appels séparés, jamais un rang partagé.
     const shownLifeEvents = assignStackIndex([
         ...thinEvents(visibleLifeEvents.filter((e) => !e.pinned), MAX_LIFE_ICONS),
         ...visibleLifeEvents.filter((e) => e.pinned),
     ]);
     const shownFlowEvents = assignStackIndex(thinEvents(visibleFlowEvents, MAX_FLOW_ICONS));
     const lastMonthIndex = chartData.length > 0 ? chartData[chartData.length - 1].monthIndex : 0;
-    // ⚠️ Indices résolus sur `displayData` (= `pastPrefix` + `chartData`) et NON sur `chartData` :
-    // c'est `displayData` que `useTimeChartZoom` indexe. Chercher dans `chartData` rendait un indice
-    // décalé du nombre de mois de PASSÉ préfixés — le bouton « 5 ans » s'arrêtait alors
-    // `pastPrefix.length` mois trop tôt, en silence, et son état actif se comparait au même indice
-    // faux (donc cohérent avec lui-même, donc invisible).
+
     const idxForYears = (yrs: number) => {
         const i = (displayData as ProjectionChartPoint[]).findIndex((d) => d.monthIndex >= yrs * 12);
         return i === -1 ? displayData.length - 1 : i;
     };
-    // [FUTUR-DAILY-NATIVE + finding a11y #592] Le bouton « Jour » (chemin vers la vue au jour) est
-    // retiré — mais il était aussi le SEUL contrôle FOCUSABLE menant à une fenêtre centrée sur
-    // AUJOURD'HUI : les presets « 5 ans… Tout » partent tous de l'origine. « Aujourd'hui » reprend
-    // ce rôle-là (preset de FENÊTRE temporelle, ~6 mois autour du présent — pas un mode) : au
-    // clavier, Tab + Entrée suffisent à regarder le présent de près. WCAG 2.1.1.
     const todayArrayIndex = (() => {
         const i = (displayData as ProjectionChartPoint[]).findIndex((d) => d.monthIndex >= todayMonthIndex);
         return i === -1 ? displayData.length - 1 : i;
     })();
     const todayPresetRange = centeredWindowRange(displayData.length, todayArrayIndex, 7);
 
-    // [S5-REFONTE-FUTUR] Repères essentiels de la courbe (FIRE et valeur à l'horizon) rendus sous
-    // forme de boutons compacts cliquables dans l'en-tête de la courbe (suppression des KPI redondants
-    // Succès / Vitalité / tuilesCourbeMobile qui prenaient de la place au-dessus et en dessous du graphe).
-    const patrimoineKpi = kpiPatrimoine(results, isPrivacyMode);
+    const finScenarioP50 = activeScenarioOutput.milestones.finalNetWorthP50;
+    const resultsScenarioPatrimoine =
+        typeof finScenarioP50 === 'number' && Number.isFinite(finScenarioP50)
+            ? {
+                  finalNetWorth: finScenarioP50,
+                  estateNetWorth: activeScenarioOutput.milestones.estateNetWorthP50 ?? results?.estateNetWorth,
+                  fireNumber,
+              }
+            : results;
+    const patrimoineKpi = kpiPatrimoine(resultsScenarioPatrimoine, isPrivacyMode);
     const libelleMC = mcSublabel(runMC, results?.mcIterationsRun);
     const anneeDe = (monthIndex: number) => calendarFromMonthIndex(startYear, startMonth, monthIndex).year;
-    const pointRetraite = (chartData as ProjectionChartPoint[]).find((d) => d.monthIndex >= 0 && d.isRetired) ?? null;
     const dernierPoint = chartData.length > 0 ? (chartData[chartData.length - 1] as ProjectionChartPoint) : null;
-    const anneesHorizon = dernierPoint ? Math.max(0, Math.round((dernierPoint.monthIndex - todayMonthIndex) / 12)) : null;
+    const anneesHorizon = dernierPoint
+        ? Math.max(0, Math.round((dernierPoint.monthIndex - todayMonthIndex) / 12))
+        : null;
     const naviguerVers = (tab: Tab) => useFinanceStore.getState().setActiveTab(tab);
 
-    const cellCourbe = 'touch-target gf-quote-cell inline-flex items-center gap-2 rounded-xl border border-bordure hover:border-repere bg-surface-douce px-3 py-1.5 text-tiny cursor-pointer transition-colors focus-ring shrink-0';
+    const cellCourbe =
+        'touch-target min-h-11 gf-quote-cell inline-flex items-center gap-2 rounded-xl border border-bordure hover:border-repere bg-surface-douce px-3 py-1.5 text-tiny cursor-pointer transition-colors focus-ring shrink-0';
     const statsCourbe = (
         <div className="flex items-center gap-2 shrink-0">
             <button
@@ -1637,9 +1207,13 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                 onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
                 className={cellCourbe}
             >
-                <span className="text-ink-400 font-medium">Objectif FIRE</span>
-                <PrivateAmount className="font-mono font-bold text-ink-50">{formatCompactCAD(fireNumber)}</PrivateAmount>
-                {jalonFire?.year != null && <span className="px-1.5 py-0.5 rounded-full font-mono font-semibold gf-delta-amber">· <PrivateAmount>{jalonFire.year}</PrivateAmount></span>}
+                <span className="text-texte-doux font-medium">Objectif FIRE</span>
+                <PrivateAmount className="font-mono font-bold text-texte">{formatCompactCAD(fireNumber)}</PrivateAmount>
+                {jalonFire?.year != null && (
+                    <span className="px-1.5 py-0.5 rounded-full font-mono font-semibold gf-delta-amber">
+                        · <PrivateAmount>{jalonFire.year}</PrivateAmount>
+                    </span>
+                )}
                 <span className="text-repere font-semibold" aria-hidden="true">↗</span>
             </button>
             <button
@@ -1649,12 +1223,10 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                 onMouseEnter={() => prefetchTab(Tab.INVESTMENTS)}
                 className={cellCourbe}
             >
-                {/* [HORIZON-ESPERANCE-DE-VIE] L'horizon court jusqu'à l'espérance de vie de la personne 1. */}
-                {/* NOMBRE-NON-MONETAIRE : réglage saisi (âge ou horizon choisi), pas une valeur dérivée du dossier (horizon = espérance de vie) */}
-                <span className="text-ink-400 font-medium" title={`Jusqu'à ${esperanceDeVieEffective(retirementGoal)} ans`}>
+                {/* NOMBRE-NON-MONETAIRE : horizon = espérance de vie configurée */}
+                <span className="text-texte-doux font-medium" title={`Jusqu'à ${esperanceDeVieEffective(retirementGoal)} ans`}>
                     À l&apos;horizon{anneesHorizon != null ? ` (${anneesHorizon} ans)` : ''}
                 </span>
-                {/* [FUTUR-KPI-PATRIMOINE-FIN-COURBE] Valeur nette de fin de courbe ; l'héritage net vit dans l'info-bulle. */}
                 <span className="px-1.5 py-0.5 rounded-full font-mono font-bold gf-delta-up">
                     <PrivateAmount>{patrimoineKpi.value}</PrivateAmount>
                 </span>
@@ -1663,119 +1235,82 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         </div>
     );
 
-    // [S5-REFONTE-FUTUR] Jalons (tableau sous la courbe). Années et âges lus sur les points de la
-    // courbe ; « ≈ » devant l'année FIRE, comme sur la courbe (le seuil est une estimation).
-    const ageDe = (a: number | undefined) => (a != null && Number.isFinite(a) ? String(Math.floor(a)) : '—');
-    const jalons: JalonProjection[] = [
-        {
-            cle: 'aujourdhui',
-            libelle: "Aujourd'hui",
-            annee: String(anneeDe(todayMonthIndex)),
-            age: ageDe(pointAncre?.age),
-            montant: pointAncre && Number.isFinite(pointAncre.NetWorth) ? <PrivateAmount>{formatCAD(pointAncre.NetWorth)}</PrivateAmount> : null,
-            bureauSeulement: true,
-            onClick: () => naviguerVers(Tab.TRANSACTIONS),
-        },
-        {
-            cle: 'fire',
-            libelle: jalonFire ? 'Objectif FIRE atteint' : 'Objectif FIRE (non atteint)',
-            libelleCourt: 'Objectif FIRE',
-            annee: jalonFire?.year != null ? <PrivateAmount>{`≈ ${jalonFire.year}`}</PrivateAmount> : '—',
-            age: jalonFire?.age != null ? <PrivateAmount>{ageDe(jalonFire.age)}</PrivateAmount> : '—',
-            montant: <PrivateAmount>{formatCompactCAD(fireNumber)}</PrivateAmount>,
-            ton: 'fire',
-            onClick: () => naviguerVers(Tab.INVESTMENTS),
-        },
-        {
-            cle: 'retraite',
-            libelle: 'Retraite',
-            annee: pointRetraite ? String(anneeDe(pointRetraite.monthIndex)) : '—',
-            age: pointRetraite ? ageDe(pointRetraite.age) : String(retirementGoal.targetAge),
-            montant: null,
-            onClick: () => naviguerVers(Tab.RETIREMENT),
-        },
-        {
-            cle: 'horizon',
-            libelle: "Fin de l'horizon",
-            annee: dernierPoint ? String(anneeDe(dernierPoint.monthIndex)) : '—',
-            age: ageDe(dernierPoint?.age),
-            montant: <PrivateAmount>{patrimoineKpi.value}</PrivateAmount>,
-            onClick: () => naviguerVers(Tab.RETIREMENT),
-        },
-    ];
-
-    // [S5-REFONTE-FUTUR] Leviers APPLIQUÉS (valeurs réelles de l'état, jamais une plage inventée).
-    const ordreRetrait = projection.withdrawalStrategy === 'PRIO_CELI_NO_RAP'
-        ? `${leverValueLabel('withdrawalOrder', 'PRIO_CELI')} (sans RAP)`
-        : leverValueLabel('withdrawalOrder', projection.withdrawalStrategy ?? 'AUTO_MARGINAL');
-    const profilRendement = projection.appliedReturnProfile
-        ? leverValueLabel('returnRateProfile', projection.appliedReturnProfile)
-        : 'Personnalisé';
-    const ageRrq = retirementGoal.rrqStartAge ?? Math.min(retirementGoal.targetAge, 65);
-    const agePsv = retirementGoal.psvStartAge ?? 65;
-    // NOMBRE-NON-MONETAIRE : réglage saisi (âge ou horizon choisi), pas une valeur dérivée du dossier (âges RRQ et PSV)
-    const rentes = ageRrq === agePsv ? `${ageRrq} ans` : `RRQ ${ageRrq} · PSV ${agePsv} ans`;
-    const leviers: LevierAffiche[] = [
-        // NOMBRE-NON-MONETAIRE : réglage saisi (âge ou horizon choisi), pas une valeur dérivée du dossier (âge de retraite)
-        { libelle: 'Âge de retraite', valeur: `${retirementGoal.targetAge} ans`, onClick: () => naviguerVers(Tab.RETIREMENT) },
-        { libelle: 'Ordre de retrait', valeur: ordreRetrait, onClick: () => naviguerVers(Tab.TAX) },
-        { libelle: 'Profil de rendement', valeur: profilRendement, onClick: () => naviguerVers(Tab.INVESTMENTS) },
-        { libelle: 'Rentes gouvernementales', valeur: rentes, onClick: () => naviguerVers(Tab.PROFILE) },
-    ];
-    // NOMBRE-NON-MONETAIRE : réglage saisi (âge ou horizon choisi), pas une valeur dérivée du dossier (âge de retraite)
-    const resumeLeviers = `Retraite à ${retirementGoal.targetAge} ans — retrait : ${ordreRetrait.toLowerCase()} — profil ${profilRendement.toLowerCase()} — rentes : ${rentes}`;
-
-    // role="status" (live polite) : le badge apparaît après le calcul de projection → annoncé au
-    // lecteur d'écran si le plan bascule en insoutenable lors d'un recalcul.
     const insolvencyBadge = insolvency ? (
         <div role="status">
             <Badge variant="danger" size="md">
-                {insolvency.age != null
-                    ? <>Plan insoutenable — capital épuisé vers <PrivateAmount>{insolvency.age}</PrivateAmount> ans</>
-                    : 'Plan insoutenable — capital épuisé'}
+                {insolvency.age != null ? (
+                    <>Plan insoutenable — capital épuisé vers <PrivateAmount>{insolvency.age}</PrivateAmount> ans</>
+                ) : (
+                    'Plan insoutenable — capital épuisé'
+                )}
             </Badge>
         </div>
     ) : undefined;
 
-    // Verrouiller / Plein écran : secondaires, à droite des périodes dans l'en-tête de la carte.
     const actionsCourbe = (
         <div className="flex items-center gap-1.5 shrink-0">
-            {/* PH2-d — verrou de courbe : fige la courbe courante comme référence (persistée IDB). */}
-                {isProjectionLocked ? (
-                    <button
-                        type="button"
-                        onClick={unlockProjection}
-                        className="touch-target h-11 min-w-11 lg:h-9 lg:min-w-0 px-3 rounded-lg text-[13px] font-semibold text-alerte-texte hover:text-texte bg-alerte-fond hover:bg-surface-douce border border-alerte-texte/30 transition-colors focus-ring"
-                        title="Déverrouiller : revenir à la courbe live seule"
-                    >
-                        <span aria-hidden="true">🔓</span> <span className="max-lg:sr-only">Déverrouiller</span>
-                    </button>
-                ) : (
-                    <button
-                        type="button"
-                        onClick={() => { if (results) lockProjection(results); }}
-                        disabled={!results || isComputing}
-                        className="touch-target h-11 min-w-11 lg:h-9 lg:min-w-0 px-3 rounded-lg text-[13px] text-ink-300 hover:text-ink-50 hover:bg-surface-douce border border-bordure transition-colors focus-ring disabled:opacity-40 disabled:cursor-not-allowed"
-                        title="Verrouiller cette courbe comme référence (persistée jusqu'au déverrouillage)"
-                    >
-                        <span aria-hidden="true">🔒</span> <span className="max-lg:sr-only">Verrouiller</span>
-                    </button>
-                )}
-                {/* Au téléphone, le sélecteur compact porte déjà « Plein écran » (44×44). */}
-                {!etroit && (
+            <button
+                type="button"
+                onClick={() => setTiroirOuvert('hypotheses')}
+                aria-haspopup="dialog"
+                aria-expanded={tiroirOuvert === 'hypotheses'}
+                aria-controls={tiroirDomId('hypotheses')}
+                className="touch-target min-h-11 px-3 rounded-lg text-[13px] font-semibold text-texte-doux hover:text-texte hover:bg-surface-douce border border-bordure transition-colors focus-ring"
+                title="Modifier les hypothèses de simulation"
+            >
+                <span aria-hidden="true">⚙</span> <span className="max-lg:sr-only">Hypothèses</span>
+            </button>
+            <button
+                type="button"
+                onClick={() => setAnatomyOpen(true)}
+                className="touch-target min-h-11 px-3 rounded-lg text-[13px] font-semibold text-texte-doux hover:text-texte hover:bg-surface-douce border border-bordure transition-colors focus-ring"
+                title="Anatomie détaillée d'une année"
+            >
+                <span aria-hidden="true">📋</span> <span className="max-lg:sr-only">Anatomie</span>
+            </button>
+            <button
+                type="button"
+                onClick={() => setTiroirOuvert('historique')}
+                aria-haspopup="dialog"
+                aria-expanded={tiroirOuvert === 'historique'}
+                aria-controls={tiroirDomId('historique')}
+                className="touch-target min-h-11 px-3 rounded-lg text-[13px] font-semibold text-texte-doux hover:text-texte hover:bg-surface-douce border border-bordure transition-colors focus-ring"
+                title="Historique passé par compte"
+            >
+                <span aria-hidden="true">📊</span> <span className="max-lg:sr-only">Historique</span>
+            </button>
+            {isProjectionLocked ? (
+                <button
+                    type="button"
+                    onClick={unlockProjection}
+                    className="touch-target min-h-11 min-w-11 lg:min-w-0 px-3 rounded-lg text-[13px] font-semibold text-alerte-texte hover:text-texte bg-alerte-fond hover:bg-surface-douce border border-alerte-texte/30 transition-colors focus-ring"
+                    title="Déverrouiller : revenir à la courbe live seule"
+                >
+                    <span aria-hidden="true">🔓</span> <span className="max-lg:sr-only">Déverrouiller</span>
+                </button>
+            ) : (
+                <button
+                    type="button"
+                    onClick={() => { if (results) lockProjection(results); }}
+                    disabled={!results || isComputing}
+                    className="touch-target min-h-11 min-w-11 lg:min-w-0 px-3 rounded-lg text-[13px] text-texte-doux hover:text-texte hover:bg-surface-douce border border-bordure transition-colors focus-ring disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Verrouiller cette courbe comme référence (persistée jusqu'au déverrouillage)"
+                >
+                    <span aria-hidden="true">🔒</span> <span className="max-lg:sr-only">Verrouiller</span>
+                </button>
+            )}
+            {!etroit && (
                 <button
                     type="button"
                     onClick={() => zoom.containerEl.current?.requestFullscreen?.()}
-                    className="touch-target sr-only h-9"
+                    className="touch-target sr-only min-h-11"
                     title="Plein écran (Échap pour quitter)"
                 >
-                    ⛶ Plein écran
+                    Plein écran
                 </button>
-                )}
+            )}
         </div>
     );
-
-    const outils = <OutilsProjection tiroirOuvert={tiroirOuvert} onOuvrir={setTiroirOuvert} />;
 
     return (
         <div className="space-y-4 lg:space-y-6 pb-24">
@@ -1798,17 +1333,11 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                 }
             />
 
-            {/* [REFONTE-NAV Lot 1] Chiffres de tête (ex-Accueil), fournis par l'hôte (TabRouter) :
-                le bandeau reste un module chargé à part — il tire l'historique du portefeuille. */}
             {bandeauKpi?.(etroit ? 'mobile-tete' : 'bureau')}
 
-            {/* Écran d'invite : tant que la courbe n'est pas révélée (jamais calculée OU entrées
-                modifiées depuis le dernier calcul), on invite à (re)calculer — jamais de courbe auto.
-                PH4-FUT « leviers-d'abord » : le composeur de leviers est EN AMONT de tout calcul.
-                [PROJECTION-PERSIST] Fenêtre de restauration → chargement honnête, pas l'amorçage. */}
             {curveRestoring && (
                 <section className="gf-terminal-card rounded-2xl bg-surface border border-bordure text-center">
-                    <div className="py-10 flex flex-col items-center gap-3 text-ink-300" role="status" aria-live="polite">
+                    <div className="py-10 flex flex-col items-center gap-3 text-texte-doux" role="status" aria-live="polite">
                         <svg className="animate-spin h-8 w-8 text-alerte-texte" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                             <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="40" strokeDashoffset="20" opacity="0.5" />
                         </svg>
@@ -1816,17 +1345,18 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                     </div>
                 </section>
             )}
+
             {!curveVisible && !curveRestoring && (
                 <div className="space-y-4">
-                    {!reqsMet && !isTestModeActive && (
+                    {!reqsMet && !isTestModeActive ? (
                         <section aria-label="Données requises pour la projection" className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-5 space-y-3">
                             <div className="space-y-1">
-                                <h2 className="text-base font-bold text-ink-50">Complète ton dossier pour calculer ta trajectoire</h2>
-                                <p className="text-meta text-ink-300">
+                                <h2 className="text-base font-bold text-texte">Complète ton dossier pour calculer ta trajectoire</h2>
+                                <p className="text-meta text-texte-doux">
                                     Aucune projection fictive n&apos;est affichée tant que ces données de base manquent :
                                 </p>
                             </div>
-                            <ul className="flex flex-wrap gap-2 text-xs text-ink-200">
+                            <ul className="flex flex-wrap gap-2 text-xs text-texte">
                                 {FUTURE_REQ_IDS.filter((id) => !REQUIREMENTS[id].isMet(useFinanceStore.getState())).map((id) => (
                                     <li key={id} className="px-2.5 py-1 rounded-full bg-surface-douce border border-bordure font-medium">
                                         {REQUIREMENTS[id].label}
@@ -1850,994 +1380,710 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                 </button>
                             </div>
                         </section>
-                    )}
-                    <section className="gf-terminal-card rounded-2xl bg-surface border border-bordure text-center">
-                        <div className="py-6 px-4 space-y-3 max-w-xl mx-auto">
-                            <div className="text-4xl" aria-hidden="true">{isStale ? '🔄' : '🎯'}</div>
-                            <h2 className="text-h2 text-ink-50">{isStale ? 'Paramètres modifiés' : 'Compose tes leviers, calcule ta meilleure projection'}</h2>
-                            <p className="text-meta text-ink-300 leading-snug">
-                                {isStale
-                                    ? 'Tes hypothèses ou tes leviers ont changé depuis le dernier calcul. Recompose / relance ci-dessous pour mettre ta courbe et ton plan d\'action à jour.'
-                                    : 'Coche les leviers à explorer ci-dessous, lance la recherche Monte-Carlo, puis applique la stratégie gagnante : ta courbe de vie affichera la MEILLEURE selon tes leviers.'}
+                    ) : (
+                        <section aria-label="Projection en attente" className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-6 text-center space-y-2">
+                            <h2 className="text-base font-bold text-texte">Aucune projection calculée pour l&apos;instant</h2>
+                            <p className="text-meta text-texte-doux">
+                                Vérifie tes paramètres de profil ou ouvre les hypothèses pour ajuster ta simulation.
                             </p>
-                            <button
-                                type="button"
-                                onClick={revealCurve}
-                                disabled={isComputing}
-                                aria-busy={isComputing}
-                                className={`touch-target text-tiny text-ink-400 hover:text-ink-200 underline focus-ring rounded disabled:opacity-50 ${
-                                    isNarrowViewport ? 'min-h-[44px] inline-flex items-center' : ''
-                                }`}
-                            >
-                                {isComputing ? 'Calcul en cours…' : 'ou vois directement ta projection actuelle (sans optimiser)'}
-                            </button>
-                        </div>
-                        <div className="px-4 pb-5 text-left">
-                            <BoutonsPimenterFutur
-                                projection={projection}
-                                retirementGoal={retirementGoal}
-                                runMC={runMC}
-                                setRunMC={setRunMC}
-                                onInstantUpdate={handleInstantScenarioUpdate}
-                                finalNetWorth={results?.finalNetWorth ?? null}
-                                onOpenDeepControls={() => setTiroirOuvert('hypotheses')}
-                                deepControlsOpen={tiroirOuvert === 'hypotheses'}
-                            />
-                        </div>
-                    </section>
-                    <StrategyOptimizerPanel params={params} onApply={setRetirementGoal ? applyAndReveal : undefined} />
-                    {/* [UI-SCEN] — stress-tests à la demande (sortis du recalcul permanent). [EP-10] repliés. */}
-                    <CollapsibleSection title="Stress-tests" subtitle="Scénarios adverses (krach, inflation, longévité…) — à la demande." defaultOpen={false}>
-                        <StressTestPanel params={params} baselineEstateNW={allResults[0]?.estateNetWorth} />
-                    </CollapsibleSection>
+                            <div className="pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setTiroirOuvert('hypotheses')}
+                                    className="touch-target min-h-11 px-4 py-2 rounded-xl bg-accent hover:bg-accent-fonce text-sur-accent text-xs font-semibold focus-ring"
+                                >
+                                    Modifier les hypothèses
+                                </button>
+                            </div>
+                        </section>
+                    )}
                 </div>
-            )}
-
-            {!curveVisible && !curveRestoring && (
-                <>
-                    {etroit && bandeauKpi && <div className="grid grid-cols-2 gap-2.5">{bandeauKpi('mobile-pied')}</div>}
-                    {outils}
-                </>
             )}
 
             {curveVisible && (
-            <div ref={revealedRef} tabIndex={-1} className="outline-hidden space-y-4 lg:space-y-6" role="region" aria-label="Projection affichée">
-            {isStale && (
-                <div className="flex flex-wrap items-center gap-3 rounded-card border border-warning-500/40 bg-warning-500/10 px-4 py-2.5" role="status">
-                    <span aria-hidden="true">🔄</span>
-                    <span className="text-meta text-ink-100 font-bold">
-                        Pas à jour{frozenUsable ? ' — courbe figée au dernier calcul' : ''}
-                    </span>
-                    <span className="text-tiny text-ink-300">
-                        Tes hypothèses ou tes données ont changé depuis.
-                    </span>
-                    <span className="flex gap-2 ml-auto">
-                        <button
-                            type="button"
-                            onClick={revealCurve}
-                            disabled={isComputing}
-                            className="touch-target px-3 py-1 rounded-card bg-primary text-dark text-tiny font-bold focus-ring disabled:opacity-50"
-                        >
-                            {isComputing ? 'Calcul…' : 'Recharger avec mes données'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={regateToLevers}
-                            className="touch-target px-3 py-1 rounded-card border border-bordure-champ text-ink-200 hover:text-ink-50 text-tiny font-bold focus-ring"
-                        >
-                            Rechoisir mes leviers
-                        </button>
-                    </span>
-                </div>
-            )}
-            {/* [ENG-GOALSHORTFALLS-EXPOSE] Bandeau des objectifs non financés — la phrase vient du
-                module PUR (alerteObjectifsManques), jamais recopiée ici ; le montant reste un NŒUD
-                (PrivateAmount) pour suivre le mode discret. Pas de bandeau quand il n'y a rien à
-                dire (null) : une alerte permanente est une alerte morte. */}
-            {alerteObjectifs && (
-                <div className="flex flex-wrap items-center gap-3 rounded-card border border-warning-500/40 bg-warning-500/10 px-4 py-2.5">
-                    <span aria-hidden="true">🎯</span>
-                    <span className="text-meta text-ink-100 font-bold">{alerteObjectifs.libelle}</span>
-                    <span className="text-tiny text-ink-300">
-                        Il a manqué <PrivateAmount>{formatCAD(alerteObjectifs.montant)}</PrivateAmount> au
-                        fil de la projection — avance la date de l&apos;objectif, réduis son montant ou
-                        libère de l&apos;épargne.
-                    </span>
-                </div>
-            )}
-
-            {/* [S5-REFONTE-FUTUR] Carte « La courbe de vie » (maquette F-bureau) ; habillage Google Finance Beta. */}
-            <FutureSimulationControls
-                projection={projection}
-                runMC={runMC}
-                setRunMC={setRunMC}
-                onUpdateProjection={(nextProj) => handleInstantScenarioUpdate(nextProj)}
-                onOpenYearAnatomy={() => setAnatomyOpen(true)}
-                selectedYear={jourAffiche?.point?.year ?? startYear}
-            />
-            <section aria-labelledby="courbe-vie-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure px-3 py-3.5 sm:px-5 sm:py-4 lg:px-6 lg:pt-5 lg:pb-6 space-y-4">
-                <GoogleFinanceHero
-                    jourAffiche={jourAffiche?.point ?? null}
-                    pointAncre={pointAncre}
-                    estFige={selection.mode === 'frozen'}
-                    onLibererJour={selection.release}
-                    isZoomed={zoom.isZoomed}
-                    onResetZoom={zoom.reset}
-                    onFocusToday={() => {
-                        if (todayPresetRange) {
-                            zoom.showRange(todayPresetRange[0], todayPresetRange[1]);
-                        } else {
-                            zoom.reset();
-                        }
-                    }}
-                    onOpenConnections={() => setShowConnexionsModal(true)}
-                />
-                <h2 id="courbe-vie-titre" className="sr-only">La courbe de vie</h2>
-                <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pb-2 border-b border-bordure">
-                    <div className="flex items-center gap-2 min-w-max">
-                        <FutureCurveToolbar
-                            modeCourbe={modeCourbe}
-                            onChangeModeCourbe={setModeCourbe}
-                            modeComparaison={modeComparaison}
-                            onToggleComparaison={() => setModeComparaison((v) => !v)}
-                            pointComparaisonA={comparaisonPoints.a}
-                            pointComparaisonB={comparaisonPoints.b}
-                            onClearComparaison={() => setComparaisonPoints({ a: null, b: null })}
-                            mcLabel={libelleMC}
-                        />
-                        {statsCourbe}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                        {isComputing && (
-                            <span className="flex items-center gap-1.5 text-tiny text-alerte-texte" role="status" aria-live="polite">
-                                <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="40" strokeDashoffset="20" opacity="0.5"/>
-                                </svg>
-                                <span className="sr-only">Recalcul Monte Carlo en cours…</span>
+                <div ref={revealedRef} tabIndex={-1} className="outline-hidden space-y-4 lg:space-y-6" role="region" aria-label="Projection affichée">
+                    {alerteObjectifs && (
+                        <div className="flex flex-wrap items-center gap-3 rounded-card border border-alerte-texte/40 bg-alerte-fond px-4 py-2.5">
+                            <span aria-hidden="true">🎯</span>
+                            <span className="text-meta text-texte font-bold">{alerteObjectifs.libelle}</span>
+                            <span className="text-tiny text-texte-doux">
+                                Il a manqué <PrivateAmount>{formatCAD(alerteObjectifs.montant)}</PrivateAmount> au
+                                fil de la projection — avance la date de l&apos;objectif, réduis son montant ou
+                                libère de l&apos;épargne.
                             </span>
-                        )}
-                        <FuturePeriodSelector
-                            variant={etroit ? 'compact' : 'buttons'}
-                            zoom={zoom}
-                            todayPresetRange={todayPresetRange}
-                            idxForYears={idxForYears}
-                            lastMonthIndex={lastMonthIndex}
-                            onFullscreen={() => zoom.containerEl.current?.requestFullscreen?.()}
-                        />
-                        {actionsCourbe}
-                    </div>
-                </div>
-                {pastPrefixPoints.length > 0 && (
-                    <div className="sr-only">
-                        <span>
-                            Patrimoine net réel{pastHistory.firstDate ? ` depuis ${pastHistory.firstDate.slice(0, 7)}` : ''}
-                            {mentionDettes ? ` · ${mentionDettes}` : ''}
-                            {hasForeignHoldings ? ' · titres étrangers au change du jour' : ''}
-                            {pastHistory.isLoading ? ' · chargement des prix…' : (pastHistory.coverage < 0.99 ? ' · partiellement estimé aux prix actuels' : '')}
-                        </span>
-                    </div>
-                )}
-                {lockedByMonth && (
-                    <div className="text-tiny text-ink-200 flex items-center gap-1.5 flex-wrap">
-                        <span aria-hidden="true" className="inline-block w-5 border-t-2 border-dashed border-repere" />
-                        <span className="px-1.5 py-0.5 rounded-full font-mono font-semibold gf-delta-neutral">Courbe verrouillée</span>
-                    </div>
-                )}
-                <ForecastAccuracyBadge accuracy={forecastAccuracy} />
-                <div
-                    ref={zoom.containerRef}
-                    onDoubleClick={zoom.handlers.onDoubleClick}
-                    onPointerDownCapture={(e) => {
-                        pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
-                        if ((e.target as Element | null)?.closest?.('button, a, [role="button"]')) {
-                            dragStartPointRef.current = null;
-                            return;
-                        }
-                        const pt = resoudrePointClientX(e.clientX);
-                        if (e.pointerType === 'touch' && !modeComparaison) {
-                            dragStartPointRef.current = null;
-                            if (pt) {
-                                lastHoverPointRef.current = pt;
-                                selection.onHoverPoint(pt);
-                            }
-                            return;
-                        }
-                        dragStartPointRef.current = pt;
-                    }}
-                    onPointerMove={(e) => {
-                        if (zoom.isPinchActive()) return;
-                        if (e.pointerType === 'touch' && !modeComparaison) {
-                            const down = pointerDownPosRef.current;
-                            if (down && Math.abs(e.clientY - down.y) > Math.abs(e.clientX - down.x) && Math.abs(e.clientY - down.y) > 18) {
-                                return;
-                            }
-                            const currentPt = resoudrePointClientX(e.clientX);
-                            if (currentPt) {
-                                lastHoverPointRef.current = currentPt;
-                                selection.onHoverPoint(currentPt);
-                            }
-                            return;
-                        }
-                        const down = pointerDownPosRef.current;
-                        const startPt = dragStartPointRef.current;
-                        if (!down || !startPt) return;
-                        if (Math.abs(e.clientX - down.x) > 10) {
-                            const currentPt = resoudrePointClientX(e.clientX);
-                            if (currentPt && currentPt.monthIndex !== startPt.monthIndex) {
-                                setComparaisonPoints({ a: startPt, b: currentPt });
-                            }
-                        }
-                    }}
-                    onPointerUp={handleChartContainerClick}
-                    onPointerLeave={() => { dragStartPointRef.current = null; }}
-                    tabIndex={0}
-                    onKeyDown={handleChartKeyDown}
-                    className="chart-fullscreen relative w-full h-[280px] min-h-[260px] sm:h-[500px] sm:min-h-0 lg:h-[650px] select-none focus-ring rounded-lg cursor-crosshair gf-chart-enter"
-                    role="group"
-                    aria-roledescription="graphique"
-                    aria-label="Courbe de vie — évolution projetée du patrimoine net et de chaque compte dans le temps. Le détail du jour visé est décrit dans le panneau situé juste sous la courbe ; les mêmes données sont aussi lisibles sous forme de tableau et de liste de jalons. À la souris : survol = aperçu, clic = épingle le jour dans le panneau, glisser = comparer deux dates, molette = zoom. Au clavier : Entrée ou flèches = épingle le jour d'aujourd'hui, puis Veille/Lendemain et Détail complet dans le panneau, Échap = relâche."
-                >
-                     {isComputing ? (
-                        // Pendant le (re)calcul : on masque la courbe (potentiellement périmée) et on
-                        // affiche un état de chargement de la MÊME hauteur que le graphe → zéro layout
-                        // shift, et on ne montre jamais une courbe partielle/obsolète (demande Marc).
-                        <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-ink-300" role="status" aria-live="polite">
-                            <svg className="animate-spin h-8 w-8 text-alerte-texte" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="40" strokeDashoffset="20" opacity="0.5" />
-                            </svg>
-                            <span className="text-meta">Calcul de ta projection…</span>
                         </div>
-                     ) : (
-                     <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart
-                            data={chartSeries}
-                            margin={{ top: etroit ? 26 : 34, right: 2, left: 2, bottom: 4 }}
-                            onMouseMove={((s: { activePayload?: Array<{ payload: ProjectionChartPoint }> }) => {
-                                // [DETTE-CAST-DAILYCURVE] Les DEUX derniers `as unknown as` du fichier
-                                // (celui-ci et onMouseLeave), JUSTIFIÉS : les types recharts v3
-                                // déclarent ces handlers sans `activePayload` — un typage TIERS qu'on
-                                // ne contrôle pas (seul cas où un cast se garde, cf. lot 138). Bornés
-                                // par tests/services/dailyCurveCastGuard.test.ts : un 3e est refusé.
-                                // [FUTUR-DAILY-NATIVE] Le point recharts est LÉGER (champs de la courbe) :
-                                // l'infobulle reçoit sa version COMPLÈTE, ventilée à la demande et cachée
-                                // par mois (~10 ms la 1re entrée dans un mois, 0 ensuite).
-                                const p = s?.activePayload?.[0]?.payload;
-                                if (p) { const full = enrichDailyPoint(p) ?? p; lastHoverPointRef.current = full; selection.onHoverPoint(full); }
-                            }) as unknown as (nextState: unknown, event: unknown) => void}
-                            onMouseLeave={(() => selection.onChartLeave()) as unknown as () => void}
+                    )}
+
+                    {/* Bloc 1 : 4 scénarios uniques + mémoire + barre de calcul profond */}
+                    <FutureScenarioHeader
+                        report={deepForecast.activeReport}
+                        appliedReport={deepForecast.appliedReport}
+                        pendingReport={deepForecast.pendingReport}
+                        selectedScenario={deepForecast.selectedScenario}
+                        onSelectScenario={deepForecast.setSelectedScenario}
+                        status={deepForecast.status}
+                        isApplying={deepForecast.isApplying}
+                        progress={deepForecast.progress}
+                        error={deepForecast.error}
+                        unreadableStorage={deepForecast.unreadableStorage}
+                        isOutdated={deepForecast.isOutdated}
+                        hasPendingToApply={deepForecast.hasPendingToApply}
+                        refusMessage={deepForecast.refusMessage}
+                        onLaunch={() => { void deepForecast.launchDeepForecast(); }}
+                        onCancel={deepForecast.cancelDeepForecast}
+                        onApplyPending={() => { void deepForecast.applyPendingReport(); }}
+                        onDiscardPending={deepForecast.discardPendingReport}
+                    />
+
+                    {/* Bloc 2 : Carte graphique épurée + ruban [P10, P90] unique + FutureRichTooltip */}
+                    <section aria-labelledby="courbe-vie-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure px-3 py-3.5 sm:px-5 sm:py-4 lg:px-6 lg:pt-5 lg:pb-6 space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-bordure-champ bg-surface-douce px-3 py-1 text-tiny font-bold text-texte">
+                                <span className="w-2 h-2 rounded-full bg-accent" aria-hidden="true" />
+                                Scénario affiché : {activeScenarioOutput.label}
+                            </span>
+                            <span className="text-tiny text-texte-doux">
+                                {deepForecast.activeReport.isDeepRun ? 'Fourchette [P10, P90] profonde' : 'Fourchette [P10, P90] estimée'}
+                            </span>
+                        </div>
+
+                        <GoogleFinanceHero
+                            jourAffiche={jourAffiche?.point ?? null}
+                            pointAncre={pointAncre}
+                            estFige={selection.mode === 'frozen'}
+                            onLibererJour={selection.release}
+                            isZoomed={zoom.isZoomed}
+                            onResetZoom={zoom.reset}
+                            onFocusToday={() => {
+                                if (todayPresetRange) {
+                                    zoom.showRange(todayPresetRange[0], todayPresetRange[1]);
+                                } else {
+                                    zoom.reset();
+                                }
+                            }}
+                            onOpenConnections={() => setShowConnexionsModal(true)}
+                        />
+                        <h2 id="courbe-vie-titre" className="sr-only">La courbe de vie</h2>
+
+                        <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pb-2 border-b border-bordure">
+                            <div className="flex items-center gap-2 min-w-max">
+                                <FutureCurveToolbar
+                                    modeCourbe={modeCourbe}
+                                    onChangeModeCourbe={setModeCourbe}
+                                    modeComparaison={modeComparaison}
+                                    onToggleComparaison={() => setModeComparaison((v) => !v)}
+                                    pointComparaisonA={comparaisonPoints.a}
+                                    pointComparaisonB={comparaisonPoints.b}
+                                    onClearComparaison={() => setComparaisonPoints({ a: null, b: null })}
+                                    mcLabel={libelleMC}
+                                />
+                                {statsCourbe}
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                                {isComputing && (
+                                    <span className="flex items-center gap-1.5 text-tiny text-alerte-texte" role="status" aria-live="polite">
+                                        <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="40" strokeDashoffset="20" opacity="0.5" />
+                                        </svg>
+                                        <span className="sr-only">Recalcul en cours…</span>
+                                    </span>
+                                )}
+                                <FuturePeriodSelector
+                                    variant={etroit ? 'compact' : 'buttons'}
+                                    zoom={zoom}
+                                    todayPresetRange={todayPresetRange}
+                                    idxForYears={idxForYears}
+                                    lastMonthIndex={lastMonthIndex}
+                                    onFullscreen={() => zoom.containerEl.current?.requestFullscreen?.()}
+                                />
+                                {actionsCourbe}
+                            </div>
+                        </div>
+
+                        {pastPrefixPoints.length > 0 && (
+                            <div className="sr-only">
+                                <span>
+                                    Patrimoine net réel{pastHistory.firstDate ? ` depuis ${pastHistory.firstDate.slice(0, 7)}` : ''}
+                                    {mentionDettes ? ` · ${mentionDettes}` : ''}
+                                    {hasForeignHoldings ? ' · titres étrangers au change du jour' : ''}
+                                    {pastHistory.isLoading ? ' · chargement des prix…' : (pastHistory.coverage < 0.99 ? ' · partiellement estimé aux prix actuels' : '')}
+                                </span>
+                            </div>
+                        )}
+                        {lockedByMonth && (
+                            <div className="text-tiny text-texte-doux flex items-center gap-1.5 flex-wrap">
+                                <span aria-hidden="true" className="inline-block w-5 border-t-2 border-dashed border-repere" />
+                                <span className="px-1.5 py-0.5 rounded-full font-mono font-semibold gf-delta-neutral">Courbe verrouillée</span>
+                            </div>
+                        )}
+                        <ForecastAccuracyBadge accuracy={forecastAccuracy} />
+
+                        <div
+                            ref={zoom.containerRef}
+                            onDoubleClick={(e) => {
+                                if (isInsideTooltip(e.target)) return;
+                                zoom.handlers.onDoubleClick();
+                            }}
+                            onPointerDownCapture={(e) => {
+                                if (isInsideTooltip(e.target)) return;
+                                pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
+                                if ((e.target as Element | null)?.closest?.('button, a, [role="button"]')) {
+                                    dragStartPointRef.current = null;
+                                    return;
+                                }
+                                const ratio = computeAnchorRatioFromClientX(e.clientX);
+                                if (ratio !== null) setHoverXRatio(ratio);
+                                const pt = resoudrePointClientX(e.clientX);
+                                if (e.pointerType === 'touch' && !modeComparaison) {
+                                    dragStartPointRef.current = null;
+                                    if (pt) {
+                                        lastHoverPointRef.current = pt;
+                                        selection.onHoverPoint(pt);
+                                    }
+                                    return;
+                                }
+                                dragStartPointRef.current = pt;
+                            }}
+                            onPointerMove={(e) => {
+                                if (zoom.isPinchActive() || isInsideTooltip(e.target)) return;
+                                if (selection.mode !== 'frozen') {
+                                    const ratio = computeAnchorRatioFromClientX(e.clientX);
+                                    if (ratio !== null) setHoverXRatio(ratio);
+                                }
+                                if (e.pointerType === 'touch' && !modeComparaison) {
+                                    const down = pointerDownPosRef.current;
+                                    if (down && Math.abs(e.clientY - down.y) > Math.abs(e.clientX - down.x) && Math.abs(e.clientY - down.y) > 18) {
+                                        return;
+                                    }
+                                    const currentPt = resoudrePointClientX(e.clientX);
+                                    if (currentPt) {
+                                        lastHoverPointRef.current = currentPt;
+                                        selection.onHoverPoint(currentPt);
+                                    }
+                                    return;
+                                }
+                                const down = pointerDownPosRef.current;
+                                const startPt = dragStartPointRef.current;
+                                if (!down || !startPt) {
+                                    if (selection.mode !== 'frozen') {
+                                        const grid = zoom.containerEl.current?.querySelector('.recharts-cartesian-grid');
+                                        const rect = grid?.getBoundingClientRect();
+                                        const inGrid =
+                                            !rect ||
+                                            (e.clientX >= rect.left &&
+                                                e.clientX <= rect.right &&
+                                                e.clientY >= rect.top &&
+                                                e.clientY <= rect.bottom);
+                                        if (inGrid) {
+                                            const currentPt = resoudrePointClientX(e.clientX);
+                                            if (currentPt) {
+                                                lastHoverPointRef.current = currentPt;
+                                                selection.onHoverPoint(currentPt);
+                                            }
+                                        }
+                                    }
+                                    return;
+                                }
+                                if (Math.abs(e.clientX - down.x) > 10) {
+                                    const currentPt = resoudrePointClientX(e.clientX);
+                                    if (currentPt && currentPt.monthIndex !== startPt.monthIndex) {
+                                        setComparaisonPoints({ a: startPt, b: currentPt });
+                                    }
+                                }
+                            }}
+                            onPointerUp={handleChartContainerClick}
+                            onPointerLeave={() => {
+                                pointerDownPosRef.current = null;
+                                dragStartPointRef.current = null;
+                                selection.onChartLeave();
+                            }}
+                            tabIndex={0}
+                            onKeyDown={handleChartKeyDown}
+                            className="chart-fullscreen relative w-full select-none focus-ring rounded-lg cursor-crosshair gf-chart-enter"
+                            role="group"
+                            aria-roledescription="graphique"
+                            aria-label="Courbe de vie — évolution projetée du patrimoine net et de chaque compte dans le temps. Le détail du jour visé est affiché dans l'infobulle sur la courbe ; les mêmes données sont aussi lisibles sous forme de tableau et de liste de jalons. À la souris : survol = aperçu, clic = épingle l'infobulle, glisser = comparer deux dates, molette = zoom. Au clavier : Entrée ou flèches = épingle le jour d'aujourd'hui, Échap = relâche."
                         >
-                            <defs>
-                                <linearGradient id="gfNetWorthGrad" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={couleurSerie('NetWorth')} stopOpacity={0.32} />
-                                    <stop offset="75%" stopColor={couleurSerie('NetWorth')} stopOpacity={0.06} />
-                                    <stop offset="100%" stopColor={couleurSerie('NetWorth')} stopOpacity={0} />
-                                </linearGradient>
-                                <linearGradient id="gfMonteCarloBandGrad" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={couleurSerie('montecarlo')} stopOpacity={0.16} />
-                                    <stop offset="100%" stopColor="var(--repere)" stopOpacity={0.02} />
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+                            <div className="w-full h-[280px] min-h-[260px] sm:h-[500px] sm:min-h-0 lg:h-[650px]">
+                                {isComputing ? (
+                                    <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-texte-doux" role="status" aria-live="polite">
+                                        <svg className="animate-spin h-8 w-8 text-alerte-texte" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="40" strokeDashoffset="20" opacity="0.5" />
+                                        </svg>
+                                        <span className="text-meta">Calcul de ta projection…</span>
+                                    </div>
+                                ) : (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <ComposedChart
+                                            data={chartSeriesWithRibbon}
+                                            margin={{ top: etroit ? 26 : 34, right: 2, left: 2, bottom: 4 }}
+                                            onMouseMove={((s: { activePayload?: Array<{ payload: ProjectionChartPoint }> }) => {
+                                                // [DETTE-CAST-DAILYCURVE] Cast borné à 2 occurrences (handlers recharts v3).
+                                                const p = s?.activePayload?.[0]?.payload;
+                                                if (p) {
+                                                    const full = enrichDailyPoint(p) ?? p;
+                                                    lastHoverPointRef.current = full;
+                                                    selection.onHoverPoint(full);
+                                                }
+                                            }) as unknown as (nextState: unknown, event: unknown) => void}
+                                            onMouseLeave={(() => selection.onChartLeave()) as unknown as () => void}
+                                        >
+                                            <defs>
+                                                <linearGradient id="gfNetWorthGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor={couleurSerie('NetWorth')} stopOpacity={0.14} />
+                                                    <stop offset="100%" stopColor={couleurSerie('NetWorth')} stopOpacity={0} />
+                                                </linearGradient>
+                                                <linearGradient id="gfConfidenceRibbonGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor={couleurSerie('montecarlo')} stopOpacity={0.22} />
+                                                    <stop offset="100%" stopColor={couleurSerie('montecarlo')} stopOpacity={0.07} />
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid stroke="var(--bordure)" strokeOpacity={0.6} vertical={false} />
 
-                            {/* [FUTUR-DAILY lot B] Axe X NUMÉRIQUE (`type="number"`), et non plus catégoriel. */}
-                            <XAxis
-                                dataKey="monthIndex"
-                                type="number"
-                                domain={X_AXIS_DOMAIN}
-                                stroke="#6b7485"
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{ fontSize: etroit ? 10 : 11, fill: '#6b7485', fontFamily: 'var(--font-mono, monospace)' }}
-                                minTickGap={etroit ? 32 : 50}
-                                tickFormatter={(val: number) => {
-                                    const year = monthIndexToYear.get(val)
-                                        ?? calendarFromMonthIndex(startYear, startMonth, Math.floor(val)).year;
-                                    return `${year}`;
-                                }}
+                                            <XAxis
+                                                dataKey="monthIndex"
+                                                type="number"
+                                                domain={X_AXIS_DOMAIN}
+                                                stroke="var(--texte-doux)"
+                                                axisLine={false}
+                                                tickLine={false}
+                                                tick={{ fontSize: etroit ? 10 : 11, fill: 'var(--texte-doux)', fontFamily: 'var(--font-mono, monospace)' }}
+                                                minTickGap={etroit ? 32 : 50}
+                                                tickFormatter={(val: number) => {
+                                                    const year =
+                                                        monthIndexToYear.get(val) ??
+                                                        calendarFromMonthIndex(startYear, startMonth, Math.floor(val)).year;
+                                                    return `${year}`;
+                                                }}
+                                            />
+
+                                            <YAxis
+                                                orientation="right"
+                                                mirror
+                                                domain={echelleY?.domaine ?? ['auto', 'auto']}
+                                                ticks={echelleY?.ticks}
+                                                tickCount={4}
+                                                axisLine={false}
+                                                tickLine={false}
+                                                width={etroit ? 46 : 64}
+                                                tick={{ fontSize: etroit ? 10 : 11, fill: 'var(--texte-doux)', fontFamily: 'var(--font-mono, monospace)' }}
+                                                tickFormatter={maskedTick(isPrivacyMode, (v: number) => formatCompactCAD(v, { repere: true }))}
+                                            />
+
+                                            {pastPrefixPoints.length > 0 && (
+                                                <ReferenceArea
+                                                    x1={isDailyCurve && dailyAll.length > 0 ? Math.max(pastStartIndex, dailyAll[0].monthIndex) : pastStartIndex}
+                                                    x2={isDailyCurve && todayAxisX !== null ? todayAxisX : 0}
+                                                    fill="var(--repere)"
+                                                    fillOpacity={0.05}
+                                                    stroke="none"
+                                                />
+                                            )}
+                                            {comparaisonPoints.a && comparaisonPoints.b && (
+                                                <ReferenceArea
+                                                    x1={Math.min(comparaisonPoints.a.monthIndex, comparaisonPoints.b.monthIndex)}
+                                                    x2={Math.max(comparaisonPoints.a.monthIndex, comparaisonPoints.b.monthIndex)}
+                                                    fill="var(--succes-texte)"
+                                                    fillOpacity={0.14}
+                                                    stroke="var(--succes-texte)"
+                                                    strokeOpacity={0.45}
+                                                />
+                                            )}
+                                            {comparaisonPoints.a && (
+                                                <ReferenceLine
+                                                    x={comparaisonPoints.a.monthIndex}
+                                                    stroke="var(--repere)"
+                                                    strokeWidth={1.5}
+                                                    strokeDasharray="3 3"
+                                                    label={<RefLineLabel value="Point A" color="var(--repere)" />}
+                                                />
+                                            )}
+                                            {comparaisonPoints.b && (
+                                                <ReferenceLine
+                                                    x={comparaisonPoints.b.monthIndex}
+                                                    stroke="var(--succes-texte)"
+                                                    strokeWidth={1.5}
+                                                    strokeDasharray="3 3"
+                                                    label={<RefLineLabel value="Point B" color="var(--succes-texte)" />}
+                                                />
+                                            )}
+                                            {pastPrefixPoints.length > 0 && !isDailyCurve && (
+                                                <ReferenceLine
+                                                    x={0}
+                                                    stroke="var(--repere)"
+                                                    strokeOpacity={0.5}
+                                                    strokeDasharray="3 3"
+                                                    label={<RefLineLabel value="Passé réel ⟵" color="var(--repere)" />}
+                                                />
+                                            )}
+                                            <ReferenceLine y={0} stroke="var(--bordure-champ)" strokeOpacity={0.45} strokeWidth={1} />
+                                            {isVisible('aujourdhui') && (
+                                                <ReferenceLine
+                                                    x={isDailyCurve && todayAxisX !== null ? todayAxisX : todayMonthIndex}
+                                                    stroke="var(--texte)"
+                                                    strokeOpacity={0.55}
+                                                    strokeDasharray="5 5"
+                                                    label={<RefLineLabel value="Aujourd'hui" color="var(--texte)" />}
+                                                />
+                                            )}
+
+                                            <Tooltip content={() => null} cursor={GF_CROSSHAIR_CURSOR} isAnimationActive={false} />
+
+                                            {isVisible('fire') && (
+                                                <ReferenceLine y={fireNumber} stroke={couleurSerie('fire')} strokeOpacity={0.8} strokeDasharray="5 5" />
+                                            )}
+                                            {isVisible('fire') && jalonFire && (
+                                                <ReferenceLine
+                                                    x={jalonFire.x ?? jalonFire.monthIndex}
+                                                    stroke={couleurSerie('fire')}
+                                                    strokeOpacity={0.45}
+                                                    strokeDasharray="2 4"
+                                                    label={<RefLineLabel value={libelleJalonFire} color={couleurSerie('fire')} jalon />}
+                                                />
+                                            )}
+
+                                            {isVisible('events') &&
+                                                lifeMarkers.map((mk, i) => (
+                                                    <ReferenceLine
+                                                        key={`lifemark-${i}`}
+                                                        x={mk.monthIndex}
+                                                        stroke={mk.color}
+                                                        strokeOpacity={0.5}
+                                                        strokeDasharray="2 4"
+                                                        label={etroit && mk.jalon ? undefined : <RefLineLabel value={mk.label} color={mk.color} jalon={mk.jalon} />}
+                                                    />
+                                                ))}
+
+                                            {modeCourbe === 'empilee' && (
+                                                <>
+                                                    {isVisible('Liquidites') && <Area type="monotone" dataKey="Liquidites" stackId="1" stroke={couleurSerie('Liquidites')} strokeWidth={1.3} fill={couleurSerie('Liquidites')} fillOpacity={0.26} name="Cash" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />}
+                                                    {isVisible('CELI') && <Area type="monotone" dataKey="CELI" stackId="1" stroke={couleurSerie('CELI')} strokeWidth={1.3} fill={couleurSerie('CELI')} fillOpacity={0.28} name="CELI" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />}
+                                                    {isVisible('CELIAPP') && <Area type="monotone" dataKey="CELIAPP" stackId="1" stroke={couleurSerie('CELIAPP')} strokeWidth={1.3} fill={couleurSerie('CELIAPP')} fillOpacity={0.28} name="CELIAPP" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />}
+                                                    {isVisible('REER') && <Area type="monotone" dataKey="REER" stackId="1" stroke={couleurSerie('REER')} strokeWidth={1.3} fill={couleurSerie('REER')} fillOpacity={0.28} name="REER" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />}
+                                                    {isVisible('REEE') && <Area type="monotone" dataKey="REEE" stackId="1" stroke={couleurSerie('REEE')} strokeWidth={1.3} fill={couleurSerie('REEE')} fillOpacity={0.28} name="REEE" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />}
+                                                    {isVisible('NonReg') && <Area type="monotone" dataKey="NonReg" stackId="1" stroke={couleurSerie('NonReg')} strokeWidth={1.3} fill={couleurSerie('NonReg')} fillOpacity={0.28} name="Non-enregistré" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />}
+                                                    {isVisible('Crypto') && <Area type="monotone" dataKey="Crypto" stackId="1" stroke={couleurSerie('Crypto')} strokeWidth={1.3} fill={couleurSerie('Crypto')} fillOpacity={0.28} name="Crypto" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />}
+                                                    {isVisible('Immobilier') && <Area type="monotone" dataKey="Immobilier" stackId="1" stroke={couleurSerie('Immobilier')} strokeWidth={1.25} fill={couleurSerie('Immobilier')} fillOpacity={0.2} name="Équité immo" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />}
+                                                    {isVisible('Entreprise') && <Area type="monotone" dataKey="Entreprise" stackId="1" stroke={couleurSerie('Entreprise')} strokeWidth={1.25} fill={couleurSerie('Entreprise')} fillOpacity={0.2} name="Entreprise" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />}
+                                                </>
+                                            )}
+
+                                            {modeCourbe === 'nette' && (
+                                                <>
+                                                    {isVisible('montecarlo') && (
+                                                        <Area
+                                                            type="monotone"
+                                                            dataKey="mcRange"
+                                                            stroke="none"
+                                                            fill="url(#gfConfidenceRibbonGrad)"
+                                                            fillOpacity={1}
+                                                            connectNulls={false}
+                                                            dot={false}
+                                                            activeDot={false}
+                                                            name="Fourchette P10–P90"
+                                                            isAnimationActive={!zoom.isPanning}
+                                                            animationDuration={280}
+                                                        />
+                                                    )}
+                                                    <Area
+                                                        type="monotone"
+                                                        dataKey="NetWorth"
+                                                        stroke={couleurSerie('NetWorth')}
+                                                        strokeWidth={2.5}
+                                                        fill="url(#gfNetWorthGrad)"
+                                                        fillOpacity={1}
+                                                        dot={false}
+                                                        activeDot={GF_ACTIVE_DOT}
+                                                        name="Valeur Nette Totale"
+                                                        isAnimationActive={!zoom.isPanning}
+                                                        animationDuration={300}
+                                                        animationEasing="ease-out"
+                                                    />
+                                                </>
+                                            )}
+
+                                            {isVisible('DettesNonImmo') && (
+                                                <Area type="monotone" dataKey={detteSousZero} stroke={COULEUR_DETTE} strokeWidth={1.35} fill={COULEUR_DETTE} fillOpacity={0.24} name="Dettes (hors hypothèque)" connectNulls={false} isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />
+                                            )}
+                                            {isVisible('DetteLevierSmith') && (
+                                                <Line type="monotone" dataKey={detteLevierSousZero} stroke={COULEUR_LEVIER} strokeWidth={1.6} strokeDasharray="6 3" dot={false} name={LIBELLE_LEVIER} connectNulls={false} isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />
+                                            )}
+                                            {modeCourbe === 'empilee' && isVisible('ImpotLatent') && (
+                                                <Area type="monotone" dataKey="ImpotLatent" stroke={couleurSerie('ImpotLatent')} strokeWidth={1.25} fill={couleurSerie('ImpotLatent')} fillOpacity={0.16} strokeDasharray="3 3" name="Impôt latent" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />
+                                            )}
+                                            {modeCourbe === 'empilee' && isVisible('FluxImpots') && (
+                                                <Bar dataKey="FluxImpots" fill={couleurSerie('FluxImpots')} fillOpacity={0.8} name="Paiement impôts" barSize={4} isAnimationActive={false} />
+                                            )}
+                                            {modeCourbe === 'empilee' && isVisible('NetWorth') && (
+                                                <Line type="monotone" dataKey="NetWorth" stroke={couleurSerie('NetWorth')} strokeWidth={1.85} dot={false} activeDot={GF_ACTIVE_DOT} name="Valeur Nette Totale" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />
+                                            )}
+                                            {lockedByMonth && (
+                                                <Line type="monotone" dataKey="lockedNetWorth" stroke="var(--repere)" strokeWidth={1.6} strokeDasharray="6 3" dot={false} name="Courbe verrouillée" isAnimationActive={!zoom.isPanning} animationDuration={320} />
+                                            )}
+
+                                            {isVisible('aujourdhui') && pointAncre && Number.isFinite(pointAncre.NetWorth) && (
+                                                <ReferenceDot
+                                                    x={isDailyCurve && todayAxisX !== null ? todayAxisX : todayMonthIndex}
+                                                    y={pointAncre.NetWorth}
+                                                    r={0}
+                                                    shape={<TodayValueBadge value={maskedTick(isPrivacyMode, formatCompactCAD)(pointAncre.NetWorth)} />}
+                                                />
+                                            )}
+
+                                            {isVisible('events') &&
+                                                [
+                                                    ...shownLifeEvents.map((evt, i) => ({ evt, kind: 'life' as const, key: `life-${i}` })),
+                                                    ...shownFlowEvents.map((evt, i) => ({ evt, kind: 'flow' as const, key: `flow-${i}` })),
+                                                ]
+                                                    .sort((a, b) => (a.evt.x ?? a.evt.monthIndex) - (b.evt.x ?? b.evt.monthIndex))
+                                                    .map(({ evt, kind, key }) => (
+                                                        <ReferenceDot
+                                                            key={key}
+                                                            x={evt.x ?? evt.monthIndex}
+                                                            y={evt.val}
+                                                            r={kind === 'life' ? 3 : 2}
+                                                            shape={
+                                                                <ClickableEventIcon
+                                                                    kind={kind}
+                                                                    payload={evt}
+                                                                    onSelect={() => {
+                                                                        const found = chartData.find((d: ProjectionChartPoint) => d.monthIndex === evt.monthIndex);
+                                                                        if (found) {
+                                                                            setDetailDayIso(null);
+                                                                            setDetailAnchorIso(null);
+                                                                            setDetailMonthIso(null);
+                                                                            setDetailPoint(found);
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            }
+                                                        />
+                                                    ))}
+                                        </ComposedChart>
+                                    </ResponsiveContainer>
+                                )}
+                            </div>
+
+                            <FutureRichTooltip
+                                point={jourAffiche?.point ?? null}
+                                isOpen={selection.mode !== 'idle'}
+                                isPinned={selection.mode === 'frozen'}
+                                origine={jourAffiche?.origine ?? 'ancre'}
+                                anchorXRatio={resolvedAnchorXRatio}
+                                scenarioLabel={activeScenarioOutput.label}
+                                turningPointHint={activeTurningPointHint}
+                                userName1={config.users[0]?.name}
+                                userName2={config.users[1]?.name}
+                                onOpenDetail={() => ouvrirDetailSur(jourAffiche?.point ?? null)}
+                                onStep={stepJour}
+                                pas={pasNavigation}
+                                onPasChange={setPasNavigation}
+                                canStepPrev={bornesPas.prev}
+                                canStepNext={bornesPas.next}
+                                onUnpin={selection.release}
+                                tooltipRef={selection.panneauRef}
                             />
+                        </div>
 
-                            <YAxis
-                                orientation="right"
-                                mirror
-                                domain={echelleY?.domaine ?? ['auto', 'auto']}
-                                ticks={echelleY?.ticks}
-                                tickCount={4}
-                                axisLine={false}
-                                tickLine={false}
-                                width={etroit ? 46 : 64}
-                                tick={{ fontSize: etroit ? 10 : 11, fill: '#8a93a6', fontFamily: 'var(--font-mono, monospace)' }}
-                                tickFormatter={maskedTick(isPrivacyMode, (v: number) => formatCompactCAD(v, { repere: true }))}
+                        <FutureTimelineBrush
+                            zoom={zoom}
+                            totalPoints={displayData.length}
+                            anneeDebut={anneeDe((displayData[0] as ProjectionChartPoint | undefined)?.monthIndex ?? 0)}
+                            anneeFin={anneeDe(lastMonthIndex)}
+                            anneeAujourdhui={anneeDe(todayMonthIndex)}
+                            ratioAujourdhui={displayData.length > 1 ? todayArrayIndex / (displayData.length - 1) : 0}
+                        />
+
+                        <div className={modeCourbe === 'nette' ? 'sr-only' : ''}>
+                            <FutureLegendDrawer
+                                runMC={true}
+                                hiddenSeries={hiddenSeries}
+                                isVisible={isVisible}
+                                toggleSeries={toggleSeries}
+                                showAllSeries={showAllSeries}
                             />
+                        </div>
 
-                            {pastPrefixPoints.length > 0 && (
-                                <ReferenceArea
-                                    x1={isDailyCurve && dailyAll.length > 0 ? Math.max(pastStartIndex, dailyAll[0].monthIndex) : pastStartIndex}
-                                    x2={isDailyCurve && todayAxisX !== null ? todayAxisX : 0}
-                                    fill="#22d3ee"
-                                    fillOpacity={0.05}
-                                    stroke="none"
-                                />
-                            )}
-                            {comparaisonPoints.a && comparaisonPoints.b && (
-                                <ReferenceArea
-                                    x1={Math.min(comparaisonPoints.a.monthIndex, comparaisonPoints.b.monthIndex)}
-                                    x2={Math.max(comparaisonPoints.a.monthIndex, comparaisonPoints.b.monthIndex)}
-                                    fill="var(--succes-texte)"
-                                    fillOpacity={0.14}
-                                    stroke="var(--succes-texte)"
-                                    strokeOpacity={0.45}
-                                />
-                            )}
-                            {comparaisonPoints.a && (
-                                <ReferenceLine
-                                    x={comparaisonPoints.a.monthIndex}
-                                    stroke="var(--repere)"
-                                    strokeWidth={1.5}
-                                    strokeDasharray="3 3"
-                                    label={<RefLineLabel value="Point A" color="var(--repere)" />}
-                                />
-                            )}
-                            {comparaisonPoints.b && (
-                                <ReferenceLine
-                                    x={comparaisonPoints.b.monthIndex}
-                                    stroke="var(--succes-texte)"
-                                    strokeWidth={1.5}
-                                    strokeDasharray="3 3"
-                                    label={<RefLineLabel value="Point B" color="var(--succes-texte)" />}
-                                />
-                            )}
-                            {pastPrefixPoints.length > 0 && !isDailyCurve && (
-                                <ReferenceLine x={0} stroke="#22d3ee" strokeOpacity={0.5} strokeDasharray="3 3" label={<RefLineLabel value="Passé réel ⟵" color="#22d3ee" />} />
-                            )}
-                            <ReferenceLine y={0} stroke="rgba(255,255,255,0.22)" strokeWidth={1} />
-                            {isVisible('aujourdhui') && <ReferenceLine x={isDailyCurve && todayAxisX !== null ? todayAxisX : todayMonthIndex} stroke="rgba(255,255,255,0.6)" strokeDasharray="5 5" label={<RefLineLabel value="Aujourd'hui" color="#ffffff" />} />}
+                        <NotesGraphe
+                            notes={notesGraphe({
+                                courbeAuJour: isDailyCurve,
+                                mentionAutoriteCourtier,
+                                impotLatentVisible: isVisible('ImpotLatent'),
+                            })}
+                        />
 
-                            <Tooltip content={<FutureCurveTooltip />} cursor={GF_CROSSHAIR_CURSOR} isAnimationActive={true} animationDuration={90} />
-                            {isVisible('fire') && <ReferenceLine y={fireNumber} stroke={couleurSerie('fire')} strokeOpacity={0.8} strokeDasharray="5 5" />}
-                            {isVisible('fire') && jalonFire && (
-                                <ReferenceLine x={jalonFire.x ?? jalonFire.monthIndex} stroke={couleurSerie('fire')} strokeOpacity={0.45} strokeDasharray="2 4" label={<RefLineLabel value={libelleJalonFire} color={couleurSerie('fire')} jalon />} />
-                            )}
+                        {!isDailyCurve && (
+                            <p role="status" className="mt-2 rounded-card border border-alerte-texte/30 bg-alerte-fond px-3 py-2 text-tiny text-texte-doux">
+                                <strong className="text-alerte-texte">Courbe au mois (repli)</strong> — la valeur nette
+                                mensuelle est inconnue sur presque toute la période (données passées incomplètes),
+                                donc les jours ne peuvent pas être reconstruits honnêtement.
+                            </p>
+                        )}
 
-                            {isVisible('events') && lifeMarkers.map((mk, i) => (
-                                <ReferenceLine key={`lifemark-${i}`} x={mk.monthIndex} stroke={mk.color} strokeOpacity={0.5} strokeDasharray="2 4" label={etroit && mk.jalon ? undefined : <RefLineLabel value={mk.label} color={mk.color} jalon={mk.jalon} />} />
+                        {(mentionRaccordJour ||
+                            mentionRaccordMois ||
+                            (dailyPast !== null && Math.abs(dailyPast.undatedTotal) > 0.5) ||
+                            Boolean(dailyPast?.truncatedFrom) ||
+                            (dailyPast !== null && Math.abs(dailyPast.flowsAfterNowDate) > 0.5)) && (
+                            <p role="status" className="mt-2 rounded-card border border-bordure-champ bg-surface-douce px-3 py-2 text-tiny text-texte-doux">
+                                {dailyPast !== null && Math.abs(dailyPast.undatedTotal) > 0.5 && (
+                                    <span className="block text-alerte-texte">
+                                        ⚠ <PrivateAmount>{formatCAD(Math.abs(dailyPast.undatedTotal))}</PrivateAmount> de transactions datées au mois
+                                        seul (sans jour) ne peuvent pas être placées : le niveau des jours passés peut
+                                        être décalé d&apos;autant.
+                                    </span>
+                                )}
+                                {dailyPast?.truncatedFrom && (
+                                    <span className="mt-1 block text-alerte-texte">
+                                        ⚠ Le premier jour non reconstruit est le {dailyPast.truncatedFrom} : à
+                                        partir de là, la courbe passée s&apos;interrompt (limite de volume) et les
+                                        journées ne sont ni tracées ni sélectionnables.
+                                    </span>
+                                )}
+                                {dailyPast !== null && Math.abs(dailyPast.flowsAfterNowDate) > 0.5 && (
+                                    <span className="mt-1 block text-alerte-texte">
+                                        ⚠ <PrivateAmount>{formatCAD(Math.abs(dailyPast.flowsAfterNowDate))}</PrivateAmount> de transactions datées
+                                        après aujourd&apos;hui sont déjà dans ton solde actuel mais pas encore dans les
+                                        jours passés.
+                                    </span>
+                                )}
+                                {mentionRaccordJour && <span className="mt-1 block">{mentionRaccordJour}</span>}
+                                {mentionRaccordMois && <span className="mt-1 block">{mentionRaccordMois}</span>}
+                            </p>
+                        )}
+
+                        <ChartDataTable
+                            caption={
+                                isDailyCurve
+                                    ? 'Projection du patrimoine net et des comptes, jour par jour'
+                                    : 'Projection du patrimoine net et des comptes par mois (repli)'
+                            }
+                            columns={dataColumns}
+                            rows={selectSeries}
+                        />
+
+                        {(shownLifeEvents.length > 0 || shownFlowEvents.length > 0) &&
+                            (isPrivacyMode ? (
+                                <p className="sr-only">
+                                    {shownLifeEvents.length + shownFlowEvents.length} jalons masqués en mode discret.
+                                </p>
+                            ) : (
+                                <ul className="sr-only">
+                                    <li>Jalons de la projection :</li>
+                                    {[...shownLifeEvents, ...shownFlowEvents]
+                                        .slice()
+                                        .sort((a, b) => a.monthIndex - b.monthIndex)
+                                        .map((e, i) => (
+                                            <li key={`ms-sr-${i}`}>
+                                                {e.dateLabel ? `${e.dateLabel} : ` : ''}
+                                                {e.label}
+                                            </li>
+                                        ))}
+                                </ul>
                             ))}
 
-                            {modeCourbe === 'empilee' && (
-                                <>
-                                    {isVisible('Liquidites') && <Area type="monotone" dataKey="Liquidites" stackId="1" stroke={couleurSerie('Liquidites')} strokeWidth={1.3} fill={couleurSerie('Liquidites')} fillOpacity={0.26} name="Cash" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />}
-                                    {isVisible('CELI') && <Area type="monotone" dataKey="CELI" stackId="1" stroke={couleurSerie('CELI')} strokeWidth={1.3} fill={couleurSerie('CELI')} fillOpacity={0.28} name="CELI" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out"/>}
-                                    {isVisible('CELIAPP') && <Area type="monotone" dataKey="CELIAPP" stackId="1" stroke={couleurSerie('CELIAPP')} strokeWidth={1.3} fill={couleurSerie('CELIAPP')} fillOpacity={0.28} name="CELIAPP" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out"/>}
-                                    {isVisible('REER') && <Area type="monotone" dataKey="REER" stackId="1" stroke={couleurSerie('REER')} strokeWidth={1.3} fill={couleurSerie('REER')} fillOpacity={0.28} name="REER" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out"/>}
-                                    {isVisible('REEE') && <Area type="monotone" dataKey="REEE" stackId="1" stroke={couleurSerie('REEE')} strokeWidth={1.3} fill={couleurSerie('REEE')} fillOpacity={0.28} name="REEE" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out"/>}
-                                    {isVisible('NonReg') && <Area type="monotone" dataKey="NonReg" stackId="1" stroke={couleurSerie('NonReg')} strokeWidth={1.3} fill={couleurSerie('NonReg')} fillOpacity={0.28} name="Non-enregistré" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out"/>}
-                                    {isVisible('Crypto') && <Area type="monotone" dataKey="Crypto" stackId="1" stroke={couleurSerie('Crypto')} strokeWidth={1.3} fill={couleurSerie('Crypto')} fillOpacity={0.28} name="Crypto" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out"/>}
-                                    {isVisible('Immobilier') && <Area type="monotone" dataKey="Immobilier" stackId="1" stroke={couleurSerie('Immobilier')} strokeWidth={1.25} fill={couleurSerie('Immobilier')} fillOpacity={0.2} name="Équité immo" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out"/>}
-                                    {isVisible('Entreprise') && <Area type="monotone" dataKey="Entreprise" stackId="1" stroke={couleurSerie('Entreprise')} strokeWidth={1.25} fill={couleurSerie('Entreprise')} fillOpacity={0.2} name="Entreprise" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out"/>}
-                                </>
-                            )}
+                        {detailPoint && (
+                            <FutureDetailModal
+                                point={detailPoint}
+                                chartData={chartData}
+                                transactions={transactions}
+                                dayIso={detailDayIso}
+                                variation={variationDuJour}
+                                monthIso={detailMonthIso}
+                                userName1={config.users[0]?.name}
+                                userName2={config.users[1]?.name}
+                                isPrivacyMode={isPrivacyMode}
+                                onStepDay={stepDetailDay}
+                                canStepPrev={detailSeriesIdx > 0}
+                                canStepNext={detailSeriesIdx !== -1 && detailSeriesIdx < selectSeries.length - 1}
+                                onClose={() => {
+                                    setDetailPoint(null);
+                                    setDetailDayIso(null);
+                                    setDetailAnchorIso(null);
+                                    setDetailMonthIso(null);
+                                }}
+                            />
+                        )}
+                    </section>
 
-                            {modeCourbe === 'nette' && (
-                                <Area
-                                    type="monotone"
-                                    dataKey="NetWorth"
-                                    stroke={couleurSerie('NetWorth')}
-                                    strokeWidth={2.2}
-                                    fill="url(#gfNetWorthGrad)"
-                                    fillOpacity={1}
-                                    dot={false}
-                                    activeDot={GF_ACTIVE_DOT}
-                                    name="Valeur Nette Totale"
-                                    isAnimationActive={!zoom.isPanning}
-                                    animationDuration={320}
-                                    animationEasing="ease-out"
-                                />
-                            )}
+                    {etroit && bandeauKpi && (
+                        <div className="grid grid-cols-2 gap-2.5">{bandeauKpi('mobile-pied')}</div>
+                    )}
 
-                            {isVisible('DettesNonImmo') && <Area type="monotone" dataKey={detteSousZero} stroke={COULEUR_DETTE} strokeWidth={1.35} fill={COULEUR_DETTE} fillOpacity={0.24} name="Dettes (hors hypothèque)" connectNulls={false} isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out"/>}
-                            {isVisible('DetteLevierSmith') && <Line type="monotone" dataKey={detteLevierSousZero} stroke={COULEUR_LEVIER} strokeWidth={1.6} strokeDasharray="6 3" dot={false} name={LIBELLE_LEVIER} connectNulls={false} isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out"/>}
-                            {modeCourbe === 'empilee' && isVisible('ImpotLatent') && <Area type="monotone" dataKey="ImpotLatent" stroke={couleurSerie('ImpotLatent')} strokeWidth={1.25} fill={couleurSerie('ImpotLatent')} fillOpacity={0.16} strokeDasharray="3 3" name="Impôt latent" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out"/>}
-                            {modeCourbe === 'empilee' && isVisible('FluxImpots') && <Bar dataKey="FluxImpots" fill={couleurSerie('FluxImpots')} fillOpacity={0.8} name="Paiement impôts" barSize={4} isAnimationActive={false} />}
-
-                            {grandCalculByMonth !== null && isVisible('montecarlo') ? (
-                                <>
-                                    <Area type="monotone" dataKey="P95" stroke="var(--repere)" strokeWidth={1.15} strokeOpacity={0.55} strokeDasharray="3 3" fill="url(#gfMonteCarloBandGrad)" fillOpacity={0.75} dot={false} name="Optimiste extrême (P95)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
-                                    <Line type="monotone" dataKey="P5" stroke="var(--alerte-texte)" strokeWidth={1.15} strokeOpacity={0.65} strokeDasharray="3 3" dot={false} name="Pessimiste extrême (P5)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
-                                    <Area type="monotone" dataKey="P90" stroke={couleurSerie('montecarlo')} strokeWidth={1.25} strokeDasharray="5 4" fill="url(#gfMonteCarloBandGrad)" fillOpacity={0.9} dot={false} name="Optimiste (P90)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
-                                    <Line type="monotone" dataKey="P75" stroke={couleurSerie('montecarlo')} strokeWidth={1} strokeOpacity={0.5} strokeDasharray="2 3" dot={false} name="Quartile supérieur (P75)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
-                                    <Line type="monotone" dataKey="P25" stroke={couleurSerie('montecarlo')} strokeWidth={1} strokeOpacity={0.5} strokeDasharray="2 3" dot={false} name="Quartile inférieur (P25)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
-                                    <Line type="monotone" dataKey="P10" stroke="var(--erreur-texte)" strokeWidth={1.25} strokeDasharray="5 4" dot={false} name="Pessimiste (P10)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
-                                    <Line type="monotone" dataKey="P50" stroke={couleurSerie('montecarlo')} strokeWidth={1.75} dot={false} name="Scénario médian (P50)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
-                                </>
-                            ) : runMC && isVisible('montecarlo') && (
-                                <>
-                                    <Area type="monotone" dataKey="P90" stroke={couleurSerie('montecarlo')} strokeWidth={1.25} strokeDasharray="5 4" fill="url(#gfMonteCarloBandGrad)" fillOpacity={1} dot={false} name="Optimiste (P90)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
-                                    <Line type="monotone" dataKey="P10" stroke="var(--erreur-texte)" strokeWidth={1.25} strokeDasharray="5 4" dot={false} name="Pessimiste (P10)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
-                                    <Line type="monotone" dataKey="P50" stroke={couleurSerie('montecarlo')} strokeWidth={1.75} dot={false} name="Scénario médian (P50)" isAnimationActive={!zoom.isPanning} animationDuration={320} />
-                                </>
-                            )}
-
-                            {modeCourbe === 'empilee' && isVisible('NetWorth') && <Line type="monotone" dataKey="NetWorth" stroke={couleurSerie('NetWorth')} strokeWidth={1.85} dot={false} activeDot={GF_ACTIVE_DOT} name="Valeur Nette Totale" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out"/>}
-                            {lockedByMonth && <Line type="monotone" dataKey="lockedNetWorth" stroke="#e879f9" strokeWidth={1.6} strokeDasharray="6 3" dot={false} name="Courbe verrouillée 🔒" isAnimationActive={!zoom.isPanning} animationDuration={320} />}
-
-                            {isVisible('aujourdhui') && pointAncre && Number.isFinite(pointAncre.NetWorth) && (
-                                <ReferenceDot
-                                    x={isDailyCurve && todayAxisX !== null ? todayAxisX : todayMonthIndex}
-                                    y={pointAncre.NetWorth}
-                                    r={0}
-                                    shape={<TodayValueBadge value={maskedTick(isPrivacyMode, formatCompactCAD)(pointAncre.NetWorth)} />}
-                                />
-                            )}
-
-                            {isVisible('events') && [
-                                ...shownLifeEvents.map((evt, i) => ({ evt, kind: 'life' as const, key: `life-${i}` })),
-                                ...shownFlowEvents.map((evt, i) => ({ evt, kind: 'flow' as const, key: `flow-${i}` })),
-                            ]
-                                .sort((a, b) => (a.evt.x ?? a.evt.monthIndex) - (b.evt.x ?? b.evt.monthIndex))
-                                .map(({ evt, kind, key }) => (
-                                    <ReferenceDot
-                                        key={key}
-                                        x={evt.x ?? evt.monthIndex}
-                                        y={evt.val}
-                                        r={kind === 'life' ? 3 : 2}
-                                        shape={
-                                            <ClickableEventIcon
-                                                kind={kind}
-                                                payload={evt}
-                                                onSelect={() => { const found = chartData.find((d: ProjectionChartPoint) => d.monthIndex === evt.monthIndex); if (found) { setDetailDayIso(null); setDetailAnchorIso(null); setDetailMonthIso(null); setDetailPoint(found); } }}
-                                            />
-                                        }
-                                    />
-                                ))}
-                        </ComposedChart>
-                    </ResponsiveContainer>
-                     )}
-                </div>
-
-                <FutureTimelineBrush
-                    zoom={zoom}
-                    totalPoints={displayData.length}
-                    anneeDebut={anneeDe((displayData[0] as ProjectionChartPoint | undefined)?.monthIndex ?? 0)}
-                    anneeFin={anneeDe(lastMonthIndex)}
-                    anneeAujourdhui={anneeDe(todayMonthIndex)}
-                    ratioAujourdhui={displayData.length > 1 ? todayArrayIndex / (displayData.length - 1) : 0}
-                />
-
-                <div className={modeCourbe === 'nette' ? 'sr-only' : ''}>
-                    <FutureLegendDrawer
-                        runMC={runMC || grandCalculByMonth !== null}
-                        hiddenSeries={hiddenSeries}
-                        isVisible={isVisible}
-                        toggleSeries={toggleSeries}
-                        showAllSeries={showAllSeries}
+                    {/* Bloc 3 : 4 repères clés pleine largeur */}
+                    <FutureCoreMilestonesGrid
+                        report={deepForecast.activeReport}
+                        scenario={activeScenarioOutput}
                     />
-                </div>
 
-                <BoutonsPimenterFutur
-                    projection={projection}
-                    retirementGoal={retirementGoal}
-                    runMC={runMC}
-                    setRunMC={setRunMC}
-                    onInstantUpdate={handleInstantScenarioUpdate}
-                    finalNetWorth={results?.finalNetWorth ?? null}
-                    onOpenDeepControls={() => setTiroirOuvert('hypotheses')}
-                    deepControlsOpen={tiroirOuvert === 'hypotheses'}
-                />
+                    {/* Bloc 4 : Panneau unifié (Passé & actualités + Pourquoi la courbe évolue ainsi + Actions concrètes) */}
+                    <FutureUnifiedInsightsPanel
+                        report={deepForecast.activeReport}
+                        scenario={activeScenarioOutput}
+                        onFocusMonth={handleSelectExplanationMonth}
+                        onSelectScenario={deepForecast.setSelectedScenario}
+                        onNavigateTab={naviguerVers}
+                    />
 
-                {/* [FUTUR-PANNEAU-FIXE] Le panneau du jour, dans le FLUX du document, immédiatement
-                    sous le graphe — demande de Marc en texte libre : « j'aimerais que ce soit un
-                    panneau fixe en dessous du graphe et pareil sur le téléphone ».
-                    ⚠️ Le graphe GARDE sa taille (choix de Marc en clic) : c'est la PAGE qui défile
-                    pour atteindre le panneau. L'alternative — rétrécir le graphe pour tout faire
-                    tenir — aurait réglé le défilement en abîmant ce qu'on vient regarder. */}
-                <PanneauJour
-                    data={jourAffiche?.point ?? null}
-                    origine={jourAffiche?.origine ?? 'ancre'}
-                    userName1={config.users[0]?.name}
-                    userName2={config.users[1]?.name}
-                    onOpenDetail={() => {
-                        // Le jour se lit sur le point D'ORIGINE, avant que `detailPointFor` ne le
-                        // rebase sur son mois hôte. Le trio (point, jour, mois) est posé par
-                        // `ouvrirDetailSur` — un seul endroit, partagé avec les flèches du panneau
-                        // de détail lui-même.
-                        ouvrirDetailSur(jourAffiche?.point ?? null);
-                    }}
-                    onStep={stepJour}
-                    pas={pasNavigation}
-                    onPasChange={setPasNavigation}
-                    canStepPrev={bornesPas.prev}
-                    canStepNext={bornesPas.next}
-                    onRelease={selection.release}
-                    panneauRef={selection.panneauRef}
-                />
-
-                {/* [FUTUR-NOTES-COMPACTES] Marc, 2026-09-21 (capture, deux blocs biffés) : « vire moi
-                    tout le texte que j'ai barré ». Le BANDEAU d'autorité courtier et le PAVÉ
-                    « Courbe au jour » ont quitté l'écran ; leurs trois réserves survivent en
-                    pastilles (`components/future/notesGraphe.tsx`), libellé court + phrase entière
-                    en `title` ET en jumeau `sr-only`. ⚠️ Les effacer tout court aurait réarmé trois
-                    plaintes que Marc a DÉJÀ formulées — dont, le jour même, « explique pourquoi j'ai
-                    pas la même valeur sur mon app et sur Fintable », à laquelle la note « Raccord »
-                    répond (`EPURATION-SUPPRIME-LA-RESERVE`). */}
-                <NotesGraphe notes={notesGraphe({
-                    courbeAuJour: isDailyCurve,
-                    mentionAutoriteCourtier,
-                    impotLatentVisible: isVisible('ImpotLatent'),
-                })} />
-                {!isDailyCurve && (
-                    <p role="status" className="mt-2 rounded-card border border-alerte-texte/30 bg-alerte-fond px-3 py-2 text-tiny text-ink-200">
-                        <strong className="text-alerte-texte">Courbe au mois (repli)</strong> — la valeur nette
-                        mensuelle est inconnue sur presque toute la période (données passées incomplètes),
-                        donc les jours ne peuvent pas être reconstruits honnêtement.
-                    </p>
-                )}
-                {/* [FUTUR-NOTES-COMPACTES] Ce qui RESTE de l'ancien pavé « Courbe au jour » : les
-                    avertissements CONDITIONNELS et les mentions de raccord. Marc n'en a biffé
-                    aucun — et pour cause, aucun n'était à l'écran ce jour-là : chacun ne parle que
-                    quand son défaut existe. La méthodologie et l'impôt latent, eux, s'affichaient
-                    EN PERMANENCE ; ce sont eux qui sont passés en pastilles juste au-dessus.
-                    ⚠️ Le conteneur ne se monte plus que s'il a quelque chose à dire : un encadré
-                    vide sous la courbe serait du chrome, exactement ce que ce lot retire. */}
-                {(mentionRaccordJour || mentionRaccordMois
-                    || (dailyPast !== null && Math.abs(dailyPast.undatedTotal) > 0.5)
-                    || Boolean(dailyPast?.truncatedFrom)
-                    || (dailyPast !== null && Math.abs(dailyPast.flowsAfterNowDate) > 0.5)) && (
-                    <p role="status" className="mt-2 rounded-card border border-primary/25 bg-primary/5 px-3 py-2 text-tiny text-ink-200">
-                        {/* [FUTUR-DAILY-ANCHOR-CAVEAT] Un montant que l'ancre compte mais que la série
-                            quotidienne ne peut pas placer décale TOUT le niveau passé. Le dire est le
-                            minimum ; le corriger (retrancher ces flux de l'ancre) touche
-                            `computeStartingCash`, donc le raccord au présent — plan-first, au BACKLOG. */}
-                        {dailyPast !== null && Math.abs(dailyPast.undatedTotal) > 0.5 && (
-                            <span className="block text-alerte-texte/90">
-                                ⚠ <PrivateAmount>{formatCAD(Math.abs(dailyPast.undatedTotal))}</PrivateAmount> de transactions datées au mois
-                                seul (sans jour) ne peuvent pas être placées : le niveau des jours passés peut
-                                être décalé d'autant.
-                            </span>
-                        )}
-                        {dailyPast?.truncatedFrom && (
-                            <span className="mt-1 block text-alerte-texte/90">
-                                {/* ⚠️ `truncatedFrom` est le PREMIER jour NON reconstruit, pas le dernier
-                                    tracé. Mon premier libellé disait « s'arrête au {date} », ce qui
-                                    laissait croire que ce jour-là existait encore — décalage d'un jour
-                                    relevé par la revue, sur une mise en garde dont tout l'intérêt est
-                                    d'être exacte. */}
-                                ⚠ Le premier jour non reconstruit est le {dailyPast.truncatedFrom} : à
-                                partir de là, la courbe passée s'interrompt (limite de volume) et les
-                                journées ne sont ni tracées ni sélectionnables.
-                            </span>
-                        )}
-                        {dailyPast !== null && Math.abs(dailyPast.flowsAfterNowDate) > 0.5 && (
-                            <span className="mt-1 block text-alerte-texte/90">
-                                ⚠ <PrivateAmount>{formatCAD(Math.abs(dailyPast.flowsAfterNowDate))}</PrivateAmount> de transactions datées
-                                après aujourd'hui sont déjà dans ton solde actuel mais pas encore dans les
-                                jours passés.
-                            </span>
-                        )}
-                        {/* [PASSE-REEL-RACCORD-CHUTE] La marche au raccord, EXPLIQUÉE. Aucun montant
-                            dans la phrase : interpolé dans une chaîne il ne serait plus masquable, et
-                            il est déjà lisible sur la courbe. Ton informatif, pas d'avertissement —
-                            les deux points sont JUSTES, il n'y a rien à corriger. */}
-                        {mentionRaccordJour && (
-                            <span className="mt-1 block">{mentionRaccordJour}</span>
-                        )}
-                        {mentionRaccordMois && (
-                            <span className="mt-1 block">{mentionRaccordMois}</span>
-                        )}
-                    </p>
-                )}
-
-                {/* [A11Y-CHARTS] — alternative TEXTUELLE (sr-only) à la courbe Recharts : mêmes données
-                    en table accessible, masquage privacy aligné sur l'axe/tooltip.
-                    ⚠️ `chartSeries` et NON `displayData` (finding revue) : la table doit suivre ce qui
-                    est RÉELLEMENT tracé. En vue au jour, elle restait au mois — un utilisateur de
-                    lecteur d'écran n'avait alors aucun accès à la granularité que la courbe expose.
-                    ⚠️ La mention « les colonnes par compte y sortent “—” » est PÉRIMÉE depuis
-                    [FUTUR-DAILY-FULL] : `dailyLedger` ventile les soldes par compte au jour, donc la
-                    table les remplit aussi. Le « — » reste réservé aux valeurs réellement absentes
-                    (préfixe passé avant la 1re transaction connue). */}
-                {/* ⚠️ `selectSeries` (tranche quotidienne COMPLÈTE) et non `chartSeries` (tracé
-                    décimé) — finding a11y #592 : la table annonçait « 40 échantillonnés sur 700 »
-                    alors que la base réelle est ~11 000 jours. La table échantillonne elle-même à
-                    ~40 lignes : lui donner la série complète ne coûte rien et rend le dénominateur
-                    honnête. */}
-                <ChartDataTable
-                    caption={isDailyCurve
-                        ? 'Projection du patrimoine net et des comptes, jour par jour'
-                        : 'Projection du patrimoine net et des comptes par mois (repli)'}
-                    columns={dataColumns}
-                    rows={selectSeries}
-                />
-                {/* [FUTUR-ICONS-RICH, a11y] Liste sr-only des JALONS affichés sur la courbe (RRQ/PSV/retraits/
-                    impôts/retraite/FIRE…). Les pastilles SVG sont focusables DEPUIS le lot
-                    A11Y-FUTUR-MILESTONES-KEYBOARD (PR #599) — la liste reste utile pour la LECTURE
-                    d'ensemble (date + libellé d'un coup, sans tabuler 29 pastilles), sans
-                    échantillonnage (bornée par le cap visuel des icônes). */}
-                {(shownLifeEvents.length > 0 || shownFlowEvents.length > 0) && (
-                    isPrivacyMode ? (
-                        <p className="sr-only">
-                            {shownLifeEvents.length + shownFlowEvents.length} jalons masqués en mode discret.
-                        </p>
-                    ) : (
-                        <ul className="sr-only">
-                            <li>Jalons de la projection :</li>
-                            {[...shownLifeEvents, ...shownFlowEvents]
-                                .slice()
-                                .sort((a, b) => a.monthIndex - b.monthIndex)
-                                .map((e, i) => (
-                                    <li key={`ms-sr-${i}`}>{e.dateLabel ? `${e.dateLabel} : ` : ''}{e.label}</li>
-                                ))}
-                        </ul>
-                    )
-                )}
-
-                {detailPoint && (
-                    <FutureDetailModal
-                        point={detailPoint}
+                    <FutureYearAnatomyModal
+                        isOpen={anatomyOpen}
+                        onClose={() => setAnatomyOpen(false)}
                         chartData={chartData}
-                        transactions={transactions}
-                        dayIso={detailDayIso}
-                        variation={variationDuJour}
-                        monthIso={detailMonthIso}
+                        initialYear={jourAffiche?.point?.year ?? startYear}
                         userName1={config.users[0]?.name}
                         userName2={config.users[1]?.name}
-                        isPrivacyMode={isPrivacyMode}
-                        onStepDay={stepDetailDay}
-                        canStepPrev={detailSeriesIdx > 0}
-                        canStepNext={detailSeriesIdx !== -1 && detailSeriesIdx < selectSeries.length - 1}
-                        onClose={() => { setDetailPoint(null); setDetailDayIso(null); setDetailAnchorIso(null); setDetailMonthIso(null); }}
                     />
-                )}
-            </section>
-
-            {etroit && bandeauKpi && (
-                <div className="grid grid-cols-2 gap-2.5">
-                    {bandeauKpi('mobile-pied')}
                 </div>
             )}
 
-            <Suspense fallback={<Skeleton variant="kpi" className="h-48" />}>
-                <GrandCalculPanels
-                    params={params}
-                    showBands={showGrandCalculBands}
-                    onToggleBands={setShowGrandCalculBands}
-                />
-                <CurveExplanationPanel
-                    chartData={chartData}
-                    grandCalculResult={grandCalculResult}
-                    selectedPoint={jourAffiche?.point ?? null}
-                    selectedOrigin={jourAffiche?.origine ?? 'ancre'}
-                    onSelectMonth={handleSelectExplanationMonth}
-                />
-            </Suspense>
-
-            <FinancialGoalsProgressSection goals={financialGoals} todayIso={todayIso} />
-
-            <Suspense fallback={<Skeleton variant="chart" className="h-48" />}>
-                <FutureValoriaPlacementsPanel
-                    assets={storeAssets}
-                    fxRates={fxRates}
+            <Drawer
+                id={tiroirDomId('hypotheses')}
+                isOpen={tiroirOuvert === 'hypotheses'}
+                onClose={() => setTiroirOuvert(null)}
+                variant={isBelowSidebarBreakpoint ? 'feuille' : 'lateral'}
+                title="Modifier les hypothèses"
+            >
+                <ProjectionControls
                     projection={projection}
-                    valoriaRiskProfile={valoriaRiskProfile}
-                    apiKey={geminiApiKey}
-                    onUpdateProjection={(patch) => handleInstantScenarioUpdate({ ...projection, ...patch })}
+                    updateProj={updateProj}
+                    updateReturnRate={updateReturnRate}
+                    runMC={runMC}
+                    setRunMC={setRunMC}
+                    isComputing={isComputing}
+                    fireNumber={fireNumber}
+                    liveCSVBalances={liveCSVBalances}
+                    applyHistoricalRate={applyHistoricalRate}
+                    realEstateGoals={realEstateGoals}
+                    setRealEstateGoals={setRealEstateGoals}
+                    config={config}
+                    isLateralDrawer={!isBelowSidebarBreakpoint}
                 />
-            </Suspense>
+                {isNarrowViewport && (
+                    <div className="sticky bottom-0 -mx-5 px-5 py-2.5 mt-3 border-t border-bordure bg-fond/95 backdrop-blur-xs">
+                        <button
+                            type="button"
+                            onClick={() => setTiroirOuvert(null)}
+                            className="touch-target w-full min-h-11 rounded-card bg-accent text-sur-accent font-bold text-body focus-ring"
+                        >
+                            Appliquer et fermer
+                        </button>
+                    </div>
+                )}
+            </Drawer>
 
-            <FuturePrescriptiveAdvisorCard
-                params={params}
-                projectionResult={allResults[0] ?? results}
-                assets={storeAssets}
-                fxRates={fxRates}
-                projection={projection}
-                retirementGoal={retirementGoal}
-                onApplyLever={handleInstantScenarioUpdate}
-            />
+            <Drawer
+                id={tiroirDomId('historique')}
+                isOpen={tiroirOuvert === 'historique'}
+                onClose={() => setTiroirOuvert(null)}
+                variant={isBelowSidebarBreakpoint ? 'feuille' : 'lateral'}
+                title="Historique"
+            >
+                <Suspense fallback={<Skeleton variant="chart" />}>
+                    <FutureHistorySection />
+                </Suspense>
+            </Drawer>
 
-            <FutureYearAnatomyModal
-                isOpen={anatomyOpen}
-                onClose={() => setAnatomyOpen(false)}
-                chartData={chartData}
-                initialYear={jourAffiche?.point?.year ?? startYear}
-                userName1={config.users[0]?.name}
-                userName2={config.users[1]?.name}
-            />
-
-            {/* [S5-REFONTE-FUTUR] Jalons + Leviers équilibrés côte à côte (h-full), Outils pleine largeur et Plan d'action complet intégré. */}
-            <div className="grid gap-4 lg:gap-6 lg:grid-cols-2 items-stretch">
-                <TableJalons jalons={jalons} etroit={etroit} />
-                <CarteLeviers leviers={leviers} strategie={allResults[0]?.strategyName} resume={resumeLeviers} nbLeviers={LEVER_LIBRARY.length} etroit={etroit} onOptimiser={regateToLevers} />
-            </div>
-            {outils}
-            <ActionPlanDrilldown chartData={chartData} strategyName={allResults[0]?.strategyName} />
-            </div>
-            )}
-
-        
-        {/* [FUTUR-NAV-TIROIRS] Les trois anciens sous-onglets, désormais en tiroir. `variant` suit
-            le même seuil que la mise en page : feuille du bas en colonne empilée, tiroir latéral
-            quand la barre latérale est visible. */}
-        <Drawer
-            id={tiroirDomId('hypotheses')}
-            isOpen={tiroirOuvert === 'hypotheses'}
-            onClose={() => setTiroirOuvert(null)}
-            variant={isBelowSidebarBreakpoint ? 'feuille' : 'lateral'}
-            title="Modifier les hypothèses"
-        >
-            <ProjectionControls
-                projection={projection}
-                updateProj={updateProj}
-                updateReturnRate={updateReturnRate}
-                runMC={runMC}
-                setRunMC={setRunMC}
-                isComputing={isComputing}
-                fireNumber={fireNumber}
-                liveCSVBalances={liveCSVBalances}
-                applyHistoricalRate={applyHistoricalRate}
-                realEstateGoals={realEstateGoals}
-                setRealEstateGoals={setRealEstateGoals}
-                config={config}
-                isLateralDrawer={!isBelowSidebarBreakpoint}
-            />
-            {/* [FUTUR-MOBILE-PR4] CTA collant en pied de tiroir (décision Marc 2026-09-10, adaptée) :
-                « aucun calcul sans geste » reste vrai — ce bouton reste le SEUL chemin qui déclenche
-                la révélation depuis ce tiroir sur téléphone. `changedHypothesesCount` dit CE QUI a
-                changé depuis le dernier calcul. Referme le tiroir au lieu de basculer d'onglet — la
-                courbe est déjà visible derrière. */}
-            {isNarrowViewport && (
-                <div className="sticky bottom-0 -mx-5 px-5 py-2.5 mt-3 border-t border-bordure bg-fond/95 backdrop-blur-xs">
-                    <button
-                        type="button"
-                        onClick={() => { revealCurve(); setTiroirOuvert(null); }}
-                        disabled={isComputing}
-                        aria-busy={isComputing}
-                        className="touch-target w-full min-h-[48px] rounded-card bg-primary text-dark font-bold text-body focus-ring disabled:opacity-50"
-                    >
-                        {isComputing
-                            ? 'Calcul en cours…'
-                            : changedHypothesesCount > 0
-                                ? `Recalculer la projection (${changedHypothesesCount} hypothèse${changedHypothesesCount > 1 ? 's' : ''} modifiée${changedHypothesesCount > 1 ? 's' : ''})`
-                                : 'Recalculer la projection'}
-                    </button>
-                </div>
-            )}
-        </Drawer>
-
-        <Drawer
-            id={tiroirDomId('plan')}
-            isOpen={tiroirOuvert === 'plan'}
-            onClose={() => setTiroirOuvert(null)}
-            variant={isBelowSidebarBreakpoint ? 'feuille' : 'lateral'}
-            title="Plan d'action"
-        >
-            {/* [FUTUR-NAV-TIROIRS] Trois états, symétriques au corps principal (curveRestoring
-                gérée en premier, comme là-bas) : sans ce bloc, ouvrir ce tiroir pendant la fenêtre de
-                restauration (~300 ms-qq s, [PROJECTION-PERSIST]) rendait un dialogue avec un titre et
-                rien d'autre — un écran vide plus trompeur ici que dans l'ancien panneau d'onglet,
-                puisqu'on s'attend à du contenu dans une boîte de dialogue qu'on vient d'ouvrir. */}
-            {curveRestoring && (
-                <div className="py-10 flex flex-col items-center gap-3 text-ink-300" role="status" aria-live="polite">
-                    <svg className="animate-spin h-8 w-8 text-alerte-texte" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="40" strokeDashoffset="20" opacity="0.5" />
-                    </svg>
-                    <span className="text-meta">Ta projection se recharge…</span>
-                </div>
-            )}
-            {/* PH4 — gated comme la courbe : pas de résultats tant que la projection n'est pas
-                calculée. [PROJECTION-PERSIST] pendant la restauration, ne pas montrer l'invite. */}
-            {!curveVisible && !curveRestoring && (
-                <div className="py-10 px-4 space-y-3 max-w-md mx-auto text-center">
-                    <div className="text-3xl" aria-hidden="true">🗂️</div>
-                    <p className="text-meta text-ink-300 leading-snug">
-                        {isStale ? 'Tes paramètres ont changé — relance le calcul' : 'Calcule ta projection'} pour
-                        voir ton plan d'action.
-                    </p>
-                </div>
-            )}
-            {curveVisible && (
-                <div className="space-y-6">
-                    <ProjectionExplains chartData={chartData} />
-                    {/* C2 — Plan d'action HIÉRARCHIQUE (global → mois, drill-down au clic). */}
-                    <ActionPlanDrilldown chartData={chartData} strategyName={allResults[0]?.strategyName} />
-                </div>
-            )}
-        </Drawer>
-
-        {/* [REFONTE-NAV-L2b] Historique : évolution PASSÉE du patrimoine par compte (ex-Accueil).
-            Indépendant de la projection (pas gated par curveVisible : l'historique existe même sans
-            courbe calculée). Lazy → le pipeline ne se paie qu'à l'affichage. */}
-        <Drawer
-            id={tiroirDomId('historique')}
-            isOpen={tiroirOuvert === 'historique'}
-            onClose={() => setTiroirOuvert(null)}
-            variant={isBelowSidebarBreakpoint ? 'feuille' : 'lateral'}
-            title="Historique"
-        >
-            <Suspense fallback={<Skeleton variant="chart" />}>
-                <FutureHistorySection />
-            </Suspense>
-        </Drawer>
-
-        <HubConnexionsModal
-            isOpen={showConnexionsModal}
-            onClose={() => setShowConnexionsModal(false)}
-        />
+            <HubConnexionsModal isOpen={showConnexionsModal} onClose={() => setShowConnexionsModal(false)} />
         </div>
     );
 };
-
-interface FutureCurveTooltipProps {
-    active?: boolean;
-    payload?: Array<{ payload: ProjectionChartPoint & { isPast?: boolean; dayIsReal?: boolean; lockedNetWorth?: number } }>;
-}
-
-const COMPTES_INFOBULLE_FUTUR = [
-    { cle: 'CELI', libelle: 'CELI' },
-    { cle: 'REER', libelle: 'REER' },
-    { cle: 'CELIAPP', libelle: 'CELIAPP' },
-    { cle: 'NonReg', libelle: 'Non-enregistré' },
-    { cle: 'Liquidites', libelle: 'Liquidités' },
-    { cle: 'Immobilier', libelle: 'Équité immo' },
-    { cle: 'Crypto', libelle: 'Crypto' },
-    { cle: 'REEE', libelle: 'REEE' },
-] as const;
-
-const FutureCurveTooltip = React.memo(({ active, payload }: FutureCurveTooltipProps) => {
-    if (!active || !payload || payload.length === 0) return null;
-    const pt = payload[0]?.payload;
-    if (!pt || !Number.isFinite(pt.NetWorth)) return null;
-
-    const estPasse = Boolean(pt.isPast || pt.dayIsReal || pt.monthIndex < 0);
-    const diff = typeof pt.diffNW === 'number' && Number.isFinite(pt.diffNW) ? pt.diffNW : null;
-    const comptesActifs = COMPTES_INFOBULLE_FUTUR
-        .map((c) => ({ ...c, val: Number(pt[c.cle as keyof ProjectionChartPoint]) }))
-        .filter((c) => Number.isFinite(c.val) && Math.abs(c.val) >= 1)
-        .sort((a, b) => b.val - a.val)
-        .slice(0, 5);
-    const dette = typeof pt.DettesNonImmo === 'number' && Number.isFinite(pt.DettesNonImmo) && pt.DettesNonImmo > 0
-        ? pt.DettesNonImmo
-        : null;
-
-    const totalPositif = comptesActifs.reduce((acc, c) => acc + Math.max(0, c.val), 0);
-
-    return (
-        <div className="gf-tooltip-card">
-            {/* Vue mobile ultra-compacte (bandeau HUD en haut du graphique) */}
-            <div className="sm:hidden">
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[11px] font-semibold text-ink-50 truncate">
-                            {pt.dateLabel || (pt.year != null ? `Année ${pt.year}` : '')}
-                            {pt.age != null && Number.isFinite(pt.age) && (
-                                <> · <PrivateAmount>{`${Math.floor(pt.age)} ans`}</PrivateAmount></>
-                            )}
-                        </span>
-                        <span className={`shrink-0 px-1 py-0.5 rounded-sm text-[9px] font-mono font-semibold ${estPasse ? 'gf-delta-neutral' : 'gf-delta-amber'}`}>
-                            {estPasse ? 'Réel' : 'Projeté'}
-                        </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                        <PrivateAmount className="font-mono text-xs font-bold text-ink-50 tabular-nums">
-                            {formatCompactCAD(pt.NetWorth)}
-                        </PrivateAmount>
-                        {diff !== null && Math.abs(diff) >= 1 && (
-                            <span className={`px-1 py-0.5 rounded-sm text-[9px] font-mono font-semibold ${diff >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}>
-                                <PrivateAmount>{formatSigned(diff, { withCurrency: true })}</PrivateAmount>
-                            </span>
-                        )}
-                    </div>
-                </div>
-                {comptesActifs.length > 0 && (
-                    <div className="grid grid-cols-3 gap-x-2 gap-y-0.5 pt-1 mt-1 border-t border-bordure">
-                        {comptesActifs.slice(0, 3).map((c) => (
-                            <div key={c.cle} className="flex items-center justify-between gap-1 text-[10px] min-w-0">
-                                <span className="flex items-center gap-1 text-ink-300 truncate">
-                                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: couleurSerie(c.cle) }} aria-hidden="true" />
-                                    <span className="truncate">{c.libelle}</span>
-                                </span>
-                                <PrivateAmount className="font-mono font-semibold text-ink-50 tabular-nums shrink-0">
-                                    {formatCompactCAD(c.val)}
-                                </PrivateAmount>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            {/* Vue bureau détaillée */}
-            <div className="hidden sm:block">
-                <div className="gf-tooltip-header">
-                    <span className="text-xs font-semibold text-ink-50">
-                        {pt.dateLabel || (pt.year != null ? `Année ${pt.year}` : '')}
-                        {pt.age != null && Number.isFinite(pt.age) && (
-                            <> · <PrivateAmount>{`${Math.floor(pt.age)} ans`}</PrivateAmount></>
-                        )}
-                    </span>
-                    <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold ${estPasse ? 'gf-delta-neutral' : 'gf-delta-amber'}`}>
-                        {estPasse ? 'Réel' : 'Projeté'}
-                    </span>
-                </div>
-
-                <div className="gf-tooltip-hero">
-                    <div className="flex flex-col">
-                        <span className="text-[10px] font-mono uppercase tracking-wider text-ink-400">Valeur nette</span>
-                        <PrivateAmount className="font-mono text-[16px] font-bold text-ink-50 tabular-nums">
-                            {formatCAD(pt.NetWorth)}
-                        </PrivateAmount>
-                    </div>
-                    {diff !== null && Math.abs(diff) >= 1 && (
-                        <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold ${diff >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}>
-                            <PrivateAmount>{formatSigned(diff, { withCurrency: true })}</PrivateAmount>
-                        </span>
-                    )}
-                </div>
-
-                {comptesActifs.length > 0 && (
-                    <div className="space-y-1.5 pt-1 border-t border-bordure">
-                        {comptesActifs.map((c) => {
-                            const partPct = totalPositif > 0 ? Math.min(100, Math.max(4, Math.round((Math.max(0, c.val) / totalPositif) * 100))) : 0;
-                            return (
-                                <div key={c.cle} className="space-y-0.5">
-                                    <div className="gf-tooltip-row">
-                                        <span className="flex items-center gap-1.5 text-ink-300 truncate">
-                                            <span className="gf-tooltip-dot" style={{ backgroundColor: couleurSerie(c.cle) }} aria-hidden="true" />
-                                            {c.libelle}
-                                        </span>
-                                        <PrivateAmount className="font-mono font-semibold text-ink-50 tabular-nums">
-                                            {formatCompactCAD(c.val)}
-                                        </PrivateAmount>
-                                    </div>
-                                    {partPct > 0 && (
-                                        <div className="h-1 w-full rounded-full bg-surface-douce overflow-hidden" aria-hidden="true">
-                                            {/* NOMBRE-NON-MONETAIRE : BARRE-DECORATIVE accompagnant le montant sous PrivateAmount */}
-                                            <div className="h-full rounded-full" style={{ width: `${partPct}%`, backgroundColor: couleurSerie(c.cle) }} />
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                        {dette !== null && (
-                            <div className="gf-tooltip-row pt-0.5">
-                                <span className="flex items-center gap-1.5 text-erreur-texte truncate">
-                                    <span className="gf-tooltip-dot" style={{ backgroundColor: COULEUR_DETTE }} aria-hidden="true" />
-                                    Dettes
-                                </span>
-                                <PrivateAmount className="font-mono font-semibold text-erreur-texte tabular-nums">
-                                    {`−${formatCompactCAD(dette)}`}
-                                </PrivateAmount>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {typeof pt.P50 === 'number' && Number.isFinite(pt.P50) && (
-                    <div className="gf-tooltip-divider space-y-1">
-                        <div className="gf-tooltip-row">
-                            <span className="text-ink-400">Médiane (P50)</span>
-                            <PrivateAmount className="font-mono font-semibold text-ink-200">{formatCompactCAD(pt.P50)}</PrivateAmount>
-                        </div>
-                        {typeof pt.P10 === 'number' && Number.isFinite(pt.P10) && typeof pt.P90 === 'number' && Number.isFinite(pt.P90) && (
-                            <div className="gf-tooltip-row">
-                                <span className="text-repere">Bande P10 – P90</span>
-                                <span className="font-mono text-ink-200 tabular-nums">
-                                    <PrivateAmount>{formatCompactCAD(pt.P10)}</PrivateAmount>
-                                    {' – '}
-                                    <PrivateAmount>{formatCompactCAD(pt.P90)}</PrivateAmount>
-                                </span>
-                            </div>
-                        )}
-                        {typeof pt.P5 === 'number' && Number.isFinite(pt.P5) && typeof pt.P95 === 'number' && Number.isFinite(pt.P95) && (
-                            <div className="gf-tooltip-row">
-                                <span className="text-texte-doux">Bande P5 – P95</span>
-                                <span className="font-mono text-ink-200 tabular-nums">
-                                    <PrivateAmount>{formatCompactCAD(pt.P5)}</PrivateAmount>
-                                    {' – '}
-                                    <PrivateAmount>{formatCompactCAD(pt.P95)}</PrivateAmount>
-                                </span>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-});
-

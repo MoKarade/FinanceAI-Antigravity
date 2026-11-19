@@ -18,10 +18,8 @@ async function ouvrirFuturEtReveler(page: Page) {
     await activateTestMode(page);
     await page.goto('/#FUTURE');
     await page.waitForLoadState('domcontentloaded');
-    const voirDirect = page.getByRole('button', { name: /projection actuelle.*sans optimiser/i });
-    await voirDirect.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
-    if (await voirDirect.isVisible().catch(() => false)) await voirDirect.click();
     await expect(page.getByRole('group', { name: /Courbe de vie/ })).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('button', { name: 'Par compte', exact: true }).click();
 }
 
 const groupeSeries = (page: Page) => page.locator('[role="group"][aria-label="Séries du graphique"]');

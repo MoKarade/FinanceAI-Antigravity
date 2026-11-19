@@ -39,9 +39,24 @@ describe('kpiPatrimoine', () => {
         expect(kpiPatrimoine(null, false).value).toBe(formatCompactCAD(0));
     });
 
+    it('aligne la valeur et l’héritage net sur le scénario actif Futur 4.0 (discret inclus)', () => {
+        const scenFinalP50 = 42_760_000;
+        const scenEstateP50 = 20_960_000;
+        const k = kpiPatrimoine({ finalNetWorth: scenFinalP50, estateNetWorth: scenEstateP50, fireNumber: 1_270_000 }, false);
+        expect(k.value).toBe(formatCompactCAD(scenFinalP50));
+        expect(k.tooltip).toContain(`Héritage net : ${formatCompactCAD(scenEstateP50)}`);
+
+        const kDiscret = kpiPatrimoine(
+            { finalNetWorth: scenFinalP50, estateNetWorth: scenEstateP50, fireNumber: 1_270_000 },
+            true,
+        );
+        expect(kDiscret.tooltip).toContain(`Héritage net : ${MASKED_AMOUNT_LABEL}`);
+        expect(kDiscret.tooltip).not.toContain(formatCompactCAD(scenEstateP50));
+    });
+
     it('est bien la source de la tuile du Futur', () => {
         const src = readFileSync('components/FutureProjection.tsx', 'utf8');
-        expect(src).toContain('kpiPatrimoine(results, isPrivacyMode)');
+        expect(src).toContain('kpiPatrimoine(resultsScenarioPatrimoine, isPrivacyMode)');
         // [S5-REFONTE-FUTUR] La tuile est devenue la stat « À l'horizon » de la carte de la courbe.
         expect(src).toContain('<PrivateAmount>{patrimoineKpi.value}</PrivateAmount>');
         expect(src).toContain('title={patrimoineKpi.tooltip}');

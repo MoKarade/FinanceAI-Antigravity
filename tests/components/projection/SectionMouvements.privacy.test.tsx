@@ -72,22 +72,23 @@ describe('Mode Discret — SectionMouvements, PanneauJour et FutureDetailModal (
         expect(screen.getByText(/2 événements masqués/i)).toBeInTheDocument();
     });
 
-    it('masque aussi l’âge dans PanneauJour et les événements/âge dans FutureDetailModal en mode discret', () => {
+    it('masque aussi l’âge dans FutureRichTooltip et les événements/âge dans FutureDetailModal en mode discret', () => {
         const day1 = makeDay1PointFromLedger();
 
-        // PanneauJour hors mode discret -> âge visible
+        // FutureRichTooltip hors mode discret -> âge visible + montant visible via onglet « Ce jour-là »
         useFinanceStore.setState({ isPrivacyMode: false });
-        const pj = renderPanneauJour(day1);
+        const pj = renderPanneauJour(day1, { defaultSection: 'mouvements' });
         expect(pj.container.textContent).toContain('Âge 85');
         expect(pj.container.textContent).toContain('12 345 $');
         pj.unmount();
 
-        // PanneauJour en mode discret -> âge, $ et événement absents
+        // FutureRichTooltip en mode discret -> âge, $ et événement absents
         useFinanceStore.setState({ isPrivacyMode: true });
-        const pjPriv = renderPanneauJour(day1);
+        const pjPriv = renderPanneauJour(day1, { defaultSection: 'mouvements' });
         expect(pjPriv.container.textContent).not.toContain('Âge 85');
         expect(pjPriv.container.textContent).not.toContain('85 ans');
         expect(pjPriv.container.textContent).not.toContain('12 345');
+        expect(pjPriv.container.textContent).not.toContain('Soins de longue durée');
         expect(pjPriv.container.textContent).not.toContain('$');
         pjPriv.unmount();
 

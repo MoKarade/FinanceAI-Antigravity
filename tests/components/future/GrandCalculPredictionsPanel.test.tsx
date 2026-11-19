@@ -3,232 +3,226 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
-import { GrandCalculPredictionsPanel } from '../../../components/future/GrandCalculPredictionsPanel';
+import { FutureCoreMilestonesGrid } from '../../../components/future/FutureCoreMilestonesGrid';
 import { useFinanceStore } from '../../../store/useFinanceStore';
-import type { GrandCalculResult } from '../../../services/projection/types';
+import type {
+    DeepForecastReport,
+    DeepGoalMilestoneSummary,
+    DeepScenarioOutput,
+} from '../../../services/projection/deepForecastTypes';
 
-const populatedResult: GrandCalculResult = {
-    version: 1,
-    paramsSig: 'gc1:r2:test:1',
-    createdAt: '2026-11-17T00:00:00Z',
-    durationMs: 1_500,
-    iterationsRun: 50_000,
-    regimesEnabled: true,
-    historicalCrisesEnabled: true,
-    survivalRatePct: 90,
-    cvar95: 120_000,
-    monthlyBands: [],
-    fiAge: {
-        reachedPct: 84.5,
-        p5Age: 52,
-        p50Age: 59,
-        p95Age: 68,
-        horizonAge: 90,
-    },
-    goalProbabilities: [
-        {
-            goalId: 'g1',
-            name: 'Fonds urgence',
-            deadline: '2030-06',
-            targetAmount: 30_000,
-            probabilityPct: 94.2,
-            medianShortfall: 0,
-            status: 'evaluated',
+function makeScenario(
+    overrides: Partial<DeepScenarioOutput['milestones']> = {},
+): DeepScenarioOutput {
+    return {
+        id: 'real_trajectory',
+        label: 'Trajectoire réelle',
+        shortDescription: 'Trajectoire de référence',
+        assumptionsSummaryFr: 'Hypothèses réelles',
+        points: [],
+        milestones: {
+            fiAge: 58,
+            fiProbabilityPct: 86.5,
+            sustainableMonthlyNetRetirementCad: 4_350,
+            sustainableMonthlyNetP90Cad: 3_420,
+            goalsSummary: [
+                {
+                    id: 'g-achieved',
+                    name: 'Fonds urgence',
+                    targetDate: '2027-06-01',
+                    probabilityPct: 100,
+                    status: 'achieved',
+                },
+                {
+                    id: 'g-next',
+                    name: 'Voyage Japon',
+                    targetDate: '2029-09-15',
+                    probabilityPct: 78.4,
+                    status: 'on_track',
+                },
+                {
+                    id: 'g-later',
+                    name: 'Chalet',
+                    targetDate: '2035-05-01',
+                    probabilityPct: 48.2,
+                    status: 'at_risk',
+                },
+            ],
+            finalNetWorthP50: 1_650_000,
+            estateNetWorthP50: 1_420_000,
+            estateTaxP50: 230_000,
+            ruinProbabilityPct: 3.1,
+            ...overrides,
         },
-        {
-            goalId: 'g2',
-            name: 'Projet lointain',
-            deadline: '2099-01',
-            targetAmount: 200_000,
-            probabilityPct: null,
-            medianShortfall: null,
-            status: 'beyond_horizon',
+        turningPoints: [],
+        appliedOptimizationsFr: [],
+    };
+}
+
+function makeReport(scenario: DeepScenarioOutput, isDeepRun = true): DeepForecastReport {
+    return {
+        version: 1,
+        inputsSig: 'df1:milestones:1',
+        createdAt: '2026-11-18T12:00:00.000Z',
+        durationMs: 1_500,
+        trajectoriesRun: isDeepRun ? 100_000 : 0,
+        isDeepRun,
+        pastDiagnostic: {
+            transactionsAnalyzed: 0,
+            monthsCovered: 0,
+            firstTransactionDate: null,
+            lastTransactionDate: null,
+            observedMonthlyIncomeCad: null,
+            observedMonthlyExpensesCad: null,
+            budgetedMonthlyExpensesCad: null,
+            monthlySpendingGapCad: null,
+            observedSavingsRatePct: null,
+            lifestyleCreepAnnualPct: null,
+            fixedExpensesSharePct: null,
+            discretionarySharePct: null,
+            peakSpendingMonthLabel: null,
+            lowSpendingMonthLabel: null,
+            weightedMerPct: null,
+            estimatedAnnualFeeAndTaxDragCad: null,
+            expenseVolatilityPct: null,
+            findingsFr: [],
         },
-    ],
-    guaranteedPurchasingPower: {
-        p95SecurityMonthlyNetReal: 3_100,
-        p90SecurityMonthlyNetReal: 3_450,
-        p50SecurityMonthlyNetReal: 4_300,
-        retirementMonthsEvaluated: 300,
-    },
-    estateTax: {
-        deterministicTotal: 95_000,
-        deterministicFed: 40_000,
-        deterministicQc: 55_000,
-        mcTotalP5: 45_000,
-        mcTotalP50: 98_000,
-        mcTotalP95: 180_000,
-        mcFedP50: 41_000,
-        mcQcP50: 57_000,
-        mcRealTotalP50: 62_000,
-        taxableBreakdown: {
-            rrspRrif: 250_000,
-            capitalGainsTaxable: 45_000,
-            rentalRecapture: 15_000,
+        newsBundle: {
+            collectedAtIso: '2026-11-18T12:00:00.000Z',
+            liveArticlesUsed: 0,
+            offlineFallbackUsed: true,
+            portfolioSentimentScore: null,
+            portfolioSentimentLabel: 'Neutre',
+            annualizedReturnAdjustmentPct: 0,
+            volatilityMultiplier: 1,
+            macroHeadlineFr: 'Neutre',
+            keySignals: [],
+            aiSynthesisFr: null,
+            usedGemini: false,
         },
-        projectedDeathAge: 90,
-    },
-};
+        valoriaSummary: null,
+        scenarios: {
+            real_trajectory: scenario,
+            prudent_stress: scenario,
+            ai_optimized: scenario,
+            favorable_tailwinds: scenario,
+        },
+        concreteActions: [],
+    };
+}
 
 const initialStore = useFinanceStore.getState();
 
-describe('GrandCalculPredictionsPanel (R2)', () => {
+describe('FutureCoreMilestonesGrid (remplace GrandCalculPredictionsPanel — Futur 4.0)', () => {
     beforeEach(() => {
         useFinanceStore.setState(initialStore, true);
     });
 
-    it('délègue à ProjectionRequired si projectionRefus est défini', () => {
-        useFinanceStore.setState({ projectionRefus: 'Salaire illisible' });
-        render(<GrandCalculPredictionsPanel result={null} />);
+    it('affiche les 4 cartes repères dans l’ordre avec valeurs cohérentes et libellé de profondeur', () => {
+        const scenario = makeScenario();
+        const report = makeReport(scenario, true);
+        render(<FutureCoreMilestonesGrid report={report} scenario={scenario} />);
 
-        expect(screen.getByRole('status')).toHaveTextContent(/Donnée illisible/i);
-        expect(screen.queryByRole('region', { name: /Prédictions/i })).not.toBeInTheDocument();
-    });
-
-    it('affiche les 4 cartes sémantiques avec « — » avant tout Grand Calcul (no-fake-data)', () => {
-        render(<GrandCalculPredictionsPanel result={null} />);
-
-        const region = screen.getByRole('region', { name: /Prédictions et jalons avancés/i });
+        const region = screen.getByRole('region', { name: /Repères clés de vie/i });
         expect(region).toBeInTheDocument();
+        expect(screen.getByText(/Simulation Monte Carlo profonde/i)).toBeInTheDocument();
 
-        expect(within(region).getByRole('region', { name: /indépendance financière/i })).toBeInTheDocument();
-        expect(within(region).getByRole('region', { name: /objectifs? financiers?/i })).toBeInTheDocument();
-        expect(within(region).getByRole('region', { name: /pouvoir d'achat/i })).toBeInTheDocument();
-        expect(within(region).getByRole('region', { name: /impôt successoral/i })).toBeInTheDocument();
+        const articles = within(region).getAllByRole('article');
+        expect(articles).toHaveLength(4);
+        expect(articles[0]).toHaveTextContent(/Indépendance financière/i);
+        expect(articles[0]).toHaveTextContent(/58 ans/);
+        expect(articles[0]).toHaveTextContent(/86,5\s*%/);
 
-        expect(region.textContent).not.toMatch(/0\s*\$/);
-        expect(within(region).getAllByText('Pas de donnée').length).toBeGreaterThanOrEqual(8);
+        expect(articles[1]).toHaveTextContent(/Revenu mensuel net retraite/i);
+        expect(articles[1]).toHaveTextContent(/4[\s\u00a0\u202f]350\s*\$/);
+        expect(articles[1]).toHaveTextContent(/3[\s\u00a0\u202f]420\s*\$/);
+
+        expect(articles[2]).toHaveTextContent(/Objectifs datés/i);
+        expect(articles[2]).toHaveTextContent(/2 \/ 3/);
+        // Priorité au prochain objectif non encore atteint le plus proche dans le temps (Voyage Japon)
+        expect(articles[2]).toHaveTextContent(/Voyage Japon/);
+        expect(articles[2]).toHaveTextContent(/Sur la cible/);
+
+        expect(articles[3]).toHaveTextContent(/Patrimoine final & Succession/i);
+        expect(articles[3]).toHaveTextContent(/1,65/);
+        expect(articles[3]).toHaveTextContent(/1,42/);
+        expect(articles[3]).toHaveTextContent(/230/);
     });
 
-    it('signale un stockage illisible via role="status"', () => {
-        render(<GrandCalculPredictionsPanel result={null} unreadableStorage />);
+    it('respecte no-fake-data (« — » jamais 0 $) lorsque les mesures sont absentes ou non finies', () => {
+        const emptyScenario = makeScenario({
+            fiAge: null,
+            fiProbabilityPct: Number.NaN,
+            sustainableMonthlyNetRetirementCad: null,
+            sustainableMonthlyNetP90Cad: Number.POSITIVE_INFINITY,
+            goalsSummary: [],
+            finalNetWorthP50: null,
+            estateNetWorthP50: null,
+            estateTaxP50: Number.NaN,
+        });
+        const report = makeReport(emptyScenario, false);
 
-        expect(screen.getByRole('status')).toHaveTextContent(/Sauvegarde locale illisible/i);
-    });
-
-    it('respecte l’ordre strict des quantiles et la ventilation ARC/RQ + MC sur les 4 cartes', () => {
-        render(<GrandCalculPredictionsPanel result={populatedResult} />);
-
-        // 1. FI Age : P5 <= P50 <= P95 avant horizonAge
-        const fiCard = screen.getByRole('region', { name: /indépendance financière/i });
-        const fiAges = [...(fiCard.textContent ?? '').matchAll(/(\d{2,3})\s*ans/g)].map((m) => Number(m[1]));
-        expect(fiAges).toEqual([52, 59, 68, 90]);
-
-        // 2. Objectifs financiers
-        const goalsCard = screen.getByRole('region', { name: /objectifs? financiers?/i });
-        expect(within(goalsCard).getByText('Fonds urgence')).toBeInTheDocument();
-        expect(within(goalsCard).getByText('Projet lointain')).toBeInTheDocument();
-        expect(within(goalsCard).getByText('Hors horizon')).toBeInTheDocument();
-
-        // 3. Pouvoir d'achat réel mensuel net garanti : P95 <= P90 <= P50 en dollars constants / mois
-        const ppCard = screen.getByRole('region', { name: /pouvoir d'achat/i });
-        expect(ppCard.textContent).toMatch(/dollars constants/i);
-        expect(ppCard.textContent).toMatch(/\/\s*mois/i);
-        const ppAmounts = [...(ppCard.textContent ?? '').matchAll(/(\d[\d\s\u00a0\u202f]*)\s*\$/g)].map((m) =>
-            Number(m[1].replace(/[\s\u00a0\u202f]/g, '')),
+        const { container } = render(
+            <FutureCoreMilestonesGrid report={report} scenario={emptyScenario} />,
         );
-        expect(ppAmounts).toEqual([3100, 3450, 4300]);
 
-        // 4. Impôt successoral : tableaux sémantiques déterministe (Total, ARC, RQ) puis MC (P5, P50, P95) + ventilation + âge décès
-        const estateCard = screen.getByRole('region', { name: /impôt successoral/i });
-        const tables = within(estateCard).getAllByRole('table');
-        expect(tables.length).toBe(3);
-
-        const detRows = within(tables[0]).getAllByRole('row');
-        expect(within(detRows[0]).getByRole('rowheader')).toHaveTextContent(/Total/i);
-        expect(within(detRows[0]).getByRole('cell')).toHaveTextContent(/95[\s\u00a0\u202f]000\s*\$/);
-        expect(within(detRows[1]).getByRole('rowheader')).toHaveTextContent(/ARC/i);
-        expect(within(detRows[1]).getByRole('cell')).toHaveTextContent(/40[\s\u00a0\u202f]000\s*\$/);
-        expect(within(detRows[2]).getByRole('rowheader')).toHaveTextContent(/Revenu Québec/i);
-        expect(within(detRows[2]).getByRole('cell')).toHaveTextContent(/55[\s\u00a0\u202f]000\s*\$/);
-
-        const mcRows = within(tables[1]).getAllByRole('row');
-        expect(within(mcRows[0]).getByRole('rowheader')).toHaveTextContent(/^P5$/i);
-        expect(within(mcRows[0]).getByRole('cell')).toHaveTextContent(/45[\s\u00a0\u202f]000\s*\$/);
-        expect(within(mcRows[1]).getByRole('rowheader')).toHaveTextContent(/^P50$/i);
-        expect(within(mcRows[1]).getByRole('cell')).toHaveTextContent(/98[\s\u00a0\u202f]000\s*\$/);
-        expect(within(mcRows[2]).getByRole('rowheader')).toHaveTextContent(/^P95$/i);
-        expect(within(mcRows[2]).getByRole('cell')).toHaveTextContent(/180[\s\u00a0\u202f]000\s*\$/);
-
-        const estateText = estateCard.textContent ?? '';
-        expect(estateText).toMatch(/REER\s*\/\s*FERR/i);
-        expect(estateText).toMatch(/Gain en capital imposable/i);
-        expect(estateText).toMatch(/Récupération DPA/i);
-        expect(estateText).toMatch(/90\s*ans/);
+        expect(screen.getByText(/Aperçu rapide instantané/i)).toBeInTheDocument();
+        expect(screen.getByText(/Aucun objectif daté configuré/i)).toBeInTheDocument();
+        expect(container.textContent).not.toMatch(/\b0\s*\$/);
+        expect(screen.getAllByText('Pas de donnée').length).toBeGreaterThanOrEqual(7);
     });
 
-    it('affiche un état vide honnête si goalProbabilities est vide et « — » si FI inatteignable', () => {
-        const unreachable: GrandCalculResult = {
-            ...populatedResult,
-            fiAge: { reachedPct: 0, p5Age: null, p50Age: null, p95Age: null, horizonAge: 90 },
-            goalProbabilities: [],
-        };
-        render(<GrandCalculPredictionsPanel result={unreachable} />);
+    it('gère tous les statuts d’objectifs (Atteint, À surveiller, Hors horizon) et date vide', () => {
+        const cases: Array<{ goal: DeepGoalMilestoneSummary; badge: string }> = [
+            {
+                goal: { id: 'g1', name: 'Cible A', targetDate: '2026-08-01', probabilityPct: 100, status: 'achieved' },
+                badge: 'Atteint',
+            },
+            {
+                goal: { id: 'g2', name: 'Cible B', targetDate: '2030-01', probabilityPct: 42, status: 'at_risk' },
+                badge: 'À surveiller',
+            },
+            {
+                goal: { id: 'g3', name: 'Cible C', targetDate: '', probabilityPct: null, status: 'insufficient_data' },
+                badge: 'Hors horizon',
+            },
+        ];
 
-        const goalsCard = screen.getByRole('region', { name: /objectifs? financiers?/i });
-        expect(goalsCard).toHaveTextContent(/Aucun objectif financier/i);
-
-        const fiCard = screen.getByRole('region', { name: /indépendance financière/i });
-        expect(within(fiCard).getAllByText('Pas de donnée').length).toBeGreaterThanOrEqual(3);
+        for (const { goal, badge } of cases) {
+            const scenario = makeScenario({ goalsSummary: [goal] });
+            const { unmount } = render(
+                <FutureCoreMilestonesGrid report={makeReport(scenario)} scenario={scenario} />,
+            );
+            expect(screen.getByText(badge)).toBeInTheDocument();
+            expect(screen.getByText(goal.name)).toBeInTheDocument();
+            unmount();
+        }
     });
 
-    it('masque tous les montants, pourcentages, âges et mois en mode discret', () => {
+    it('masque intégralement montants, âges, pourcentages et noms d’objectifs en mode discret', () => {
         useFinanceStore.setState({ isPrivacyMode: true });
-        const { container } = render(<GrandCalculPredictionsPanel result={populatedResult} />);
-
-        expect(container.textContent).not.toContain('$');
-        expect(container.textContent).not.toContain('59 ans');
-        expect(container.textContent).not.toContain('300 mois');
-        expect(container.textContent).not.toContain('84,5');
-        expect(screen.getAllByText('Montant masqué').length).toBeGreaterThanOrEqual(10);
-    });
-
-    it('couvre les statuts already_completed / invalid_deadline, badge isStale, retirementMonthsEvaluated: 0, NaN et masquage des noms d’objectifs', () => {
-        const edgeResult: GrandCalculResult = {
-            ...populatedResult,
-            fiAge: { reachedPct: Number.NaN, p5Age: Number.NaN, p50Age: null, p95Age: null, horizonAge: 90 },
-            goalProbabilities: [
+        const scenario = makeScenario({
+            goalsSummary: [
                 {
-                    goalId: 'g-done',
-                    name: 'Léguer 500 k$',
-                    deadline: '2030-01',
-                    targetAmount: 500_000,
-                    probabilityPct: 100,
-                    medianShortfall: 0,
-                    status: 'already_completed',
-                },
-                {
-                    goalId: 'g-bad',
-                    name: 'Objectif sans échéance',
-                    deadline: '',
-                    targetAmount: 25_000,
-                    probabilityPct: null,
-                    medianShortfall: null,
-                    status: 'invalid_deadline',
+                    id: 'g-priv',
+                    name: 'Objectif secret 500 k$',
+                    targetDate: '2031-05-01',
+                    probabilityPct: 81.2,
+                    status: 'on_track',
                 },
             ],
-            guaranteedPurchasingPower: {
-                p95SecurityMonthlyNetReal: null,
-                p90SecurityMonthlyNetReal: null,
-                p50SecurityMonthlyNetReal: null,
-                retirementMonthsEvaluated: 0,
-            },
-        };
+        });
+        const { container } = render(
+            <FutureCoreMilestonesGrid report={makeReport(scenario)} scenario={scenario} />,
+        );
 
-        const { rerender, container } = render(<GrandCalculPredictionsPanel result={edgeResult} isStale />);
-        expect(screen.getByRole('status')).toHaveTextContent(/Paramètres modifiés/i);
-        expect(screen.getByText('Atteint')).toBeInTheDocument();
-        expect(screen.getByText('Échéance invalide')).toBeInTheDocument();
-        expect(container.textContent).not.toContain('NaN');
-        // retirementMonthsEvaluated === 0 et deadline === '' utilisent emptyAware (« Pas de donnée »)
-        expect(screen.getAllByText('Pas de donnée').length).toBeGreaterThanOrEqual(7);
-
-        // Mode discret : un nom d'objectif contenant un montant (« Léguer 500 k$ ») disparaît du DOM
-        useFinanceStore.setState({ isPrivacyMode: true });
-        rerender(<GrandCalculPredictionsPanel result={edgeResult} />);
-        expect(container.textContent).not.toContain('Léguer 500 k$');
-        expect(container.textContent).not.toContain('500 k$');
-        expect(container.textContent).not.toContain('$');
-        expect(screen.getAllByText('Valeur masquée').length).toBeGreaterThanOrEqual(2);
+        const txt = (container.textContent || '').replace(/\u00a0/g, ' ');
+        expect(txt).not.toContain('$');
+        expect(txt).not.toContain('58 ans');
+        expect(txt).not.toContain('86,5');
+        expect(txt).not.toContain('4 350');
+        expect(txt).not.toContain('Objectif secret 500 k$');
+        expect(screen.getAllByText('Montant masqué').length).toBeGreaterThanOrEqual(8);
+        expect(screen.getAllByText('Valeur masquée').length).toBeGreaterThanOrEqual(1);
     });
 });

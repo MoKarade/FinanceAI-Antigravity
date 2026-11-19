@@ -28,9 +28,6 @@ if (localChromium) test.use({ launchOptions: { executablePath: localChromium } }
 test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
 
 async function chartBox(page: Page) {
-  const voirDirect = page.getByRole('button', { name: /projection actuelle.*sans optimiser/i });
-  await voirDirect.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
-  if (await voirDirect.isVisible().catch(() => false)) await voirDirect.click();
   const chart = page.getByRole('group', { name: /Courbe de vie/ });
   await expect(chart).toBeVisible({ timeout: 15_000 });
   await chart.scrollIntoViewIfNeeded();
@@ -41,21 +38,24 @@ async function chartBox(page: Page) {
 }
 
 /**
- * Le préset « Tout » est actif UNIQUEMENT en vue complète — c'est l'observable d'`isZoomed` côté
- * écran, sans lire l'état React. [FUTUR-MOBILE-PR2] À 390 px (le viewport de CE fichier — le
- * scénario mobile de Marc), le sélecteur de période bascule en `<select>` natif : le bouton
- * « Tout » n'existe plus, remplacé par l'option `value="all"`. Les DEUX variantes existent selon
- * la largeur (`components/future/FuturePeriodSelector.tsx`) — vérifier laquelle est montée plutôt
- * que d'en supposer une, sinon `getByRole('button', …)` attend indéfiniment un élément absent.
+ * Vue complète active (`!zoom.isZoomed`) : sur mobile compact (`FuturePeriodSelector.tsx`),
+ * le bouton « Tout voir » n'est monté que lorsque la fenêtre est zoomée et « Dézoomer » est
+ * désactivé au repos.
  */
 async function toutIsActive(page: Page): Promise<boolean> {
-  const bouton = page.getByRole('button', { name: 'Tout', exact: true });
-  if (await bouton.count() > 0) {
-    // [S5-REFONTE-FUTUR] État lu sur `aria-pressed` (annoncé), plus sur une classe de couleur.
-    return (await bouton.getAttribute('aria-pressed')) === 'true';
+  const btnToutVoir = page.getByRole('button', { name: 'Tout voir', exact: true });
+  if ((await btnToutVoir.count()) > 0 && (await btnToutVoir.isVisible().catch(() => false))) {
+    return false;
   }
-  const select = page.getByRole('combobox', { name: 'Période affichée' });
-  return select.evaluate((el) => (el as HTMLSelectElement).value === 'all');
+  const btnZoomOut = page.getByRole('button', { name: 'Dézoomer', exact: true });
+  if ((await btnZoomOut.count()) > 0) {
+    return await btnZoomOut.isDisabled();
+  }
+  const boutonTout = page.getByRole('button', { name: 'Tout', exact: true });
+  if ((await boutonTout.count()) > 0) {
+    return (await boutonTout.getAttribute('aria-pressed')) === 'true';
+  }
+  return true;
 }
 
 /**
@@ -115,7 +115,7 @@ test.describe('Futur — pincement 2 doigts (contexte tactile réel)', () => {
     await attendreTout(page, false);
 
     // La fin du pincement n'a PAS figé de jour (le lever du 2e doigt émet un pointerup crédible).
-    await expect(page.locator('[data-jour-epingle]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="future-rich-tooltip"][data-pinned="true"]')).toHaveCount(0);
 
     // Resserrer (scaleFactor < 1) → retour vers la vue large. ⚠️ Gestes MODÉRÉS (0,5 ×3) : le
     // synthétiseur CDP est VERTICAL et un dézoom démarre doigts ÉCARTÉS — à 0,25 l'écart de
@@ -165,7 +165,7 @@ test.describe('Futur — pincement 2 doigts (contexte tactile réel)', () => {
     // même si un zoom était en train de se committer (cf. l'en-tête de `attendreTout`).
     await page.waitForTimeout(BUDGET_BASCULE_MS);
     expect(await toutIsActive(page)).toBe(true);
-    await expect(page.locator('[data-jour-epingle]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="future-rich-tooltip"][data-pinned="true"]')).toHaveCount(0);
 
     // 2 doigts : annulés (le geste appartient au graphe) — et il zoome RÉELLEMENT
     // (« Tout » perd son état actif : preuve que le pincement construit a traversé le hook).

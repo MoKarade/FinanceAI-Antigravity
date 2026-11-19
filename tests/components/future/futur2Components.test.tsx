@@ -2,75 +2,258 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { FutureSimulationControls } from '../../../components/future/FutureSimulationControls';
+import { FutureUnifiedInsightsPanel } from '../../../components/future/FutureUnifiedInsightsPanel';
 import { FutureYearAnatomyModal } from '../../../components/future/FutureYearAnatomyModal';
-import { FuturePrescriptiveAdvisorCard } from '../../../components/future/FuturePrescriptiveAdvisorCard';
 import { useFinanceStore } from '../../../store/useFinanceStore';
-import type { ProjectionConfig, RetirementGoal, Asset } from '../../../types';
-import type { ProjectionChartPoint, SimulationParams } from '../../../services/projection/types';
+import { Tab } from '../../../types';
+import type { ProjectionChartPoint } from '../../../services/projection/types';
+import type { DeepForecastReport, DeepScenarioOutput } from '../../../services/projection/deepForecastTypes';
 
-function baseProjection(): ProjectionConfig {
+function makeScenario(): DeepScenarioOutput {
     return {
-        years: 25,
-        returnRate: 6.5,
-        inflationRate: 2.0,
-        savingsMode: 'budget',
-        manualContribution: 0,
-        usePortfolioRate: false,
-        returnRates: { celi: 6.5, reer: 6.5, nonReg: 6.5, crypto: 8.0, cash: 2.5 },
-        manualREERRoom: 25000,
+        id: 'real_trajectory',
+        label: 'Trajectoire réelle',
+        shortDescription: 'Ancrée sur tes flux observés et la fiscalité ARC/RQ.',
+        assumptionsSummaryFr: 'Rendement neutre 6,1 %',
+        points: [],
+        milestones: {
+            fiAge: 58,
+            fiProbabilityPct: 84,
+            sustainableMonthlyNetRetirementCad: 4_200,
+            sustainableMonthlyNetP90Cad: 3_400,
+            goalsSummary: [],
+            finalNetWorthP50: 1_450_000,
+            estateNetWorthP50: 1_250_000,
+            estateTaxP50: 200_000,
+            ruinProbabilityPct: 3,
+        },
+        turningPoints: [
+            {
+                id: 'tp-fire',
+                monthIndex: 144,
+                year: 2038,
+                age: 54,
+                title: 'Atteinte du seuil FIRE',
+                summaryFr: 'Le capital projeté couvre durablement le train de vie net.',
+                proofDetailsFr: [
+                    'Épargne observée maintenue à 35 % sur 12 mois.',
+                    'Gain fiscal annuel de 2 400 $ via localisation CELI/REER.',
+                ],
+                impactCad: 120_000,
+                kind: 'milestone',
+            },
+        ],
+        appliedOptimizationsFr: [],
     };
 }
 
-function baseRetirement(): RetirementGoal {
+function makeReport(overrides: Partial<DeepForecastReport> = {}): DeepForecastReport {
+    const scenario = makeScenario();
     return {
-        targetAge: 62,
-        lifeExpectancy: 92,
-        targetMonthlyIncome: 4000,
-        governmentPension: 1800,
+        version: 1,
+        inputsSig: 'df1:insights:1',
+        createdAt: '2026-11-18T12:00:00.000Z',
+        durationMs: 900,
+        trajectoriesRun: 100_000,
+        isDeepRun: true,
+        pastDiagnostic: {
+            transactionsAnalyzed: 184,
+            monthsCovered: 12,
+            firstTransactionDate: '2025-11-01',
+            lastTransactionDate: '2026-10-31',
+            observedMonthlyIncomeCad: 6_500,
+            observedMonthlyExpensesCad: 4_120,
+            budgetedMonthlyExpensesCad: 4_000,
+            monthlySpendingGapCad: 120,
+            observedSavingsRatePct: 36.6,
+            lifestyleCreepAnnualPct: 1.4,
+            fixedExpensesSharePct: 62,
+            discretionarySharePct: 38,
+            peakSpendingMonthLabel: 'Décembre',
+            lowSpendingMonthLabel: 'Février',
+            weightedMerPct: 0.24,
+            estimatedAnnualFeeAndTaxDragCad: 380,
+            expenseVolatilityPct: 7.2,
+            findingsFr: ['Dépenses de décembre +18 % au-dessus de la moyenne.'],
+        },
+        newsBundle: {
+            collectedAtIso: '2026-11-18T12:00:00.000Z',
+            liveArticlesUsed: 4,
+            offlineFallbackUsed: false,
+            portfolioSentimentScore: 0.35,
+            portfolioSentimentLabel: 'Modérément porteur',
+            annualizedReturnAdjustmentPct: 0.3,
+            volatilityMultiplier: 0.96,
+            macroHeadlineFr: 'Baisse graduelle des taux directeurs attendue au Canada.',
+            keySignals: [
+                {
+                    id: 'sig-1',
+                    title: 'Taux directeur BoC',
+                    category: 'Macro',
+                    impactLabel: '+0,3 %/an',
+                    plainFrench: 'Soutient les obligations et réduit la charge hypothécaire au renouvellement.',
+                    direction: 'positif',
+                    isLive: true,
+                },
+            ],
+            aiSynthesisFr: 'Positionnement équilibré entre actions mondiales et liquidités.',
+            usedGemini: true,
+        },
+        valoriaSummary: {
+            consensus100: 78,
+            consensusTitle: 'Constructif',
+            evaluatedAssetsCount: 6,
+            regimeName: 'Expansion modérée',
+            shortTermRatePct: 5.8,
+            longTermRatePct: 6.4,
+        },
+        scenarios: {
+            real_trajectory: scenario,
+            prudent_stress: scenario,
+            ai_optimized: scenario,
+            favorable_tailwinds: scenario,
+        },
+        concreteActions: [
+            {
+                id: 'act-celi',
+                title: 'Maximiser les cotisations CELI avant le non-enregistré',
+                plainFrenchWhy: 'Évite l’imposition annuelle des dividendes et gains en capital.',
+                gainCad: 42_000,
+                freedomMonthsGained: 9,
+                targetTab: Tab.INVESTMENTS,
+                appliesAiScenario: true,
+            },
+        ],
+        ...overrides,
     };
 }
 
-describe('Lot 6 — Composants UI Futur 2.0 (F22, F23, F24)', () => {
+describe('Futur 4.0 — FutureUnifiedInsightsPanel & FutureYearAnatomyModal', () => {
     beforeEach(() => {
         useFinanceStore.setState({ isPrivacyMode: false });
     });
 
-    it('FutureSimulationControls bascule les 3 modes (dépenses, rendements, puissance MC) et ouvre Anatomie', () => {
-        const onUpdate = vi.fn();
-        const setRunMC = vi.fn();
-        const onOpenAnatomy = vi.fn();
-        const proj = baseProjection();
+    it('FutureUnifiedInsightsPanel affiche passé réel, actualités, tournants dépliables avec focus courbe et actions chiffrées', () => {
+        const onFocusMonth = vi.fn();
+        const onSelectScenario = vi.fn();
+        const onNavigateTab = vi.fn();
+        const report = makeReport();
+        const scenario = report.scenarios.real_trajectory;
 
         render(
-            <FutureSimulationControls
-                projection={proj}
-                runMC={false}
-                setRunMC={setRunMC}
-                onUpdateProjection={onUpdate}
-                onOpenYearAnatomy={onOpenAnatomy}
-                selectedYear={2028}
+            <FutureUnifiedInsightsPanel
+                report={report}
+                scenario={scenario}
+                onFocusMonth={onFocusMonth}
+                onSelectScenario={onSelectScenario}
+                onNavigateTab={onNavigateTab}
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Comportement réel' }));
-        expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ expenseProjectionMode: 'real' }));
+        // Partie A : Passé réel + actualités en direct + consensus Valoria
+        expect(screen.getByText(/Diagnostic de ton passé réel/i)).toBeInTheDocument();
+        expect(screen.getByText(/184 opérations · 12 mois/)).toBeInTheDocument();
+        expect(screen.getByText(/36,6\s*%/)).toBeInTheDocument();
+        expect(screen.getByText(/En direct \(4 articles\)/i)).toBeInTheDocument();
+        expect(screen.getByText(/Synthèse Gemini/i)).toBeInTheDocument();
+        expect(screen.getByText(/Valoria : Constructif \(Expansion modérée\)/i)).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Normes IQPF 2026' }));
-        expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ returnAssumptionsMode: 'iqpf' }));
+        // Partie B : Tournants majeurs + preuves dépliables + focus courbe
+        expect(screen.getByText(/Atteinte du seuil FIRE/i)).toBeInTheDocument();
+        expect(screen.queryByText(/Gain fiscal annuel de 2 400/)).not.toBeInTheDocument();
 
-        const mcSelect = screen.getByRole('combobox', { name: /Puissance Monte Carlo/i });
-        fireEvent.change(mcSelect, { target: { value: 'deep_search' } });
-        expect(setRunMC).toHaveBeenCalledWith(true);
-        expect(onUpdate).toHaveBeenCalledWith(
-            expect.objectContaining({ mcPowerTier: 'deep_search', monteCarloIterations: 10000 }),
+        const toggleBtn = screen.getByRole('button', { name: /Voir les chiffres/i });
+        expect(toggleBtn).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(toggleBtn);
+        expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByText(/Gain fiscal annuel de 2 400/)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /Voir sur la courbe/i }));
+        expect(onFocusMonth).toHaveBeenCalledWith(144);
+
+        // Partie C : Actions concrètes -> bascule Optimisé IA + navigation onglet cible
+        fireEvent.click(screen.getByRole('button', { name: /Appliquer dans Optimisé IA/i }));
+        expect(onSelectScenario).toHaveBeenCalledWith('ai_optimized');
+
+        fireEvent.click(screen.getByRole('button', { name: /Ouvrir Placements/i }));
+        expect(onNavigateTab).toHaveBeenCalledWith(Tab.INVESTMENTS);
+    });
+
+    it('FutureUnifiedInsightsPanel respecte no-fake-data et masque tout en mode discret', () => {
+        const emptyReport = makeReport({
+            pastDiagnostic: {
+                transactionsAnalyzed: 0,
+                monthsCovered: 0,
+                firstTransactionDate: null,
+                lastTransactionDate: null,
+                observedMonthlyIncomeCad: null,
+                observedMonthlyExpensesCad: null,
+                budgetedMonthlyExpensesCad: null,
+                monthlySpendingGapCad: null,
+                observedSavingsRatePct: null,
+                lifestyleCreepAnnualPct: null,
+                fixedExpensesSharePct: null,
+                discretionarySharePct: null,
+                peakSpendingMonthLabel: null,
+                lowSpendingMonthLabel: null,
+                weightedMerPct: null,
+                estimatedAnnualFeeAndTaxDragCad: null,
+                expenseVolatilityPct: null,
+                findingsFr: [],
+            },
+            newsBundle: {
+                collectedAtIso: '2026-11-18T12:00:00.000Z',
+                liveArticlesUsed: 0,
+                offlineFallbackUsed: true,
+                portfolioSentimentScore: null,
+                portfolioSentimentLabel: 'Hors ligne',
+                annualizedReturnAdjustmentPct: 0,
+                volatilityMultiplier: 1,
+                macroHeadlineFr: 'Mode hors-ligne',
+                keySignals: [],
+                aiSynthesisFr: null,
+                usedGemini: false,
+            },
+            valoriaSummary: null,
+            concreteActions: [],
+        });
+        const emptyScenario: DeepScenarioOutput = {
+            ...makeScenario(),
+            turningPoints: [],
+        };
+
+        const { rerender, container } = render(
+            <FutureUnifiedInsightsPanel
+                report={emptyReport}
+                scenario={emptyScenario}
+                onFocusMonth={vi.fn()}
+                onSelectScenario={vi.fn()}
+            />,
         );
 
-        fireEvent.change(mcSelect, { target: { value: 'off' } });
-        expect(setRunMC).toHaveBeenCalledWith(false);
+        expect(screen.getByText(/Historique non mesuré/i)).toBeInTheDocument();
+        expect(screen.getByText(/Repli hors-ligne/i)).toBeInTheDocument();
+        expect(screen.getByText(/Aucun point d'inflexion majeur détecté/i)).toBeInTheDocument();
+        expect(screen.getByText(/Aucune action prioritaire supplémentaire identifiée/i)).toBeInTheDocument();
+        expect(screen.getAllByText('Pas de donnée').length).toBeGreaterThanOrEqual(4);
 
-        fireEvent.click(screen.getByRole('button', { name: /Anatomie d'une année/i }));
-        expect(onOpenAnatomy).toHaveBeenCalledTimes(1);
+        // Mode discret sur le rapport peuplé
+        const richReport = makeReport();
+        useFinanceStore.setState({ isPrivacyMode: true });
+        rerender(
+            <FutureUnifiedInsightsPanel
+                report={richReport}
+                scenario={richReport.scenarios.real_trajectory}
+                onFocusMonth={vi.fn()}
+                onSelectScenario={vi.fn()}
+            />,
+        );
+        const txt = (container.textContent || '').replace(/\u00a0/g, ' ');
+        expect(txt).not.toContain('36,6');
+        expect(txt).not.toContain('42');
+        expect(txt).not.toContain('380');
+        expect(txt).not.toContain('54 ans');
+        expect(txt).not.toContain('$');
     });
 
     it('FutureYearAnatomyModal agrège les 4 panneaux, respecte No-Fake-Data (—) et masque les montants en mode discret', () => {
@@ -109,7 +292,6 @@ describe('Lot 6 — Composants UI Futur 2.0 (F22, F23, F24)', () => {
         expect(screen.getByText(/2\. Impôts & Cotisations/i)).toBeTruthy();
         expect(screen.getByText(/3\. Dépenses & Famille/i)).toBeTruthy();
         expect(screen.getByText(/4\. Bilan & Portefeuille/i)).toBeTruthy();
-        // Champ absent (ex: Revenus locatifs nets) -> tiret cadratin, pas un faux 0 $
         expect(screen.getAllByText('—').length).toBeGreaterThan(0);
 
         useFinanceStore.setState({ isPrivacyMode: true });
@@ -126,64 +308,5 @@ describe('Lot 6 — Composants UI Futur 2.0 (F22, F23, F24)', () => {
 
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(onClose).toHaveBeenCalled();
-    });
-
-    it('FuturePrescriptiveAdvisorCard affiche les actions chiffrées par impact et permet de simuler un levier', () => {
-        const onApplyLever = vi.fn();
-        const proj = baseProjection();
-        const ret = baseRetirement();
-        const params: SimulationParams = {
-            projection: proj,
-            calculatedStartingCash: 10000,
-            liveCSVBalances: { CELI: 70000, CELIAPP: 0, REER: 200000, NON_ENREG: 30000, CRYPTO: 0, REEE: 0 },
-            realEstateGoals: [],
-            debts: [{ id: 'd1', name: 'Carte', balance: 6000, interestRate: 19.9, minimumPayment: 200, category: 'CreditCard' }],
-            childGoals: [],
-            travelGoals: [],
-            lifeEvents: [],
-            retirementGoal: ret,
-            config: {
-                users: [
-                    { name: 'Alex', netSalary: 6500, grossSalary: 11250, color: '#3b82f6', age: 39 },
-                    { name: 'Sam', netSalary: 0, grossSalary: 0, color: '#10b981', age: 39 },
-                ],
-                splitMode: '50/50',
-            },
-            baseGrossAnnual: 135000,
-            baseNetAnnual: 78000,
-            currentRentExpense: 1600,
-            baseMonthlyExpenses: 4000,
-            startYear: 2026,
-            startMonth: 0,
-        };
-        const assets: Asset[] = [
-            {
-                symbol: 'VOO',
-                name: 'S&P 500 ETF',
-                accountType: 'CELI',
-                quantity: 100,
-                currentPrice: 500,
-                currency: 'USD',
-                performance: 0,
-                dateBought: '2024-02-01',
-            },
-        ];
-
-        render(
-            <FuturePrescriptiveAdvisorCard
-                params={params}
-                assets={assets}
-                fxRates={{ USD: 1.38 }}
-                projection={proj}
-                retirementGoal={ret}
-                onApplyLever={onApplyLever}
-            />,
-        );
-
-        expect(screen.getByText(/Plan d'action prescriptif chiffré/i)).toBeTruthy();
-        const simButtons = screen.getAllByRole('button', { name: /Simuler ce levier/i });
-        expect(simButtons.length).toBeGreaterThan(0);
-        fireEvent.click(simButtons[0]);
-        expect(onApplyLever).toHaveBeenCalledTimes(1);
     });
 });

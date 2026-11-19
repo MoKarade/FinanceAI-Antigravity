@@ -1,11 +1,12 @@
 /**
- * Tests E2E Playwright — Futur 2.0 : Vue « Anatomie d'une Année » (PR [FUTUR-2.0-ANATOMIE-ANNEE])
+ * Tests E2E Playwright — Futur 4.0 : Modale « Anatomie d'une année »
  *
  * Vérifie :
- * 1. Déclenchement de la modale/tiroir annuel au clic sur une année ou depuis le PanneauJour.
- * 2. Présence des 4 dimensions d'analyse : Revenus, Impôts & Cotisations, Dépenses & Famille, Bilan & Portefeuille.
- * 3. Fermeture propre via touche Échap restaurant le focus sur le déclencheur.
- * 4. Respect du formatage en dollars canadiens (formatCAD) sans aucune valeur brute non formatée.
+ * 1. Ouverture de la modale depuis le bouton `Anatomie` de la barre d'outils de la courbe.
+ * 2. Présence des 4 dimensions d'analyse : Revenus & Rentes, Impôts & Cotisations, Dépenses & Famille, Bilan & Portefeuille.
+ * 3. Navigation entre les années projetées via le sélecteur et les boutons Précédente / Suivante.
+ * 4. Fermeture propre via touche Échap restaurant le focus sur le bouton `Anatomie`.
+ * 5. Formatage en dollars canadiens sans NaN / undefined / null.
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -15,61 +16,77 @@ const localChromium = process.env.PW_LOCAL_CHROMIUM;
 if (localChromium) test.use({ launchOptions: { executablePath: localChromium } });
 
 async function preparerPageFutur(page: Page): Promise<void> {
-    await page.addInitScript(scriptBypassOnboarding());
-    await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
-    const btnLocal = page.getByRole('button', { name: /Accéder directement à mon dossier local/i });
-    await btnLocal.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
-    if (await btnLocal.isVisible().catch(() => false)) {
-        await btnLocal.click();
-    }
-    await activateTestMode(page);
-    await page.goto('/#FUTURE');
-    await page.waitForLoadState('domcontentloaded');
-    await ecarterLeRail(page);
+  await page.addInitScript(scriptBypassOnboarding());
+  await page.goto('/');
+  await page.waitForLoadState('domcontentloaded');
+  const btnLocal = page.getByRole('button', { name: /Accéder directement à mon dossier local/i });
+  await btnLocal.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
+  if (await btnLocal.isVisible().catch(() => false)) {
+    await btnLocal.click();
+  }
+  await activateTestMode(page);
+  await page.goto('/#FUTURE');
+  await page.waitForLoadState('domcontentloaded');
+  await ecarterLeRail(page);
 
-    const voirDirect = page.getByRole('button', { name: /projection actuelle.*sans optimiser/i });
-    await voirDirect.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
-    if (await voirDirect.isVisible().catch(() => false)) {
-        await voirDirect.click();
-    }
-    await expect(page.getByRole('group', { name: /Courbe de vie/ })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('group', { name: /Courbe de vie/ })).toBeVisible({ timeout: 20_000 });
 }
 
-test.describe('Futur 2.0 — Modale et Vue Interactive « Anatomie d\'une Année »', () => {
-    test.setTimeout(120_000);
+test.describe("Futur 4.0 — Modale « Anatomie d'une année »", () => {
+  test.setTimeout(120_000);
 
-    test('L\'interaction avec le panneau détail ouvre une vue complète au dollar près', async ({ page }) => {
-        await preparerPageFutur(page);
+  test("L'interaction avec le bouton Anatomie ouvre les 4 dimensions annuelles et restaure le focus sur Échap", async ({ page }) => {
+    await preparerPageFutur(page);
 
-        // Bouton d'accès au détail dans PanneauJour ou barre d'outils
-        const boutonDetail = page.getByRole('button', { name: /détail complet|anatomie/i });
-        await boutonDetail.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
+    const boutonAnatomie = page.getByRole('button', { name: 'Anatomie', exact: true });
+    await expect(boutonAnatomie).toBeVisible();
+    await boutonAnatomie.click();
 
-        if (await boutonDetail.isVisible().catch(() => false)) {
-            await boutonDetail.click();
+    const dialogue = page.getByRole('dialog');
+    await expect(dialogue).toBeVisible({ timeout: 8_000 });
+    await expect(dialogue.getByRole('heading', { name: /Anatomie d'une année/i })).toBeVisible();
 
-            // Vérifie l'ouverture du dialogue
-            const dialogue = page.getByRole('dialog');
-            await expect(dialogue).toBeVisible({ timeout: 8_000 });
+    for (const dimension of [
+      /1\.\s*Revenus & Rentes/i,
+      /2\.\s*Impôts & Cotisations/i,
+      /3\.\s*Dépenses & Famille/i,
+      /4\.\s*Bilan & Portefeuille/i,
+    ]) {
+      await expect(dialogue.getByText(dimension).first()).toBeVisible();
+    }
 
-            // Règle d'accessibilité : fermeture via la touche Échap
-            await page.keyboard.press('Escape');
-            await expect(dialogue).toBeHidden();
-        } else {
-            // Repli gracieux : vérifie la carte PanneauJour qui porte les métriques de base
-            const panneauJour = page.locator('main').getByText(/valeur nette|flux du jour/i);
-            await expect(panneauJour.first()).toBeVisible();
-        }
-    });
+    // Navigation entre années
+    const selectAnnee = dialogue.getByLabel("Choisir l'année projetée");
+    await expect(selectAnnee).toBeVisible();
+    const valeurInitiale = await selectAnnee.inputValue();
 
-    test('Les montants affichés dans la vue détaillée sont formatés en dollars canadiens (aucun NaN ni 0 artificiel)', async ({ page }) => {
-        await preparerPageFutur(page);
+    const btnSuivante = dialogue.getByRole('button', { name: /Suivante/i });
+    if (await btnSuivante.isEnabled()) {
+      await btnSuivante.click();
+      await expect(selectAnnee).not.toHaveValue(valeurInitiale);
+    }
 
-        // Vérifie qu'aucun texte brut ne contient "NaN" ou "undefined"
-        const textePage = await page.locator('main').innerText();
-        expect(textePage).not.toContain('NaN $');
-        expect(textePage).not.toContain('undefined $');
-        expect(textePage).not.toContain('null $');
-    });
+    // Fermeture via Échap
+    await page.keyboard.press('Escape');
+    await expect(dialogue).toBeHidden();
+    await expect(boutonAnatomie).toBeFocused();
+  });
+
+  test('Les montants affichés dans Futur et Anatomie sont formatés en CAD sans NaN ni undefined', async ({ page }) => {
+    await preparerPageFutur(page);
+
+    const textePage = await page.locator('main').innerText();
+    expect(textePage).not.toContain('NaN');
+    expect(textePage).not.toContain('undefined');
+    expect(textePage).not.toContain('null $');
+
+    await page.getByRole('button', { name: 'Anatomie', exact: true }).click();
+    const dialogue = page.getByRole('dialog');
+    await expect(dialogue).toBeVisible({ timeout: 8_000 });
+    const texteModale = await dialogue.innerText();
+    expect(texteModale).toMatch(/\$\s*CA|\$/);
+    expect(texteModale).not.toContain('NaN');
+    expect(texteModale).not.toContain('undefined');
+    await page.keyboard.press('Escape');
+  });
 });

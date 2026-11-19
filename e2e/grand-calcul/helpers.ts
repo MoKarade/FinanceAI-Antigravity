@@ -1,69 +1,94 @@
 /**
- * Helpers Playwright boîte noire partagés pour la suite E2E Grand Calcul (Tiers 1 à 4).
+ * Helpers partagés pour la suite E2E Futur 4.0 (`e2e/grand-calcul/**`).
  *
- * Zéro couplage interne : aucune importation depuis `services/`, `store/` ou `components/`.
- * Seul `STORAGE_KEYS` (`utils/storageKeys.ts`) est importé pour respecter la garde du registre.
+ * Contrats Futur 4.0 alignés avec :
+ * - `components/future/FutureScenarioHeader.tsx`
+ * - `components/future/FutureRichTooltip.tsx`
+ * - `components/future/FutureCoreMilestonesGrid.tsx`
+ * - `components/future/FutureUnifiedInsightsPanel.tsx`
+ * - `components/FutureProjection.tsx`
+ * - `services/deepForecastStore.ts` (IndexedDB `financeai-deep-forecast` / store `applied_reports`)
  */
+
 import { expect, type Locator, type Page } from '@playwright/test';
 import { activateTestMode, ecarterLeRail, scriptBypassOnboarding } from '../helpers/setup';
-import { STORAGE_KEYS } from '../../utils/storageKeys';
 
-export type PersonaTestId =
+export type PersonaId =
   | 'couple-confort'
-  | 'lea-fauchee'
-  | 'karim-immigre'
   | 'couple-dettes'
   | 'pre-retraite-riche'
+  | 'lea-fauchee'
+  | 'karim-immigre'
+  | 'gilles-actif-decaisse'
   | 'jeune-couple-dink'
-  | 'autonome-monoparentale'
-  | 'gilles-actif-decaisse';
+  | 'autonome-monoparentale';
 
-export interface OptionsLancementGrandCalcul {
-  iterations?: number;
-  regimesMacro?: boolean;
-  crisesHistoriques?: boolean;
-  timeoutMs?: number;
-}
+export type ScenarioLabel =
+  | 'Trajectoire réelle'
+  | 'Prudent / Stress'
+  | 'Optimisé IA'
+  | 'Favorable';
 
-export interface CollecteurErreurs {
-  pageErrors: string[];
+export interface ErrorCollector {
   consoleErrors: string[];
+  pageErrors: string[];
+  serverErrors: string[];
+  assertClean: () => void;
 }
 
-export function scriptBypassGates(): string {
-  return `
-    ${scriptBypassOnboarding()}
-    try {
-      sessionStorage.setItem('financeai:offline_bypass', '1');
-    } catch {
-      // sessionStorage indisponible
-    }
-  `;
-}
-
-export function attacherCollecteursErreurs(page: Page): CollecteurErreurs {
-  const pageErrors: string[] = [];
+/**
+ * Attache des écouteurs console / pageerror / HTTP >= 500 sur la page Playwright.
+ */
+export function attacherCapteurErreurs(page: Page): ErrorCollector {
   const consoleErrors: string[] = [];
-  page.on('pageerror', (err) => {
-    pageErrors.push(err.message);
-  });
+  const pageErrors: string[] = [];
+  const serverErrors: string[] = [];
+
   page.on('console', (msg) => {
     if (msg.type() === 'error') {
       consoleErrors.push(msg.text());
     }
   });
-  return { pageErrors, consoleErrors };
+  page.on('pageerror', (err) => {
+    pageErrors.push(err.message);
+  });
+  page.on('response', (res) => {
+    if (res.status() >= 500) {
+      serverErrors.push(`${res.status()} ${res.url()}`);
+    }
+  });
+
+  return {
+    consoleErrors,
+    pageErrors,
+    serverErrors,
+    assertClean: () => {
+      expect(consoleErrors, `Erreurs console inattendues : ${consoleErrors.join(' | ')}`).toEqual([]);
+      expect(pageErrors, `Erreurs non interceptées : ${pageErrors.join(' | ')}`).toEqual([]);
+      expect(serverErrors, `Erreurs HTTP >= 500 : ${serverErrors.join(' | ')}`).toEqual([]);
+    },
+  };
 }
 
+/**
+ * Passe l'écran local / offline gate si présent, puis attend que le DOM principal soit prêt.
+ */
 export async function passerGardeLocale(page: Page): Promise<void> {
-  const btnLocal = page.getByRole('button', { name: /Accéder directement à mon dossier local/i });
-  await btnLocal.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
+  const btnLocal = page
+    .getByRole('button', {
+      name: /Accéder directement à mon dossier local|Continuer en mode local|Continuer sans compte/i,
+    })
+    .first();
+  await btnLocal.waitFor({ state: 'visible', timeout: 3_000 }).catch(() => {});
   if (await btnLocal.isVisible().catch(() => false)) {
     await btnLocal.click();
   }
 }
 
-async function fermerToastsSiPresents(page: Page): Promise<void> {
+/**
+ * Ferme les toasts encore visibles pour éviter qu'ils n'interceptent un clic dans le bas du graphe.
+ */
+export async function fermerToastsSiPresents(page: Page): Promise<void> {
   const zone = page.getByRole('region', { name: 'Notifications' });
   const fermer = zone.getByRole('button', { name: 'Fermer la notification' });
   for (let i = 0; i < 4 && (await fermer.count()) > 0; i++) {
@@ -71,628 +96,451 @@ async function fermerToastsSiPresents(page: Page): Promise<void> {
   }
 }
 
-export async function ouvrirDossierLocalSansModeTest(page: Page, hash = '#FUTURE'): Promise<void> {
-  await page.addInitScript(scriptBypassGates());
-  await page.goto(`/?nogate=1${hash}`);
+/**
+ * Charge un persona spécifique dans le panneau Mode Test (`/#SETTINGS`).
+ */
+export async function chargerPersonaDansModeTest(page: Page, personaId: PersonaId): Promise<void> {
+  await page.goto('/#SETTINGS');
   await page.waitForLoadState('domcontentloaded');
   await passerGardeLocale(page);
   await ecarterLeRail(page);
-}
 
-export async function revelerCourbeProjection(page: Page): Promise<void> {
-  const voirDirect = page.getByRole('button', { name: /projection actuelle.*sans optimiser/i });
-  const courbe = page.getByRole('group', { name: /Courbe de vie/ });
-  await expect(courbe.or(voirDirect)).toBeVisible({ timeout: 20_000 });
-  if (await voirDirect.isVisible().catch(() => false)) {
-    await voirDirect.click();
-  }
-  await expect(courbe).toBeVisible({ timeout: 20_000 });
-}
+  const selectPersona = page
+    .locator('select')
+    .filter({ has: page.locator(`option[value="${personaId}"]`) })
+    .first();
+  await expect(selectPersona).toBeVisible({ timeout: 10_000 });
 
-export async function changerPersona(page: Page, personaId: PersonaTestId): Promise<void> {
-  const selectBanner = page.getByLabel('Changer de persona de test');
-  if (await selectBanner.isVisible().catch(() => false)) {
-    await selectBanner.selectOption(personaId);
-    await expect(selectBanner).toHaveValue(personaId);
-    await fermerToastsSiPresents(page);
-    return;
+  if ((await selectPersona.inputValue()) !== personaId) {
+    await selectPersona.selectOption(personaId);
+    await page.waitForTimeout(300);
   }
-  await page.goto('/?nogate=1#SETTINGS');
-  await page.waitForLoadState('domcontentloaded');
-  await ecarterLeRail(page);
-  const libelles: Record<PersonaTestId, RegExp> = {
-    'couple-confort': /Couple à l'aise/i,
-    'lea-fauchee': /Léa/i,
-    'karim-immigre': /Karim/i,
-    'couple-dettes': /Sophie/i,
-    'pre-retraite-riche': /Diane/i,
-    'jeune-couple-dink': /Maya/i,
-    'autonome-monoparentale': /Nadia/i,
-    'gilles-actif-decaisse': /Gilles/i,
-  };
-  await page.getByRole('group', { name: /persona/i }).getByRole('button', { name: libelles[personaId] }).click();
-  await page.waitForFunction(() => document.body.innerText.includes('MODE TEST'), { timeout: 8_000 });
   await fermerToastsSiPresents(page);
 }
 
-export async function ouvrirFuturAvecPersona(
+/**
+ * Prépare la page sur `#FUTURE` avec le persona demandé actif.
+ */
+export async function preparerFuturAvecPersona(
   page: Page,
-  personaId: PersonaTestId = 'couple-confort',
-  opts: { revelerCourbe?: boolean } = {},
+  personaId: PersonaId = 'couple-confort',
 ): Promise<void> {
-  await page.addInitScript(scriptBypassGates());
-  await page.goto('/?nogate=1');
+  await page.addInitScript(scriptBypassOnboarding());
+  await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
   await passerGardeLocale(page);
   await activateTestMode(page);
   if (personaId !== 'couple-confort') {
-    await changerPersona(page, personaId);
+    await chargerPersonaDansModeTest(page, personaId);
   }
-  await page.goto('/?nogate=1#FUTURE');
+  await naviguerVersFutur(page);
+}
+
+/**
+ * Navigue vers `#FUTURE` et attend que la courbe et le Bloc 1 soient visibles.
+ */
+export async function naviguerVersFutur(page: Page): Promise<void> {
+  await page.goto('/#FUTURE');
   await page.waitForLoadState('domcontentloaded');
   await ecarterLeRail(page);
-  if (opts.revelerCourbe !== false) {
-    await revelerCourbeProjection(page);
-  }
+  await fermerToastsSiPresents(page);
+  await expect(page.getByRole('group', { name: /Courbe de vie/ })).toBeVisible({ timeout: 20_000 });
+  await expect(zoneScenarios(page)).toBeVisible({ timeout: 15_000 });
 }
 
-export function zoneGrandCalcul(page: Page): Locator {
-  return page.locator('main').getByRole('region', { name: /Grand Calcul/i }).first();
-}
-
-export function zonePredictions(page: Page): Locator {
-  return page.locator('main').getByRole('region', { name: /Prédictions|Jalons.*prédictions/i }).first();
-}
-
-export function cartePredictionR2(page: Page, titreRegex: RegExp): Locator {
-  const pred = zonePredictions(page);
-  return pred
-    .getByRole('region', { name: titreRegex })
-    .or(pred.locator('article').filter({ hasText: titreRegex }))
-    .first();
-}
-
-export function zoneExplications(page: Page): Locator {
-  return page.locator('main').getByRole('region', { name: /Explications|Pourquoi la courbe/i }).first();
-}
-
-export function boutonLancerGrandCalcul(panel: Locator): Locator {
-  return panel.getByRole('button', {
-    name: /Lancer.*Grand Calcul|Calculer.*Grand Calcul|Relancer|Mettre à jour/i,
-  }).first();
-}
-
-export function boutonAnnulerGrandCalcul(panel: Locator): Locator {
-  return panel.getByRole('button', { name: /Annuler/i }).first();
-}
-
-export function barreProgressionGrandCalcul(panel: Locator): Locator {
-  return panel.getByRole('progressbar').first();
-}
-
-export function badgeParametresModifies(panel: Locator): Locator {
-  return panel.getByRole('status').filter({ hasText: /paramètres modifiés|pas à jour|obsolète/i }).first();
-}
-
-async function reglerBascule(controle: Locator, actif: boolean): Promise<void> {
-  const cible = controle.first();
-  await expect(cible).toBeVisible({ timeout: 10_000 });
-  await expect(cible).toBeEnabled({ timeout: 5_000 });
-  const pressed = await cible.getAttribute('aria-pressed');
-  const checked = await cible.getAttribute('aria-checked');
-  let courant = false;
-  if (pressed !== null) {
-    courant = pressed === 'true';
-  } else if (checked !== null) {
-    courant = checked === 'true';
+/**
+ * Quitte le mode test via le bandeau ou `/#SETTINGS`.
+ */
+export async function quitterModeTest(page: Page): Promise<void> {
+  const btnBandeau = page.getByRole('button', { name: /Quitter le mode test/i }).first();
+  if (await btnBandeau.isVisible().catch(() => false)) {
+    await btnBandeau.click();
   } else {
-    courant = await cible.isChecked().catch(() => false);
-  }
-  if (courant !== actif) {
-    await cible.click();
-  }
-}
-
-export async function estBasculeGrandCalculActive(panel: Locator, etiquette: RegExp): Promise<boolean> {
-  const controle = panel
-    .locator('button, input, [role="switch"], [role="checkbox"]')
-    .filter({ hasText: etiquette })
-    .or(panel.getByRole('checkbox', { name: etiquette }))
-    .or(panel.getByRole('switch', { name: etiquette }))
-    .first();
-  await expect(controle).toBeVisible({ timeout: 10_000 });
-  const pressed = await controle.getAttribute('aria-pressed');
-  if (pressed !== null) return pressed === 'true';
-  const checked = await controle.getAttribute('aria-checked');
-  if (checked !== null) return checked === 'true';
-  return controle.isChecked();
-}
-
-export async function configurerGrandCalcul(
-  page: Page,
-  opts: OptionsLancementGrandCalcul = {},
-): Promise<void> {
-  const panel = zoneGrandCalcul(page);
-  await expect(panel).toBeVisible({ timeout: 15_000 });
-
-  if (typeof opts.iterations === 'number') {
-    const cible = opts.iterations;
-    const champ = panel.getByRole('spinbutton', { name: /trajectoires|itérations|simulations/i }).first();
-    const glissiere = panel.getByRole('slider', { name: /trajectoires|itérations|simulations/i }).first();
-    const etiquettePreset = new RegExp(
-      String(cible).replace(/\B(?=(\d{3})+(?!\d))/g, '[\\s\\u00a0\\u202f]?'),
-    );
-    const boutonPreset = panel.getByRole('button', { name: etiquettePreset }).first();
-
-    const presetVisible = (await boutonPreset.count()) > 0 && (await boutonPreset.isVisible().catch(() => false));
-    const champVisible = (await champ.count()) > 0 && (await champ.isVisible().catch(() => false));
-    const glissiereVisible = (await glissiere.count()) > 0 && (await glissiere.isVisible().catch(() => false));
-    expect(presetVisible || champVisible || glissiereVisible).toBe(true);
-
-    if (presetVisible) {
-      await expect(boutonPreset).toBeEnabled({ timeout: 5_000 });
-      await boutonPreset.click();
-    } else if (champVisible) {
-      await expect(champ).toBeEnabled({ timeout: 5_000 });
-      await champ.fill(String(cible));
-      await champ.blur();
-    } else if (glissiereVisible) {
-      await expect(glissiere).toBeEnabled({ timeout: 5_000 });
-      await glissiere.fill(String(cible));
-    }
-  }
-
-  if (typeof opts.regimesMacro === 'boolean') {
-    const basculeRegimes = panel.locator('button, input, [role="switch"], [role="checkbox"]').filter({
-      hasText: /régimes macro/i,
-    }).or(panel.getByRole('checkbox', { name: /régimes macro/i }))
-      .or(panel.getByRole('switch', { name: /régimes macro/i }));
-    await reglerBascule(basculeRegimes, opts.regimesMacro);
-  }
-
-  if (typeof opts.crisesHistoriques === 'boolean') {
-    const basculeCrises = panel.locator('button, input, [role="switch"], [role="checkbox"]').filter({
-      hasText: /crises historiques/i,
-    }).or(panel.getByRole('checkbox', { name: /crises historiques/i }))
-      .or(panel.getByRole('switch', { name: /crises historiques/i }));
-    await reglerBascule(basculeCrises, opts.crisesHistoriques);
-  }
-}
-
-export async function lancerGrandCalcul(
-  page: Page,
-  opts: OptionsLancementGrandCalcul = {},
-): Promise<void> {
-  await configurerGrandCalcul(page, opts);
-  const panel = zoneGrandCalcul(page);
-  const btn = boutonLancerGrandCalcul(panel);
-  await expect(btn).toBeVisible({ timeout: 10_000 });
-  await expect(btn).toBeEnabled({ timeout: 10_000 });
-  await btn.click();
-}
-
-export async function attendreFinGrandCalcul(page: Page, timeoutMs = 120_000): Promise<void> {
-  const panel = zoneGrandCalcul(page);
-  const cancel = boutonAnnulerGrandCalcul(panel);
-  const progress = barreProgressionGrandCalcul(panel);
-  await expect(cancel).toHaveCount(0, { timeout: timeoutMs });
-  await expect
-    .poll(
-      async () => {
-        const visible = await progress.isVisible().catch(() => false);
-        if (!visible) return true;
-        return (await progress.getAttribute('aria-valuenow')) === '100';
-      },
-      { timeout: 15_000 },
-    )
-    .toBe(true);
-  await expect(boutonLancerGrandCalcul(panel)).toBeEnabled({ timeout: 10_000 });
-}
-
-export async function lancerGrandCalculEtAttendre(
-  page: Page,
-  opts: OptionsLancementGrandCalcul = {},
-): Promise<void> {
-  await lancerGrandCalcul(page, opts);
-  await attendreFinGrandCalcul(page, opts.timeoutMs ?? 120_000);
-}
-
-export async function toggleModeDiscret(page: Page, enable: boolean): Promise<void> {
-  const vp = page.viewportSize();
-  const isMobile = (vp?.width ?? 1280) < 1024;
-  const targetName = enable ? 'Activer le mode discret' : 'Quitter le mode discret';
-  if (isMobile) {
-    const plusBtn = page.getByRole('button', { name: "Plus d'options" });
-    if ((await plusBtn.getAttribute('aria-expanded')) !== 'true') {
-      await plusBtn.click();
-    }
-    await page.getByRole('button', { name: targetName }).click();
-    if ((await plusBtn.getAttribute('aria-expanded')) === 'true') {
-      await plusBtn.click();
-    }
-  } else {
-    await page.getByRole('button', { name: targetName }).click();
-  }
-}
-
-export async function modifierParametresRetraiteDansProfil(
-  page: Page,
-  modifs: { targetAge?: number; lifeExpectancy?: number },
-): Promise<void> {
-  await page.goto('/?nogate=1#PROFILE');
-  await page.waitForLoadState('domcontentloaded');
-  await ecarterLeRail(page);
-  const ongletRetraite = page.getByRole('tab', { name: /Retraite et enfants/i });
-  await expect(ongletRetraite).toBeVisible({ timeout: 10_000 });
-  await ongletRetraite.click();
-
-  if (typeof modifs.targetAge === 'number') {
-    const champAge = page.getByLabel('Âge de retraite cible');
-    await expect(champAge).toBeVisible({ timeout: 8_000 });
-    await champAge.fill(String(modifs.targetAge));
-    await champAge.blur();
-  }
-
-  if (typeof modifs.lifeExpectancy === 'number') {
-    const champVie = page.getByLabel(/Espérance de vie/i);
-    await expect(champVie).toBeVisible({ timeout: 8_000 });
-    await champVie.fill(String(modifs.lifeExpectancy));
-    await champVie.blur();
-  }
-}
-
-export async function lireLocalStoragePrincipal(page: Page): Promise<string | null> {
-  return page.evaluate((key) => localStorage.getItem(key), STORAGE_KEYS.persistStore);
-}
-
-export async function listerBasesIndexedDB(page: Page): Promise<string[]> {
-  return page.evaluate(async () => {
-    if (typeof indexedDB.databases !== 'function') return [];
-    const dbs = await indexedDB.databases();
-    return dbs.map((d) => d.name).filter((n): n is string => typeof n === 'string');
-  });
-}
-
-export async function inspecterPayloadIndexedDBGrandCalcul(page: Page): Promise<{
-  dbFound: string | null;
-  recordCount: number;
-  hasPlaintextMonthlySeries: boolean;
-}> {
-  return page.evaluate(async () => {
-    if (typeof indexedDB.databases !== 'function') {
-      return { dbFound: null, recordCount: 0, hasPlaintextMonthlySeries: false };
-    }
-    const dbs = await indexedDB.databases();
-    const candidates = dbs
-      .map((d) => d.name)
-      .filter((n): n is string => typeof n === 'string' && /grand.?calcul/i.test(n));
-    const dbName = candidates[0] ?? null;
-    if (!dbName) return { dbFound: null, recordCount: 0, hasPlaintextMonthlySeries: false };
-
-    return new Promise((resolve) => {
-      const req = indexedDB.open(dbName);
-      req.onerror = () => resolve({ dbFound: dbName, recordCount: 0, hasPlaintextMonthlySeries: false });
-      req.onsuccess = () => {
-        const db = req.result;
-        const stores = Array.from(db.objectStoreNames);
-        if (stores.length === 0) {
-          db.close();
-          resolve({ dbFound: dbName, recordCount: 0, hasPlaintextMonthlySeries: false });
-          return;
-        }
-        const tx = db.transaction(stores[0], 'readonly');
-        const store = tx.objectStore(stores[0]);
-        const getAllReq = store.getAll();
-        getAllReq.onerror = () => {
-          db.close();
-          resolve({ dbFound: dbName, recordCount: 0, hasPlaintextMonthlySeries: false });
-        };
-        getAllReq.onsuccess = () => {
-          const rows = getAllReq.result ?? [];
-          const serialized = JSON.stringify(rows);
-          const hasPlaintext = serialized.includes('"p50":') && serialized.includes('"monthIndex":');
-          db.close();
-          resolve({
-            dbFound: dbName,
-            recordCount: rows.length,
-            hasPlaintextMonthlySeries: hasPlaintext,
-          });
-        };
-      };
-    });
-  });
-}
-
-export async function corrompreEnregistrementGrandCalculIDB(page: Page): Promise<boolean> {
-  return page.evaluate(async () => {
-    if (typeof indexedDB.databases !== 'function') return false;
-    const dbs = await indexedDB.databases();
-    const dbName = dbs
-      .map((d) => d.name)
-      .find((n): n is string => typeof n === 'string' && /grand.?calcul/i.test(n));
-    if (!dbName) return false;
-
-    return new Promise((resolve) => {
-      const req = indexedDB.open(dbName);
-      req.onerror = () => resolve(false);
-      req.onsuccess = () => {
-        const db = req.result;
-        const storeName = db.objectStoreNames[0];
-        if (!storeName) {
-          db.close();
-          resolve(false);
-          return;
-        }
-        const tx = db.transaction(storeName, 'readwrite');
-        const store = tx.objectStore(storeName);
-        const keysReq = store.getAllKeys();
-        keysReq.onerror = () => {
-          db.close();
-          resolve(false);
-        };
-        keysReq.onsuccess = () => {
-          const keys = keysReq.result ?? [];
-          if (keys.length === 0) {
-            db.close();
-            resolve(false);
-            return;
-          }
-          const enregistrement: Record<string, unknown> = {
-            payload: 'corrupted',
-            encrypted: true,
-            iv: 'Y29ycnVwdGVkLWl2',
-            ciphertext: 'Y29ycnVwdGVkLWNpcGhlcnRleHQ=',
-          };
-          if (typeof store.keyPath === 'string') {
-            enregistrement[store.keyPath] = keys[0];
-            store.put(enregistrement);
-          } else if (Array.isArray(store.keyPath) && store.keyPath.length > 0) {
-            const valeurs = Array.isArray(keys[0]) ? keys[0] : [keys[0]];
-            store.keyPath.forEach((kp, idx) => {
-              enregistrement[kp] = valeurs[idx] ?? keys[0];
-            });
-            store.put(enregistrement);
-          } else {
-            store.put(enregistrement, keys[0]);
-          }
-        };
-        tx.oncomplete = () => {
-          db.close();
-          resolve(true);
-        };
-        tx.onerror = () => {
-          db.close();
-          resolve(false);
-        };
-      };
-    });
-  });
-}
-
-export async function supprimerClesAppareilIDB(page: Page): Promise<boolean> {
-  return page.evaluate(async () => {
-    if (typeof indexedDB.databases !== 'function') return false;
-    const dbs = await indexedDB.databases();
-    const secureDb = dbs
-      .map((d) => d.name)
-      .find((n): n is string => typeof n === 'string' && /secure|key/i.test(n));
-    if (!secureDb) return false;
-    return new Promise((resolve) => {
-      const req = indexedDB.deleteDatabase(secureDb);
-      req.onsuccess = () => resolve(true);
-      req.onerror = () => resolve(false);
-      req.onblocked = () => resolve(false);
-    });
-  });
-}
-
-export async function auditerCiblesTactilesConteneur(
-  conteneur: Locator,
-  minPx = 44,
-): Promise<string[]> {
-  return conteneur.evaluate((root, min) => {
-    const selControls =
-      'button, a[href], input, select, textarea, [role="button"], [role="switch"], [role="checkbox"], [role="slider"]';
-    const anomalies: string[] = [];
-    for (const el of Array.from(root.querySelectorAll<HTMLElement>(selControls))) {
-      const r = el.getBoundingClientRect();
-      if (r.width === 0 || r.height === 0) continue;
-      if (el.classList.contains('sr-only')) continue;
-      if (el.closest('[hidden], [aria-hidden="true"]')) continue;
-      if (getComputedStyle(el).visibility === 'hidden') continue;
-      if (r.width < min - 0.5 || r.height < min - 0.5) {
-        const nom = (el.getAttribute('aria-label') || el.textContent || el.tagName)
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 40);
-        anomalies.push(`${el.tagName.toLowerCase()} « ${nom} » ${Math.round(r.width)}×${Math.round(r.height)}`);
+    await page.goto('/#SETTINGS');
+    await page.waitForLoadState('domcontentloaded');
+    await ecarterLeRail(page);
+    const btnSettings = page.getByRole('button', { name: /Désactiver le mode test|Quitter le mode test/i }).first();
+    if (await btnSettings.isVisible().catch(() => false)) {
+      await btnSettings.click();
+      const btnOui = page.getByRole('button', { name: /^Oui$/i }).first();
+      if (await btnOui.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await btnOui.click();
       }
     }
-    return anomalies;
-  }, minPx);
+  }
+  await page
+    .waitForFunction(() => !document.body.innerText.includes('MODE TEST'), { timeout: 10_000 })
+    .catch(() => {});
+  await fermerToastsSiPresents(page);
 }
 
-export async function auditerAbsenceHoverTransform(conteneur: Locator): Promise<void> {
-  const classesInterdites = conteneur.locator(
-    '[class*="hover:scale-"], [class*="hover:-translate-y-"], [class*="hover:translate-y-"]',
-  );
-  await expect(classesInterdites).toHaveCount(0);
+/* -------------------------------------------------------------------------- */
+/* Sélecteurs canoniques Futur 4.0                                            */
+/* -------------------------------------------------------------------------- */
+
+export function zoneScenarios(page: Page): Locator {
+  return page.locator('main section[aria-label="Scénarios de trajectoire future"]').first();
 }
 
-export async function largeurDefilable(page: Page): Promise<number> {
-  return page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth));
+export function zoneReperesCles(page: Page): Locator {
+  return page.locator('main section[aria-labelledby="futur-reperes-cles-titre"]').first();
 }
 
-export function extraireNombresCAD(texte: string): number[] {
-  const matches = texte.match(/-?\d[\d\s\u00a0\u202f]*(?:[,.]\d+)?\s*\$/g) ?? [];
-  return matches
-    .map((m) => Number(m.replace(/\$/g, '').replace(/[\s\u00a0\u202f]/g, '').replace(',', '.')))
-    .filter((n) => Number.isFinite(n));
+export function zoneAnalyseUnifiee(page: Page): Locator {
+  return page.locator('main section[aria-labelledby="futur-insights-unifies-titre"]').first();
 }
 
-export function extrairePourcentages(texte: string): number[] {
-  const matches = texte.match(/-?\d+(?:[,.]\d+)?\s*%/g) ?? [];
-  return matches
-    .map((m) => Number(m.replace(/%/g, '').replace(/\s/g, '').replace(',', '.')))
-    .filter((n) => Number.isFinite(n));
+export function infobulleRiche(page: Page): Locator {
+  return page.locator('[data-testid="future-rich-tooltip"]');
 }
 
-export function extraireAges(texte: string): number[] {
-  const matches = texte.match(/\b(\d{2,3})\s*ans\b/gi) ?? [];
-  return matches
-    .map((m) => Number(m.replace(/ans/i, '').trim()))
-    .filter((n) => Number.isFinite(n));
+export function boutonScenario(page: Page, label: ScenarioLabel): Locator {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return zoneScenarios(page).getByRole('button', { name: new RegExp(escaped, 'i') }).first();
 }
 
-export function extraireTauxSurvie(texte: string): number | null {
-  const match = texte.match(
-    /(?:survie|réussite)[^%\n—]{0,60}?(?:\n[^%\n—]{0,40}?)?(?<![\d.,])([-\u2212]?\d+(?:[,.]\d+)?)\s*%/i,
-  );
-  if (!match) return null;
-  const val = Number(match[1].replace('\u2212', '-').replace(',', '.'));
-  return Number.isFinite(val) ? val : null;
-}
-
-export function extraireCVaR95(texte: string): number | null {
-  const match = texte.match(
-    /CVaR(?:\s*95)?[^$\n—]{0,60}?(?:\n[^$\n—]{0,40}?)?(?<![\d.,])([-\u2212]?\d[\d\s\u00a0\u202f]*(?:[,.]\d+)?)\s*\$/i,
-  );
-  if (!match) return null;
-  const val = Number(
-    match[1]
-      .replace('\u2212', '-')
-      .replace(/[\s\u00a0\u202f]/g, '')
-      .replace(',', '.'),
-  );
-  return Number.isFinite(val) ? val : null;
-}
-
-export function verifierTexteSansValeursInvalides(texte: string): void {
-  expect(texte).not.toMatch(/\bNaN\b/);
-  expect(texte).not.toMatch(/\bundefined\b/);
-  expect(texte).not.toMatch(/\bInfinity\b/);
-  expect(texte).not.toContain('null $');
-}
-
-export interface ResultatDepliageExplicationR3 {
-  carte: Locator;
-  toggle: Locator;
-  region: Locator;
-  regionTexte: string;
-}
-
-/**
- * Attend le montage Suspense du panneau R3, cible la carte demandée (ou la première),
- * vérifie la transition `aria-expanded="false" -> "true"`, la visibilité de `#${regionId}` (`role="region"`),
- * la présence des justifications fiscales ARC/RQ et d'au moins un montant CAD non nul.
- */
-export async function deplierEtVerifierExplicationR3(
-  page: Page,
-  filtreCarte?: RegExp,
-): Promise<ResultatDepliageExplicationR3> {
-  const exp = zoneExplications(page);
-  await expect(exp).toBeVisible({ timeout: 15_000 });
-  await expect(exp.locator('button[aria-expanded]').first()).toBeVisible({ timeout: 15_000 });
-
-  const carte = filtreCarte
-    ? exp.locator('ol li article').filter({ hasText: filtreCarte }).first()
-    : exp.locator('ol li article').first();
-  await expect(carte).toBeVisible({ timeout: 10_000 });
-
-  const toggle = carte.locator('button[aria-expanded]').first();
-  await expect(toggle).toBeVisible({ timeout: 10_000 });
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-
-  const regionId = await toggle.getAttribute('aria-controls');
-  expect(regionId).toBeTruthy();
-  const region = page.locator(`#${regionId}`);
-  await expect(region).toBeVisible({ timeout: 5_000 });
-  await expect(region).toHaveAttribute('role', 'region');
-
-  const regionTexte = await region.innerText();
-  verifierTexteSansValeursInvalides(regionTexte);
-  expect(regionTexte).toContain('Justifications fiscales (ARC / Revenu Québec)');
-  expect(extraireNombresCAD(regionTexte).length).toBeGreaterThan(0);
-
-  return { carte, toggle, region, regionTexte };
-}
-
-/**
- * Lit le montant CAD d'une ligne `<th scope="row">` dans la carte R2 « Impôt successoral latent au décès ».
- */
-export async function lireLigneSuccessionCAD(
-  page: Page,
-  blocSuccession: Locator,
-  labelRe: RegExp,
-): Promise<number> {
-  const row = blocSuccession
-    .locator('tr')
-    .filter({ has: page.locator('th', { hasText: labelRe }) })
+export function boutonLancerAnalyseProfonde(page: Page): Locator {
+  return zoneScenarios(page)
+    .getByRole('button', { name: /^(Lancer|Relancer) l[’']analyse profonde/i })
     .first();
-  await expect(row).toBeVisible();
-  const nums = extraireNombresCAD(await row.locator('td').first().innerText());
-  expect(nums.length).toBe(1);
-  return nums[0];
+}
+
+export function boutonAnnulerAnalyseProfonde(page: Page): Locator {
+  return zoneScenarios(page).getByRole('button', { name: /^Annuler$/i }).first();
+}
+
+export function barreProgressionAnalyseProfonde(page: Page): Locator {
+  return zoneScenarios(page).getByRole('progressbar', { name: /Progression de l[’']analyse profonde/i }).first();
+}
+
+export function boutonAppliquerAnalyseProfonde(page: Page): Locator {
+  return zoneScenarios(page).getByRole('button', { name: /^Appliquer et mémoriser$/i }).first();
+}
+
+export function boutonIgnorerAnalyseProfonde(page: Page): Locator {
+  return zoneScenarios(page).getByRole('button', { name: /^Ignorer$/i }).first();
 }
 
 /**
- * Prouve après `page.reload()` que le dernier Grand Calcul a été restauré depuis IndexedDB
- * (avant toute réactivation du mode discret).
+ * Exécute l'analyse profonde à 100 000 trajectoires, attend l'état `staged` (`Appliquer et mémoriser`),
+ * puis l'applique et vérifie le passage en mémoire (`Analyse profonde en mémoire` + `100 000 trajectoires`).
  */
-export async function verifierRestaurationGrandCalculIDB(
+export async function executerEtAppliquerAnalyseProfonde(
   page: Page,
-  iterationsAttendues = 50_000,
-): Promise<{ panel: Locator; pred: Locator; exp: Locator }> {
-  const panel = zoneGrandCalcul(page);
-  const pred = zonePredictions(page);
-  const exp = zoneExplications(page);
+  options: { timeoutMs?: number; appliquer?: boolean } = {},
+): Promise<void> {
+  const { timeoutMs = 130_000, appliquer = true } = options;
+  const btnLancer = boutonLancerAnalyseProfonde(page);
+  await expect(btnLancer).toBeVisible({ timeout: 10_000 });
+  await btnLancer.click();
 
-  const iterPattern = new RegExp(
-    `\\b${String(iterationsAttendues).replace(/\B(?=(\d{3})+(?!\d))/g, '[\\s\\u00a0\\u202f]?')}\\s+simulations\\b`,
-    'i',
-  );
+  const btnAppliquer = boutonAppliquerAnalyseProfonde(page);
+  await expect(btnAppliquer).toBeVisible({ timeout: timeoutMs });
+  await expect(zoneScenarios(page).getByText(/Nouvelle analyse prête/i)).toBeVisible();
+  await expect(zoneScenarios(page).getByText(/100[\s\u00a0\u202f]?000\s+trajectoires/i)).toBeVisible();
 
-  await expect(panel).toBeVisible({ timeout: 15_000 });
-  await expect(barreProgressionGrandCalcul(panel)).toHaveCount(0);
-  await expect(panel.getByRole('button', { name: 'Relancer le Grand Calcul', exact: true })).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(panel.getByText('Aucun calcul enregistré', { exact: true })).toHaveCount(0);
-  expect(await panel.innerText()).toMatch(iterPattern);
-  expect(extraireNombresCAD(await panel.innerText()).length).toBeGreaterThan(0);
+  if (appliquer) {
+    await btnAppliquer.click();
+    await expect(zoneScenarios(page).getByText(/Analyse profonde en mémoire/i)).toBeVisible({ timeout: 15_000 });
+    await expect(zoneScenarios(page).getByText(/100[\s\u00a0\u202f]?000\s+trajectoires/i)).toBeVisible();
+    await expect(
+      zoneScenarios(page).getByRole('button', { name: /^Relancer l[’']analyse profonde$/i }),
+    ).toBeVisible();
+  }
+}
 
-  await expect(pred).toBeVisible({ timeout: 15_000 });
-  await expect(pred.getByText('En attente du Grand Calcul')).toHaveCount(0, { timeout: 10_000 });
-  const predTexte = await pred.innerText();
-  verifierTexteSansValeursInvalides(predTexte);
-  expect(extraireNombresCAD(predTexte).length).toBeGreaterThan(0);
+/* -------------------------------------------------------------------------- */
+/* Inspection & corruption IndexedDB (`financeai-deep-forecast`)              */
+/* -------------------------------------------------------------------------- */
 
-  await expect(exp).toBeVisible({ timeout: 15_000 });
-  await expect(exp.locator('button[aria-expanded]').first()).toBeVisible({ timeout: 15_000 });
-  const expTexte = await exp.innerText();
-  verifierTexteSansValeursInvalides(expTexte);
-  expect(extraireNombresCAD(expTexte).length).toBeGreaterThan(0);
-
-  return { panel, pred, exp };
+export interface DeepForecastIdbInspectResult {
+  dbFound: boolean;
+  recordCount: number;
+  keys: string[];
+  allEncryptedAndCiphertextOnly: boolean;
+  localStorageHasReportLeak: boolean;
 }
 
 /**
- * Vérifie que le mode discret masque tout montant CAD dans les 3 panneaux Grand Calcul
- * tout en affichant `•••` et `Montant masqué` (.sr-only).
+ * Inspecte la base IndexedDB `financeai-deep-forecast` (store `applied_reports`)
+ * et vérifie l'absence totale de fuite du rapport profond dans `localStorage`.
  */
-export async function verifierModeDiscretGrandCalcul(page: Page): Promise<void> {
-  const panel = zoneGrandCalcul(page);
-  const pred = zonePredictions(page);
-  const exp = zoneExplications(page);
+export async function inspecterPayloadIDBDeepForecast(page: Page): Promise<DeepForecastIdbInspectResult> {
+  return page.evaluate(async () => {
+    const localStorageHasReportLeak = Object.keys(localStorage).some((k) => {
+      const v = localStorage.getItem(k) ?? '';
+      return (
+        k.includes('deep-forecast') ||
+        k.includes('deepForecast') ||
+        v.includes('real_trajectory') ||
+        v.includes('prudent_stress') ||
+        v.includes('favorable_tailwinds')
+      );
+    });
 
-  expect(extraireNombresCAD(await pred.innerText())).toEqual([]);
-  expect(extraireNombresCAD(await exp.innerText())).toEqual([]);
-  expect(extraireNombresCAD(await panel.innerText())).toEqual([]);
+    const dbs = typeof indexedDB.databases === 'function' ? await indexedDB.databases() : [];
+    const found = dbs.some((d) => d.name === 'financeai-deep-forecast');
+    if (!found) {
+      return {
+        dbFound: false,
+        recordCount: 0,
+        keys: [],
+        allEncryptedAndCiphertextOnly: false,
+        localStorageHasReportLeak,
+      };
+    }
 
-  await expect(pred.getByText('•••').first()).toBeVisible();
-  await expect(pred.getByText('Montant masqué').first()).toBeAttached();
-  await expect(exp.getByText('•••').first()).toBeVisible();
-  await expect(exp.getByText('Montant masqué').first()).toBeAttached();
+    const records = await new Promise<Array<{ id?: unknown; encrypted?: unknown; payload?: unknown }>>((resolve) => {
+      const req = indexedDB.open('financeai-deep-forecast');
+      req.onerror = () => resolve([]);
+      req.onsuccess = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('applied_reports')) {
+          db.close();
+          resolve([]);
+          return;
+        }
+        const tx = db.transaction('applied_reports', 'readonly');
+        const store = tx.objectStore('applied_reports');
+        const getAllReq = store.getAll();
+        getAllReq.onsuccess = () => {
+          db.close();
+          resolve((getAllReq.result as Array<{ id?: unknown; encrypted?: unknown; payload?: unknown }>) ?? []);
+        };
+        getAllReq.onerror = () => {
+          db.close();
+          resolve([]);
+        };
+      };
+    });
+
+    const keys = records.map((r) => String(r.id ?? ''));
+    const allEncryptedAndCiphertextOnly =
+      records.length > 0 &&
+      records.every((r) => {
+        if (r.encrypted !== true || typeof r.payload !== 'string' || r.payload.length < 16) return false;
+        return (
+          !r.payload.trimStart().startsWith('{') &&
+          !r.payload.includes('"real_trajectory"') &&
+          !r.payload.includes('"p50"')
+        );
+      });
+
+    return {
+      dbFound: true,
+      recordCount: records.length,
+      keys,
+      allEncryptedAndCiphertextOnly,
+      localStorageHasReportLeak,
+    };
+  });
+}
+
+/**
+ * Corrompt tous les enregistrements `applied_reports` dans `financeai-deep-forecast`.
+ */
+export async function corrompreEnregistrementDeepForecastIDB(page: Page): Promise<number> {
+  return page.evaluate(async () => {
+    return new Promise<number>((resolve) => {
+      const req = indexedDB.open('financeai-deep-forecast');
+      req.onerror = () => resolve(0);
+      req.onsuccess = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('applied_reports')) {
+          db.close();
+          resolve(0);
+          return;
+        }
+        const tx = db.transaction('applied_reports', 'readwrite');
+        const store = tx.objectStore('applied_reports');
+        const keysReq = store.getAllKeys();
+        keysReq.onsuccess = () => {
+          const keys = keysReq.result ?? [];
+          for (const k of keys) {
+            store.put({
+              id: k,
+              payload: 'corrupted-ciphertext-e2e',
+              encrypted: true,
+              timestamp: Date.now(),
+            });
+          }
+          tx.oncomplete = () => {
+            db.close();
+            resolve(keys.length);
+          };
+          tx.onerror = () => {
+            db.close();
+            resolve(0);
+          };
+        };
+        keysReq.onerror = () => {
+          db.close();
+          resolve(0);
+        };
+      };
+    });
+  });
+}
+
+/**
+ * Supprime la base de clé locale `financeai-secure` (simule perte de clé d'appareil).
+ */
+export async function supprimerClesAppareilIDB(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve) => {
+      const req = indexedDB.deleteDatabase('financeai-secure');
+      req.onsuccess = () => resolve();
+      req.onerror = () => resolve();
+      req.onblocked = () => resolve();
+    });
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Infobulle riche, Ruban P10–P90, Audit tactiles, Débordement & Mode Discret */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Épingle le `FutureRichTooltip` en cliquant au centre-droit du graphe (hors icônes d'événement).
+ */
+export async function epinglerInfobulleSurCourbe(page: Page, xRatio = 0.62, yRatio = 0.55): Promise<Locator> {
+  await fermerToastsSiPresents(page);
+  const svgSurface = page.locator('.recharts-wrapper svg.recharts-surface').first();
+  await expect(svgSurface).toBeVisible({ timeout: 10_000 });
+  await svgSurface.scrollIntoViewIfNeeded();
+  const box = await svgSurface.boundingBox();
+  if (!box) throw new Error('Surface SVG de la courbe introuvable');
+
+  await page.mouse.click(box.x + box.width * xRatio, box.y + box.height * yRatio);
+
+  // Si un clic malchanceux a touché un marqueur d'événement ouvrant la modale directement, la fermer et réessayer
+  const modalDirect = page.getByRole('dialog', { name: /Détail du mois/i });
+  if (await modalDirect.isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape');
+    await expect(modalDirect).toBeHidden();
+    await page.mouse.click(box.x + box.width * Math.min(0.85, xRatio + 0.08), box.y + box.height * 0.48);
+  }
+
+  const tooltip = page.locator('[data-testid="future-rich-tooltip"][data-pinned="true"]');
+  await expect(tooltip).toBeVisible({ timeout: 8_000 });
+  return tooltip;
+}
+
+/**
+ * Audite le ruban SVG `[P10, P90]` unique de Futur 4.0 :
+ * - exactement 1 path `fill="url(#gfConfidenceRibbonGrad)"` non vide
+ * - aucun path/bande `P5`/`P25`/`P75`/`P95`
+ * - la borne inférieure du ruban n'est pas écrasée à la ligne de base Y=0 lorsque les données sont > 0.
+ */
+export async function auditerRubanP10P90Svg(page: Page): Promise<void> {
+  const ribbonStats = await page.evaluate(() => {
+    const ribbonPaths = Array.from(document.querySelectorAll('path.recharts-area-area[fill*="gfConfidenceRibbonGrad"]'));
+    if (ribbonPaths.length !== 1) {
+      return {
+        count: ribbonPaths.length,
+        d: '',
+        boxHeight: 0,
+        lowerEdgeSpreadPx: 0,
+      };
+    }
+    const ribbonPath = ribbonPaths[0];
+    const pathRect = ribbonPath.getBoundingClientRect();
+    const d = ribbonPath.getAttribute('d') ?? '';
+    // Recharts Area range trace d'abord le bord supérieur (gauche -> droite) puis le bord inférieur (droite -> gauche)
+    // avec `M` puis `L` (linéaire) ou `C x1,y1,x2,y2,x,y` (courbe monotone).
+    const coordPairs: Array<{ x: number; y: number }> = [];
+    const cmdRe =
+      /([ML])\s*(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)|C\s*-?\d+(?:\.\d+)?[,\s]+-?\d+(?:\.\d+)?[,\s]+-?\d+(?:\.\d+)?[,\s]+-?\d+(?:\.\d+)?[,\s]+(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)/g;
+    for (const m of d.matchAll(cmdRe)) {
+      const x = Number(m[1] ? m[2] : m[4]);
+      const y = Number(m[1] ? m[3] : m[5]);
+      if (Number.isFinite(x) && Number.isFinite(y)) coordPairs.push({ x, y });
+    }
+    const half = Math.floor(coordPairs.length / 2);
+    const lowerYs = coordPairs.slice(half).map((p) => p.y).filter(Number.isFinite);
+    const lowerEdgeSpreadPx =
+      lowerYs.length >= 2 ? Math.max(...lowerYs) - Math.min(...lowerYs) : 0;
+    return {
+      count: ribbonPaths.length,
+      d,
+      boxHeight: pathRect.height,
+      lowerEdgeSpreadPx,
+    };
+  });
+
+  expect(ribbonStats.count).toBe(1);
+  expect(ribbonStats.d.length).toBeGreaterThan(20);
+  expect(ribbonStats.boxHeight).toBeGreaterThan(8);
+  // Vérifie que la borne inférieure du ruban suit réellement P10 (non écrasée à une ligne plate Y=0)
+  expect(ribbonStats.lowerEdgeSpreadPx).toBeGreaterThan(4);
+
+  // Aucune mention P5/P25/P75/P95 dans le ChartDataTable
+  const tableHeaders = await page.locator('table.sr-only thead th').allInnerTexts().catch(() => []);
+  for (const th of tableHeaders) {
+    expect(th).not.toMatch(/\bP5\b|\bP25\b|\bP75\b|\bP95\b/i);
+  }
+}
+
+/**
+ * Vérifie que toutes les cibles tactiles visibles d'un conteneur font >= 44 px de hauteur.
+ */
+export async function auditerCiblesTactilesConteneur(container: Locator): Promise<void> {
+  const boutons = container.locator('button:visible');
+  const count = await boutons.count();
+  expect(count).toBeGreaterThan(0);
+
+  for (let i = 0; i < count; i++) {
+    const btn = boutons.nth(i);
+    const box = await btn.boundingBox();
+    if (box && box.width > 0 && box.height > 0) {
+      expect(box.height, `Bouton trop petit (${await btn.innerText()}): ${box.height}px`).toBeGreaterThanOrEqual(43.5);
+    }
+  }
+}
+
+/**
+ * Vérifie l'absence de débordement horizontal sur le viewport courant.
+ */
+export async function verifierZeroDebordementHorizontal(page: Page): Promise<void> {
+  const overflow = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
+}
+
+/**
+ * Bascule le mode discret (Desktop via sidebar, Mobile via « Plus » si bouton non visible directement).
+ */
+export async function basculerModeDiscret(page: Page): Promise<void> {
+  const btnDirect = page.getByRole('button', { name: /Mode discret/i }).first();
+  if (await btnDirect.isVisible().catch(() => false)) {
+    await btnDirect.click();
+    return;
+  }
+
+  const mobileNav = page.getByRole('navigation', { name: 'Navigation mobile' });
+  await expect(mobileNav).toBeVisible({ timeout: 8_000 });
+  await mobileNav.getByRole('button', { name: /Plus/i }).click();
+  const btnDrawer = page.getByRole('button', { name: /Mode discret/i }).first();
+  await expect(btnDrawer).toBeVisible({ timeout: 6_000 });
+  await btnDrawer.click();
+  await page.keyboard.press('Escape');
+}
+
+/**
+ * Vérifie qu'en mode discret aucun montant CAD ni chiffre sensible ne fuite dans les 4 blocs de Futur.
+ */
+export async function verifierModeDiscretFutur4(page: Page): Promise<void> {
+  await expect(page.getByText('•••').first()).toBeVisible({ timeout: 8_000 });
+
+  for (const section of [zoneReperesCles(page), zoneAnalyseUnifiee(page)]) {
+    const text = await section.innerText();
+    expect(text).not.toMatch(/\d[\d\s\u00a0\u202f,.]*\s*\$/);
+    expect(text).toContain('•••');
+  }
+
+  // En-têtes ou cellules du tableau accessible .sr-only masquées en mode discret
+  const srOnlyText = await page.locator('main .sr-only').allInnerTexts();
+  expect(srOnlyText.join(' ')).toContain('Montant masqué');
 }

@@ -1,35 +1,25 @@
 /**
- * [FUTUR-AXE-Y-MINIMAL] Le badge flottant « Aujourd'hui » (TodayValueBadge, sur le graphe Futur)
- * n'était exercé par AUCUN test avant ce lot (revue panel code-reviewer, 2026-09-21) : tous les
- * fichiers qui montent `FutureProjection` mockent `ReferenceDot: () => null`, donc son garde
- * no-fake-data interne et son câblage n'étaient vérifiés par rien.
- *
- * ⚠️ `pointAncre` (la valeur affichée) vient de `displayData`, qui PRÉFIXE `chartData` avec
- * `pastPrefixPoints` — reconstruit par `buildPastPrefix` depuis les VRAIES transactions du
- * persona chargé (`enableTestMode`), pas depuis la prop `transactions` du Harness. Injecter un
- * `chartData` synthétique à `monthIndex: 0` ne contrôle donc PAS la valeur réellement affichée
- * (mesuré : la vraie reconstruction du persona l'emporte) — les deux premiers tests capturent
- * la valeur RÉELLE plutôt que d'en imposer une fausse, et vérifient sa cohérence/son masquage.
- * Le garde no-fake-data lui-même (entrée non finie → aucun rendu) est testé directement sur le
- * composant `TodayValueBadge`, isolé de ce pipeline.
+ * [FUTUR-AXE-Y-MINIMAL] Le badge flottant « Aujourd'hui » (`TodayValueBadge`, sur le graphe Futur)
+ * affiche immédiatement la valeur réelle non-NaN et se masque strictement à `***` en mode discret.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, waitFor, act, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
 import { FutureProjection } from '../../components/FutureProjection';
 import { TodayValueBadge } from '../../components/projection/ProjectionTooltip';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../../services/testFixtures';
 
-/** Valeurs capturées à la frontière recharts, pour le SEUL ReferenceDot qui porte le badge (celui
- *  dont `shape.props.value` est défini — les pastilles d'événement portent `payload`/`kind`, pas
- *  `value`, donc les deux formes ne se confondent jamais). */
 let badgeValues: Array<string | undefined>;
 
 vi.mock('recharts', async () => {
     const React = await import('react');
     const P = ({ children }: { children?: React.ReactNode }) => React.createElement('div', null, children);
     return {
-        ResponsiveContainer: P, PieChart: P, BarChart: P, LineChart: P, AreaChart: P, ComposedChart: P,
+        ResponsiveContainer: P, PieChart: P, BarChart: P, LineChart: P, AreaChart: P,
+        ComposedChart: ({ children }: { children?: React.ReactNode }) => {
+            badgeValues = [];
+            return React.createElement('div', null, children);
+        },
         Pie: () => null, Bar: () => null, Area: () => null, Line: () => null, Cell: () => null,
         Legend: () => null, ReferenceLine: () => null, ReferenceArea: () => null,
         ReferenceDot: (props: { shape?: { props?: { value?: string } } }) => {
@@ -41,11 +31,11 @@ vi.mock('recharts', async () => {
     };
 });
 vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn() }));
-vi.mock('../../components/projection/StrategyOptimizerPanel', () => ({
-    StrategyOptimizerPanel: ({ onApply }: { onApply?: (c: unknown) => void }) =>
-        onApply ? <button type="button" onClick={() => onApply({})}>Appliquer (mock)</button> : null,
+vi.mock('../../services/deepForecastStore', () => ({
+    loadAppliedDeepForecast: vi.fn(async () => ({ status: 'empty' as const })),
+    saveAppliedDeepForecast: vi.fn(async () => true),
+    clearAppliedDeepForecast: vi.fn(async () => true),
 }));
-vi.mock('../../components/projection/StressTestPanel', () => ({ StressTestPanel: () => null }));
 
 function chartDataMinimale() {
     return [
@@ -58,9 +48,6 @@ function Harness() {
     const projection = useFinanceStore((s) => s.projection);
     const config = useFinanceStore((s) => s.config);
     const retirementGoal = useFinanceStore((s) => s.retirementGoal);
-    // ⚠️ `isPrivacyMode` est un PROP de `FutureProjection` (défaut `false`), PAS lu directement du
-    // store à l'intérieur du composant — l'oublier ici aurait rendu le 2e test vacueux (toujours
-    // en clair, quel que soit le store).
     const isPrivacyMode = useFinanceStore((s) => s.isPrivacyMode);
     return (
         <FutureProjection
@@ -89,8 +76,8 @@ async function afficherEtCapturer(isPrivacyMode: boolean) {
         });
     });
     render(<Harness />);
-    fireEvent.click(screen.getByText(/Appliquer \(mock\)/i));
-    await waitFor(() => expect(screen.getByTitle(/Recomposer tes leviers/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('region', { name: /Projection affichée/i })).toBeInTheDocument());
+    await waitFor(() => expect(badgeValues.length).toBeGreaterThan(0));
     return badgeValues;
 }
 
@@ -99,12 +86,10 @@ describe('[FUTUR-AXE-Y-MINIMAL] badge flottant « Aujourd\'hui »', () => {
 
     it('affiche une valeur RÉELLE (jamais "NaN", jamais un tiret « — » qui flotterait sans repère)', async () => {
         const valeurs = await afficherEtCapturer(false);
-        // Anti-vacuité : le badge est bien apparu (le mock ne l'a pas raté en silence).
         expect(valeurs.length).toBeGreaterThan(0);
         for (const v of valeurs) {
             expect(v).not.toMatch(/NaN|undefined/);
             expect(v).not.toBe('—');
-            // Format compact attendu : un nombre suivi de « k$ » ou « M$ » (formatCompactCAD).
             expect(v).toMatch(/^\d[\d\s]*\s?(k\$|M\$)$/);
         }
     });
@@ -113,7 +98,6 @@ describe('[FUTUR-AXE-Y-MINIMAL] badge flottant « Aujourd\'hui »', () => {
         const valeurs = await afficherEtCapturer(true);
         expect(valeurs.length).toBeGreaterThan(0);
         expect(valeurs).toContain('***');
-        // Aucune valeur en clair ne doit fuiter à côté du masquage.
         for (const v of valeurs) expect(v).toBe('***');
     });
 });

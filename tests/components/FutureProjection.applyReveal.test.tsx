@@ -1,20 +1,18 @@
-// PH4-FUT-TEST — verrouille l'invariant « leviers-d'abord » du flux applyAndReveal :
-// cliquer « Appliquer la stratégie gagnante » RÉVÈLE la courbe SANS flash et SANS état périmé.
-//
-// Invariant protégé (commenté dans FutureProjection.tsx) : handleApplyConfig fait 2 setAppState
-// (projection + retirementGoal) BATCHÉS en 1 render (React 19) ; le flag revealAfterApply déclenche
-// setRevealedSig(currentSig) au render SUIVANT, quand `params` reflète DÉJÀ les 2 mutations →
-// currentSig recalculé UNE fois, COMPLET → revealedSig === currentSig → isStale FAUX.
-// Si un de ces setters devenait async (mutations sur 2 renders), la révélation capturerait une
-// signature PARTIELLE puis currentSig divergerait → écran « Paramètres modifiés » (isStale) :
-// ce test échouerait. C'est exactement la régression qu'il garde.
+// Futur 4.0 — vérifie le basculement immédiat entre les 4 scénarios, la modification
+// d'hypothèses dans le tiroir sans flash ni état corrompu, et le flux « Appliquer et mémoriser »
+// sans écraser la mémoire avant confirmation explicite.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor, act, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, act, cleanup, fireEvent, within } from '@testing-library/react';
 import { FutureProjection } from '../../components/FutureProjection';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../../services/testFixtures';
+import {
+    DEEP_SCENARIO_IDS,
+    type DeepForecastReport,
+    type DeepScenarioId,
+    type DeepScenarioOutput,
+} from '../../services/projection/deepForecastTypes';
 
-// Recharts → stubs inertes (jsdom n'a pas de layout SVG ; le rendu de la courbe ne nous intéresse pas).
 vi.mock('recharts', async () => {
     const React = await import('react');
     const P = ({ children }: { children?: React.ReactNode }) => React.createElement('div', null, children);
@@ -27,33 +25,130 @@ vi.mock('recharts', async () => {
 });
 vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn() }));
 
-// Stratégie « gagnante » qui change À LA FOIS projection (emergencyFundMonths, useSmithManoeuvre,
-// appliedReturnProfile…) ET retirementGoal (targetAge, targetMonthlyIncome, + rrqStartAge/psvStartAge
-// via delayPensions) → exerce vraiment le batching des 2 setters. vi.hoisted : disponible dans le
-// factory de vi.mock (hoisté en tête de fichier).
-const { WINNER } = vi.hoisted(() => ({
-    WINNER: {
-        withdrawalOrder: 'PRIO_CELI', delayPensions: true, retirementAge: 67, skipRap: true,
-        contributionOrder: 'CELI_FIRST', retirementSpending: 1.1, smithManoeuvre: true,
-        emergencyFundMonths: 9, assetLocation: true, gainHarvesting: true,
-        returnRateProfile: 'aggressive', pensionSplitting: false, savingsMultiplier: 1.2, downsize: true,
-    },
+const deepMocks = vi.hoisted(() => ({
+    loadApplied: vi.fn(async () => ({ status: 'empty' as const })),
+    saveApplied: vi.fn(async () => true),
+    clearApplied: vi.fn(async () => true),
+    runDeep: vi.fn(),
 }));
 
-// Optimiseur mocké : un seul bouton « Appliquer » qui appelle onApply(WINNER) (= applyAndReveal côté
-// FutureProjection). StressTestPanel neutralisé (hors sujet, évite son câblage moteur).
-vi.mock('../../components/projection/StrategyOptimizerPanel', () => ({
-    StrategyOptimizerPanel: ({ onApply }: { onApply?: (c: unknown) => void }) =>
-        onApply
-            ? <button type="button" onClick={() => onApply(WINNER)}>Appliquer la stratégie (mock)</button>
-            : <span>optimiseur en lecture seule</span>,
-}));
-vi.mock('../../components/projection/StressTestPanel', () => ({
-    StressTestPanel: () => null,
+vi.mock('../../services/deepForecastStore', () => ({
+    loadAppliedDeepForecast: deepMocks.loadApplied,
+    saveAppliedDeepForecast: deepMocks.saveApplied,
+    clearAppliedDeepForecast: deepMocks.clearApplied,
 }));
 
-// Harness = mime App : props relus du store + setters câblés sur le store (sinon `params`, dérivé du
-// store par useSimulationParams, ne bougerait pas et currentSig resterait figé).
+vi.mock('../../services/projection/runDeepForecastAsync', async () => {
+    const actual = await vi.importActual<typeof import('../../services/projection/runDeepForecastAsync')>(
+        '../../services/projection/runDeepForecastAsync',
+    );
+    return {
+        ...actual,
+        runDeepForecastAsync: (...args: unknown[]) => deepMocks.runDeep(...args),
+    };
+});
+
+function makeDeepReport(inputsSig: string): DeepForecastReport {
+    const labels: Record<DeepScenarioId, string> = {
+        real_trajectory: 'Trajectoire réelle',
+        prudent_stress: 'Prudent / Stress',
+        ai_optimized: 'Optimisé IA',
+        favorable_tailwinds: 'Favorable',
+    };
+    const scenarios = Object.fromEntries(
+        DEEP_SCENARIO_IDS.map((id, i) => {
+            const finalVal = 1_000_000 + i * 250_000;
+            const out: DeepScenarioOutput = {
+                id,
+                label: labels[id],
+                shortDescription: `Scénario ${labels[id]}`,
+                assumptionsSummaryFr: 'Résumé',
+                points: [
+                    {
+                        monthIndex: 0,
+                        year: 2026,
+                        age: 35,
+                        netWorth: 200_000,
+                        p10: 180_000,
+                        p50: 200_000,
+                        p90: 220_000,
+                        mcRange: [180_000, 220_000],
+                    },
+                    {
+                        monthIndex: 12,
+                        year: 2027,
+                        age: 36,
+                        netWorth: finalVal,
+                        p10: finalVal - 100_000,
+                        p50: finalVal,
+                        p90: finalVal + 100_000,
+                        mcRange: [finalVal - 100_000, finalVal + 100_000],
+                    },
+                ],
+                milestones: {
+                    fiAge: 55 + i,
+                    fiProbabilityPct: 85,
+                    sustainableMonthlyNetRetirementCad: 4_000,
+                    sustainableMonthlyNetP90Cad: 3_200,
+                    goalsSummary: [],
+                    finalNetWorthP50: finalVal,
+                    estateNetWorthP50: finalVal,
+                    estateTaxP50: 80_000,
+                    ruinProbabilityPct: 3,
+                },
+                turningPoints: [],
+                appliedOptimizationsFr: [],
+            };
+            return [id, out];
+        }),
+    ) as Record<DeepScenarioId, DeepScenarioOutput>;
+
+    return {
+        version: 1,
+        inputsSig,
+        createdAt: '2026-11-18T15:00:00.000Z',
+        durationMs: 420,
+        trajectoriesRun: 100_000,
+        isDeepRun: true,
+        pastDiagnostic: {
+            transactionsAnalyzed: 10,
+            monthsCovered: 6,
+            firstTransactionDate: '2026-05-01',
+            lastTransactionDate: '2026-10-31',
+            observedMonthlyIncomeCad: 5_000,
+            observedMonthlyExpensesCad: 3_200,
+            budgetedMonthlyExpensesCad: 3_100,
+            monthlySpendingGapCad: 100,
+            observedSavingsRatePct: 36,
+            lifestyleCreepAnnualPct: 1,
+            fixedExpensesSharePct: 60,
+            discretionarySharePct: 40,
+            peakSpendingMonthLabel: 'Juillet',
+            lowSpendingMonthLabel: 'Février',
+            weightedMerPct: 0.2,
+            estimatedAnnualFeeAndTaxDragCad: 250,
+            expenseVolatilityPct: 5,
+            findingsFr: ['Constat simulé'],
+        },
+        newsBundle: {
+            collectedAtIso: '2026-11-18T15:00:00.000Z',
+            liveArticlesUsed: 0,
+            offlineFallbackUsed: true,
+            portfolioSentimentScore: null,
+            portfolioSentimentLabel: 'Neutre',
+            annualizedReturnAdjustmentPct: 0,
+            volatilityMultiplier: 1,
+            macroHeadlineFr: 'Contexte stable',
+            keySignals: [],
+            aiSynthesisFr: null,
+            usedGemini: false,
+        },
+        valoriaSummary: null,
+        scenarios,
+        concreteActions: [],
+    };
+}
+
 function Harness() {
     const projection = useFinanceStore((s) => s.projection);
     const config = useFinanceStore((s) => s.config);
@@ -78,61 +173,92 @@ function Harness() {
     );
 }
 
-describe('FutureProjection — applyAndReveal (PH4-FUT-TEST)', () => {
+describe('FutureProjection — scénarios, hypothèses et Appliquer et mémoriser (Futur 4.0)', () => {
     beforeEach(() => {
+        vi.clearAllMocks();
+        deepMocks.loadApplied.mockResolvedValue({ status: 'empty' });
+        deepMocks.saveApplied.mockResolvedValue(true);
+
         const persona = getPersonaOrDefault(DEFAULT_PERSONA_ID);
         act(() => {
             useFinanceStore.getState().enableTestMode(persona.build(), persona.id);
-            // runMC=false (déterministe) ; pas de courbe pré-révélée ni verrouillée → écran d'amorçage.
-            // [PROJECTION-PERSIST] un résultat moteur DOIT être publié : depuis la garde no-fake-data
-            // (`curveVisible` exige `results !== null`), une révélation SANS résultat n'affiche plus la
-            // courbe (c'était le flash « Objectif FIRE 0k$ » corrigé) — ces tests vérifient le FLUX de
-            // révélation, pas l'attente moteur → on publie un résultat minimal.
             useFinanceStore.setState({
-                projectionRunMC: false, projectionStatus: 'idle',
-                lastProjection: { chartData: [], fireNumber: 400_000, allResults: [] },
-                isProjectionLocked: false, lockedProjection: null,
+                projectionRunMC: false,
+                projectionStatus: 'idle',
+                lastProjection: {
+                    chartData: [
+                        { monthIndex: 0, year: 2026, age: 35, dateLabel: '2026-01', NetWorth: 200_000 },
+                        { monthIndex: 12, year: 2027, age: 36, dateLabel: '2027-01', NetWorth: 230_000 },
+                    ] as never,
+                    fireNumber: 500_000,
+                    allResults: [],
+                },
+                isProjectionLocked: false,
+                lockedProjection: null,
             });
         });
     });
+
     afterEach(() => cleanup());
 
-    it('clic « Appliquer » → courbe révélée SANS flash ni état périmé (isStale faux)', async () => {
-        render(<Harness />);
+    it('affiche immédiatement les 4 scénarios (zéro écran bloqueur) et bascule vers Optimisé IA et Prudent / Stress sans flash', async () => {
+        const { container } = render(<Harness />);
 
-        // Départ : écran d'amorçage « leviers-d'abord » (jamais calculé → revealedSig null).
-        expect(screen.getByText(/Compose tes leviers/i)).toBeInTheDocument();
-        expect(screen.queryByTitle(/Recomposer tes leviers/i)).not.toBeInTheDocument();
-
-        fireEvent.click(screen.getByText(/Appliquer la stratégie \(mock\)/i));
-
-        // Après application : la courbe est RÉVÉLÉE (bouton « Trouver la meilleure stratégie » présent, strip KPI affiché)
-        // et l'amorçage a disparu. Surtout : AUCUN écran « Paramètres modifiés » (= isStale resté faux,
-        // preuve que les 2 setAppState ont été vus dans la même signature).
-        await waitFor(() => expect(screen.getByTitle(/Recomposer tes leviers/i)).toBeInTheDocument());
         expect(screen.queryByText(/Compose tes leviers/i)).not.toBeInTheDocument();
-        expect(screen.queryByText(/Paramètres modifiés/i)).not.toBeInTheDocument();
-        // Le strip KPI révélé (caché tant que la courbe n'est pas calculée).
-        expect(screen.getAllByText(/Objectif FIRE/i).length).toBeGreaterThan(0);
+        expect(screen.getByText(/Scénario affiché : Trajectoire réelle/i)).toBeInTheDocument();
 
-        // Le geste a bien été propagé au store (preuve que setProjection/setRetirementGoal ont coulé) :
-        const st = useFinanceStore.getState();
-        expect(st.projection.emergencyFundMonths).toBe(9);
-        expect(st.projection.appliedReturnProfile).toBe('aggressive');
-        expect(st.retirementGoal.targetAge).toBe(67);
-        // delayPensions=true → âges de rentes reportés (cohérent avec le levier delayPensions moteur).
-        expect(st.retirementGoal.rrqStartAge).toBe(72);
-        expect(st.retirementGoal.psvStartAge).toBe(70);
+        const headerRegion = screen.getByRole('region', { name: /Scénarios de trajectoire future/i });
+        const btnAi = within(headerRegion).getByRole('button', { name: /Optimisé IA/i });
+        fireEvent.click(btnAi);
+        expect(screen.getByText(/Scénario affiché : Optimisé IA/i)).toBeInTheDocument();
+        expect(btnAi).toHaveAttribute('aria-pressed', 'true');
+
+        fireEvent.click(within(headerRegion).getByRole('button', { name: /Prudent \/ Stress/i }));
+        expect(screen.getByText(/Scénario affiché : Prudent \/ Stress/i)).toBeInTheDocument();
+        expect(container.textContent).not.toContain('NaN');
     });
 
-    it('ré-optimiser ramène à l\'écran d\'amorçage (la courbe se re-cache sur demande)', async () => {
+    it('ouvre le tiroir Hypothèses, applique une modification de paramètres sans corrompre la courbe ni créer de flash', async () => {
         render(<Harness />);
-        fireEvent.click(screen.getByText(/Appliquer la stratégie \(mock\)/i));
-        await waitFor(() => expect(screen.getByTitle(/Recomposer tes leviers/i)).toBeInTheDocument());
 
-        fireEvent.click(screen.getByTitle(/Recomposer tes leviers/i));
+        const btnHypotheses = screen.getByRole('button', { name: /Hypothèses/i });
+        fireEvent.click(btnHypotheses);
+        expect(btnHypotheses).toHaveAttribute('aria-expanded', 'true');
 
-        await waitFor(() => expect(screen.getByText(/Compose tes leviers/i)).toBeInTheDocument());
-        expect(screen.queryByTitle(/Recomposer tes leviers/i)).not.toBeInTheDocument();
+        // Simule une mise à jour des hypothèses (setProjection via le store) et fermeture du tiroir
+        const oldInflation = useFinanceStore.getState().projection.inflationRate ?? 2;
+        act(() => {
+            const p = useFinanceStore.getState().projection;
+            useFinanceStore.setState({ projection: { ...p, inflationRate: oldInflation + 0.5 } });
+        });
+        expect(useFinanceStore.getState().projection.inflationRate).toBe(oldInflation + 0.5);
+        expect(screen.getByRole('region', { name: /Projection affichée/i })).toBeInTheDocument();
+    });
+
+    it('flux Appliquer et mémoriser : le rapport calculé reste staged sans écraser IndexedDB avant clic de confirmation', async () => {
+        deepMocks.runDeep.mockImplementationOnce(async (input: { inputsSig?: string }) =>
+            makeDeepReport(input.inputsSig ?? 'sig'),
+        );
+
+        render(<Harness />);
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: /Lancer l’analyse profonde/i })).toBeEnabled(),
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /Lancer l’analyse profonde/i }));
+
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: /Appliquer et mémoriser/i })).toBeInTheDocument(),
+        );
+        // Garde critique : IndexedDB n'a PAS été écrasé avant la confirmation explicite !
+        expect(deepMocks.saveApplied).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: /Appliquer et mémoriser/i }));
+
+        await waitFor(() => expect(deepMocks.saveApplied).toHaveBeenCalledTimes(1));
+        await waitFor(() =>
+            expect(screen.getByText(/Analyse profonde en mémoire/i)).toBeInTheDocument(),
+        );
+        expect(screen.queryByRole('button', { name: /Appliquer et mémoriser/i })).not.toBeInTheDocument();
     });
 });

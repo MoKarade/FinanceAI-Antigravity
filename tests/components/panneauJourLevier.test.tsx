@@ -52,7 +52,7 @@ const noeudsDeTexte = (): string[] => {
 
 describe('[DETTE-LEVIER-EXPLICITE] le panneau du jour nomme la part levier', () => {
     it('un jour AVEC levier : la ligne apparaît, et elle dit « dont »', () => {
-        renderPanneauJour(jour(347_875));
+        renderPanneauJour(jour(347_875), { defaultSection: 'comptes' });
         expect(screen.getAllByText(LIBELLE_LEVIER).length).toBeGreaterThan(0);
         // Anti-vacuité : la ligne de dette QUI LA CONTIENT est bien là aussi — sans elle, la
         // sous-ligne parlerait d'un conteneur absent.
@@ -62,17 +62,17 @@ describe('[DETTE-LEVIER-EXPLICITE] le panneau du jour nomme la part levier', () 
     it('un jour SANS levier : aucune ligne (contrôle négatif)', () => {
         // ⚠️ Le contrôle qui compte : une ligne qui s'afficherait toujours serait du décor, et
         // affirmerait « levier » sur une dette ordinaire.
-        renderPanneauJour(jour(undefined));
+        renderPanneauJour(jour(undefined), { defaultSection: 'comptes' });
         expect(screen.queryByText(LIBELLE_LEVIER)).toBeNull();
     });
 
     it('un levier à ZÉRO ne parle pas non plus', () => {
-        renderPanneauJour(jour(0));
+        renderPanneauJour(jour(0), { defaultSection: 'comptes' });
         expect(screen.queryByText(LIBELLE_LEVIER)).toBeNull();
     });
 
     it('l’explication complète est accessible : `title` ET jumeau `sr-only`', () => {
-        const { container } = renderPanneauJour(jour(347_875));
+        const { container } = renderPanneauJour(jour(347_875), { defaultSection: 'comptes' });
         const phrase = phraseLevier({ DetteLevierSmith: 347_875 })!;
         // ⚠️ Le `title` seul ne suffit PAS (finding a11y #644) : sur un `<span>` non focusable il
         // n'est révélé que par un survol SOURIS. Les deux, ou l'explication est perdue pour le
@@ -87,7 +87,7 @@ describe('[DETTE-LEVIER-EXPLICITE] le panneau du jour nomme la part levier', () 
         // ⚠️ La garde `[FUTUR-INFOBULLE-EPUREE]` existe, mais SA fixture ne porte pas de levier :
         // elle ne pouvait donc rien dire de cette ligne. Une garde ne couvre que ce que sa fixture
         // rend non nul (`UNE-GARDE-NE-COUVRE-QUE-CE-QUE-SA-FIXTURE-REND-NON-NUL`).
-        renderPanneauJour(jour(347_875));
+        renderPanneauJour(jour(347_875), { defaultSection: 'comptes' });
         const trop = noeudsDeTexte().filter((t) => t.length > PLAFOND_PROSE);
         expect(trop, `prose trop longue rendue : ${JSON.stringify(trop)}`).toEqual([]);
         // Anti-vacuité : l'écran n'est pas vide, et la phrase LONGUE existe bien quelque part.

@@ -1,9 +1,13 @@
+/**
+ * Tests E2E Playwright — Futur 4.0 × Consensus Valoria & Quant IA + déblocage chargement hors test mode
+ */
+
 import { test, expect, type Page } from '@playwright/test';
 import { scriptBypassOnboarding, activateTestMode, ecarterLeRail } from '../helpers/setup';
 
 async function passerGardeLocale(page: Page): Promise<void> {
   const btnLocal = page
-    .getByRole('button', { name: /Continuer en mode local|Continuer sans compte/i })
+    .getByRole('button', { name: /Accéder directement à mon dossier local|Continuer en mode local|Continuer sans compte/i })
     .first();
   if (await btnLocal.isVisible().catch(() => false)) {
     await btnLocal.click();
@@ -28,7 +32,7 @@ function attacherGardeErreurs(page: Page) {
   return { consoleErrors, pageErrors, serverErrors };
 }
 
-test.describe('Futur × 7 Agents Valoria + déblocage chargement hors test mode', () => {
+test.describe('Futur 4.0 × Consensus Valoria + déblocage chargement hors test mode', () => {
   test.setTimeout(90_000);
 
   test('Futur sans prérequis ni mode test ne reste jamais bloqué sur un spinner et /assets inexistant répond 404', async ({ page }) => {
@@ -50,14 +54,14 @@ test.describe('Futur × 7 Agents Valoria + déblocage chargement hors test mode'
     await page.waitForTimeout(1200);
     await expect(page.getByText(/Ta projection se recharge/i)).toHaveCount(0);
     await expect(
-      page.getByText(/Complète d[’']abord ton profil|Projection retraite|Futur/i).first(),
+      page.getByText(/Complète d[’']abord ton profil|Complète ton dossier|Aucune projection|Projection/i).first(),
     ).toBeVisible({ timeout: 10_000 });
 
     expect(errors.pageErrors).toEqual([]);
     expect(errors.serverErrors).toEqual([]);
   });
 
-  test('Mode test : Agents IA (7 Agents) calcule Futur et affiche le panneau Placements × 7 Agents', async ({ page }) => {
+  test('Mode test : Futur 4.0 affiche le consensus Valoria et navigue vers Quant IA / Pont Futur sans erreur', async ({ page }) => {
     const errors = attacherGardeErreurs(page);
     await page.addInitScript(scriptBypassOnboarding());
     await page.goto('/?nogate=1');
@@ -69,30 +73,38 @@ test.describe('Futur × 7 Agents Valoria + déblocage chargement hors test mode'
     const nav = page.getByRole('navigation', { name: 'Navigation principale' });
     await nav.getByRole('button', { name: /^Futur$/i }).click();
 
-    const optionAgents = page.getByRole('button', { name: /Agents IA\s*\(7 Agents\)/i });
-    await expect(optionAgents).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('group', { name: /Courbe de vie/ })).toBeVisible({ timeout: 20_000 });
 
-    const boxBtn = await optionAgents.boundingBox();
-    expect(boxBtn?.height ?? 0).toBeGreaterThanOrEqual(44);
-    await optionAgents.click();
+    // Ancien bouton Agents IA (7 Agents) retiré de Futur 4.0
+    await expect(page.getByRole('button', { name: /Agents IA\s*\(7 Agents\)/i })).toHaveCount(0);
 
-    const sectionPanel = page.getByRole('region', {
-      name: /Prévisions des placements par les 7 agents Valoria/i,
-    });
-    await expect(sectionPanel).toBeVisible({ timeout: 15_000 });
+    // Section A de l'Analyse unifiée intègre les actualités & consensus Valoria
+    const panel = page.locator('section[aria-labelledby="futur-insights-unifies-titre"]');
+    await expect(panel).toBeVisible({ timeout: 10_000 });
+    await expect(panel.getByText('Actualités & consensus Valoria')).toBeVisible();
 
-    const activeStateBtn = sectionPanel.getByRole('button', {
-      name: /Actif sur la courbe Futur|Propulser la courbe Futur par les 7 Agents/i,
-    });
-    await expect(activeStateBtn).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+    // Bouton Quant IA du PageHeader (>= 44 px) mène à Placements -> Conseiller & 7 Agents
+    const btnQuantIa = page.getByRole('button', { name: /Quant IA/i }).first();
+    await expect(btnQuantIa).toBeVisible();
+    const boxQuant = await btnQuantIa.boundingBox();
+    expect(boxQuant?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await btnQuantIa.click();
 
-    await expect(sectionPanel.getByText(/Médiane à 5 ans/i)).toBeVisible();
-    await expect(sectionPanel.getByText(/Médiane à 10 ans/i)).toBeVisible();
+    await expect(page.getByTestId('valoria-workspace')).toBeVisible({ timeout: 15_000 });
+    const tabCeQueJai = page.getByRole('tab', { name: /Ce que j[’']ai/i }).first();
+    if (await tabCeQueJai.isVisible().catch(() => false)) {
+      await tabCeQueJai.click();
+    }
 
-    const rayonXBtn = sectionPanel.getByRole('button', { name: /Explorer .* dans le Rayon-X/i }).first();
-    if (await rayonXBtn.isVisible().catch(() => false)) {
-      const boxRayon = await rayonXBtn.boundingBox();
-      expect(boxRayon?.height ?? 0).toBeGreaterThanOrEqual(44);
+    const hubCard = page.getByText(/Pont Projection Futur & Black-Litterman/i).first();
+    await expect(hubCard).toBeVisible({ timeout: 15_000 });
+
+    const btnComparer = page.getByRole('button', { name: /Comparer dans Futur/i }).first();
+    if (await btnComparer.isVisible().catch(() => false)) {
+      const boxComparer = await btnComparer.boundingBox();
+      expect(boxComparer?.height ?? 0).toBeGreaterThanOrEqual(43.5);
+      await btnComparer.click();
+      await expect(page.getByRole('group', { name: /Courbe de vie/ })).toBeVisible({ timeout: 15_000 });
     }
 
     expect(errors.consoleErrors).toEqual([]);

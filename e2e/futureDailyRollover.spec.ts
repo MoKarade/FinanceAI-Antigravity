@@ -37,14 +37,11 @@ test.describe('Futur — rollover quotidien de la frontière réel/projeté', ()
     await page.goto('/#FUTURE');
     await page.waitForLoadState('domcontentloaded');
 
-    const voirDirect = page.getByRole('button', { name: /projection actuelle.*sans optimiser/i });
-    await voirDirect.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
-    if (await voirDirect.isVisible().catch(() => false)) await voirDirect.click();
     await page.locator('.recharts-cartesian-grid').first().waitFor({ state: 'visible', timeout: 15_000 });
 
-    // Fenêtre resserrée autour du présent : le preset clavier « Aujourd'hui » (~7 mois).
-    // ⚠️ Ciblé par `title` : le toggle de légende (masquer la ligne) porte le MÊME nom visible.
-    await page.getByTitle("Fenêtre d'environ 6 mois centrée sur aujourd'hui").click();
+    // Fenêtre resserrée autour du présent : le preset « Aujourd'hui » (~15 mois autour d'aujourd'hui).
+    // Bouton « Aujourd'hui » (desktop) -> centrer +/- 1 an autour d'aujourd'hui
+    await page.getByTitle("Centrer la fenêtre autour d'aujourd'hui (±1 an) ou revenir à la vue complète").click();
     await page.locator('.recharts-area-area, .recharts-area path').first().waitFor({ state: 'attached', timeout: 15_000 });
 
     const xBefore = await todayLabelX(page);
@@ -52,14 +49,14 @@ test.describe('Futur — rollover quotidien de la frontière réel/projeté', ()
     // Minuit passe (21 h → 01 h) : le tick HORAIRE partagé tire pendant l'avance.
     await page.clock.fastForward('04:00:00');
 
-    // La frontière a avancé d'environ UN jour de largeur de fenêtre (~7 mois ≈ 215 jours
-    // visibles) : strictement > 0 et < 3 largeurs de jour (tolérance re-layout).
+    // La frontière a avancé d'environ UN jour de largeur de fenêtre (~15 mois ≈ 456 jours
+    // visibles) : strictement > 0,5 px et < 3 largeurs de jour (tolérance re-layout).
     await expect
       .poll(async () => (await todayLabelX(page)) - xBefore, { timeout: 10_000 })
       .toBeGreaterThan(0.5);
     const delta = (await todayLabelX(page)) - xBefore;
     const grid = (await page.locator('.recharts-cartesian-grid').first().boundingBox())!;
-    const oneDayPx = grid.width / 215;
+    const oneDayPx = grid.width / 456;
     expect(delta).toBeLessThan(oneDayPx * 3);
   });
 });

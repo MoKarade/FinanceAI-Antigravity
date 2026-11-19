@@ -19,9 +19,6 @@ async function openFuture(page: Page) {
   await page.waitForLoadState('domcontentloaded');
   await activateTestMode(page);
   await page.goto('/#FUTURE');
-  const voirDirect = page.getByRole('button', { name: /projection actuelle.*sans optimiser/i });
-  await voirDirect.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
-  if (await voirDirect.isVisible().catch(() => false)) await voirDirect.click();
   await expect(page.getByRole('group', { name: /Courbe de vie/ })).toBeVisible({ timeout: 15_000 });
   await page.locator('.chart-event-icon').first().waitFor({ state: 'attached', timeout: 15_000 });
 }

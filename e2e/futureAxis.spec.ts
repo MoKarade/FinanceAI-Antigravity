@@ -43,10 +43,6 @@ test.describe('Futur — ancrages de l’axe X numérique', () => {
     await page.goto('/#FUTURE');
     await page.waitForLoadState('domcontentloaded');
 
-    const voirDirect = page.getByRole('button', { name: /projection actuelle.*sans optimiser/i });
-    await voirDirect.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
-    if (await voirDirect.isVisible().catch(() => false)) await voirDirect.click();
-
     await page.locator('.recharts-cartesian-grid').first().waitFor({ state: 'visible', timeout: 15_000 });
     await page.locator('.recharts-area-area, .recharts-area path').first().waitFor({ state: 'attached', timeout: 15_000 });
     await page.locator('.recharts-reference-area-rect').first().waitFor({ state: 'attached', timeout: 15_000 });

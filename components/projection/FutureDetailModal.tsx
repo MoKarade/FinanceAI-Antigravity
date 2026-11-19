@@ -102,17 +102,23 @@ export const FutureDetailModal: React.FC<FutureDetailModalProps> = ({
     const catsDuMois = useMemo(() => monthCategories(transactions, monthIso), [transactions, monthIso]);
 
     // [A11Y-FUTUR-MILESTONES-KEYBOARD] Une modale ouvrable au CLAVIER (pastilles focusables,
-    // Entrée) doit se fermer au clavier : Échap n'était géré NULLE PART — seul le bouton
-    // « Fermer » et le clic-dehors fermaient (mesuré : l'e2e croyait Échap fonctionnel parce
-    // qu'une boucle avalait son échec). Listener document : ferme quel que soit l'endroit où
-    // le focus se trouve.
+    // Entrée) doit se fermer au clavier : phase capture + ref stable pour fermer la modale
+    // avant tout listener sous-jacent (ex. FutureRichTooltip / useSelectionJour) et sans
+    // réenregistrement destructeur à chaque re-render.
+    const onCloseRef = useRef(onClose);
+    onCloseRef.current = onClose;
+
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') onClose();
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                onCloseRef.current();
+            }
         };
-        document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
-    }, [onClose]);
+        document.addEventListener('keydown', onKey, true);
+        return () => document.removeEventListener('keydown', onKey, true);
+    }, []);
 
     // [Audit a11y #599, HIGH] Focus au MONTAGE UNIQUEMENT (deps []) : le callback-ref inline
     // d'avant changeait d'identité à chaque rendu → React ré-exécutait `.focus()` à CHAQUE

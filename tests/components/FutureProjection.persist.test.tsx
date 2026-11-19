@@ -1,23 +1,24 @@
-// [PROJECTION-PERSIST 2026-07-16] — verrouille la demande Marc : « quand j'ai généré une projection,
-// je ne veux pas avoir à la regénérer — elle reste peu importe si je reload ou si je change de page ;
-// si mes paramètres changent, un indicateur "pas à jour" + un bouton (recharger / rechoisir) ».
-//
-// Discriminants (échouent sur l'ANCIEN code) :
-//  1. revealedSig était un useState LOCAL → un remontage (reload/changement de page) re-affichait
-//     l'écran d'amorçage. Désormais : signature PERSISTÉE (store) → la courbe reste.
-//  2. entrées modifiées → l'ancien code re-affichait l'écran plein « Paramètres modifiés » (courbe
-//     cachée). Désormais : la courbe FIGÉE reste affichée (titre STRAT-A, pas STRAT-B live) + badge
-//     « Pas à jour » + 2 boutons.
-//
-// HORS mode test exprès : en mode test le gel est désactivé (le blob figé porte les VRAIES données).
+// [PROJECTION-PERSIST] Futur 4.0 :
+//   1. Affichage immédiat dès qu'un résultat `lastProjection` est présent (zéro écran bloqueur).
+//   2. [no-fake-data] Lorsque `results === null`, état honnête de rechargement (`curveRestoring`),
+//      jamais de KPI fictif à 0 $.
+//   3. Mémoire chiffrée IndexedDB (`deepForecastStore`) + badge `isOutdated` lorsque les paramètres
+//      changent + isolation stricte entre dossier réel et mode test (persona).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, act, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, renderHook, screen, act, cleanup, waitFor } from '@testing-library/react';
 import { FutureProjection } from '../../components/FutureProjection';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../../services/testFixtures';
+import { computeDeepForecastInputsSig } from '../../services/projection/runDeepForecastAsync';
+import { useSimulationParams } from '../../hooks/useSimulationParams';
+import {
+    DEEP_SCENARIO_IDS,
+    type DeepForecastReport,
+    type DeepScenarioId,
+    type DeepScenarioOutput,
+} from '../../services/projection/deepForecastTypes';
 import type { ProjectionResult } from '../../services/projection/types';
 
-// Recharts → stubs inertes (jsdom n'a pas de layout SVG).
 vi.mock('recharts', async () => {
     const React = await import('react');
     const P = ({ children }: { children?: React.ReactNode }) => React.createElement('div', null, children);
@@ -29,33 +30,101 @@ vi.mock('recharts', async () => {
     };
 });
 vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn() }));
-// Store IDB mocké et OBSERVABLE (jsdom n'a pas d'indexedDB ; le round-trip IDB réel est prouvé à part
-// dans tests/services/lockedProjectionStore.test.ts avec fake-indexeddb). Permet d'asserter les APPELS
-// (ex. garde mode-test sur clearRevealedProjection). load → 'empty' = comportement jsdom d'origine.
+
 const idbMocks = vi.hoisted(() => ({
-    loadRevealed: vi.fn(async () => ({ status: 'empty' as const })),
-    saveRevealed: vi.fn(async () => true),
-    clearRevealed: vi.fn(async () => undefined),
-}));
-vi.mock('../../services/lockedProjectionStore', () => ({
-    loadRevealedProjection: idbMocks.loadRevealed,
-    saveRevealedProjection: idbMocks.saveRevealed,
-    clearRevealedProjection: idbMocks.clearRevealed,
-    saveLockedProjection: vi.fn(async () => true),
-    loadLockedProjection: vi.fn(async () => ({ status: 'empty' as const })),
-    clearLockedProjection: vi.fn(async () => undefined),
-}));
-// Optimiseur/stress neutralisés (hors sujet ici — on teste le gating/gel, pas la recherche).
-vi.mock('../../components/projection/StrategyOptimizerPanel', () => ({
-    StrategyOptimizerPanel: () => <span>optimiseur (mock)</span>,
-}));
-vi.mock('../../components/projection/StressTestPanel', () => ({
-    StressTestPanel: () => null,
+    loadApplied: vi.fn(),
+    saveApplied: vi.fn(async () => true),
+    clearApplied: vi.fn(async () => true),
 }));
 
-// Résultats moteur discriminables par le TITRE de la carte (« Stratégie : <strategyName> », carte Leviers).
-const RESULT_A: ProjectionResult = { chartData: [], fireNumber: 500_000, allResults: [{ chartData: [], fireNumber: 500_000, allResults: [], strategyName: 'STRAT-A' } as unknown as ProjectionResult] };
-const RESULT_B: ProjectionResult = { chartData: [], fireNumber: 500_000, allResults: [{ chartData: [], fireNumber: 500_000, allResults: [], strategyName: 'STRAT-B' } as unknown as ProjectionResult] };
+vi.mock('../../services/deepForecastStore', () => ({
+    loadAppliedDeepForecast: idbMocks.loadApplied,
+    saveAppliedDeepForecast: idbMocks.saveApplied,
+    clearAppliedDeepForecast: idbMocks.clearApplied,
+}));
+
+const RESULT_A: ProjectionResult = {
+    chartData: [
+        { monthIndex: 0, year: 2026, age: 35, dateLabel: '2026-01', NetWorth: 210_000 } as never,
+    ],
+    fireNumber: 500_000,
+    allResults: [
+        { chartData: [], fireNumber: 500_000, allResults: [], strategyName: 'STRAT-A' } as unknown as ProjectionResult,
+    ],
+};
+
+function makeSavedDeepReport(inputsSig: string, trajectoriesRun = 100_000): DeepForecastReport {
+    const scenarios = Object.fromEntries(
+        DEEP_SCENARIO_IDS.map((id) => {
+            const out: DeepScenarioOutput = {
+                id: id as DeepScenarioId,
+                label: id === 'real_trajectory' ? 'Trajectoire réelle' : id,
+                shortDescription: 'Rapport restauré',
+                assumptionsSummaryFr: 'Résumé',
+                points: [{ monthIndex: 0, year: 2026, age: 35, netWorth: 210_000, p10: 190_000, p50: 210_000, p90: 230_000, mcRange: [190_000, 230_000] }],
+                milestones: {
+                    fiAge: 58,
+                    fiProbabilityPct: 84,
+                    sustainableMonthlyNetRetirementCad: 4_100,
+                    sustainableMonthlyNetP90Cad: 3_300,
+                    goalsSummary: [],
+                    finalNetWorthP50: 1_400_000,
+                    estateNetWorthP50: 1_250_000,
+                    estateTaxP50: 150_000,
+                    ruinProbabilityPct: 3,
+                },
+                turningPoints: [],
+                appliedOptimizationsFr: [],
+            };
+            return [id, out];
+        }),
+    ) as Record<DeepScenarioId, DeepScenarioOutput>;
+
+    return {
+        version: 1,
+        inputsSig,
+        createdAt: '2026-11-18T10:00:00.000Z',
+        durationMs: 1_500,
+        trajectoriesRun,
+        isDeepRun: true,
+        pastDiagnostic: {
+            transactionsAnalyzed: 0,
+            monthsCovered: 0,
+            firstTransactionDate: null,
+            lastTransactionDate: null,
+            observedMonthlyIncomeCad: null,
+            observedMonthlyExpensesCad: null,
+            budgetedMonthlyExpensesCad: null,
+            monthlySpendingGapCad: null,
+            observedSavingsRatePct: null,
+            lifestyleCreepAnnualPct: null,
+            fixedExpensesSharePct: null,
+            discretionarySharePct: null,
+            peakSpendingMonthLabel: null,
+            lowSpendingMonthLabel: null,
+            weightedMerPct: null,
+            estimatedAnnualFeeAndTaxDragCad: null,
+            expenseVolatilityPct: null,
+            findingsFr: [],
+        },
+        newsBundle: {
+            collectedAtIso: '2026-11-18T10:00:00.000Z',
+            liveArticlesUsed: 0,
+            offlineFallbackUsed: true,
+            portfolioSentimentScore: null,
+            portfolioSentimentLabel: 'Neutre',
+            annualizedReturnAdjustmentPct: 0,
+            volatilityMultiplier: 1,
+            macroHeadlineFr: 'Neutre',
+            keySignals: [],
+            aiSynthesisFr: null,
+            usedGemini: false,
+        },
+        valoriaSummary: null,
+        scenarios,
+        concreteActions: [],
+    };
+}
 
 function Harness() {
     const projection = useFinanceStore((s) => s.projection);
@@ -81,152 +150,132 @@ function Harness() {
     );
 }
 
-const revealBtn = () => screen.getByText(/vois directement ta projection actuelle/i);
-
-describe('FutureProjection — persistance de la révélation + gel « pas à jour » (PROJECTION-PERSIST)', () => {
+describe('FutureProjection — affichage immédiat, mémoire chiffrée IDB et isolation mode test (PROJECTION-PERSIST)', () => {
     beforeEach(() => {
+        vi.clearAllMocks();
+        idbMocks.loadApplied.mockResolvedValue({ status: 'empty' });
         const data = getPersonaOrDefault(DEFAULT_PERSONA_ID).build();
         act(() => {
-            // Données réalistes SANS mode test (le gel est coupé en mode test, par design).
             useFinanceStore.setState({
                 ...data,
-                isTestMode: false, activeTestPersonaId: null, realDataSnapshot: null,
-                projectionRunMC: false, lastProjection: RESULT_A, projectionStatus: 'idle',
-                isProjectionLocked: false, lockedProjection: null,
-                revealedProjectionSig: null,
+                isTestMode: false,
+                activeTestPersonaId: null,
+                realDataSnapshot: null,
+                projectionRunMC: false,
+                lastProjection: RESULT_A,
+                projectionStatus: 'idle',
+                isProjectionLocked: false,
+                lockedProjection: null,
             });
         });
     });
+
     afterEach(() => cleanup());
 
-    it('la révélation SURVIT au remontage (reload / changement de page simulé)', async () => {
+    it('affiche immédiatement la courbe et les 4 scénarios quand lastProjection est présent (plus d’écran bloqueur)', async () => {
         render(<Harness />);
-        expect(screen.getByText(/Compose tes leviers/i)).toBeInTheDocument(); // jamais calculé → gate
-
-        fireEvent.click(revealBtn());
-        await waitFor(() => expect(screen.getByText(/Stratégie : STRAT-A/i)).toBeInTheDocument());
-        expect(useFinanceStore.getState().revealedProjectionSig).not.toBeNull(); // signature PERSISTÉE
-
-        cleanup();
-        render(<Harness />); // « reload » : nouveau montage, store persistant intact
-
-        // Discriminant : sur l'ancien code (useState local), ce remontage ré-affichait le gate.
-        expect(screen.getByText(/Stratégie : STRAT-A/i)).toBeInTheDocument();
         expect(screen.queryByText(/Compose tes leviers/i)).not.toBeInTheDocument();
+        expect(screen.getByRole('region', { name: /Projection affichée/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Trajectoire réelle/i })).toBeInTheDocument();
+        await waitFor(() => expect(idbMocks.loadApplied).toHaveBeenCalledWith({ isTestMode: false, personaId: null }));
     });
 
-    it('entrées modifiées → courbe FIGÉE (STRAT-A) + badge « Pas à jour », PAS l\'écran d\'amorçage', async () => {
-        render(<Harness />);
-        fireEvent.click(revealBtn());
-        await waitFor(() => expect(screen.getByText(/Stratégie : STRAT-A/i)).toBeInTheDocument());
-
-        // Un paramètre change (horizon) ET le moteur publie un NOUVEAU résultat (STRAT-B).
+    it('[no-fake-data] lorsque lastProjection === null → « Ta projection se recharge… », JAMAIS de KPIs fictifs à 0 $', async () => {
         act(() => {
-            const proj = useFinanceStore.getState().projection;
-            useFinanceStore.setState({ projection: { ...proj, inflationRate: (proj.inflationRate ?? 2) + 1 /* [HORIZON-ESPERANCE-DE-VIE] `years` ne pilote plus le moteur */ }, lastProjection: RESULT_B });
+            useFinanceStore.setState({ lastProjection: null });
         });
-
-        // Discriminant : l'ancien code cachait la courbe (écran plein « Paramètres modifiés »).
-        // Désormais : la courbe reste, FIGÉE au dernier calcul (STRAT-A, pas le STRAT-B live), badge + boutons.
-        expect(screen.getByText(/Pas à jour/i)).toBeInTheDocument();
-        expect(screen.getByText(/Stratégie : STRAT-A/i)).toBeInTheDocument();
-        expect(screen.queryByText(/Stratégie : STRAT-B/i)).not.toBeInTheDocument();
-        expect(screen.queryByText(/Compose tes leviers/i)).not.toBeInTheDocument();
-    });
-
-    it('« Recharger avec mes données » (badge) → courbe LIVE fraîche (STRAT-B), badge disparu', async () => {
-        render(<Harness />);
-        fireEvent.click(revealBtn());
-        await waitFor(() => expect(screen.getByText(/Stratégie : STRAT-A/i)).toBeInTheDocument());
-        act(() => {
-            const proj = useFinanceStore.getState().projection;
-            useFinanceStore.setState({ projection: { ...proj, inflationRate: (proj.inflationRate ?? 2) + 1 /* [HORIZON-ESPERANCE-DE-VIE] `years` ne pilote plus le moteur */ }, lastProjection: RESULT_B });
-        });
-        expect(screen.getByText(/Pas à jour/i)).toBeInTheDocument();
-
-        fireEvent.click(screen.getByText(/Recharger avec mes données/i));
-
-        await waitFor(() => expect(screen.getByText(/Stratégie : STRAT-B/i)).toBeInTheDocument());
-        expect(screen.queryByText(/Pas à jour/i)).not.toBeInTheDocument();
-    });
-
-    it('« Rechoisir mes leviers » (badge) → retour à l\'écran d\'amorçage, signature effacée', async () => {
-        render(<Harness />);
-        fireEvent.click(revealBtn());
-        await waitFor(() => expect(screen.getByText(/Stratégie : STRAT-A/i)).toBeInTheDocument());
-        act(() => {
-            const proj = useFinanceStore.getState().projection;
-            useFinanceStore.setState({ projection: { ...proj, inflationRate: (proj.inflationRate ?? 2) + 1 /* [HORIZON-ESPERANCE-DE-VIE] `years` ne pilote plus le moteur */ }, lastProjection: RESULT_B });
-        });
-
-        fireEvent.click(screen.getByText(/Rechoisir mes leviers/i));
-
-        await waitFor(() => expect(screen.getByText(/Compose tes leviers/i)).toBeInTheDocument());
-        expect(useFinanceStore.getState().revealedProjectionSig).toBeNull();
-        // Hors mode test : le gel IDB est bien purgé (voir aussi le test mode-test plus bas).
-        expect(idbMocks.clearRevealed).toHaveBeenCalled();
-    });
-
-    it('[no-fake-data] reload AVANT publication moteur → « se recharge » (spinner), JAMAIS de KPIs à 0 $ ni d\'amorçage', async () => {
-        // 1. Révèle (sig persistée).
-        render(<Harness />);
-        fireEvent.click(revealBtn());
-        await waitFor(() => expect(screen.getByText(/Stratégie : STRAT-A/i)).toBeInTheDocument());
-        cleanup();
-
-        // 2. « Reload » : sig persistée MAIS le moteur n'a encore RIEN publié (lastProjection est hors
-        // persist → null au boot ; ProjectionEngine mettra ~300 ms + calcul avant de publier).
-        act(() => { useFinanceStore.setState({ lastProjection: null }); });
         render(<Harness />);
 
-        // Discriminant (finding silent-failure BLOQUANT) : sans la garde `results !== null`, l'ancienne
-        // version affichait le strip KPI avec « Objectif FIRE 0k $ » (fausse donnée) et un graphe vide.
         expect(screen.getByText(/Ta projection se recharge/i)).toBeInTheDocument();
-        expect(screen.queryByText(/Objectif FIRE/i)).not.toBeInTheDocument();      // pas de KPIs à 0 $
-        expect(screen.queryByText(/Compose tes leviers/i)).not.toBeInTheDocument(); // pas d'amorçage trompeur
+        expect(screen.queryByText(/Objectif FIRE/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Compose tes leviers/i)).not.toBeInTheDocument();
 
-        // 3. Le moteur publie → la courbe remplace le spinner, sans geste utilisateur.
-        act(() => { useFinanceStore.setState({ lastProjection: RESULT_A }); });
-        await waitFor(() => expect(screen.getByText(/Stratégie : STRAT-A/i)).toBeInTheDocument());
+        act(() => {
+            useFinanceStore.setState({ lastProjection: RESULT_A });
+        });
+        await waitFor(() => expect(screen.getByRole('region', { name: /Projection affichée/i })).toBeInTheDocument());
         expect(screen.queryByText(/se recharge/i)).not.toBeInTheDocument();
     });
 
-    it('[a11y] montage déjà-révélé (reload) → le focus n\'est PAS volé ; révélation par CLIC → focus sur la courbe', async () => {
-        // Montage avec sig persistée (posée par un cycle précédent) : pas de vol de focus.
-        render(<Harness />);
-        fireEvent.click(revealBtn());
-        await waitFor(() => expect(screen.getByText(/Stratégie : STRAT-A/i)).toBeInTheDocument());
-        cleanup();
-        render(<Harness />); // remontage révélé d'emblée
-        const region = () => screen.getByRole('region', { name: /Projection affichée/i });
-        expect(region()).toBeInTheDocument();
-        expect(document.activeElement).not.toBe(region()); // focus resté où il était (body)
+    it('restaure le badge « Analyse profonde en mémoire » depuis IndexedDB et signale isOutdated si les paramètres changent', async () => {
+        const state = useFinanceStore.getState();
+        const { result: simHook, unmount: unmountHook } = renderHook(() => useSimulationParams(2000));
+        const sig = computeDeepForecastInputsSig({
+            params: simHook.current.params,
+            transactions: state.transactions,
+            assets: state.assets,
+            valoriaRiskProfile: state.valoriaRiskProfile,
+        });
+        unmountHook();
+        idbMocks.loadApplied.mockResolvedValue({
+            status: 'ok',
+            report: makeSavedDeepReport(sig, 100_000),
+        });
 
-        // Transition explicite (clic) : re-gate puis re-révèle → le focus DOIT aller sur la courbe.
-        fireEvent.click(screen.getByTitle(/Recomposer tes leviers/i));
-        await waitFor(() => expect(screen.getByText(/Compose tes leviers/i)).toBeInTheDocument());
-        fireEvent.click(revealBtn());
-        await waitFor(() => expect(document.activeElement).toBe(region()));
+        render(<Harness />);
+        await waitFor(() => expect(screen.getByText(/Analyse profonde en mémoire/i)).toBeInTheDocument());
+        expect(screen.queryByText(/Données modifiées/i)).not.toBeInTheDocument();
+
+        // Changement d'un paramètre -> isOutdated passe à vrai tout en conservant le rapport restauré
+        act(() => {
+            const p = useFinanceStore.getState().projection;
+            useFinanceStore.setState({
+                projection: { ...p, inflationRate: (p.inflationRate ?? 2) + 1 },
+            });
+        });
+
+        await waitFor(() =>
+            expect(screen.getByText(/Données modifiées — tu peux relancer quand tu veux/i)).toBeInTheDocument(),
+        );
+        expect(screen.getByText(/Analyse profonde en mémoire/i)).toBeInTheDocument();
     });
 
-    it('[mode test] « Rechoisir mes leviers » en persona NE supprime PAS le blob réel (garde clearRevealedProjection)', async () => {
-        // Passe en mode test avec les mêmes données (persona) : révèle, puis re-gate.
-        const data = getPersonaOrDefault(DEFAULT_PERSONA_ID);
-        act(() => {
-            useFinanceStore.getState().enableTestMode(data.build(), data.id);
-            useFinanceStore.setState({ lastProjection: RESULT_A, projectionRunMC: false });
+    it('[mode test] isole strictement le slot IndexedDB entre dossier réel et persona (zéro fuite sur clear/load)', async () => {
+        idbMocks.loadApplied.mockImplementation(async (scope: { isTestMode?: boolean; personaId?: string | null }) => {
+            if (!scope?.isTestMode) {
+                return { status: 'ok', report: makeSavedDeepReport('sig-real', 100_000) };
+            }
+            return { status: 'empty' };
         });
-        idbMocks.clearRevealed.mockClear();
+
         render(<Harness />);
-        fireEvent.click(revealBtn());
-        await waitFor(() => expect(screen.getByTitle(/Recomposer tes leviers/i)).toBeInTheDocument());
+        await waitFor(() => expect(idbMocks.loadApplied).toHaveBeenCalledWith({ isTestMode: false, personaId: null }));
+        await waitFor(() => expect(screen.getByText(/Analyse profonde en mémoire/i)).toBeInTheDocument());
 
-        fireEvent.click(screen.getByTitle(/Recomposer tes leviers/i)); // « Trouver la meilleure stratégie » = regateToLevers
+        const persona = getPersonaOrDefault(DEFAULT_PERSONA_ID);
+        act(() => {
+            useFinanceStore.getState().enableTestMode(persona.build(), persona.id);
+        });
 
-        await waitFor(() => expect(screen.getByText(/Compose tes leviers/i)).toBeInTheDocument());
-        // Discriminant (finding silent-failure ÉLEVÉ) : sans la garde, le blob RÉEL était supprimé
-        // silencieusement depuis une démo persona (record IDB partagé réel/test).
-        expect(idbMocks.clearRevealed).not.toHaveBeenCalled();
-        act(() => { useFinanceStore.getState().disableTestMode(); });
+        await waitFor(() =>
+            expect(idbMocks.loadApplied).toHaveBeenCalledWith({ isTestMode: true, personaId: persona.id }),
+        );
+        // Le persona a un slot vide : la mémoire du dossier réel ne fuit pas en mode test
+        await waitFor(() => expect(screen.queryByText(/Analyse profonde en mémoire/i)).not.toBeInTheDocument());
+        expect(idbMocks.clearApplied).not.toHaveBeenCalled();
+
+        act(() => {
+            useFinanceStore.getState().disableTestMode();
+        });
+    });
+
+    it('[a11y] montage déjà-visible → le focus n’est PAS volé ; transition rechargement → visible place le focus sur la courbe', async () => {
+        render(<Harness />);
+        const region = screen.getByRole('region', { name: /Projection affichée/i });
+        expect(document.activeElement).not.toBe(region);
+        cleanup();
+
+        act(() => {
+            useFinanceStore.setState({ lastProjection: null });
+        });
+        render(<Harness />);
+        expect(screen.getByText(/Ta projection se recharge/i)).toBeInTheDocument();
+
+        act(() => {
+            useFinanceStore.setState({ lastProjection: RESULT_A });
+        });
+        await waitFor(() =>
+            expect(document.activeElement).toBe(screen.getByRole('region', { name: /Projection affichée/i })),
+        );
     });
 });

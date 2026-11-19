@@ -27,9 +27,6 @@ test.describe('Futur — icônes-jalons (FUTUR-ICONS-RICH)', () => {
   });
 
   test('le graphe affiche de nombreuses icônes-jalons (RRQ/PSV/retraits/impôts)', async ({ page }) => {
-    const voirDirect = page.getByRole('button', { name: /projection actuelle.*sans optimiser/i });
-    await voirDirect.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
-    if (await voirDirect.isVisible().catch(() => false)) await voirDirect.click();
     const chart = page.getByRole('group', { name: /Courbe de vie/ });
     await expect(chart).toBeVisible({ timeout: 15_000 });
     await chart.scrollIntoViewIfNeeded();

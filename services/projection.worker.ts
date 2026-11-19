@@ -24,16 +24,21 @@ import {
 } from './projection';
 import type { GrandCalculConfig, GrandCalculShardResult, ProjectionResult } from './projection/types';
 import type { StrategySearchResult } from './projection/strategySearch';
+import {
+    computeDeepScenarioShard,
+    type DeepShardOutput,
+    type DeepShardRequest,
+} from './projection/deepScenarioEngine';
 
 // Payload entrant du main thread vers le worker.
 interface RunMessage {
     __requestId?: string | number;
-    params: SimulationParams;
+    params?: SimulationParams;
     runMC?: boolean;
     selectedIdx?: number;
     // [UI-SCEN] — types de scénarios demandés explicitement (panneau stress-tests).
     onlyStratTypes?: string[];
-    mode?: 'projection' | 'strategySearch' | 'tournamentSearch' | 'grandCalculShard';
+    mode?: 'projection' | 'strategySearch' | 'tournamentSearch' | 'grandCalculShard' | 'deepForecastShard';
     // G21 C5 commit 4 — mode 'strategySearch' : ce worker traite SA part de configs
     // (sharding fait côté main thread). iterations = sims MC par config.
     configs?: StrategyConfig[];
@@ -44,6 +49,8 @@ interface RunMessage {
     grandCalculConfig?: GrandCalculConfig;
     startIter?: number;
     count?: number;
+    // Mode 'deepForecastShard' : tranche de trajectoires couplées Futur 4.0 (4 scénarios).
+    deepShardRequest?: DeepShardRequest;
 }
 
 // Payloads sortants du worker vers le main thread.
@@ -54,7 +61,7 @@ interface WorkerProgressMessage {
 
 interface WorkerResultMessage {
     __requestId: string | number | undefined;
-    result: ProjectionResult | StrategySearchResult | GrandCalculShardResult;
+    result: ProjectionResult | StrategySearchResult | GrandCalculShardResult | DeepShardOutput;
 }
 
 interface WorkerErrorMessage {
@@ -100,6 +107,34 @@ function collectShardTransferables(shard: GrandCalculShardResult): Transferable[
     return Array.from(buffers);
 }
 
+/**
+ * Collecte les ArrayBuffers des TypedArrays d'un shard Futur 4.0 (4 scénarios) pour transfert zero-copy.
+ */
+function collectDeepShardTransferables(shard: DeepShardOutput): Transferable[] {
+    const buffers = new Set<ArrayBuffer>();
+    const addIfView = (candidate: unknown) => {
+        if (ArrayBuffer.isView(candidate) && candidate.buffer instanceof ArrayBuffer) {
+            buffers.add(candidate.buffer);
+        }
+    };
+    for (const slice of Object.values(shard.scenarios)) {
+        if (!slice) continue;
+        if (slice.monthlyHistograms) {
+            addIfView(slice.monthlyHistograms.counts);
+            addIfView(slice.monthlyHistograms.means);
+            addIfView(slice.monthlyHistograms.weights);
+            addIfView(slice.monthlyHistograms.exactFlags);
+        }
+        addIfView(slice.fiReachedAges);
+        addIfView(slice.sustainableMonthlyNet);
+        addIfView(slice.estateTotals);
+        addIfView(slice.estateTaxes);
+        addIfView(slice.finalNetWorths);
+        addIfView(slice.goalMetCounts);
+    }
+    return Array.from(buffers);
+}
+
 self.onmessage = (e: MessageEvent<RunMessage>) => {
     // FIX silent-failure cycle 2 (HIGH): requestId obligatoire pour corréler
     // chaque réponse à son appel — évite les résultats croisés entre appels concurrents.
@@ -117,8 +152,29 @@ self.onmessage = (e: MessageEvent<RunMessage>) => {
         grandCalculConfig,
         startIter = 0,
         count = 0,
+        deepShardRequest,
     } = e.data;
     try {
+        if (mode === 'deepForecastShard') {
+            if (!deepShardRequest) {
+                throw new Error('deepShardRequest manquant pour le mode deepForecastShard.');
+            }
+            const result = computeDeepScenarioShard(
+                deepShardRequest,
+                (done, total) =>
+                    workerSelf.postMessage({ __requestId: requestId, __progress: { done, total } }),
+            );
+            const transferables = collectDeepShardTransferables(result);
+            if (transferables.length > 0) {
+                workerSelf.postMessage({ __requestId: requestId, result }, transferables);
+            } else {
+                workerSelf.postMessage({ __requestId: requestId, result });
+            }
+            return;
+        }
+        if (!params) {
+            throw new Error('Paramètres de simulation manquants pour le worker.');
+        }
         if (mode === 'grandCalculShard') {
             const gcConfig: GrandCalculConfig = grandCalculConfig ?? {
                 iterations: GRAND_CALCUL_ITERATIONS_DEFAULT,
