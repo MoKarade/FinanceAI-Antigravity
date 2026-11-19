@@ -148,6 +148,9 @@ export interface BrowserSyncOptions {
 const DEBIT_OR_NON_CARD_RE = /\b(debit|d[eé]bit)\b/i;
 const CREDIT_CARD_ACCOUNT_RE = /\b(credit[\s_-]*card|creditcard|carte\s+(?:de\s+)?cr[eé]dit|visa|mastercard|amex|american\s+express)\b/i;
 const NON_CARD_CREDIT_LABEL_RE = /\b(line\s+of\s+credit|marge|loan|pr[eê]t|hypothe|mortgage)\b/i;
+const CASH_ACCOUNT_RE = /\b(checking|chequing|savings?|ch[eè]ques?|compte\s+(?:courant|ch[eè]que|[eé]pargne)|epargne|[eé]pargne|eop|depository)\b/i;
+const CREDIT_OR_LOAN_RE = /\b(credit|cr[eé]dit|visa|mastercard|amex|loan|pr[eê]t|hypothe|mortgage|marge|line\s+of\s+credit|debt|dette)\b/i;
+const INVESTMENT_ACCOUNT_RE = /\b(investment|brokerage|celiapp|fhsa|celi|tfsa|reer|rrsp|reee|resp|disnat|wealthsimple|questrade|placement|courtage)\b/i;
 
 /**
  * Détecte de façon conservatrice si un compte Fintable est une carte de crédit afin d'importer
@@ -162,6 +165,37 @@ export function isLikelyCreditCardAccount(
     if (DEBIT_OR_NON_CARD_RE.test(combined)) return false;
     if (CREDIT_CARD_ACCOUNT_RE.test(combined)) return true;
     return rawType.toLowerCase() === 'credit' && !NON_CARD_CREDIT_LABEL_RE.test(label);
+}
+
+/**
+ * Auto-détection conservatrice des rôles Fintable pour la synchronisation automatique
+ * (carte de crédit sans écrasement de dette, compte chèque/épargne, compte de placement).
+ */
+export function inferAutoFintableRole(
+    account: Pick<FintableSnapshot['accounts'][number], 'rawType' | 'label'>,
+): FintableAccountRoleConfig | undefined {
+    if (isLikelyCreditCardAccount(account)) {
+        return { kind: 'debt', debtName: '' };
+    }
+    const rawType = (account.rawType ?? '').trim();
+    const label = (account.label ?? '').trim();
+    const combined = `${rawType} ${label}`;
+    if (INVESTMENT_ACCOUNT_RE.test(combined)) {
+        if (/\b(celi|tfsa)\b/i.test(combined) && !/\b(celiapp|fhsa)\b/i.test(combined)) {
+            return { kind: 'investment', taxRegime: 'CELI' };
+        }
+        if (/\b(reer|rrsp)\b/i.test(combined)) {
+            return { kind: 'investment', taxRegime: 'REER' };
+        }
+        if (/\b(non[\s_-]?enreg|cash|comptant|margin|marge)\b/i.test(combined)) {
+            return { kind: 'investment', taxRegime: 'NON-ENREG' };
+        }
+        return { kind: 'investment' };
+    }
+    if (CASH_ACCOUNT_RE.test(combined) && !CREDIT_OR_LOAN_RE.test(combined)) {
+        return { kind: 'cash' };
+    }
+    return undefined;
 }
 
 function describeError(err: unknown): string {
@@ -300,13 +334,13 @@ export async function runFintableBrowserSync(
             : rawDateFrom;
         const snapshot = await readFintableSnapshot(client, { dateFrom, dateTo: todayStr });
 
-        // Auto-routage conservateur des comptes carte de crédit sans rôle configuré :
-        // importe les transactions comme dépenses (`debtName: ''`) sans inventer de solde de dette.
+        // Auto-routage conservateur des comptes sans rôle configuré (carte crédit, chèque/épargne, placement)
         const autoAssignedRoles: Record<string, FintableAccountRoleConfig> = {};
         if (autoCreditCards) {
             for (const acc of snapshot.accounts) {
-                if (state.fintableRoles?.[acc.id] === undefined && isLikelyCreditCardAccount(acc)) {
-                    autoAssignedRoles[acc.id] = { kind: 'debt', debtName: '' };
+                if (state.fintableRoles?.[acc.id] === undefined) {
+                    const inferred = inferAutoFintableRole(acc);
+                    if (inferred) autoAssignedRoles[acc.id] = inferred;
                 }
             }
         }
@@ -381,7 +415,7 @@ export async function runFintableBrowserSync(
             const cardCandidates: CardRecoveryCandidate[] = [];
             for (const tx of snapshot.transactions) {
                 const role = mapperRoles[tx.accountId];
-                if (!role || role.kind !== 'debt') continue;
+                if (!role || (role.kind !== 'debt' && role.kind !== 'cash')) continue;
                 if (tx.date < thirtyDaysAgoStr || tx.date > todayStr) continue;
 
                 const accountLabel = accountById.get(tx.accountId)?.label;

@@ -21,7 +21,8 @@ import {
     genererAvisHonneteDossier,
     type ContextePatrimonialGemini,
 } from '../../services/geminiAssistant';
-import { MODEL_IDS, resolveChatModelKey } from '../../services/aiChat/models';
+import { MODEL_IDS, modelLabelFromId, resolveChatModelKey } from '../../services/aiChat/models';
+import { testerCleApiGemini } from '../../services/geminiClientAdapter';
 import { executerTour, executerTourLocal } from '../../services/assistant/agentLoop';
 import { creerClientGemini } from '../../services/assistant/clientGemini';
 import { annulerGroupe, annulationDisponible } from '../../services/assistant/journalModifications';
@@ -89,6 +90,7 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
     const [saisie, setSaisie] = useState(initialQuery);
     const [saisieCle, setSaisieCle] = useState('');
     const [panneauCleOuvert, setPanneauCleOuvert] = useState(false);
+    const [testCleEnCours, setTestCleEnCours] = useState(false);
     const [cleSauvegardeeMsg, setCleSauvegardeeMsg] = useState<string | null>(null);
     const [enCours, setEnCours] = useState(false);
     const [etape, setEtape] = useState<string | null>(null);
@@ -116,9 +118,45 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
             // La clé reste active en mémoire pour la session courante.
         }
         setSaisieCle('');
-        setPanneauCleOuvert(false);
         setAlerte(null);
-        setCleSauvegardeeMsg('Clé API Gemini enregistrée et activée (Gemini 3.8 Flash / 4 Argon prêt).');
+        setTestCleEnCours(true);
+        try {
+            const verif = await testerCleApiGemini(propre);
+            if (verif.ok) {
+                setPanneauCleOuvert(false);
+                setCleSauvegardeeMsg(`Clé API Gemini vérifiée et active (${modelLabelFromId(verif.model ?? 'gemini-3.8-flash')}).`);
+            } else if (verif.cause === 'cle-refusee') {
+                setPanneauCleOuvert(true);
+                setCleSauvegardeeMsg(null);
+                setAlerte(`Google Gemini a refusé cette clé (${verif.message ?? 'accès refusé'}). Autorise ce domaine dans Google AI Studio ou utilise une clé sans restriction.`);
+            } else {
+                setPanneauCleOuvert(false);
+                setCleSauvegardeeMsg(`Clé enregistrée localement (${verif.message ?? 'vérification différée'}).`);
+            }
+        } catch {
+            setPanneauCleOuvert(false);
+            setCleSauvegardeeMsg('Clé API Gemini enregistrée (Gemini 3.8 Flash / 4 Argon prêt).');
+        } finally {
+            setTestCleEnCours(false);
+        }
+    };
+
+    const testerCleActive = async () => {
+        const cle = saisieCle.replace(/^["'\s]+|["'\s]+$/g, '') || apiKeyGemini;
+        if (!cle || testCleEnCours) return;
+        setTestCleEnCours(true);
+        setAlerte(null);
+        setCleSauvegardeeMsg(null);
+        try {
+            const verif = await testerCleApiGemini(cle);
+            if (verif.ok) {
+                setCleSauvegardeeMsg(`Clé API Gemini active (${modelLabelFromId(verif.model ?? 'gemini-3.8-flash')}).`);
+            } else {
+                setAlerte(`Test Google Gemini échoué : ${verif.message ?? verif.cause ?? 'requête refusée'}`);
+            }
+        } finally {
+            setTestCleEnCours(false);
+        }
     };
 
     const rafraichirListe = useCallback(async (d: DepotConversations | null) => {
@@ -469,11 +507,21 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
                                 />
                                 <button
                                     type="submit"
-                                    disabled={!saisieCle.trim()}
+                                    disabled={!saisieCle.trim() || testCleEnCours}
                                     className="touch-target px-3.5 rounded-full bg-repere-fond text-repere border border-bordure-lien text-xs font-semibold hover:opacity-90 disabled:opacity-50 focus-ring shrink-0"
                                 >
-                                    Enregistrer la clé
+                                    {testCleEnCours ? 'Vérification…' : 'Enregistrer la clé'}
                                 </button>
+                                {(cleConfiguree || saisieCle.trim().length > 0) && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { void testerCleActive(); }}
+                                        disabled={testCleEnCours}
+                                        className="touch-target px-3 rounded-full bg-fond text-ink-200 border border-bordure text-xs font-medium hover:text-ink-50 disabled:opacity-50 focus-ring shrink-0"
+                                    >
+                                        Tester
+                                    </button>
+                                )}
                             </div>
                         </form>
                     )}

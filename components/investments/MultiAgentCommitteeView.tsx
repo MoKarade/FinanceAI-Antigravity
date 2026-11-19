@@ -42,9 +42,9 @@ const STARTER_PROMPTS: ReadonlyArray<{ id: string; label: string; question: stri
         question: 'Est-ce que ça vaut le coup de renforcer XEQT.TO ou VFV.TO dans mon CELI ?',
     },
     {
-        id: 'nvda',
-        label: 'Analyser NVDA',
-        question: 'Est-ce que ça vaut le coup d’acheter NVDA maintenant malgré sa valorisation ?',
+        id: 'msft',
+        label: 'Analyser MSFT',
+        question: 'Est-ce que ça vaut le coup d’acheter MSFT maintenant malgré sa valorisation ?',
     },
     {
         id: 'portfolio_check',
@@ -222,7 +222,7 @@ export const MultiAgentCommitteeView: React.FC<MultiAgentCommitteeViewProps> = (
                         value={questionInput}
                         onChange={(e) => setQuestionInput(e.target.value)}
                         disabled={isPrivacyMode}
-                        placeholder="Ex. Est-ce que ça vaut le coup d’acheter Anthropic ? ou Analyser NVDA"
+                        placeholder="Ex. Est-ce que ça vaut le coup d’acheter Anthropic ? ou Analyser MSFT"
                         className="touch-target min-h-11 flex-1 rounded-xl bg-surface-douce border border-bordure-champ px-3.5 py-2 text-sm text-texte placeholder-ink-400 focus-ring disabled:opacity-50"
                     />
                     {status === 'running' ? (

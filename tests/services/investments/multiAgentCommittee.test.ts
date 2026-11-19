@@ -38,18 +38,18 @@ function makeTestState(overrides: Partial<AppState> = {}): AppState {
             } as Asset,
             {
                 id: 'a2',
-                symbol: 'NVDA',
-                name: 'NVIDIA',
+                symbol: 'MSFT',
+                name: 'Microsoft',
                 sector: 'Technologie',
                 region: 'USA',
                 accountType: 'REER',
                 currency: 'USD',
                 quantity: 10,
-                currentPrice: 130,
-                buyPrice: 95,
-                performance: 36,
+                currentPrice: 410,
+                buyPrice: 320,
+                performance: 28,
                 dateBought: '2025-02-01',
-                dividendYield: 0.03,
+                dividendYield: 0.7,
             } as Asset,
         ],
         ...overrides,
@@ -179,7 +179,7 @@ describe('multiAgentCommittee — comité à 5 agents en parallèle', () => {
             }
             if (req.agentId === 'chair_synthesis') {
                 return {
-                    text: '```json\n{"entityStatus":"public_listed","resolvedTicker":"NVDA","verdict":"CONSERVER","conviction":66,"executiveSummary":"NVDA reste déjà bien représenté dans le portefeuille REER.","consensus":["Momentum solide"],"disagreements":["Valorisation élevée"],"actionPlan":["Éviter de surpondérer au-delà de 15 %"],"indirectProxies":[],"invalidationConditions":["Ralentissement des capex IA"],"recommendedWrapper":"REER"}\n```',
+                    text: '```json\n{"entityStatus":"public_listed","resolvedTicker":"MSFT","verdict":"CONSERVER","conviction":66,"executiveSummary":"MSFT reste déjà bien représenté dans le portefeuille REER.","consensus":["Momentum solide"],"disagreements":["Valorisation élevée"],"actionPlan":["Éviter de surpondérer au-delà de 15 %"],"indirectProxies":[],"invalidationConditions":["Ralentissement des capex IA"],"recommendedWrapper":"REER"}\n```',
                     sources: [],
                     usedWebSearch: false,
                     modelUsed: 'gemini-2.5-flash',
@@ -200,14 +200,14 @@ describe('multiAgentCommittee — comité à 5 agents en parallèle', () => {
         });
 
         const report = await runMultiAgentCommittee({
-            question: 'Analyser NVDA pour mon REER',
+            question: 'Analyser MSFT pour mon REER',
             state: makeTestState(),
             apiKey: 'gemini-test-key',
             agentRunner,
         });
 
         expect(report.entityStatus).toBe('public_listed');
-        expect(report.resolvedTicker).toBe('NVDA');
+        expect(report.resolvedTicker).toBe('MSFT');
         expect(report.verdict).toBe('CONSERVER');
         expect(report.agents.find((a) => a.id === 'risk_bear')?.sourceMode).toBe('fallback');
         expect(report.agents.filter((a) => a.sourceMode !== 'fallback')).toHaveLength(3);

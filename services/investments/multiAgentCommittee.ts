@@ -20,6 +20,7 @@ import { formatCAD } from '../../utils/format';
 import { calculateFiscalReport } from '../../utils/tax';
 import { MESSAGE_IA_MODE_DISCRET } from '../messageErreurIa';
 import { signalerUsageIa } from '../aiChat/coutIa';
+import { MODEL_IDS } from '../aiChat/models';
 import type { BlocTableau } from '../assistant/blocsRiches';
 import {
     marquerSystemFictif,
@@ -46,7 +47,13 @@ import type {
     CommitteeVerdict,
 } from './multiAgentCommitteeTypes';
 
-const DEFAULT_COMMITTEE_MODEL = 'gemini-2.5-flash';
+const DEFAULT_COMMITTEE_MODEL = MODEL_IDS.sonnet;
+const COMMITTEE_FALLBACK_MODELS = [
+    MODEL_IDS.sonnet,
+    MODEL_IDS.haiku,
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+] as const;
 const MARKET_FETCH_TIMEOUT_MS = 3500;
 const MAX_HOLDINGS_PROMPT = 12;
 
@@ -65,7 +72,7 @@ export const PRIVATE_COMPANY_DIRECTORY: ReadonlyArray<{
         proxies: [
             { symbol: 'AMZN', name: 'Amazon.com', rationale: 'Actionnaire stratégique majeur d’Anthropic et distributeur principal via AWS Bedrock.' },
             { symbol: 'GOOGL', name: 'Alphabet (Google)', rationale: 'Investisseur stratégique important et partenaire cloud/TPU d’Anthropic.' },
-            { symbol: 'NVDA', name: 'NVIDIA', rationale: 'Fournisseur central d’infrastructure GPU pour l’entraînement et l’inférence des grands modèles IA.' },
+            { symbol: 'MSFT', name: 'Microsoft', rationale: 'Fournisseur majeur d’infrastructure infonuagique IA en entreprise.' },
             { symbol: 'XEQT.TO', name: 'iShares Core Equity ETF (CAD)', rationale: 'Exposition mondiale diversifiée incluant indirectement les géants cloud qui financent l’IA.' },
         ],
     },
@@ -76,7 +83,7 @@ export const PRIVATE_COMPANY_DIRECTORY: ReadonlyArray<{
         note: 'Entreprise privée non cotée directement en bourse.',
         proxies: [
             { symbol: 'MSFT', name: 'Microsoft', rationale: 'Partenaire stratégique majeur et intégrateur Azure/Copilot des modèles OpenAI.' },
-            { symbol: 'NVDA', name: 'NVIDIA', rationale: 'Infrastructure de calcul GPU au cœur de l’écosystème IA.' },
+            { symbol: 'AMD', name: 'AMD', rationale: 'Fournisseur alternatif d’accélérateurs de calcul pour l’inférence IA.' },
         ],
     },
     {
@@ -116,7 +123,7 @@ export const PRIVATE_COMPANY_DIRECTORY: ReadonlyArray<{
         note: 'Entreprise privée non cotée.',
         proxies: [
             { symbol: 'TSLA', name: 'Tesla', rationale: 'Synergies d’IA embarquée et liens opérationnels avec l’écosystème Elon Musk.' },
-            { symbol: 'NVDA', name: 'NVIDIA', rationale: 'Fournisseur des grappes GPU utilisées pour l’entraînement.' },
+            { symbol: 'ORCL', name: 'Oracle', rationale: 'Partenaire d’infrastructure cloud hébergeant des grappes de calcul IA.' },
         ],
     },
     {
@@ -134,7 +141,7 @@ export const PRIVATE_COMPANY_DIRECTORY: ReadonlyArray<{
         sector: 'Recherche IA',
         note: 'Entreprise privée non cotée.',
         proxies: [
-            { symbol: 'NVDA', name: 'NVIDIA', rationale: 'Investisseur stratégique et fournisseur d’infrastructure IA.' },
+            { symbol: 'GOOGL', name: 'Alphabet', rationale: 'Pair coté dominant dans la recherche assistée par l’IA générative.' },
             { symbol: 'AMZN', name: 'Amazon.com', rationale: 'Infrastructure AWS et investissement via Jeff Bezos.' },
         ],
     },
@@ -153,7 +160,7 @@ export const PRIVATE_COMPANY_DIRECTORY: ReadonlyArray<{
         sector: 'Infrastructure de données IA',
         note: 'Entreprise privée non cotée.',
         proxies: [
-            { symbol: 'PLTR', name: 'Palantir Technologies', rationale: 'Acteur coté des plateformes de données et d’IA décisionnelle.' },
+            { symbol: 'SNOW', name: 'Snowflake', rationale: 'Acteur coté des plateformes de données infonuagiques pour l’IA.' },
         ],
     },
     {
@@ -163,7 +170,7 @@ export const PRIVATE_COMPANY_DIRECTORY: ReadonlyArray<{
         note: 'Entreprise privée non cotée.',
         proxies: [
             { symbol: 'KTOS', name: 'Kratos Defense', rationale: 'Acteur coté des drones et systèmes autonomes de défense.' },
-            { symbol: 'PLTR', name: 'Palantir Technologies', rationale: 'Logiciels de défense et partenariats IA.' },
+            { symbol: 'LMT', name: 'Lockheed Martin', rationale: 'Grand maître d’œuvre coté dans les systèmes de défense et autonomie.' },
         ],
     },
     {
@@ -200,7 +207,7 @@ export const PRIVATE_COMPANY_DIRECTORY: ReadonlyArray<{
         sector: 'IA d’entreprise (Canada)',
         note: 'Entreprise canadienne privée non cotée.',
         proxies: [
-            { symbol: 'NVDA', name: 'NVIDIA', rationale: 'Investisseur et fournisseur GPU de Cohere.' },
+            { symbol: 'AMD', name: 'AMD', rationale: 'Partenaire matériel d’accélérateurs IA pour l’inférence en entreprise.' },
             { symbol: 'ORCL', name: 'Oracle', rationale: 'Partenaire cloud et investisseur de Cohere.' },
         ],
     },
@@ -234,7 +241,7 @@ export const VERDICT_LABELS: Record<CommitteeVerdict, string> = {
 };
 
 const KNOWN_COMPANY_TICKER_HINTS: ReadonlyArray<[RegExp, { symbol: string; name: string }]> = [
-    [/\bnvidia\b/i, { symbol: 'NVDA', name: 'NVIDIA' }],
+    [/\bamd\b/i, { symbol: 'AMD', name: 'AMD' }],
     [/\bapple\b/i, { symbol: 'AAPL', name: 'Apple' }],
     [/\bmicrosoft\b/i, { symbol: 'MSFT', name: 'Microsoft' }],
     [/\bamazon\b/i, { symbol: 'AMZN', name: 'Amazon' }],
@@ -711,7 +718,8 @@ export async function collectCommitteeContext(params: {
 const estErreurCleOuAuth = (err: unknown): boolean => {
     const status = (err as { status?: unknown } | null)?.status;
     const msg = String((err as { message?: unknown } | null)?.message ?? '');
-    return status === 401 || /API_KEY_INVALID|API key not valid/i.test(msg);
+    if (status === 401 || status === 403) return true;
+    return status === 400 && /API_KEY_INVALID|API key not valid|PERMISSION_DENIED/i.test(msg);
 };
 
 const estAbortError = (err: unknown): boolean =>
@@ -749,9 +757,9 @@ export function createGeminiCommitteeRunner(apiKey: string): CommitteeAgentRunne
         const { GoogleGenAI } = await sdkPromise;
         const ai = new GoogleGenAI({ apiKey: cleanKey });
 
-        const invokeOnce = async (withSearch: boolean): Promise<CommitteeAgentCallResponse> => {
+        const invokeOnce = async (modelId: string, withSearch: boolean): Promise<CommitteeAgentCallResponse> => {
             const rep = await ai.models.generateContent({
-                model: req.model,
+                model: modelId,
                 contents: req.prompt,
                 config: {
                     systemInstruction: req.systemInstruction,
@@ -764,7 +772,7 @@ export function createGeminiCommitteeRunner(apiKey: string): CommitteeAgentRunne
 
             const usage = rep.usageMetadata;
             signalerUsageIa(
-                req.model,
+                modelId,
                 usage
                     ? {
                           input_tokens: usage.promptTokenCount ?? null,
@@ -777,19 +785,33 @@ export function createGeminiCommitteeRunner(apiKey: string): CommitteeAgentRunne
                 text: rep.text ?? '',
                 sources: withSearch ? extractGroundingSources(rep) : [],
                 usedWebSearch: withSearch,
-                modelUsed: req.model,
+                modelUsed: modelId,
             };
         };
 
-        try {
-            return await invokeOnce(req.useWebSearch);
-        } catch (err) {
-            if (estAbortError(err) || estErreurCleOuAuth(err)) throw err;
-            if (req.useWebSearch) {
-                return await invokeOnce(false);
+        const modelsToTry = [
+            req.model,
+            ...COMMITTEE_FALLBACK_MODELS.filter((m) => m !== req.model),
+        ];
+        let lastErr: unknown;
+
+        for (const modelId of modelsToTry) {
+            try {
+                return await invokeOnce(modelId, req.useWebSearch);
+            } catch (err) {
+                if (estAbortError(err) || estErreurCleOuAuth(err)) throw err;
+                lastErr = err;
+                if (req.useWebSearch) {
+                    try {
+                        return await invokeOnce(modelId, false);
+                    } catch (errNoSearch) {
+                        if (estAbortError(errNoSearch) || estErreurCleOuAuth(errNoSearch)) throw errNoSearch;
+                        lastErr = errNoSearch;
+                    }
+                }
             }
-            throw err;
         }
+        throw lastErr;
     };
 }
 

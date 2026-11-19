@@ -37,6 +37,10 @@ describe('requêtes vers Google Gemini', () => {
         expect(appels[0].url).toContain(`models/${MODEL_SONNET}:generateContent`);
         expect(appels[0].body.generationConfig).toEqual({ maxOutputTokens: 4096 });
         expect(appels[0].body).not.toHaveProperty('temperature');
+        expect(appels[0].body).not.toHaveProperty('model');
+        expect(appels[0].body).not.toHaveProperty('max_tokens');
+        expect(appels[0].body).not.toHaveProperty('thinking');
+        expect(appels[0].body).not.toHaveProperty('output_config');
     });
 
     it('chat() sur Gemini 2.5 Flash-Lite : cible gemini-2.5-flash-lite, plafond 4096, pensée désactivée (thinkingBudget: 0)', async () => {

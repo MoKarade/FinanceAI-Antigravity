@@ -215,6 +215,31 @@ function convertirMessagesPourGemini(messages: unknown[]): Array<{ role: 'user' 
     });
 }
 
+function nettoyerSchemaGemini(node: unknown): unknown {
+    if (Array.isArray(node)) return node.map(nettoyerSchemaGemini);
+    if (!node || typeof node !== 'object') return node;
+    const obj = node as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+        if (
+            k === '$schema' ||
+            k === '$defs' ||
+            k === 'definitions' ||
+            k === '$id' ||
+            k === 'additionalProperties' ||
+            k === 'propertyNames'
+        ) {
+            continue;
+        }
+        if (k === 'const') {
+            out.enum = [v];
+            continue;
+        }
+        out[k] = nettoyerSchemaGemini(v);
+    }
+    return out;
+}
+
 function convertirOutilsPourGemini(tools: unknown[] | undefined): Array<{ functionDeclarations: unknown[] }> | undefined {
     if (!Array.isArray(tools) || tools.length === 0) return undefined;
     const declarations = tools
@@ -225,7 +250,7 @@ function convertirOutilsPourGemini(tools: unknown[] | undefined): Array<{ functi
             return {
                 name: tool.name,
                 description: tool.description ?? '',
-                ...(tool.input_schema ? { parameters: tool.input_schema } : {}),
+                ...(tool.input_schema ? { parameters: nettoyerSchemaGemini(tool.input_schema) } : {}),
             };
         })
         .filter(Boolean);
@@ -309,6 +334,125 @@ interface ResultatAppelGemini {
     resolvedModel: string;
 }
 
+const GEMINI_FALLBACK_MODELS: readonly string[] = [
+    MODEL_IDS.sonnet,
+    MODEL_IDS.haiku,
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+];
+
+function modelesCandidatsGemini(primaryModel: string): string[] {
+    const out: string[] = [primaryModel];
+    for (const m of GEMINI_FALLBACK_MODELS) {
+        if (!out.includes(m)) out.push(m);
+    }
+    return out;
+}
+
+function estErreurCleGemini(status: number, detail: string): boolean {
+    if (status === 401 || status === 403) return true;
+    return status === 400 && /API_KEY_INVALID|API key not valid|PERMISSION_DENIED/i.test(detail);
+}
+
+function estErreurModeleIndisponible(status: number, detail: string): boolean {
+    if (status === 404) return true;
+    return status === 400 && /models\/|not found|is not supported for generateContent|model.*not.*supported/i.test(detail);
+}
+
+async function lireDetailErreurGemini(res: Response): Promise<string> {
+    let detail = `HTTP ${res.status}`;
+    try {
+        const errJson = (await res.json()) as GeminiResponsePayload;
+        if (errJson?.error?.message) detail = errJson.error.message;
+    } catch {
+        // ignore JSON parse error on error body
+    }
+    return detail;
+}
+
+export interface TestCleGeminiResult {
+    ok: boolean;
+    model?: string;
+    status?: number;
+    message?: string;
+    cause?: 'cle-refusee' | 'quota' | 'reseau' | 'modele' | 'autre';
+}
+
+/**
+ * Vérifie directement auprès de l'API Google Gemini (`v1beta`) si une clé API est active
+ * en transmettant la clé uniquement dans l'en-tête HTTP `x-goog-api-key`.
+ */
+export async function testerCleApiGemini(
+    apiKey: string,
+    signal?: AbortSignal,
+): Promise<TestCleGeminiResult> {
+    const cleanKey = apiKey.replace(/^["'\s]+|["'\s]+$/g, '');
+    if (!cleanKey) {
+        return { ok: false, message: 'Aucune clé saisie.', cause: 'cle-refusee' };
+    }
+
+    const body = JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: 'OK' }] }],
+        generationConfig: { maxOutputTokens: 8 },
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(new Error('Délai dépassé')), 10_000);
+    const onExternalAbort = () => controller.abort(signal?.reason);
+    if (signal) {
+        if (signal.aborted) controller.abort(signal.reason);
+        else signal.addEventListener('abort', onExternalAbort, { once: true });
+    }
+
+    try {
+        let lastModelError: { status: number; message: string } | null = null;
+        for (const model of GEMINI_FALLBACK_MODELS) {
+            const res = await fetch(`${GEMINI_API_BASE}/${model}:generateContent`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': cleanKey,
+                },
+                body,
+                signal: controller.signal,
+            });
+            if (res.ok) {
+                return { ok: true, model };
+            }
+            const detail = await lireDetailErreurGemini(res);
+            if (estErreurCleGemini(res.status, detail)) {
+                return { ok: false, status: res.status, message: detail, cause: 'cle-refusee' };
+            }
+            if (res.status === 429) {
+                return { ok: false, status: 429, message: detail, cause: 'quota' };
+            }
+            if (estErreurModeleIndisponible(res.status, detail)) {
+                lastModelError = { status: res.status, message: detail };
+                continue;
+            }
+            return { ok: false, status: res.status, message: detail, cause: 'autre' };
+        }
+        return {
+            ok: false,
+            status: lastModelError?.status ?? 404,
+            message: lastModelError?.message ?? 'Aucun modèle Gemini disponible pour cette clé.',
+            cause: 'modele',
+        };
+    } catch (err) {
+        if (signal?.aborted) {
+            throw err;
+        }
+        return {
+            ok: false,
+            message: err instanceof Error ? err.message : 'Erreur réseau',
+            cause: 'reseau',
+        };
+    } finally {
+        clearTimeout(timeoutId);
+        if (signal) signal.removeEventListener('abort', onExternalAbort);
+    }
+}
+
 async function appelerGeminiRest(
     apiKey: string,
     params: ParamsRequeteGemini,
@@ -319,163 +463,173 @@ async function appelerGeminiRest(
         throw signal.reason ?? new DOMException('Aborted', 'AbortError');
     }
 
-    const cleanKey = apiKey.trim();
-    const resolvedModel = resoudreModeleGemini(params.model);
-    const url = `${GEMINI_API_BASE}/${resolvedModel}:generateContent`;
+    const cleanKey = apiKey.replace(/^["'\s]+|["'\s]+$/g, '');
+    const primaryModel = resoudreModeleGemini(params.model);
     const systemText = extraireSystemTexte(params.system);
     const contents = convertirMessagesPourGemini(params.messages ?? []);
     const geminiTools = convertirOutilsPourGemini(params.tools);
 
-    const generationConfig: Record<string, unknown> = {
-        maxOutputTokens: params.max_tokens ?? 4096,
-    };
-    if (params.thinking?.type === 'disabled') {
-        generationConfig.thinkingConfig = { thinkingBudget: 0 };
-    }
-
-    const body: Record<string, unknown> = {
-        model: resolvedModel,
-        contents,
-        generationConfig,
-        max_tokens: params.max_tokens ?? 4096,
-    };
-    if (params.thinking !== undefined) {
-        body.thinking = params.thinking;
-    }
-    if (params.output_config !== undefined) {
-        body.output_config = params.output_config;
-    }
-    if (systemText) {
-        body.systemInstruction = { parts: [{ text: systemText }] };
-    }
-    if (geminiTools) {
-        body.tools = geminiTools;
-    }
-
-    let lastError: unknown;
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        if (signal?.aborted) {
-            throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+    const buildBody = (includeThinkingConfig: boolean): Record<string, unknown> => {
+        const generationConfig: Record<string, unknown> = {
+            maxOutputTokens: params.max_tokens ?? 4096,
+        };
+        if (includeThinkingConfig && params.thinking?.type === 'disabled') {
+            generationConfig.thinkingConfig = { thinkingBudget: 0 };
         }
+        const out: Record<string, unknown> = {
+            contents,
+            generationConfig,
+        };
+        if (systemText) {
+            out.systemInstruction = { parts: [{ text: systemText }] };
+        }
+        if (geminiTools) {
+            out.tools = geminiTools;
+        }
+        return out;
+    };
 
-        let res: Response;
-        try {
-            res = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-goog-api-key': cleanKey,
-                },
-                body: JSON.stringify(body),
-                signal,
-            });
-        } catch (err) {
-            lastError = err;
-            if (signal?.aborted || (err instanceof Error && err.name === 'AbortError')) {
+    const candidates = modelesCandidatsGemini(primaryModel);
+    let lastError: unknown;
+
+    for (let modelIdx = 0; modelIdx < candidates.length; modelIdx++) {
+        const resolvedModel = candidates[modelIdx]!;
+        const url = `${GEMINI_API_BASE}/${resolvedModel}:generateContent`;
+        let includeThinkingConfig = params.thinking?.type === 'disabled';
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            if (signal?.aborted) {
+                throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+            }
+
+            let res: Response;
+            try {
+                res = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-goog-api-key': cleanKey,
+                    },
+                    body: JSON.stringify(buildBody(includeThinkingConfig)),
+                    signal,
+                });
+            } catch (err) {
+                lastError = err;
+                if (signal?.aborted || (err instanceof Error && err.name === 'AbortError')) {
+                    throw err;
+                }
+                if (attempt < maxRetries) {
+                    await attendreDelai(delaiRetryMs(null, attempt), signal);
+                    continue;
+                }
                 throw err;
             }
-            if (attempt < maxRetries) {
-                await attendreDelai(delaiRetryMs(null, attempt), signal);
-                continue;
+
+            if (!res.ok) {
+                const detail = await lireDetailErreurGemini(res);
+                const httpErr = Object.assign(new Error(detail), { status: res.status });
+                if (estErreurCleGemini(res.status, detail)) {
+                    throw httpErr;
+                }
+                if (
+                    includeThinkingConfig &&
+                    res.status === 400 &&
+                    /thinkingConfig|thinkingBudget|thinking/i.test(detail)
+                ) {
+                    includeThinkingConfig = false;
+                    continue;
+                }
+                if (estErreurModeleIndisponible(res.status, detail) && modelIdx < candidates.length - 1) {
+                    lastError = httpErr;
+                    break;
+                }
+                if (attempt < maxRetries && estStatutReessayable(res.status)) {
+                    await attendreDelai(delaiRetryMs(res, attempt), signal);
+                    continue;
+                }
+                throw httpErr;
             }
-            throw err;
-        }
 
-        if (!res.ok) {
-            let detail = `HTTP ${res.status}`;
-            try {
-                const errJson = (await res.json()) as GeminiResponsePayload;
-                if (errJson?.error?.message) detail = errJson.error.message;
-            } catch {
-                // ignore JSON parse error on error body
-            }
-            const httpErr = Object.assign(new Error(detail), { status: res.status });
-            if (attempt < maxRetries && estStatutReessayable(res.status)) {
-                await attendreDelai(delaiRetryMs(res, attempt), signal);
-                continue;
-            }
-            throw httpErr;
-        }
+            const data = (await res.json()) as GeminiResponsePayload;
+            const candidate = data.candidates?.[0];
+            const parts = candidate?.content?.parts;
 
-        const data = (await res.json()) as GeminiResponsePayload;
-        const candidate = data.candidates?.[0];
-        const parts = candidate?.content?.parts;
+            const contentBlocks: ResultatAppelGemini['contentBlocks'] = [];
+            const textParts: string[] = [];
 
-        const contentBlocks: ResultatAppelGemini['contentBlocks'] = [];
-        const textParts: string[] = [];
-
-        if (Array.isArray(parts) && parts.length > 0) {
-            let toolIdx = 0;
-            for (const p of parts) {
-                if (typeof p.text === 'string') {
-                    textParts.push(p.text);
-                    contentBlocks.push({ type: 'text', text: p.text });
-                } else if (p.functionCall?.name) {
-                    toolIdx += 1;
-                    contentBlocks.push({
-                        type: 'tool_use',
-                        id: `gemini_tool_${Date.now()}_${toolIdx}`,
-                        name: p.functionCall.name,
-                        input: p.functionCall.args ?? {},
-                    });
+            if (Array.isArray(parts) && parts.length > 0) {
+                let toolIdx = 0;
+                for (const p of parts) {
+                    if (typeof p.text === 'string') {
+                        textParts.push(p.text);
+                        contentBlocks.push({ type: 'text', text: p.text });
+                    } else if (p.functionCall?.name) {
+                        toolIdx += 1;
+                        contentBlocks.push({
+                            type: 'tool_use',
+                            id: `gemini_tool_${Date.now()}_${toolIdx}`,
+                            name: p.functionCall.name,
+                            input: p.functionCall.args ?? {},
+                        });
+                    }
+                }
+            } else if (Array.isArray(data.content)) {
+                for (const c of data.content) {
+                    if (c?.type === 'text' && typeof c.text === 'string') {
+                        textParts.push(c.text);
+                        contentBlocks.push({ type: 'text', text: c.text });
+                    }
                 }
             }
-        } else if (Array.isArray(data.content)) {
-            for (const c of data.content) {
-                if (c?.type === 'text' && typeof c.text === 'string') {
-                    textParts.push(c.text);
-                    contentBlocks.push({ type: 'text', text: c.text });
-                }
+
+            const text = textParts.join('');
+            if (contentBlocks.length === 0) {
+                contentBlocks.push({ type: 'text', text: '' });
             }
-        }
 
-        const text = textParts.join('');
-        if (contentBlocks.length === 0) {
-            contentBlocks.push({ type: 'text', text: '' });
-        }
+            const hasToolUse = contentBlocks.some((b) => b.type === 'tool_use');
+            const stopReason = hasToolUse
+                ? 'tool_use'
+                : mapperStopReason(candidate?.finishReason, data.stop_reason);
 
-        const hasToolUse = contentBlocks.some((b) => b.type === 'tool_use');
-        const stopReason = hasToolUse
-            ? 'tool_use'
-            : mapperStopReason(candidate?.finishReason, data.stop_reason);
+            // No-fake-data : jamais de jetons inventés (120/180) si la réponse ne porte pas d'usage réel.
+            let usage: ResultatAppelGemini['usage'];
+            if (
+                data.usageMetadata &&
+                (typeof data.usageMetadata.promptTokenCount === 'number' ||
+                    typeof data.usageMetadata.candidatesTokenCount === 'number')
+            ) {
+                usage = {
+                    input_tokens: data.usageMetadata.promptTokenCount ?? 0,
+                    output_tokens: data.usageMetadata.candidatesTokenCount ?? 0,
+                    ...(typeof data.usageMetadata.cachedContentTokenCount === 'number'
+                        ? { cache_read_input_tokens: data.usageMetadata.cachedContentTokenCount }
+                        : {}),
+                };
+            } else if (
+                data.usage &&
+                (typeof data.usage.input_tokens === 'number' || typeof data.usage.output_tokens === 'number')
+            ) {
+                usage = {
+                    input_tokens: data.usage.input_tokens ?? 0,
+                    output_tokens: data.usage.output_tokens ?? 0,
+                    ...(typeof data.usage.cache_read_input_tokens === 'number'
+                        ? { cache_read_input_tokens: data.usage.cache_read_input_tokens }
+                        : {}),
+                    ...(typeof data.usage.cache_creation_input_tokens === 'number'
+                        ? { cache_creation_input_tokens: data.usage.cache_creation_input_tokens }
+                        : {}),
+                };
+            }
 
-        // No-fake-data : jamais de jetons inventés (120/180) si la réponse ne porte pas d'usage réel.
-        let usage: ResultatAppelGemini['usage'];
-        if (
-            data.usageMetadata
-            && (typeof data.usageMetadata.promptTokenCount === 'number'
-                || typeof data.usageMetadata.candidatesTokenCount === 'number')
-        ) {
-            usage = {
-                input_tokens: data.usageMetadata.promptTokenCount ?? 0,
-                output_tokens: data.usageMetadata.candidatesTokenCount ?? 0,
-                ...(typeof data.usageMetadata.cachedContentTokenCount === 'number'
-                    ? { cache_read_input_tokens: data.usageMetadata.cachedContentTokenCount }
-                    : {}),
+            return {
+                text,
+                contentBlocks,
+                stopReason,
+                usage,
+                resolvedModel,
             };
-        } else if (
-            data.usage
-            && (typeof data.usage.input_tokens === 'number' || typeof data.usage.output_tokens === 'number')
-        ) {
-            usage = {
-                input_tokens: data.usage.input_tokens ?? 0,
-                output_tokens: data.usage.output_tokens ?? 0,
-                ...(typeof data.usage.cache_read_input_tokens === 'number'
-                    ? { cache_read_input_tokens: data.usage.cache_read_input_tokens }
-                    : {}),
-                ...(typeof data.usage.cache_creation_input_tokens === 'number'
-                    ? { cache_creation_input_tokens: data.usage.cache_creation_input_tokens }
-                    : {}),
-            };
         }
-
-        return {
-            text,
-            contentBlocks,
-            stopReason,
-            usage,
-            resolvedModel,
-        };
     }
 
     throw lastError ?? new Error('Appel Google Gemini échoué');

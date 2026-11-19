@@ -204,11 +204,17 @@ async function runDailyFintableSyncGuarded(
     const dueByAge = isDailySyncDue(state.fintableSyncReport, now(), maxAgeMs);
     const dueForCards = Boolean(opts.autoCreditCards) && hasPendingCreditCardRecovery(state.fintableSyncReport);
     if (!dueByAge && !dueForCards) return { ran: false, reason: 'fresh' };
-    const erreurAncienProxyOuCsp = Boolean(
-        state.fintableSyncReport?.error?.includes('[MALFORMED]') ||
-        state.fintableSyncReport?.error?.includes('[NETWORK]'),
+    const lastErrorMsg = state.fintableSyncReport?.error ?? '';
+    const erreurBypassCooldown = Boolean(
+        lastErrorMsg.includes('[MALFORMED]') ||
+        lastErrorMsg.includes('[NETWORK]'),
     );
-    if (!opts.ignoreCooldown && !erreurAncienProxyOuCsp && now() - readLastAttempt() < cooldownMs) {
+    const erreurRetryRapide = Boolean(
+        lastErrorMsg.includes('[SERVER]') ||
+        lastErrorMsg.includes('[RATE_LIMIT]'),
+    );
+    const cooldownEffectif = erreurRetryRapide ? Math.min(cooldownMs, 2 * 60_000) : cooldownMs;
+    if (!opts.ignoreCooldown && !erreurBypassCooldown && now() - readLastAttempt() < cooldownEffectif) {
         return { ran: false, reason: 'cooldown' };
     }
     if (!acquireFintableSyncLock()) return { ran: false, reason: 'in-flight' };

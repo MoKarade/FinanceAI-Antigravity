@@ -105,9 +105,41 @@ interface AccueilGoogleProps {
     currentLiquidity: number;
 }
 
-type HorizonCle = '1M' | '1A' | '5A' | '10A' | 'MAX';
+type HorizonCle = '1M' | '3M' | '1A' | '5A' | '10A' | 'MAX';
 type LentilleHero = 'net' | 'portefeuille' | 'liquidites' | 'immobilier';
 type ModeCourbe = 'nette' | 'complete';
+
+function calculerEchelleNetteSerree(valeurs: ReadonlyArray<number>): { ticks: number[]; domaine: [number, number] } {
+    if (valeurs.length === 0) return { ticks: [0, 50_000, 100_000], domaine: [0, 100_000] };
+    const minVal = Math.min(...valeurs);
+    const maxVal = Math.max(...valeurs);
+    if (minVal === maxVal) {
+        if (minVal === 0) return { ticks: [0, 50, 100], domaine: [0, 100] };
+        const pad = Math.max(500, Math.round(Math.abs(maxVal) * 0.05));
+        const bas = minVal >= 0 ? Math.max(0, Math.floor(minVal - pad)) : Math.floor(minVal - pad);
+        const haut = Math.ceil(maxVal + pad);
+        const mid = Math.round((bas + haut) / 2);
+        return { ticks: [bas, mid, haut], domaine: [bas, haut] };
+    }
+    const span = maxVal - minVal;
+    const basBrut = minVal >= 0 ? Math.max(0, minVal - span * 0.12) : minVal - span * 0.12;
+    const hautBrut = maxVal + span * 0.14;
+    const plage = Math.max(100, hautBrut - basBrut);
+    const brutPas = plage / 4;
+    const mag = 10 ** Math.floor(Math.log10(brutPas));
+    const norm = brutPas / mag;
+    const mult = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+    const step = Math.max(50, Math.round(mult * mag));
+    const bas = minVal >= 0
+        ? Math.max(0, Math.floor(basBrut / step) * step)
+        : Math.floor(basBrut / step) * step;
+    const haut = Math.max(bas + step, Math.ceil(hautBrut / step) * step);
+    const ticks: number[] = [];
+    for (let t = bas; t <= haut + step * 0.001; t += step) {
+        ticks.push(Math.round(t));
+    }
+    return { ticks, domaine: [bas, haut] };
+}
 
 interface PrioriteActionPatrimoniale {
     id: string;
@@ -172,6 +204,7 @@ interface JalonPatrimonial {
 
 const HORIZONS: ReadonlyArray<{ cle: HorizonCle; label: string; annees: number; tempsFort: boolean }> = [
     { cle: '1M', label: '1M', annees: 0.085, tempsFort: true },
+    { cle: '3M', label: '3M', annees: 0.25, tempsFort: true },
     { cle: '1A', label: '1A', annees: 1, tempsFort: true },
     { cle: '5A', label: '5A', annees: 5, tempsFort: true },
     { cle: '10A', label: '10A', annees: 10, tempsFort: true },
@@ -313,17 +346,24 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         startMonth,
         todayMonthIndex,
     } = useSimulationParams(calculatedMonthlySavings);
-    const { syncStatus, syncWorkspaceNow } = useFirebaseAuth();
+    const { syncStatus } = useFirebaseAuth();
 
     const [requete, setRequete] = useState('');
     const [rechercheOuverte, setRechercheOuverte] = useState(false);
     const [lentilleHero, setLentilleHero] = useState<LentilleHero>('net');
-    const [horizon, setHorizon] = useState<HorizonCle>('1M');
+    const [horizon, setHorizon] = useState<HorizonCle>('1A');
     const [modeCourbe, setModeCourbe] = useState<ModeCourbe>('nette');
     const [tempsFortsActifs, setTempsFortsActifs] = useState(true);
     const [segmentActif, setSegmentActif] = useState<string | null>(null);
+    const [pointSurvole, setPointSurvole] = useState<PointTrajectoire | null>(null);
+    const [pointEpingle, setPointEpingle] = useState<PointTrajectoire | null>(null);
     const [showConnexionsModal, setShowConnexionsModal] = useState(false);
     const [showGeminiModal, setShowGeminiModal] = useState(false);
+
+    useEffect(() => {
+        setPointSurvole(null);
+        setPointEpingle(null);
+    }, [horizon, lentilleHero, modeCourbe]);
 
     // Calcul immobilier cohérent avec FutureKpiStrip (avoirs − dettes = patrimoine net)
     const { realEstateEquity, realEstateValeur, realEstateHypotheque } = useMemo(() => {
@@ -680,7 +720,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         [displayData, startYear, startMonth, dailyDated, dailyPastByDate, enrichCache, syncConfirmedUntilIso, todayIso],
     );
 
-    // Bornes temporelles de la fenêtre selon l'horizon sélectionné (1M, 1A, 5A, 10A, MAX = Tout)
+    // Bornes temporelles de la fenêtre selon l'horizon sélectionné (1M, 3M, 1A, 5A, 10A, MAX = Tout)
     const xAuj = todayAxisX ?? todayMonthIndex;
     const bornesHorizonMois = useMemo<[number, number]>(() => {
         const minMois = Math.min(pastStartIndex, xAuj);
@@ -688,14 +728,17 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         if (horizon === '1M') {
             return [Math.max(minMois, xAuj - 1), Math.min(maxMois, xAuj + 1)];
         }
+        if (horizon === '3M') {
+            return [Math.max(minMois, xAuj - 3), Math.min(maxMois, xAuj + 3)];
+        }
         if (horizon === '1A') {
             return [Math.max(minMois, xAuj - 12), Math.min(maxMois, xAuj + 12)];
         }
         if (horizon === '5A') {
-            return [minMois, Math.min(maxMois, xAuj + 60)];
+            return [Math.max(minMois, xAuj - 12), Math.min(maxMois, xAuj + 60)];
         }
         if (horizon === '10A') {
-            return [minMois, Math.min(maxMois, xAuj + 120)];
+            return [Math.max(minMois, xAuj - 24), Math.min(maxMois, xAuj + 120)];
         }
         return [minMois, maxMois];
     }, [horizon, pastStartIndex, lastMonthIndex, xAuj]);
@@ -751,7 +794,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     );
 
     const donneesTrajectoire = useMemo<PointTrajectoire[]>(() => {
-        return chartSeriesBrute.map((pt) => {
+        const idxTransition = indexAujourdhui(chartSeriesBrute, xAuj);
+        return chartSeriesBrute.map((pt, idx) => {
             const celi = Number(pt.CELI) || 0;
             const celiapp = Number(pt.CELIAPP) || 0;
             const reer = Number(pt.REER) || 0;
@@ -765,8 +809,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             const avoirsPt = Math.round(portefeuillePt + liq + immo + ent);
             const dettesPt = Math.max(0, Math.round(Number(pt.DettesNonImmo) || 0));
             const valLentille = extraireValeurLentillePoint(pt);
-            const estPassePt = Boolean(pt.isPast || pt.dayIsReal || pt.monthIndex < xAuj - 0.01);
-            const estTransitionPt = Math.abs(pt.monthIndex - xAuj) <= 0.04;
+            const estTransitionPt = idxTransition !== -1 ? idx === idxTransition : Math.abs(pt.monthIndex - xAuj) <= 0.04;
+            const estPassePt =
+                idxTransition !== -1
+                    ? idx < idxTransition
+                    : Boolean(pt.isPast || pt.dayIsReal || pt.monthIndex < xAuj - 0.01);
             const cal = calendarFromMonthIndex(startYear, startMonth, Math.floor(pt.monthIndex));
             const labelDate =
                 pt.dateLabel ||
@@ -795,7 +842,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         return brut ? (enrichDailyPoint(brut) ?? brut) : (chartDataMoteur[0] ?? null);
     }, [idxAncre, selectSeries, enrichDailyPoint, chartDataMoteur]);
 
-    // Échelle Y alignée sur FutureProjection.tsx (reperesRonds + cadrage dynamique sur 1M/1A)
+    // Échelle Y cadrée dynamiquement sur la courbe en mode Nette (sans jamais écraser à 0), ancrée à 0 en mode empilé
     const echelleYTrajectoire = useMemo<{ ticks?: number[]; domaine: [number, number] }>(() => {
         const valeurs: number[] = [];
         const garder = (v: unknown) => {
@@ -834,12 +881,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 }
             }
         }
-        if (tempsFortsActifs && lentilleHero === 'net' && (horizon === '10A' || horizon === 'MAX')) {
-            garder(fireNumber);
-        }
         if (valeurs.length === 0) return { domaine: [0, 100_000] };
 
-        if (modeCourbe === 'complete' || horizon === '5A' || horizon === '10A' || horizon === 'MAX') {
+        if (modeCourbe === 'complete') {
+            if (tempsFortsActifs && lentilleHero === 'net' && (horizon === '10A' || horizon === 'MAX')) {
+                garder(fireNumber);
+            }
             const ticks = reperesRonds(valeurs);
             if (ticks && ticks.length > 0) {
                 const bas = Math.min(0, ...valeurs, ticks[0]!);
@@ -848,15 +895,37 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             }
         }
 
-        const minVal = Math.min(...valeurs);
-        const maxVal = Math.max(...valeurs);
-        const amplitude = Math.max(maxVal - minVal, Math.max(300, Math.round(Math.abs(maxVal) * 0.008)));
-        const margeBasse = Math.round(amplitude * 0.14);
-        const margeHaute = Math.round(amplitude * 0.12);
-        const bas = minVal < 0 ? Math.floor((minVal - margeBasse) / 100) * 100 : Math.max(0, Math.floor((minVal - margeBasse) / 100) * 100);
-        const haut = Math.max(bas + 200, Math.ceil((maxVal + margeHaute) / 100) * 100);
-        return { domaine: [bas, haut] };
+        const minActuel = Math.min(...valeurs);
+        const maxActuel = Math.max(...valeurs);
+        if (
+            tempsFortsActifs &&
+            lentilleHero === 'net' &&
+            (horizon === '10A' || horizon === 'MAX') &&
+            fireNumber > 0 &&
+            fireNumber >= minActuel * 0.85 &&
+            fireNumber <= maxActuel * 1.15
+        ) {
+            garder(fireNumber);
+        }
+
+        return calculerEchelleNetteSerree(valeurs);
     }, [donneesTrajectoire, modeCourbe, lentilleHero, runMC, tempsFortsActifs, horizon, fireNumber]);
+
+    const resumeFenetre = useMemo(() => {
+        const vals = donneesTrajectoire
+            .map((p) => p.valeur)
+            .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+        if (vals.length < 2) return null;
+        const debut = vals[0]!;
+        const fin = vals[vals.length - 1]!;
+        const min = Math.min(...vals);
+        const max = Math.max(...vals);
+        const diff = fin - debut;
+        const pct = Math.abs(debut) > 100 ? (diff / Math.abs(debut)) * 100 : null;
+        return { min, max, debut, fin, diff, pct };
+    }, [donneesTrajectoire]);
+
+    const pointInspecte = pointEpingle ?? pointSurvole;
 
     // Repères identiques à FutureProjection.tsx : Jalon FIRE, Retraite, Fin d'horizon
     const jalonFire = useMemo(() => {
@@ -1544,7 +1613,6 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         <button
                             type="button"
                             onClick={() => {
-                                void syncWorkspaceNow();
                                 setShowConnexionsModal(true);
                             }}
                             aria-label="Importer ou synchroniser des comptes"
@@ -1775,6 +1843,69 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
                     </div>
 
+                    {/* Lecture directe de la fenêtre ou du point survolé / épinglé */}
+                    {(pointInspecte || resumeFenetre) && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-fond border border-bordure text-xs font-mono tabular-nums">
+                            {pointInspecte && typeof pointInspecte.valeur === 'number' ? (
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                    <span className="font-semibold text-ink-50">
+                                        {pointInspecte.dateLabel || pointInspecte.annee}
+                                    </span>
+                                    <span className="font-bold text-ink-50">
+                                        <PrivateAmount>{formatCAD(pointInspecte.valeur)}</PrivateAmount>
+                                    </span>
+                                    <span
+                                        className={
+                                            pointInspecte.valeur - valeurHeroAffichee >= 0
+                                                ? 'text-succes-texte font-semibold'
+                                                : 'text-erreur-texte font-semibold'
+                                        }
+                                    >
+                                        <PrivateAmount>
+                                            {`${pointInspecte.valeur - valeurHeroAffichee >= 0 ? '+' : ''}${formatCompactCAD(pointInspecte.valeur - valeurHeroAffichee)} vs aujourd'hui`}
+                                        </PrivateAmount>
+                                    </span>
+                                    <span className="text-ink-400">
+                                        {pointEpingle ? 'Repère épinglé' : 'Cliquer pour épingler'}
+                                    </span>
+                                </div>
+                            ) : (
+                                resumeFenetre && (
+                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-ink-300">
+                                        <span>
+                                            Bas :{' '}
+                                            <strong className="text-ink-100">
+                                                <PrivateAmount>{formatCompactCAD(resumeFenetre.min)}</PrivateAmount>
+                                            </strong>
+                                        </span>
+                                        <span>
+                                            Haut :{' '}
+                                            <strong className="text-ink-100">
+                                                <PrivateAmount>{formatCompactCAD(resumeFenetre.max)}</PrivateAmount>
+                                            </strong>
+                                        </span>
+                                        <span className={resumeFenetre.diff >= 0 ? 'text-succes-texte font-semibold' : 'text-erreur-texte font-semibold'}>
+                                            <PrivateAmount>
+                                                {`${resumeFenetre.diff >= 0 ? '+' : ''}${formatCompactCAD(resumeFenetre.diff)}${
+                                                    resumeFenetre.pct !== null ? ` (${resumeFenetre.diff >= 0 ? '+' : ''}${formatPercent(resumeFenetre.pct)})` : ''
+                                                } sur ${horizon}`}
+                                            </PrivateAmount>
+                                        </span>
+                                    </div>
+                                )
+                            )}
+                            {pointEpingle && (
+                                <button
+                                    type="button"
+                                    onClick={() => setPointEpingle(null)}
+                                    className="touch-target px-3 py-1 rounded-full bg-surface-douce border border-bordure text-xs font-sans font-medium text-ink-200 hover:text-ink-50 focus-ring"
+                                >
+                                    Effacer le repère
+                                </button>
+                            )}
+                        </div>
+                    )}
+
                     {/* Courbe principale plein cadre */}
                     <div
                         data-testid="recharts-trajectory-entrance"
@@ -1784,10 +1915,31 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         data-chart-lens={lentilleHero}
                         role="img"
                         aria-label="Graphique combiné du présent et du futur projeté — valeurs détaillées dans le tableau de données."
-                        className="h-[300px] sm:h-[360px] w-full gf-chart-enter py-2 cursor-crosshair"
+                        className="h-[340px] sm:h-[400px] w-full gf-chart-enter py-2 cursor-crosshair"
                     >
                         <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart data={donneesTrajectoire} margin={{ top: 14, right: 10, left: 0, bottom: 0 }}>
+                            <ComposedChart
+                                data={donneesTrajectoire}
+                                margin={{ top: 18, right: 12, left: 0, bottom: 4 }}
+                                onMouseMove={(s) => {
+                                    const raw = (s as { activeTooltipIndex?: number | string | null } | null)?.activeTooltipIndex;
+                                    const idx = raw !== undefined && raw !== null ? Number(raw) : NaN;
+                                    const pt = Number.isInteger(idx) && idx >= 0 && idx < donneesTrajectoire.length
+                                        ? (donneesTrajectoire[idx] ?? null)
+                                        : null;
+                                    setPointSurvole(pt);
+                                }}
+                                onMouseLeave={() => setPointSurvole(null)}
+                                onClick={(s) => {
+                                    const raw = (s as { activeTooltipIndex?: number | string | null } | null)?.activeTooltipIndex;
+                                    const idx = raw !== undefined && raw !== null ? Number(raw) : NaN;
+                                    const pt = Number.isInteger(idx) && idx >= 0 && idx < donneesTrajectoire.length
+                                        ? (donneesTrajectoire[idx] ?? null)
+                                        : null;
+                                    if (!pt) return;
+                                    setPointEpingle((prev) => (prev?.monthIndex === pt.monthIndex ? null : pt));
+                                }}
+                            >
                                 <defs>
                                     <linearGradient id="accueilPresentGrad" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="0%" stopColor="var(--gf-bleu)" stopOpacity={0.38} />
@@ -1847,6 +1999,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     orientation="left"
                                     domain={echelleYTrajectoire.domaine}
                                     ticks={echelleYTrajectoire.ticks}
+                                    allowDataOverflow
                                     tick={{ fill: 'var(--texte-doux)', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
                                     axisLine={false}
                                     tickLine={false}
@@ -1875,18 +2028,24 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                     />
                                 )}
 
-                                <ReferenceLine y={0} stroke="var(--bordure)" strokeWidth={1} />
+                                {echelleYTrajectoire.domaine[0] <= 0 && echelleYTrajectoire.domaine[1] >= 0 && (
+                                    <ReferenceLine y={0} stroke="var(--bordure)" strokeWidth={1} />
+                                )}
 
                                 <ReferenceLine
                                     x={xAuj}
                                     stroke="var(--gf-ambre)"
                                     strokeWidth={1.5}
                                     strokeDasharray="4 4"
-                                    ifOverflow="extendDomain"
+                                    ifOverflow="hidden"
                                     label={<RefLineLabel value="Aujourd'hui" color="var(--gf-ambre)" />}
                                 />
 
-                                {tempsFortsActifs && lentilleHero === 'net' && fireNumber > 0 && (
+                                {tempsFortsActifs &&
+                                    lentilleHero === 'net' &&
+                                    fireNumber > 0 &&
+                                    fireNumber >= echelleYTrajectoire.domaine[0] &&
+                                    fireNumber <= echelleYTrajectoire.domaine[1] && (
                                     <ReferenceLine
                                         y={fireNumber}
                                         stroke="var(--gf-ambre)"
@@ -2026,6 +2185,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                 <Area
                                                     type="monotone"
                                                     dataKey="P90"
+                                                    baseValue={echelleYTrajectoire.domaine[0]}
                                                     stroke="var(--gf-bleu)"
                                                     strokeWidth={1}
                                                     strokeDasharray="3 3"
@@ -2055,7 +2215,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                                 />
                                             </>
                                         )}
-                                        {lentilleHero === 'net' && (
+                                        {modeCourbe === 'complete' && lentilleHero === 'net' && (
                                             <Area
                                                 type="monotone"
                                                 dataKey={detteSousZero}
@@ -2071,7 +2231,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         <Area
                                             type="monotone"
                                             dataKey="valeurPresent"
-                                            baseValue="dataMin"
+                                            baseValue={echelleYTrajectoire.domaine[0]}
                                             stroke="none"
                                             fill="url(#accueilPresentGrad)"
                                             fillOpacity={1}
@@ -2082,7 +2242,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             type="monotone"
                                             dataKey="valeurPresent"
                                             stroke="var(--gf-bleu)"
-                                            strokeWidth={2.5}
+                                            strokeWidth={2.75}
                                             connectNulls={false}
                                             dot={false}
                                             activeDot={(props: { cx?: number; cy?: number; value?: number | null }) => {
@@ -2110,7 +2270,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         <Area
                                             type="monotone"
                                             dataKey="valeurFutur"
-                                            baseValue="dataMin"
+                                            baseValue={echelleYTrajectoire.domaine[0]}
                                             stroke="none"
                                             fill="url(#accueilFuturGrad)"
                                             fillOpacity={1}
@@ -2121,7 +2281,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             type="monotone"
                                             dataKey="valeurFutur"
                                             stroke="var(--gf-vert)"
-                                            strokeWidth={2.35}
+                                            strokeWidth={2.6}
                                             strokeDasharray={isDailyCurve ? undefined : '5 4'}
                                             connectNulls={false}
                                             dot={false}
@@ -2164,7 +2324,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         fill="var(--gf-ambre)"
                                         stroke="var(--fond)"
                                         strokeWidth={2}
-                                        ifOverflow="extendDomain"
+                                        ifOverflow="hidden"
                                         shape={
                                             <TodayValueBadge
                                                 value={maskedTick(isPrivacyMode, (v: number) => formatCompactCAD(v))(
@@ -2842,7 +3002,6 @@ interface TrajectoireTooltipProps {
     patrimoineInitial: number;
     isPrivacyMode?: boolean;
     enrichPoint?: (pt: ProjectionChartPoint) => ProjectionChartPoint | null;
-    onHoverPoint?: (pt: ProjectionChartPoint | null) => void;
 }
 
 const COMPTES_TOOLTIP_ACCUEIL = [
@@ -2862,14 +3021,12 @@ const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({
     payload,
     patrimoineInitial,
     enrichPoint,
-    onHoverPoint,
 }) => {
     if (!active || !payload || payload.length === 0) return null;
     const itemAvecValeur = payload.find((p) => p?.payload && typeof p.payload.valeur === 'number');
     const brut = itemAvecValeur?.payload ?? payload[0]?.payload;
     if (!brut) return null;
     const enrichi = enrichPoint ? (enrichPoint(brut) ?? brut) : brut;
-    onHoverPoint?.(enrichi);
 
     const valeurAffichee = typeof brut.valeur === 'number' ? brut.valeur : enrichi.NetWorth;
     const ecart = typeof valeurAffichee === 'number' ? valeurAffichee - patrimoineInitial : 0;

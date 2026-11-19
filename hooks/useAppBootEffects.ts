@@ -323,7 +323,7 @@ export function useAppBootEffects(): void {
         return () => { cancelled = true; };
     }, []);
 
-    // [FINTABLE-7 + AUTO-CONTINUE] Sync bancaire AUTOMATIQUE à l'ouverture, toutes les 15–30 min,
+    // [FINTABLE-7 + AUTO-CONTINUE] Sync bancaire AUTOMATIQUE à l'ouverture, toutes les 15 min,
     // au retour sur l'onglet (`focus` / `visibilitychange` / `online`) et dès que les rôles changent.
     const fintableToken = useFinanceStore((s) => s.apiKeys?.fintable ?? '');
     const fintableRoles = useFinanceStore((s) => s.fintableRoles);
@@ -332,9 +332,9 @@ export function useAppBootEffects(): void {
     useEffect(() => {
         if (!fintableToken) return;
         let cancelled = false;
-        const FINTABLE_AUTO_MAX_AGE_MS = 30 * 60_000;
+        const FINTABLE_AUTO_MAX_AGE_MS = 15 * 60_000;
         const FINTABLE_AUTO_INTERVAL_MS = 15 * 60_000;
-        const FINTABLE_AUTO_COOLDOWN_MS = 10 * 60_000;
+        const FINTABLE_AUTO_COOLDOWN_MS = 2 * 60_000;
 
         const triggerAutoSync = async (forceImmediate = false) => {
             if (cancelled) return;
@@ -357,8 +357,8 @@ export function useAppBootEffects(): void {
             }
         };
 
-        // Debounce 1,5 s : évite les faux appels pendant la frappe du jeton tout en démarrant vite au boot.
-        const bootTimer = setTimeout(() => { void triggerAutoSync(false); }, 1500);
+        // Debounce 2 s : évite les faux appels pendant la frappe du jeton tout en démarrant vite au boot.
+        const bootTimer = setTimeout(() => { void triggerAutoSync(false); }, 2000);
         const intervalId = setInterval(() => {
             if (typeof document === 'undefined' || document.visibilityState === 'visible') {
                 void triggerAutoSync(false);
@@ -369,10 +369,13 @@ export function useAppBootEffects(): void {
                 void triggerAutoSync(false);
             }
         };
+        const onOnline = () => {
+            void triggerAutoSync(true);
+        };
         if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onWake);
         if (typeof window !== 'undefined') {
             window.addEventListener('focus', onWake);
-            window.addEventListener('online', onWake);
+            window.addEventListener('online', onOnline);
         }
         return () => {
             cancelled = true;
@@ -381,7 +384,7 @@ export function useAppBootEffects(): void {
             if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onWake);
             if (typeof window !== 'undefined') {
                 window.removeEventListener('focus', onWake);
-                window.removeEventListener('online', onWake);
+                window.removeEventListener('online', onOnline);
             }
         };
     }, [fintableToken]);

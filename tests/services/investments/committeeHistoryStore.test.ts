@@ -149,7 +149,7 @@ describe('committeeHistoryStore — IndexedDB chiffré & isolation de portée', 
     it('chiffre au repos dans IndexedDB, n’écrit rien en localStorage et isole real vs test', async () => {
         const lsSetSpy = vi.spyOn(localStorage, 'setItem');
         await saveCommitteeAnalysis({ isTestMode: false }, makeReport('r1', 'Anthropic'));
-        await saveCommitteeAnalysis({ isTestMode: true, personaId: 'jeune' }, makeReport('t1', 'NVDA'));
+        await saveCommitteeAnalysis({ isTestMode: true, personaId: 'jeune' }, makeReport('t1', 'MSFT'));
 
         expect(lsSetSpy).not.toHaveBeenCalled();
 

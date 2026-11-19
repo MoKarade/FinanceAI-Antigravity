@@ -276,7 +276,7 @@ export class FintableClient {
         // officielle `https://fintable.io/api/v2` (qui autorise CORS `Access-Control-Allow-Origin: *`).
         const isProxyUnavailable =
             result.isHtmlFallback ||
-            result.status === 404 ||
+            (result.status === 404 && result.body === null) ||
             result.status === 405 ||
             result.status === 502 ||
             result.status === 503 ||

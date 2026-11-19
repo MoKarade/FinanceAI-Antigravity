@@ -6,6 +6,8 @@ import React, { useState } from 'react';
 import { Card } from '../../ui/Card';
 import { Icon } from '../../ui/Icon';
 import { GeminiAssistantModal } from '../../aiChat/GeminiAssistantModal';
+import { modelLabelFromId } from '../../../services/aiChat/models';
+import { testerCleApiGemini, type TestCleGeminiResult } from '../../../services/geminiClientAdapter';
 import type { AppState } from '../../../types';
 
 interface IntegrationsSectionProps {
@@ -16,8 +18,22 @@ interface IntegrationsSectionProps {
 export const IntegrationsSection: React.FC<IntegrationsSectionProps> = ({ apiKeys, setApiKeys }) => {
   const [assistantOuvert, setAssistantOuvert] = useState(false);
   const [afficherCle, setAfficherCle] = useState(false);
+  const [testEnCours, setTestEnCours] = useState(false);
+  const [resultatTest, setResultatTest] = useState<TestCleGeminiResult | null>(null);
   const cleIa = (apiKeys?.gemini || apiKeys?.anthropic || '').replace(/^["'\s]+|["'\s]+$/g, '');
   const formatValide = cleIa.startsWith('AIza') && cleIa.length >= 20;
+
+  const lancerTestCle = async () => {
+    if (!cleIa || testEnCours) return;
+    setTestEnCours(true);
+    setResultatTest(null);
+    try {
+      const res = await testerCleApiGemini(cleIa);
+      setResultatTest(res);
+    } finally {
+      setTestEnCours(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -25,13 +41,16 @@ export const IntegrationsSection: React.FC<IntegrationsSectionProps> = ({ apiKey
       <div className="space-y-4">
         <div data-focus-section="apiKeys-gemini">
           <label htmlFor="apikey-gemini" className="block text-body text-ink-300 mb-1">Clé API Google Gemini (IA — Gemini 3.8 Flash & 4 Argon)</label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               id="apikey-gemini"
               type={afficherCle ? 'text' : 'password'}
               value={cleIa}
-              onChange={(e) => setApiKeys({ ...apiKeys, gemini: e.target.value.replace(/^["'\s]+|["'\s]+$/g, '') })}
-              className="flex-1 bg-dark border border-border rounded-sm px-3 py-2 text-white focus:border-primary outline-hidden font-mono"
+              onChange={(e) => {
+                setResultatTest(null);
+                setApiKeys({ ...apiKeys, gemini: e.target.value.replace(/^["'\s]+|["'\s]+$/g, '') });
+              }}
+              className="touch-target flex-1 min-w-[220px] bg-dark border border-border rounded-sm px-3 py-2 text-white focus:border-primary outline-hidden font-mono"
               placeholder="AIzaSy..."
               aria-describedby="apikey-gemini-format"
             />
@@ -43,7 +62,26 @@ export const IntegrationsSection: React.FC<IntegrationsSectionProps> = ({ apiKey
             >
               {afficherCle ? 'Masquer' : 'Afficher'}
             </button>
+            <button
+              type="button"
+              onClick={() => { void lancerTestCle(); }}
+              disabled={!cleIa || testEnCours}
+              className="touch-target px-3.5 py-2 rounded-sm bg-surface-douce border border-bordure-champ text-xs font-semibold text-ink-50 hover:bg-bordure disabled:opacity-50 focus-ring shrink-0"
+            >
+              {testEnCours ? 'Test en cours…' : 'Tester la clé'}
+            </button>
           </div>
+          {resultatTest && (
+            <div
+              role="status"
+              aria-live="polite"
+              className={`text-meta mt-1.5 font-medium ${resultatTest.ok ? 'text-succes-texte' : 'text-erreur-texte'}`}
+            >
+              {resultatTest.ok
+                ? `Clé active — connectée à ${modelLabelFromId(resultatTest.model ?? 'gemini-3.8-flash')}.`
+                : `Échec du test (${resultatTest.cause ?? 'erreur'}) : ${resultatTest.message ?? 'requête refusée par Google.'}`}
+            </div>
+          )}
           {cleIa && (
             <div id="apikey-gemini-format" className="text-meta mt-1" role="status" aria-live="polite">
               {formatValide

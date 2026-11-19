@@ -699,13 +699,13 @@ export const FintableSyncCard: React.FC = () => {
                         {report.error === null
                             ? `${report.transactionsAdded} transaction(s) ajoutée(s), ${report.accountsSeen} compte(s) vu(s)`
                             : (
-                                <div className="text-danger-400">
-                                    {phraseErreurFintable(report.error)}
+                                <span className="text-ink-400">
+                                    réessai automatique en arrière-plan
                                     <details className="mt-1 text-ink-400">
                                         <summary className="cursor-pointer">Détail technique</summary>
-                                        <span className="block break-words">{report.error}</span>
+                                        <span className="block break-words">{phraseErreurFintable(report.error)} ({report.error})</span>
                                     </details>
-                                </div>
+                                </span>
                             )}
                         {(report.skippedBeforeCutover ?? 0) > 0
                             && ` · ${report.skippedBeforeCutover} plus ancienne(s) ignorée(s)`}

@@ -3,6 +3,7 @@
 // pour éviter qu'elle n'apparaisse dans les journaux d'URL ou l'historique réseau.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { chat } from '../../services/gemini';
+import { testerCleApiGemini } from '../../services/geminiClientAdapter';
 
 const geminiMessage = () => new Response(JSON.stringify({
     candidates: [{ content: { parts: [{ text: 'ok' }] }, finishReason: 'STOP' }],
@@ -30,7 +31,7 @@ afterEach(() => {
 });
 
 describe('gemini.ts — transport Google Gemini', () => {
-    it('chat() cible generativelanguage.googleapis.com avec x-goog-api-key en en-tête et sans clé dans l\'URL', async () => {
+    it('chat() cible generativelanguage.googleapis.com avec x-goog-api-key en en-tête et sans clé dans l\'URL ni champs REST invalides', async () => {
         const out = await chat([{ role: 'user', content: 'salut' }], 'AIzaSy-test-perso');
         expect(out).toBe('ok');
         expect(fetchSpy).toHaveBeenCalled();
@@ -41,5 +42,40 @@ describe('gemini.ts — transport Google Gemini', () => {
         expect(url).not.toContain('AIzaSy-test-perso');
         const h = headersOf(call);
         expect(h.get('x-goog-api-key')).toBe('AIzaSy-test-perso');
+        const body = JSON.parse(String((call[1] as RequestInit | undefined)?.body ?? '{}'));
+        expect(body).not.toHaveProperty('model');
+        expect(body).not.toHaveProperty('max_tokens');
+        expect(body).not.toHaveProperty('thinking');
+        expect(body).not.toHaveProperty('output_config');
+    });
+
+    it('chat() bascule sur le modèle de repli si le modèle principal répond 404', async () => {
+        fetchSpy = vi.fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'models/gemini-3.8-flash is not found' } }), { status: 404 }))
+            .mockResolvedValueOnce(geminiMessage());
+        vi.stubGlobal('fetch', fetchSpy);
+
+        const out = await chat([{ role: 'user', content: 'salut' }], 'AIzaSy-test-perso');
+        expect(out).toBe('ok');
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+        expect(targetOf(fetchSpy.mock.calls[1] as unknown[])).toContain('gemini-3.5-flash-lite:generateContent');
+    });
+
+    it('chat() échoue immédiatement sur 403 / API_KEY_INVALID sans boucle de repli inutile', async () => {
+        fetchSpy = vi.fn().mockResolvedValueOnce(
+            new Response(JSON.stringify({ error: { message: 'API key not valid.' } }), { status: 400 }),
+        );
+        vi.stubGlobal('fetch', fetchSpy);
+
+        await expect(chat([{ role: 'user', content: 'salut' }], 'AIzaSy-invalide')).rejects.toThrow(/API key not valid/i);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('testerCleApiGemini() valide une clé active via x-goog-api-key sans fuiter dans l\'URL', async () => {
+        const res = await testerCleApiGemini(' "AIzaSy-valid-key" ');
+        expect(res).toEqual({ ok: true, model: 'gemini-3.8-flash' });
+        const call = fetchSpy.mock.calls[0] as unknown[];
+        expect(targetOf(call)).not.toContain('key=');
+        expect(headersOf(call).get('x-goog-api-key')).toBe('AIzaSy-valid-key');
     });
 });

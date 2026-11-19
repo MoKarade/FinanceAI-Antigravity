@@ -339,4 +339,81 @@ describe('runFintableBrowserSync — autoCreditCards', () => {
         });
         expect(rNoFx.report.transactionsAdded).toBe(0);
     });
+
+    it('Cas 5 : auto-route compte chèque (cash) et compte CELI (investment), et récupère sans doublon une dépense chèque postée en retard', async () => {
+        const client = {
+            get: vi.fn(async (path: string) => {
+                if (path === '/accounts') {
+                    return {
+                        data: [
+                            {
+                                id: 'acc_cheque_auto',
+                                connection_id: 'conn_1',
+                                name: 'Compte chèque Desjardins',
+                                display_name: null,
+                                type: 'depository / checking',
+                                currency: 'CAD',
+                                balance: '1850.00',
+                                balance_available: null,
+                                last_tx_date: '2026-11-18',
+                                enabled: true,
+                            },
+                            {
+                                id: 'acc_celi_auto',
+                                connection_id: 'conn_1',
+                                name: 'Disnat CELI',
+                                display_name: null,
+                                type: 'investment',
+                                currency: 'CAD',
+                                balance: '42000.00',
+                                balance_available: null,
+                                last_tx_date: null,
+                                enabled: true,
+                            },
+                        ],
+                    };
+                }
+                return { data: [] };
+            }),
+            getAllPages: vi.fn(async (path: string) =>
+                path === '/transactions'
+                    ? [
+                        {
+                            id: 'chq_late_1', account_id: 'acc_cheque_auto', date: '2026-11-14', amount: '-52.40',
+                            currency: 'CAD', description: 'HYDRO QUEBEC', merchant: 'Hydro-Québec',
+                            pending: false, category: null, updated_at: null,
+                        },
+                    ]
+                    : [],
+            ),
+        } as unknown as FintableClient;
+
+        const base = makeState({
+            transactions: [
+                {
+                    id: 10,
+                    date: '2026-11-17',
+                    payee: 'Achat récent chèque',
+                    amount: -20,
+                    category: 'Autre',
+                    status: 'processed',
+                    accountName: 'Compte chèque Desjardins',
+                } as Transaction,
+            ],
+            fintableRoles: {},
+        });
+
+        const r = await runFintableBrowserSync(base, 'jeton', {
+            client,
+            now,
+            autoCreditCards: true,
+        });
+
+        expect(r.report.error).toBeNull();
+        expect(r.report.accountsWithoutRole).toBe(0);
+        expect(r.statePatch?.fintableRoles?.acc_cheque_auto).toEqual({ kind: 'cash' });
+        expect(r.statePatch?.fintableRoles?.acc_celi_auto).toEqual({ kind: 'investment', taxRegime: 'CELI' });
+        expect(r.report.transactionsAdded).toBe(1);
+        expect(r.statePatch?.transactions?.some((t) => t.payee === 'Hydro-Québec')).toBe(true);
+    });
 });

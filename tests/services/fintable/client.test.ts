@@ -342,6 +342,28 @@ describe('récepteur de fetch (règle WebIDL du navigateur, simulée)', () => {
         }
     });
 
+    it('ne bascule PAS en appel direct sur une vraie réponse 404 JSON de Fintable (ex: holdings absents)', async () => {
+        const prevLocation = (globalThis as { location?: unknown }).location;
+        (globalThis as { location?: unknown }).location = { origin: 'https://financeai-demo-public.web.app' };
+        try {
+            const fetchImpl = vi.fn(async () =>
+                res(404, { error: { type: 'not_found', message: 'Holdings not available for account.' } }, {
+                    'content-type': 'application/json',
+                }),
+            );
+            const client = new FintableClient({
+                token: TOKEN,
+                baseUrl: '/api/fintable',
+                fetchImpl: fetchImpl as unknown as typeof fetch,
+            });
+
+            await expect(client.get('/accounts/acc_1/holdings')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+            expect(fetchImpl).toHaveBeenCalledTimes(1);
+        } finally {
+            (globalThis as { location?: unknown }).location = prevLocation;
+        }
+    });
+
     it('autorise https://fintable.io dans connect-src à la fois dans firebase.json et dans la balise meta CSP de index.html', async () => {
         const fs = await import('node:fs');
         const path = await import('node:path');
