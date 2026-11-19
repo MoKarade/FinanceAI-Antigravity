@@ -11,13 +11,14 @@ import type { Transaction } from '../../types';
 const mocks = vi.hoisted(() => ({
     nextResponseText: '[]',
     logError: vi.fn(),
+    createSpy: vi.fn(),
 }));
 
 vi.mock('../../services/geminiClientAdapter', () => ({
     creerClientCompatibleGemini: () => ({
         maxRetries: 2,
         messages: {
-            create: vi.fn(async () => ({
+            create: mocks.createSpy.mockImplementation(async () => ({
                 content: [{ type: 'text', text: mocks.nextResponseText }],
             })),
         },
@@ -93,5 +94,37 @@ describe('categorizeBatch — enforcement bout-en-bout (client Gemini mocké)', 
             .map(c => c[0]?.message ?? '')
             .filter(m => m.startsWith('categorizeBatch'));
         expect(batchWarnings).toEqual([]);
+    });
+
+    it('groupByMerchant + fewShotExamples : un seul item envoyé par marchand répété et réponse propagée', async () => {
+        mocks.createSpy.mockClear();
+        const input = [
+            tx(10, 'BOUTIQUE LOCALE #12'),
+            tx(11, 'BOUTIQUE LOCALE #99'),
+            tx(12, 'AMZN MKTP CA*1A2B3'),
+        ];
+        mocks.nextResponseText = JSON.stringify([
+            { id: 10, category: 'Épicerie', isTransfer: false, confidence: 88 },
+            { id: 12, category: 'Transport', isTransfer: false, confidence: 76 },
+        ]);
+
+        const out = await categorizeBatch(input, 'fake-key', ALLOWED, undefined, {
+            context: {
+                groupByMerchant: true,
+                budgetCategoryNames: ['Épicerie', 'Transport'],
+                fewShotExamples: [{ merchant: 'METRO PLUS', category: 'Épicerie', sign: 'debit' }],
+            },
+        });
+
+        expect(mocks.createSpy).toHaveBeenCalledTimes(1);
+        const prompt = String(mocks.createSpy.mock.calls[0]?.[0]?.messages?.[0]?.content ?? '');
+        expect(prompt).toContain('EXEMPLES CONFIRMÉS');
+        expect(prompt).toContain('METRO PLUS');
+        expect(prompt).toContain('batchCount: 2');
+
+        const byId = new Map(out.map(t => [t.id, t]));
+        expect(byId.get(10)?.category).toBe('Épicerie');
+        expect(byId.get(11)?.category).toBe('Épicerie');
+        expect(byId.get(12)?.category).toBe('Transport');
     });
 });

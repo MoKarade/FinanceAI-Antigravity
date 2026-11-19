@@ -17,7 +17,16 @@ import { RULE_CATEGORIES } from '../services/import/categoryRules';
 // marchand de plateforme (Steam, App Store…), seul le profil de récurrence distingue un achat
 // unique d'un abonnement. Modules PURS et légers.
 import { buildMerchantProfiles } from '../services/transactions/merchantProfile';
-import { contextualCategorize } from '../services/transactions/contextualCategorize';
+import { applyTransferDetection } from '../services/transactions/applyTransferDetection';
+import { buildFewShotExamples } from '../services/transactions/backgroundAiCategorize';
+import { resolveToBudgetCategory } from '../services/transactions/budgetCategoryResolver';
+import { isUncategorizedCategory } from '../services/import/categoryRules';
+import {
+    extractRulePattern,
+    isTransactionNeedsReview,
+    matchUserCategorizationRule,
+    smartCategorizeTransactions,
+} from '../services/transactions/smartCategorize';
 import { EmptyState } from './ui/EmptyState';
 import { PageHeader } from './ui/PageHeader';
 import { Icon } from './ui/Icon';
@@ -126,23 +135,25 @@ export const Transactions: React.FC<TransactionsProps> = ({
         }
     }, [liveLogs, processing]);
 
-    useEffect(() => {
-        if (categorizationRules.length === 0) return;
-        setTransactions(prev => prev.map(t => {
-            if (t.isTransfer || t.isAiProcessed) return t;
-            const match = categorizationRules.find(r =>
-                (t.payee || '').toLowerCase().includes(r.pattern.toLowerCase())
-            );
-            if (match && t.category !== match.category) {
-                return { ...t, category: match.category, status: 'manual' as const, confidence: 100 };
-            }
-            return t;
-        }));
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [categorizationRules]);
-
     const [newPattern, setNewPattern] = useState('');
     const [newRuleCategory, setNewRuleCategory] = useState('');
+    const [saveWizardRules, setSaveWizardRules] = useState(false);
+    const [pendingRulePrompt, setPendingRulePrompt] = useState<{
+        txId: number;
+        payee: string;
+        pattern: string;
+        category: string;
+        matchingCount: number;
+    } | null>(null);
+    const [lastReclassifyBackup, setLastReclassifyBackup] = useState<Transaction[] | null>(null);
+    const [reclassifySummary, setReclassifySummary] = useState<{
+        totalChanged: number;
+        byRulesAndHistory: number;
+        byAi: number;
+        transfersMarked: number;
+        manualPreserved: number;
+        needsReviewAfter: number;
+    } | null>(null);
 
     // [TX-DUPLICATES] Marquage/démarquage — passe par les helpers PURS (aucune suppression : le cash
     // est dérivé des transactions, cf. ADR « Suppressions via MCP/IA »). Le filtre s'ouvre après un
@@ -183,6 +194,52 @@ export const Transactions: React.FC<TransactionsProps> = ({
         showToast(`${ids.length} transaction(s) marquée(s) comme virement interne — exclues du budget, réversible.`, 'success');
     };
 
+    const applyRuleToList = (
+        list: Transaction[],
+        rule: Pick<CategorizationRule, 'pattern' | 'category'>,
+    ): { next: Transaction[]; count: number } => {
+        let count = 0;
+        const normTargetCat = rule.category.trim().toLowerCase();
+        const isExpenseRule = !['salaire', 'revenus divers', 'remboursement', 'transfert', 'investissement', 'impôts', 'impots', 'autre'].includes(normTargetCat);
+        const next = list.map(t => {
+            if (t.isDuplicate || t.status === 'manual') return t;
+            if (!matchUserCategorizationRule(t.payee, [{ ...rule, id: 'tmp', createdAt: '' }])) return t;
+            const rawCat = t.amount > 0 && isExpenseRule ? 'Remboursement' : rule.category;
+            const nextCat = rawCat === 'Transfert' ? 'Transfert' : resolveToBudgetCategory(rawCat, budgetItems);
+            const nextIsTransfer = nextCat === 'Transfert';
+            if (t.category !== nextCat || Boolean(t.isTransfer) !== nextIsTransfer) {
+                count++;
+                return {
+                    ...t,
+                    category: nextCat,
+                    status: 'processed' as const,
+                    isTransfer: nextIsTransfer,
+                    isAiProcessed: false,
+                    confidence: 100,
+                };
+            }
+            return t;
+        });
+        return { next, count };
+    };
+
+    const upsertRule = (pattern: string, category: string): CategorizationRule | null => {
+        const cleanPattern = pattern.trim();
+        if (!cleanPattern || !category || !setCategorizationRules) return null;
+        const norm = cleanPattern.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+        const existingIdx = categorizationRules.findIndex(
+            r => r.pattern.normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase() === norm,
+        );
+        const rule: CategorizationRule = existingIdx >= 0
+            ? { ...categorizationRules[existingIdx], pattern: cleanPattern, category }
+            : { id: `rule_${Date.now()}`, pattern: cleanPattern, category, createdAt: new Date().toISOString() };
+        const updated = existingIdx >= 0
+            ? categorizationRules.map((r, i) => (i === existingIdx ? rule : r))
+            : [...categorizationRules, rule];
+        setCategorizationRules(updated);
+        return rule;
+    };
+
     const handleAddRule = () => {
         if (!newPattern.trim() || !newRuleCategory) return;
         const rule: CategorizationRule = {
@@ -206,14 +263,8 @@ export const Transactions: React.FC<TransactionsProps> = ({
     };
 
     const handleApplyRuleNow = (rule: CategorizationRule) => {
-        let count = 0;
-        setTransactions(prev => prev.map(t => {
-            if ((t.payee || '').toLowerCase().includes(rule.pattern.toLowerCase()) && t.category !== rule.category) {
-                count++;
-                return { ...t, category: rule.category, status: 'manual' as const, confidence: 100 };
-            }
-            return t;
-        }));
+        const { next, count } = applyRuleToList(transactions, rule);
+        setTransactions(next);
         showToast(`${count} transaction(s) mises à jour`, 'success');
     };
 
@@ -233,7 +284,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                 oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
                 if (new Date(t.date) < oneWeekAgo) return false;
             }
-            if (quickFilter === 'TO_REVIEW' && t.category !== 'Uncategorized' && t.category !== 'Autre' && t.category !== 'Inconnu') return false;
+            if (quickFilter === 'TO_REVIEW' && !isTransactionNeedsReview(t)) return false;
 
             if (!showDuplicates && t.isDuplicate) return false;
             if (masquerVirements && t.isTransfer) return false;
@@ -243,7 +294,13 @@ export const Transactions: React.FC<TransactionsProps> = ({
                 (t.category || '').toLowerCase().includes(filterText.toLowerCase());
             if (!searchMatch) return false;
 
-            if (selectedCategory !== 'All' && t.category !== selectedCategory) return false;
+            if (selectedCategory !== 'All') {
+                if (selectedCategory === 'Uncategorized') {
+                    if (!isUncategorizedCategory(t.category)) return false;
+                } else if (t.category !== selectedCategory) {
+                    return false;
+                }
+            }
 
             return true;
         });
@@ -271,7 +328,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
         const groups: Record<string, { payee: string, count: number, total: number, ids: number[] }> = {};
 
         transactions.forEach(t => {
-            if (!t.isDuplicate && (t.category === 'Uncategorized' || t.category === 'Autre' || t.category === 'Inconnu')) {
+            if (!t.isDuplicate && !t.isTransfer && isUncategorizedCategory(t.category)) {
                 const key = (t.payee || 'Inconnu').toLowerCase().substring(0, 15).trim();
                 if (!groups[key]) {
                     groups[key] = { payee: t.payee, count: 0, total: 0, ids: [] };
@@ -285,17 +342,63 @@ export const Transactions: React.FC<TransactionsProps> = ({
         return Object.values(groups).sort((a, b) => b.count - a.count);
     }, [transactions]);
 
-    const handleWizardApply = (ids: number[], newCat: string) => {
+    const handleWizardApply = (ids: number[], newCat: string, groupPayee?: string) => {
         const idSet = new Set(ids);
-        const updated = transactions.map(t =>
-            idSet.has(t.id) ? { ...t, category: newCat, status: 'processed' as const, confidence: 100 } : t
+        let updated = transactions.map(t =>
+            idSet.has(t.id)
+                ? { ...t, category: newCat, status: 'manual' as const, isVerified: true, isTransfer: newCat === 'Transfert', confidence: 100 }
+                : t,
         );
+        if (saveWizardRules && groupPayee && !isUncategorizedCategory(newCat) && newCat !== 'Transfert') {
+            const pattern = extractRulePattern(groupPayee);
+            const saved = upsertRule(pattern, newCat);
+            if (saved) {
+                updated = applyRuleToList(updated, saved).next;
+            }
+        }
         setTransactions(updated);
     };
 
     const updateCategory = (id: number, newCat: string) => {
+        const target = transactions.find(t => t.id === id);
+        const nextTxs = transactions.map(t =>
+            t.id === id
+                ? { ...t, category: newCat, status: 'manual' as const, isVerified: true, isTransfer: newCat === 'Transfert', confidence: 100 }
+                : t,
+        );
+        setTransactions(nextTxs);
+        setPendingRulePrompt(null);
+
+        if (setCategorizationRules && target?.payee && !isUncategorizedCategory(newCat) && newCat !== 'Transfert') {
+            const pattern = extractRulePattern(target.payee);
+            if (pattern.length >= 2) {
+                const { count } = applyRuleToList(nextTxs, { pattern, category: newCat });
+                setPendingRulePrompt({
+                    txId: id,
+                    payee: target.payee,
+                    pattern,
+                    category: newCat,
+                    matchingCount: count,
+                });
+            }
+        }
+    };
+
+    const handleAcceptPendingRule = () => {
+        if (!pendingRulePrompt) return;
+        const saved = upsertRule(pendingRulePrompt.pattern, pendingRulePrompt.category);
+        if (saved) {
+            const { next, count } = applyRuleToList(transactions, saved);
+            setTransactions(next);
+            const extra = count > 0 ? ` et appliquée à ${count} autre(s) transaction(s)` : '';
+            showToast(`Règle mémorisée : « ${maskPayee(saved.pattern, isPrivacyMode)} » → ${maskCategory(saved.category, isPrivacyMode)}${extra}.`, 'success');
+        }
+        setPendingRulePrompt(null);
+    };
+
+    const handleVerifyTransaction = (id: number) => {
         setTransactions(prev => prev.map(t =>
-            t.id === id ? { ...t, category: newCat, status: 'manual' as const, isTransfer: newCat === 'Transfert', confidence: 100 } : t
+            t.id === id ? { ...t, status: 'manual' as const, isVerified: true, confidence: 100 } : t,
         ));
     };
 
@@ -304,80 +407,137 @@ export const Transactions: React.FC<TransactionsProps> = ({
         setTransactions(prev => prev.map(t => (t.id === id ? { ...t, ownerId } : t)));
     };
 
-    // [TX-CATEGORIZE] `scope: 'all'` = passe sur TOUT l'historique (demande Marc : « une passe tout
-    // historique », avec écrasement des catégories existantes). Dans les deux modes, une transaction
-    // corrigée à la main (`status === 'manual'`) est un VERROU : jamais réécrite (seule exception au
-    // « écraser aussi », décision Marc 2026-07-31).
+    // [TX-CATEGORIZE] `scope: 'all'` = passe sur TOUT l'historique (avec écrasement des catégories existantes,
+    // SAUF les corrections manuelles `status === 'manual'`, toujours préservées).
     const handleAutoCategorizeAll = async (scope: 'gaps' | 'all' = 'gaps') => {
         setProcessing(true);
-        setLiveLogs(['Demarrage de l\'analyse...']);
+        setLiveLogs(['Démarrage de l\'analyse…']);
         setProgressStatus({ current: 0, total: 0 });
+        setPendingRulePrompt(null);
 
+        const beforeSnapshot = transactions;
         const isLocked = (t: Transaction): boolean => t.status === 'manual';
         let targetTxs: Transaction[] = [];
         if (selectedIds.size > 0) {
             targetTxs = transactions.filter(t => selectedIds.has(t.id) && !isLocked(t));
         } else if (scope === 'all') {
-            targetTxs = transactions.filter(t => !t.isDuplicate && !t.isTransfer && !isLocked(t));
+            targetTxs = transactions.filter(t => !t.isDuplicate && !isLocked(t));
         } else {
-            targetTxs = transactions.filter(t =>
-                !t.isDuplicate && !isLocked(t) &&
-                (t.category === 'Uncategorized' || t.category === '' || t.category === 'Unknown' || t.category === 'Inconnu')
-            );
+            targetTxs = transactions.filter(t => !t.isDuplicate && !isLocked(t) && isTransactionNeedsReview(t));
         }
 
         if (targetTxs.length === 0) {
-            targetTxs = transactions.filter(t => !t.isDuplicate && !isLocked(t) && t.category === 'Autre');
-            if (targetTxs.length === 0) {
-                showToast("Tout semble déjà classé ! Utilise le mode manuel si besoin.", "info");
-                setProcessing(false);
-                return;
-            }
-        }
-
-        // [TX-CATEGORY-RULES] Passe RÈGLES d'abord (déterministe, gratuite, ~88 % du corpus réel) :
-        // ce que les règles classent est appliqué immédiatement ; l'IA ne reçoit QUE le reste.
-        // [TX-CATEGORIZE] Profils de récurrence construits sur les DÉPENSES réelles (hors
-        // transferts et doublons, qui fausseraient la cadence) — ils permettent de distinguer un
-        // achat unique chez un marchand de plateforme d'un vrai abonnement.
-        const profiles = buildMerchantProfiles(
-            transactions
-                .filter(t => !t.isDuplicate && !t.isTransfer)
-                .map(t => ({ payee: t.payee, amount: t.amount, date: t.date })),
-        );
-        const ruled = new Map<number, string>();
-        let promoted = 0;
-        for (const t of targetTxs) {
-            const decision = contextualCategorize(t.payee, profiles);
-            if (!decision.category) continue;
-            ruled.set(t.id, decision.category);
-            if (decision.source === 'recurrence') promoted++;
-        }
-        if (ruled.size > 0) {
-            setTransactions(prev => prev.map(t => {
-                const cat = ruled.get(t.id);
-                return cat
-                    ? { ...t, category: cat, status: 'processed' as const, isTransfer: cat === 'Transfert' ? true : t.isTransfer, isAiProcessed: false, confidence: 100 }
-                    : t;
-            }));
-            setLiveLogs(prev => [...prev, `${ruled.size} classée(s) par règles (sans IA)${promoted > 0 ? `, dont ${promoted} abonnement(s) reconnu(s) à la récurrence` : ''}.`]);
-            targetTxs = targetTxs.filter(t => !ruled.has(t.id));
-        }
-        if (targetTxs.length === 0) {
-            showToast(`${ruled.size} transaction(s) classée(s) par règles — rien à envoyer à l'IA.`, 'success');
-            setSelectedIds(new Set()); // même nettoyage que le chemin IA (finding panel : sélection qui restait cochée)
+            showToast("Tout semble déjà classé ! Utilise le mode manuel si besoin.", "info");
             setProcessing(false);
             return;
         }
 
-        setProgressStatus({ current: 0, total: targetTxs.length });
-        // [TX-STALE-MODEL-LABEL] Libellé DÉRIVÉ du modèle réellement employé par `categorizeBatch`
-        // (Haiku depuis la bascule) — le texte en dur affichait encore « Claude Sonnet 4.6 ».
-        setLiveLogs(prev => [...prev, `${targetTxs.length} transactions ciblees.`, `Modele: ${modelLabelFromId(CATEGORIZE_MODEL_ID)}`]);
+        let workingTxs = transactions;
+        let detectedTransferCount = 0;
+        if (scope === 'all' && selectedIds.size === 0) {
+            const transferResult = applyTransferDetection(workingTxs);
+            workingTxs = transferResult.transactions;
+            detectedTransferCount = transferResult.report.markedCount;
+        }
+
+        const targetIdSet = new Set(targetTxs.map(t => t.id));
+        const smart = smartCategorizeTransactions({
+            transactions: workingTxs,
+            targetIds: targetIdSet,
+            categorizationRules,
+            budgetItems,
+        });
+
+        const totalDetChanged = smart.changedIds.length;
+        const remainingSet = new Set(smart.remainingForAiIds);
+        const detClassifiedCount = smart.changedIds.filter(id => !remainingSet.has(id)).length;
+
+        if (totalDetChanged > 0 || detectedTransferCount > 0) {
+            setTransactions(smart.transactions);
+            const parts: string[] = [];
+            if (detClassifiedCount > 0) parts.push(`${detClassifiedCount} classée(s) par règles/historique`);
+            if (smart.stats.byRecurrence > 0) parts.push(`dont ${smart.stats.byRecurrence} abonnement(s) reconnu(s)`);
+            if (detectedTransferCount + smart.stats.transfersMarked > 0) {
+                parts.push(`${detectedTransferCount + smart.stats.transfersMarked} virement(s) détecté(s)`);
+            }
+            if (parts.length > 0) {
+                setLiveLogs(prev => [...prev, `${parts.join(', ')} (sans IA).`]);
+            }
+        }
+
+        const aiTargets = smart.transactions.filter(t =>
+            remainingSet.has(t.id) && !t.isDuplicate && !t.isTransfer && t.status !== 'manual',
+        );
+
+        const buildSummaryFrom = (finalList: Transaction[], byAiCount: number) => {
+            const totalChanged = finalList.reduce((acc, cur, idx) => {
+                const prev = beforeSnapshot[idx];
+                if (!prev || prev.id !== cur.id) return acc;
+                return prev.category !== cur.category || Boolean(prev.isTransfer) !== Boolean(cur.isTransfer) ? acc + 1 : acc;
+            }, 0);
+            const needsReviewAfter = finalList.filter(t => isTransactionNeedsReview(t)).length;
+            const preservedManual = beforeSnapshot.filter(
+                t => !t.isDuplicate && t.status === 'manual' && (selectedIds.size === 0 || selectedIds.has(t.id)),
+            ).length;
+            return {
+                totalChanged,
+                byRulesAndHistory: detClassifiedCount,
+                byAi: byAiCount,
+                transfersMarked: detectedTransferCount + smart.stats.transfersMarked,
+                manualPreserved: Math.max(smart.stats.manualPreserved, preservedManual),
+                needsReviewAfter,
+            };
+        };
+
+        if (aiTargets.length === 0) {
+            if (detClassifiedCount > 0) {
+                showToast(`${detClassifiedCount} transaction(s) classée(s) par règles — rien à envoyer à l'IA.`, 'success');
+            }
+            if (scope === 'all') {
+                setLastReclassifyBackup(beforeSnapshot);
+                setReclassifySummary(buildSummaryFrom(smart.transactions, 0));
+            }
+            setSelectedIds(new Set());
+            setProcessing(false);
+            return;
+        }
+
+        if (!apiKey) {
+            if (scope === 'all' || totalDetChanged > 0) {
+                setLastReclassifyBackup(beforeSnapshot);
+                setReclassifySummary(buildSummaryFrom(smart.transactions, 0));
+            }
+            showToast(
+                totalDetChanged > 0
+                    ? `${totalDetChanged} transaction(s) améliorée(s) par règles. Ajoute ta clé Google Gemini pour classer les ${aiTargets.length} restante(s).`
+                    : 'Ajoute ta clé Google Gemini dans Réglages pour classer automatiquement les marchands inconnus.',
+                'info',
+            );
+            setSelectedIds(new Set());
+            setProcessing(false);
+            return;
+        }
+
+        setProgressStatus({ current: 0, total: aiTargets.length });
+        const modelLabel = typeof CATEGORIZE_MODEL_ID === 'string' ? modelLabelFromId(CATEGORIZE_MODEL_ID) : 'Gemini';
+        setLiveLogs(prev => [...prev, `${aiTargets.length} transactions ciblées.`, `Modèle: ${modelLabel}`]);
 
         try {
-            await categorizeBatch(
-                targetTxs,
+            const merchantProfiles = buildMerchantProfiles(
+                smart.transactions
+                    .filter(t => !t.isDuplicate && !t.isTransfer)
+                    .map(t => ({ payee: t.payee, amount: t.amount, date: t.date })),
+            );
+            const budgetCategoryNames = budgetItems.map(b => b.name).filter(Boolean);
+            const fewShotExamples = buildFewShotExamples(smart.transactions, categorizationRules);
+
+            const alignChunk = (chunk: Transaction[]) => chunk.map((p) =>
+                p.isTransfer ? p : { ...p, category: resolveToBudgetCategory(p.category, budgetItems) },
+            );
+
+            let latestStateTransactions = smart.transactions;
+            const rawAiResult = await categorizeBatch(
+                aiTargets,
                 apiKey,
                 availableCategories,
                 (count: number, total: number, msg: string, processedChunk: Transaction[]) => {
@@ -385,28 +545,42 @@ export const Transactions: React.FC<TransactionsProps> = ({
                     setLiveLogs(prev => [...prev, msg]);
 
                     if (processedChunk && processedChunk.length > 0) {
-                        setTransactions((currentTransactions: Transaction[]): Transaction[] => {
-                            const updateMap = new Map<number, Transaction>(
-                                processedChunk.map((p: Transaction): [number, Transaction] => [p.id, p])
-                            );
-                            return currentTransactions.map((t: Transaction): Transaction => {
-                                const found = updateMap.get(t.id);
-                                return found ?? t;
-                            });
-                        });
+                        const aligned = alignChunk(processedChunk);
+                        const updateMap = new Map<number, Transaction>(aligned.map(p => [p.id, p]));
+                        latestStateTransactions = latestStateTransactions.map(t =>
+                            t.status === 'manual' ? t : (updateMap.get(t.id) ?? t),
+                        );
+                        setTransactions((currentTransactions: Transaction[]): Transaction[] =>
+                            currentTransactions.map(t => (t.status === 'manual' ? t : (updateMap.get(t.id) ?? t))),
+                        );
                     }
-                }
+                },
+                {
+                    context: {
+                        fewShotExamples,
+                        merchantProfiles,
+                        budgetCategoryNames,
+                        groupByMerchant: true,
+                    },
+                },
             );
 
-            setLiveLogs(prev => [...prev, 'Analyse terminee !']);
+            const aiOut = Array.isArray(rawAiResult) ? alignChunk(rawAiResult) : [];
+            const aiClassifiedCount = aiOut.filter(t => t.isAiProcessed && !isUncategorizedCategory(t.category)).length;
+            if (aiOut.length > 0) {
+                const finalAiMap = new Map(aiOut.map(p => [p.id, p]));
+                latestStateTransactions = latestStateTransactions.map(t =>
+                    t.status === 'manual' ? t : (finalAiMap.get(t.id) ?? t),
+                );
+                setTransactions(latestStateTransactions);
+            }
 
-            setTimeout(() => {
-                const hasLeftovers = transactions.some(t => t.category === 'Inconnu');
-                if (hasLeftovers) setShowWizard(true);
-            }, 1500);
-
+            setLiveLogs(prev => [...prev, 'Analyse terminée !']);
+            if (scope === 'all' || totalDetChanged > 0 || aiClassifiedCount > 0) {
+                setLastReclassifyBackup(beforeSnapshot);
+                setReclassifySummary(buildSummaryFrom(latestStateTransactions, aiClassifiedCount));
+            }
         } catch (e: unknown) {
-            // TH4 fix : unknown au lieu de any (useUnknownInCatchVariables tsconfig)
             logError({ source: 'ai', severity: 'error', message: 'Catégorisation batch des transactions échouée', error: e });
             const msg = e instanceof Error ? e.message : 'inconnue';
             setLiveLogs(prev => [...prev, `Erreur : ${msg}`]);
@@ -480,7 +654,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
     // groupes à classer. Les outils (doublons, virements, qualité, règles, sélection) s'ouvrent en
     // panneau au-dessus de la liste.
     const vueFiltree = (fn: () => void) => { fn(); setPlus(0); };
-    const aVerifier = transactions.filter((t) => !t.isDuplicate && (t.category === 'Uncategorized' || t.category === 'Autre' || t.category === 'Inconnu')).length;
+    const aVerifier = transactions.filter((t) => isTransactionNeedsReview(t)).length;
     const moisCourant = (() => {
         const d = new Date();
         const prefixe = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -682,14 +856,25 @@ export const Transactions: React.FC<TransactionsProps> = ({
             {showWizard && (
                 <div role="dialog" aria-modal="true" aria-labelledby="wizard-title" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-fond/90 backdrop-blur-md animate-fade-in">
                     <div className="gf-terminal-card bg-surface border border-bordure w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-2xl flex flex-col">
-                        <div className="p-6 border-b border-bordure flex justify-between items-center bg-surface-douce rounded-t-2xl">
+                        <div className="p-6 border-b border-bordure flex flex-wrap justify-between items-center gap-3 bg-surface-douce rounded-t-2xl">
                             <div>
                                 <h2 id="wizard-title" className="text-xl font-bold text-texte flex items-center gap-2">
                                     Assistant de Classement
                                 </h2>
                                 <p className="text-meta text-ink-300 mt-1">
-                                    L'IA a laisse {uncategorizedGroups.length} groupes incertains. Classez-les en masse ici.
+                                    {uncategorizedGroups.length} groupe(s) à classer. Classe-les en masse ici.
                                 </p>
+                                {setCategorizationRules && (
+                                    <label className="mt-2 inline-flex items-center gap-2 text-meta text-ink-200 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={saveWizardRules}
+                                            onChange={(e) => setSaveWizardRules(e.target.checked)}
+                                            className="rounded-sm bg-surfaceHighlight border-bordure"
+                                        />
+                                        Créer aussi une règle permanente pour ces marchands
+                                    </label>
+                                )}
                             </div>
                             <button onClick={() => setShowWizard(false)} aria-label="Fermer l'assistant" className="gf-chip text-ink-200 hover:text-texte px-3.5 py-1.5 bg-bordure rounded-full">Terminer</button>
                         </div>
@@ -723,7 +908,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                                 aria-label={`Catégorie pour ${maskPayee(group.payee, isPrivacyMode)}`}
                                                 className="bg-fond border border-bordure rounded-lg px-3 py-2 text-body text-texte focus:border-primary outline-hidden min-w-[180px]"
                                                 onChange={(e) => {
-                                                    if (e.target.value) handleWizardApply(group.ids, e.target.value);
+                                                    if (e.target.value) handleWizardApply(group.ids, e.target.value, group.payee);
                                                 }}
                                                 value=""
                                             >
@@ -801,19 +986,29 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                     </button>
                                 </div>
 
+                                {newPattern.trim().length >= 2 && (
+                                    <p className="text-tiny text-ink-300">
+                                        {transactions.filter(t => !t.isDuplicate && !t.isTransfer && t.status !== 'manual' && Boolean(matchUserCategorizationRule(t.payee, [{ id: 'preview', pattern: newPattern.trim(), category: newRuleCategory || 'Autre', createdAt: '' }]))).length} transaction(s) actuelle(s) correspondent à ce motif.
+                                    </p>
+                                )}
+
                                 {categorizationRules.length === 0 ? (
-                                    <p className="text-tiny text-ink-400 text-center py-2">Aucune regle. Creez-en une pour categoriser automatiquement.</p>
+                                    <p className="text-tiny text-ink-400 text-center py-2">Aucune règle. Crée-en une pour classer automatiquement.</p>
                                 ) : (
                                     <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
-                                        {categorizationRules.map(rule => (
+                                        {categorizationRules.map(rule => {
+                                            const matchCount = transactions.filter(t => !t.isDuplicate && !t.isTransfer && Boolean(matchUserCategorizationRule(t.payee, [rule]))).length;
+                                            return (
                                             <div key={rule.id} className="gf-row flex items-center gap-2 bg-fond/30 px-3 py-2 rounded-lg border border-bordure text-meta group">
                                                 <span className="text-ink-200 font-bold flex-1 truncate">"<PrivateText quoi="marchand">{rule.pattern}</PrivateText>"</span>
+                                                <span className="text-tiny font-mono text-ink-400 shrink-0">{matchCount}×</span>
                                                 <Icon name="chevron-right" size={12} className="text-ink-500 hidden sm:inline shrink-0" />
                                                 <PrivateText quoi="categorie" className="text-ink-100 bg-bordure px-2 py-0.5 rounded-sm font-bold truncate max-w-[120px]">{rule.category}</PrivateText>
                                                 <button onClick={() => handleApplyRuleNow(rule)} aria-label={`Appliquer la règle ${maskPayee(rule.pattern, isPrivacyMode)}`} className="md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 text-ink-300 hover:text-primary transition-all text-tiny font-bold ml-1">Appliquer</button>
                                                 <button onClick={() => setConfirmDeleteRuleId(rule.id)} aria-label={`Supprimer la règle ${maskPayee(rule.pattern, isPrivacyMode)}`} className="md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 inline-flex text-danger-400 hover:text-danger-500 transition-all ml-1 p-2 -m-1"><Icon name="close" size={13} /></button>
                                             </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -849,6 +1044,90 @@ export const Transactions: React.FC<TransactionsProps> = ({
                         </div>
                     )}
 
+
+                    {pendingRulePrompt && (
+                        <section
+                            role="region"
+                            aria-label="Apprentissage automatique"
+                            className="gf-terminal-card rounded-2xl border border-primary/35 bg-primary/10 p-3.5 lg:p-4 flex flex-wrap items-center justify-between gap-3"
+                        >
+                            <p className="text-body text-ink-100">
+                                Toujours classer «{' '}
+                                <PrivateText quoi="marchand" className="font-semibold text-texte">{pendingRulePrompt.pattern}</PrivateText>
+                                {' » en '}
+                                <PrivateText quoi="categorie" className="font-semibold text-texte">{pendingRulePrompt.category}</PrivateText>
+                                {' ?'}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleAcceptPendingRule}
+                                    className="touch-target min-h-11 px-4 rounded-full bg-primary text-dark text-meta font-bold hover:bg-accent-fonce focus-ring"
+                                >
+                                    {pendingRulePrompt.matchingCount > 0
+                                        ? `Créer la règle (+${pendingRulePrompt.matchingCount} dans l'historique)`
+                                        : 'Créer la règle'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPendingRulePrompt(null)}
+                                    className="touch-target min-h-11 px-3.5 rounded-full border border-bordure bg-surface text-meta text-ink-200 hover:text-texte focus-ring"
+                                >
+                                    Seulement cette ligne
+                                </button>
+                            </div>
+                        </section>
+                    )}
+
+                    {reclassifySummary && (
+                        <section
+                            role="status"
+                            aria-live="polite"
+                            aria-label="Résumé du reclassement"
+                            className="gf-terminal-card rounded-2xl border border-bordure bg-surface p-3.5 lg:p-4 flex flex-wrap items-center justify-between gap-3"
+                        >
+                            <div className="space-y-0.5 text-meta text-ink-200">
+                                <p className="text-body font-semibold text-texte">
+                                    {reclassifySummary.totalChanged} transaction(s) mise(s) à jour
+                                </p>
+                                <p>
+                                    {reclassifySummary.byRulesAndHistory} par règles/historique · {reclassifySummary.byAi} par IA · {reclassifySummary.transfersMarked} virement(s) · {reclassifySummary.manualPreserved} correction(s) manuelle(s) préservée(s)
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                {reclassifySummary.needsReviewAfter > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { vueFiltree(() => setQuickFilter('TO_REVIEW')); }}
+                                        className="touch-target min-h-11 px-3.5 rounded-full border border-warning-400/35 bg-warning-500/10 text-warning-400 text-meta font-semibold focus-ring"
+                                    >
+                                        Voir les {reclassifySummary.needsReviewAfter} à vérifier
+                                    </button>
+                                )}
+                                {lastReclassifyBackup && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setTransactions(lastReclassifyBackup);
+                                            setLastReclassifyBackup(null);
+                                            setReclassifySummary(null);
+                                            showToast('Reclassement annulé', 'info');
+                                        }}
+                                        className="touch-target min-h-11 px-3.5 rounded-full border border-bordure bg-surface-douce text-meta text-ink-100 hover:text-texte focus-ring"
+                                    >
+                                        Annuler le reclassement
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => setReclassifySummary(null)}
+                                    className="touch-target min-h-11 px-2 text-meta text-ink-300 underline underline-offset-2 focus-ring rounded-sm"
+                                >
+                                    Fermer
+                                </button>
+                            </div>
+                        </section>
+                    )}
 
                     {/* [REFONTE-NAV-L5] Ancre du deep-link Budget → Transactions : usePendingFocus scrolle
                         vers `category:<nom>` — l'attribut suit la catégorie filtrée (posée à l'arrivée). */}
@@ -1020,7 +1299,8 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                             </div>
                                             <ul>
                                                 {j.lignes.map((t) => {
-                                                    const isUncat = t.category === 'Uncategorized' || t.category === 'Inconnu';
+                                                    const isUncat = isUncategorizedCategory(t.category);
+                                                    const needsReview = isTransactionNeedsReview(t);
                                                     return (
                                                         <li key={t.id} className={`gf-row flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg border-b border-bordure transition-colors ${selectedIds.has(t.id) ? 'bg-primary/10' : ''}`}>
                                                             {modeSelection && (
@@ -1039,12 +1319,24 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                                                     {/* ⚠️ [PRIV-CATEGORIE-MASQUEE] `PrivateSelect` : la catégorie s'ÉDITE (toucher le libellé ouvre la liste). */}
                                                                     <PrivateSelect
                                                                         aria-label={rowControlLabel('Catégorie de', t.payee, t.date, t.id, isPrivacyMode)}
-                                                                        className={`champ-nu appearance-none field-sizing-content bg-transparent border-0 p-0 text-meta cursor-pointer max-w-[60%] truncate ${isUncat ? 'text-warning-400' : 'text-ink-400'}`}
+                                                                        className={`champ-nu appearance-none field-sizing-content bg-transparent border-0 p-0 text-meta cursor-pointer max-w-[60%] truncate ${needsReview ? 'text-warning-400' : 'text-ink-400'}`}
                                                                         value={t.category}
                                                                         onChange={(e) => updateCategory(t.id, e.target.value)}
                                                                     >
+                                                                        {!availableCategories.includes(t.category) && <option value={t.category}>{t.category}</option>}
                                                                         {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
                                                                     </PrivateSelect>
+                                                                    {!isUncat && needsReview && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleVerifyTransaction(t.id)}
+                                                                            aria-label={rowControlLabel('Confirmer la catégorie de', t.payee, t.date, t.id, isPrivacyMode)}
+                                                                            title="Proposition automatique — cliquer pour confirmer"
+                                                                            className="touch-target min-h-11 px-1.5 text-[11px] font-semibold text-warning-400 hover:text-success-400 focus-ring rounded-sm shrink-0"
+                                                                        >
+                                                                            À vérifier ✓
+                                                                        </button>
+                                                                    )}
                                                                     {/* [PH4E-OWNER-EDIT] attribution couple — dépenses seulement. */}
                                                                     {isCouple && t.amount < 0 && !t.isTransfer && (
                                                                         <>
@@ -1111,7 +1403,8 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                 </thead>
                                 <tbody>
                                     {visiblesTx.map((t) => {
-                                        const isUncat = t.category === 'Uncategorized' || t.category === 'Inconnu';
+                                        const isUncat = isUncategorizedCategory(t.category);
+                                        const needsReview = isTransactionNeedsReview(t);
                                         return (
                                             <tr
                                                 key={t.id}
@@ -1138,16 +1431,30 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                                 <td className="px-2">
                                                     {/* ⚠️ [PRIV-CATEGORIE-MASQUEE] `PrivateSelect`, pas `PrivateText` : la
                                                         catégorie s'ÉDITE — la pastille de la maquette EST la liste. */}
-                                                    <span className="relative inline-flex items-center">
-                                                        <span className="pointer-events-none absolute left-2.5 w-2 h-2 rounded-sm" style={{ background: couleurCategorie(t.category) }} aria-hidden="true" />
-                                                        <PrivateSelect
-                                                            aria-label={rowControlLabel('Catégorie de', t.payee, t.date, t.id, isPrivacyMode)}
-                                                            className={`champ-nu appearance-none field-sizing-content h-[30px] pl-6 pr-2.5 rounded-full border bg-surfaceHighlight text-[13px] cursor-pointer max-w-[170px] truncate ${isUncat ? 'border-warning-400/50 text-warning-400' : 'border-bordure text-ink-200'}`}
-                                                            value={t.category}
-                                                            onChange={(e) => updateCategory(t.id, e.target.value)}
-                                                        >
-                                                            {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                                                        </PrivateSelect>
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        <span className="relative inline-flex items-center">
+                                                            <span className="pointer-events-none absolute left-2.5 w-2 h-2 rounded-sm" style={{ background: couleurCategorie(t.category) }} aria-hidden="true" />
+                                                            <PrivateSelect
+                                                                aria-label={rowControlLabel('Catégorie de', t.payee, t.date, t.id, isPrivacyMode)}
+                                                                className={`champ-nu appearance-none field-sizing-content h-[30px] pl-6 pr-2.5 rounded-full border bg-surfaceHighlight text-[13px] cursor-pointer max-w-[170px] truncate ${needsReview ? 'border-warning-400/50 text-warning-400' : 'border-bordure text-ink-200'}`}
+                                                                value={t.category}
+                                                                onChange={(e) => updateCategory(t.id, e.target.value)}
+                                                            >
+                                                                {!availableCategories.includes(t.category) && <option value={t.category}>{t.category}</option>}
+                                                                {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                                            </PrivateSelect>
+                                                        </span>
+                                                        {!isUncat && needsReview && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleVerifyTransaction(t.id)}
+                                                                aria-label={rowControlLabel('Confirmer la catégorie de', t.payee, t.date, t.id, isPrivacyMode)}
+                                                                title="Catégorie incertaine — cliquer pour confirmer"
+                                                                className="touch-target min-h-11 px-2 text-[11px] font-semibold text-warning-400 hover:text-success-400 focus-ring rounded-sm whitespace-nowrap shrink-0"
+                                                            >
+                                                                À vérifier ✓
+                                                            </button>
+                                                        )}
                                                     </span>
                                                 </td>
                                                 {isCouple && (

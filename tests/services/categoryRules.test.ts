@@ -5,7 +5,7 @@
 // par les MÊMES règles — cohérence app↔MCP.
 
 import { describe, it, expect } from 'vitest';
-import { ruleCategorize, RULE_CATEGORIES, categoryKey, buildCategoryCanonicalMap, resolveCandidateCategory } from '../../services/import/categoryRules';
+import { ruleCategorize, RULE_CATEGORIES, categoryKey, buildCategoryCanonicalMap, resolveCandidateCategory, mapExternalCategoryHint, isMixedMerchantPayee, isUncategorizedCategory } from '../../services/import/categoryRules';
 import { parseBankCsv } from '../../services/import/parseBankCsv';
 import { applyDocument } from '../../mcp/ingest/applyDocument';
 import { buildDefaultAppState } from '../../mcp/state/loadAppState';
@@ -180,5 +180,38 @@ describe('allowlist canonique de catégories (helpers partagés)', () => {
         // Absente → règles/fallback, PAS un remap (une absence n'est pas une invention).
         expect(resolveCandidateCategory(undefined, allowed, 'ZZZZZ INCONNU', 'Autre'))
             .toEqual({ category: 'Autre', remapped: false });
+    });
+});
+
+describe('extensions QC/CA, marchands mixtes et indices Fintable', () => {
+    it('couvre les nouvelles enseignes QC/CA et priorise COSTCO GAS en Transport et YOUTUBE PREMIUM en Abonnements', () => {
+        expect(ruleCategorize('COSTCO GAS #512')).toBe('Transport');
+        expect(ruleCategorize('COSTCO WHOLESALE #512')).toBe('Épicerie');
+        expect(ruleCategorize('YOUTUBE PREMIUM')).toBe('Abonnements');
+        expect(ruleCategorize('FAMILIPRIX EXTRA')).toBe('Santé');
+        expect(ruleCategorize('DOORDASH*RESTO MTL')).toBe('Restaurants');
+        expect(ruleCategorize('VILLE DE QUEBEC TAXE MUNICIPALE')).toBe('Logement');
+        expect(ruleCategorize('RENAUD-BRAY STE-FOY')).toBe('Magasinage');
+        expect(ruleCategorize('MARRIOTT HOTELS')).toBe('Voyages');
+        expect(ruleCategorize('LA PERSONNELLE ASSURANCES')).toBe('Assurances');
+        expect(ruleCategorize('PAIEMENT CARTE VISA')).toBe('Transfert');
+    });
+
+    it('mapExternalCategoryHint : traduit les catégories bancaires anglaises et ignore Autre/Uncategorized', () => {
+        expect(mapExternalCategoryHint('Groceries')).toBe('Épicerie');
+        expect(mapExternalCategoryHint('Food & Dining')).toBe('Restaurants');
+        expect(mapExternalCategoryHint('Gas & Fuel')).toBe('Transport');
+        expect(mapExternalCategoryHint('Refund')).toBe('Remboursement');
+        expect(mapExternalCategoryHint('Uncategorized')).toBeNull();
+        expect(mapExternalCategoryHint('Autre')).toBeNull();
+    });
+
+    it('isMixedMerchantPayee et isUncategorizedCategory couvrent les statuts attendus', () => {
+        expect(isMixedMerchantPayee('COSTCO WHOLESALE')).toBe(true);
+        expect(isMixedMerchantPayee('AMZN MKTP CA*1234')).toBe(true);
+        expect(isMixedMerchantPayee('METRO CENTRE VILLE')).toBe(false);
+        expect(isUncategorizedCategory('Non catégorisé')).toBe(true);
+        expect(isUncategorizedCategory('Uncategorized')).toBe(true);
+        expect(isUncategorizedCategory('Épicerie')).toBe(false);
     });
 });

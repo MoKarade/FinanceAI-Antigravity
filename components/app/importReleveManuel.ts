@@ -15,11 +15,16 @@ import { applyTransferDetection } from '../../services/transactions/applyTransfe
 import { logAudit } from '../../services/auditLog';
 import { logError } from '../../services/errorLogger';
 import { RULE_CATEGORIES } from '../../services/import/categoryRules';
+import { smartCategorizeTransactions } from '../../services/transactions/smartCategorize';
+import { buildFewShotExamples } from '../../services/transactions/backgroundAiCategorize';
+import { buildMerchantProfiles } from '../../services/transactions/merchantProfile';
+import { resolveToBudgetCategory } from '../../services/transactions/budgetCategoryResolver';
 import { useFinanceStore } from '../../store/useFinanceStore';
 
 interface DepsImportReleve {
     transactions: AppState['transactions'];
     budgetItems: AppState['budgetItems'];
+    categorizationRules?: AppState['categorizationRules'];
     apiKeyGemini?: string;
     apiKeyAnthropic?: string;
     setAppState: (patch: Partial<AppState>) => void;
@@ -27,6 +32,8 @@ interface DepsImportReleve {
 
 export async function importerReleveManuel(rawData: string, deps: DepsImportReleve): Promise<void> {
     const { transactions, budgetItems, apiKeyGemini, apiKeyAnthropic, setAppState } = deps;
+    const storeState = useFinanceStore.getState();
+    const categorizationRules = deps.categorizationRules ?? storeState.categorizationRules ?? [];
     const result = parseBankCsv(rawData);
     const combined = [...result.transactions, ...transactions];
     const deduped = markDuplicates(combined);
@@ -36,14 +43,21 @@ export async function importerReleveManuel(rawData: string, deps: DepsImportRele
     // paires PROUVÉES (deux comptes connus et différents) — les paires plausibles sans compte
     // remontent au panneau « Virements internes » de l'onglet Transactions, jamais écrites.
     const { transactions: withTransfers, report: transferReport } = applyTransferDetection(deduped);
-    setAppState({ transactions: withTransfers, lastUpdate: Date.now() });
+    const newIds = new Set(result.transactions.map((t) => t.id));
+    const smart = smartCategorizeTransactions({
+        transactions: withTransfers,
+        targetIds: newIds,
+        categorizationRules,
+        budgetItems,
+    });
+    setAppState({ transactions: smart.transactions, lastUpdate: Date.now() });
     // SYS-AUDIT — trace l'import dans le journal d'audit (qui-quoi-quand).
     logAudit({
         field: 'transactions',
         operation: 'add',
         description: `Import relevé : ${result.transactions.length} ajoutée(s)${result.skipped > 0 ? `, ${result.skipped} ignorée(s)` : ''}`,
         countBefore: transactions.length,
-        countAfter: withTransfers.length,
+        countAfter: smart.transactions.length,
     });
     // No-silent-failure : on dit combien de lignes ont été ignorées.
     const baseMsg = result.skipped > 0
@@ -55,13 +69,12 @@ export async function importerReleveManuel(rawData: string, deps: DepsImportRele
         ? ` ${transferReport.markedCount} virement(s) interne(s) marqué(s).`
         : '';
 
-    // Auto-catégorisation IA (choix Marc) : classe les NOUVELLES transactions non
-    // dupliquées / non-transfert encore « à classer ». Lazy-import de gemini.ts.
+    // Auto-catégorisation IA (choix Marc) : classe les NOUVELLES transactions restées
+    // inconnues ou douteuses après les règles contextuelles. Lazy-import de gemini.ts.
     const apiKey = apiKeyGemini ?? apiKeyAnthropic;
-    const newIds = new Set(result.transactions.map(t => t.id));
-    const toClassify = withTransfers.filter(t =>
-        newIds.has(t.id) && !t.isDuplicate && !t.isTransfer &&
-        (t.category === 'Uncategorized' || t.category === 'Inconnu' || t.category === ''),
+    const aiTargetSet = new Set(smart.remainingForAiIds);
+    const toClassify = smart.transactions.filter((t) =>
+        aiTargetSet.has(t.id) && !t.isDuplicate && !t.isTransfer && t.status !== 'manual',
     );
     if (!apiKey || toClassify.length === 0) {
         showToast(apiKey ? `${baseMsg}${transferMsg}` : `${baseMsg}${transferMsg} Ajoute ta clé Google Gemini pour la classification auto.`, 'success');
@@ -73,17 +86,40 @@ export async function importerReleveManuel(rawData: string, deps: DepsImportRele
         // 'Inconnu' EXCLU des cibles : c'est un statut « à classer », pas une destination.
         // [TX-CATEGORY-RULES] + jeu canonique des règles : cibles IA disponibles même quand
         // le budget est encore vide (post-purge), cohérentes avec l'import et le Budget.
+        const budgetCategoryNames = budgetItems.map((b) => b.name).filter(Boolean);
         const allowed = Array.from(new Set([
-            ...budgetItems.map(b => b.name),
+            ...budgetCategoryNames,
             'Salaire', 'Autre', 'Transfert', 'Investissement', 'Remboursement',
             ...RULE_CATEGORIES,
         ]));
-        const classified = await categorizeBatch(toClassify, apiKey, allowed);
-        const byId = new Map(classified.map(t => [t.id, t]));
-        // Applique les catégories sur l'état FRAIS (et non le snapshot `deduped` capturé
-        // avant l'await) → un edit utilisateur survenu pendant la classification n'est pas écrasé.
+        const merchantProfiles = buildMerchantProfiles(
+            smart.transactions
+                .filter((t) => !t.isDuplicate && !t.isTransfer)
+                .map((t) => ({ payee: t.payee, amount: t.amount, date: t.date })),
+        );
+        const fewShotExamples = buildFewShotExamples(smart.transactions, categorizationRules);
+        const classified = await categorizeBatch(toClassify, apiKey, allowed, undefined, {
+            context: {
+                fewShotExamples,
+                merchantProfiles,
+                budgetCategoryNames,
+                groupByMerchant: true,
+            },
+        });
+        const byId = new Map(classified.map((t) => [
+            t.id,
+            t.isTransfer ? t : { ...t, category: resolveToBudgetCategory(t.category, budgetItems) },
+        ]));
+        // Applique les catégories sur l'état FRAIS (et non le snapshot capturé avant l'await)
+        // → une édition utilisateur survenue pendant la classification n'est pas écrasée.
         const current = useFinanceStore.getState().transactions;
-        setAppState({ transactions: current.map(t => byId.get(t.id) ?? t), lastUpdate: Date.now() });
+        setAppState({
+            transactions: current.map((t) => {
+                if (t.status === 'manual' || t.isDuplicate) return t;
+                return byId.get(t.id) ?? t;
+            }),
+            lastUpdate: Date.now(),
+        });
         showToast(`${classified.length} nouvelle(s) transaction(s) classée(s).`, 'success');
     } catch (e) {
         logError({ source: 'ai', message: "Auto-catégorisation à l'import échouée", error: e });

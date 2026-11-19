@@ -53,6 +53,8 @@ import { lastProductiveAtSuivant } from './syncHealth';
 import { FintableError } from './types';
 import { logError } from '../errorLogger';
 import { fxSourceEffective, fxFaitAutorite } from '../fx/provenance';
+import { applyTransferDetection } from '../transactions/applyTransferDetection';
+import { smartCategorizeTransactions } from '../transactions/smartCategorize';
 
 /** Base same-origin. Le proxy réécrit vers `https://fintable.io/api/v2`. */
 export const FINTABLE_BROWSER_BASE = '/api/fintable';
@@ -95,6 +97,8 @@ export interface BrowserSyncResult {
      * convention. Décision de Marc (2026-09-16) : « oui, à l'écran seulement ».
      */
     echantillonsChampsInconnus: EchantillonCleInconnue[];
+    /** Identifiants des nouvelles transactions ajoutées pendant cette passe (non persisté — déclenche l'IA arrière-plan). */
+    newTransactionIds?: number[];
 }
 
 export interface BrowserSyncOptions {
@@ -492,9 +496,50 @@ export async function runFintableBrowserSync(
                 ] as typeof p.transactions;
             }
         }
+        // Indexe les catégories brutes reçues de Fintable avant application pour les réutiliser
+        // dans le classement intelligent sur les transactions nouvellement ajoutées.
+        const prevMaxId = (baseState.transactions ?? []).reduce((m, t) => Math.max(m, t.id || 0), 0);
+        const rawHintQueues = new Map<string, string[]>();
+        for (const p of payloads) {
+            if (p.kind !== 'bank_statement') continue;
+            for (const item of p.transactions ?? []) {
+                const rawCat = typeof item.category === 'string' ? item.category.trim() : '';
+                if (!rawCat) continue;
+                const k = `${item.date}|${Math.round((item.amount || 0) * 100)}|${String(item.payee || '').trim().toLowerCase()}`;
+                const q = rawHintQueues.get(k);
+                if (q) q.push(rawCat);
+                else rawHintQueues.set(k, [rawCat]);
+            }
+        }
+
         // Isolation PAR PAYLOAD : PARTAGÉE avec le cron (`syncCore`), voir son en-tête.
         const applied = applyPayloadsIsolated(baseState, payloads);
         const { nextState, transactionsAdded, cashUpdated, cashAnchorDelta, debtsUpdated, warnings: applyWarnings } = applied;
+
+        let enrichedNextState = nextState;
+        let newTransactionIds: number[] = [];
+        if (transactionsAdded > 0) {
+            const addedTxs = nextState.transactions.filter((t) => t.id > prevMaxId);
+            newTransactionIds = addedTxs.map((t) => t.id);
+            if (newTransactionIds.length > 0) {
+                const externalHintsById = new Map<number, string>();
+                for (const t of addedTxs) {
+                    const k = `${t.date}|${Math.round((t.amount || 0) * 100)}|${String(t.payee || '').trim().toLowerCase()}`;
+                    const q = rawHintQueues.get(k);
+                    const hint = q?.shift();
+                    if (hint) externalHintsById.set(t.id, hint);
+                }
+                const transferDet = applyTransferDetection(nextState.transactions);
+                const smart = smartCategorizeTransactions({
+                    transactions: transferDet.transactions,
+                    targetIds: new Set(newTransactionIds),
+                    categorizationRules: baseState.categorizationRules ?? [],
+                    budgetItems: baseState.budgetItems ?? [],
+                    externalHintsById,
+                });
+                enrichedNextState = { ...nextState, transactions: smart.transactions };
+            }
+        }
 
         const adjustedSkippedBeforeCutover = Math.max(
             0,
@@ -565,7 +610,7 @@ export async function runFintableBrowserSync(
 
         const nextFintableRoles = Object.keys(autoAssignedRoles).length > 0
             ? { ...autoAssignedRoles, ...(baseState.fintableRoles ?? {}) }
-            : nextState.fintableRoles;
+            : enrichedNextState.fintableRoles;
 
         // Delta par IDENTITÉ DE RÉFÉRENCE contre `baseState` — la base RÉELLE de l'application.
         // Le helper porte le pourquoi du delta (`applyStatePatch.ts`) ; ce qui se joue ici est le
@@ -575,8 +620,9 @@ export async function runFintableBrowserSync(
             incertaines: rattrapage?.incertaines ?? [],
             // ⚠️ Hors du `report` DÉLIBÉRÉMENT (cf. le champ du type) : à l'écran seulement.
             echantillonsChampsInconnus: snapshot.unknownTransactionSamples,
+            newTransactionIds,
             statePatch: referenceDeltaPatch(baseState, {
-                ...nextState,
+                ...enrichedNextState,
                 ...(nextFintableRoles !== undefined ? { fintableRoles: nextFintableRoles } : {}),
                 fintableSyncReport: report,
                 fintableBrokerBalances: soldesCourtier,

@@ -243,7 +243,7 @@ async function runDailyFintableSyncGuarded(
         // ⚠️ [FINTABLE-SYNC-STALE-BASE] `current` est la base PRÉ-fetch ; `getFreshState` relit le
         // store juste avant l'application pour qu'une saisie manuelle faite pendant le réseau ne
         // soit pas écrasée (le verrou de sync ne protège que contre une autre PASSE).
-        const { report, statePatch } = await runFintableBrowserSync(current, freshToken, {
+        const { report, statePatch, newTransactionIds } = await runFintableBrowserSync(current, freshToken, {
             getFreshState: () => useFinanceStore.getState(),
             ...(opts.autoCreditCards ? { autoCreditCards: true } : {}),
         });
@@ -263,6 +263,15 @@ async function runDailyFintableSyncGuarded(
             return { ran: true, report };
         }
         setAppState(statePatch);
+        if (Array.isArray(newTransactionIds) && newTransactionIds.length > 0) {
+            void import('../transactions/backgroundAiCategorize')
+                .then((m) => m.scheduleBackgroundAiCategorization(newTransactionIds, {
+                    getState: () => useFinanceStore.getState(),
+                    setAppState: (patch) => useFinanceStore.getState().setAppState(patch),
+                    isTestModeNow,
+                }))
+                .catch(() => {});
+        }
         return { ran: true, report };
     } catch (err) {
         logError({

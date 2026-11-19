@@ -18,7 +18,9 @@ import { isInternalTransferLabel } from '../utils/transactionParser';
 import { MODEL_IDS } from './aiChat/models';
 import { reglagesConversation, reglagesLecture } from './aiChat/reglages';
 import { FED_BRACKETS, QC_BRACKETS } from '../utils/tax';
-import { RULE_CATEGORIES, ruleCategorize, buildCategoryCanonicalMap, resolveCandidateCategory } from './import/categoryRules';
+import { RULE_CATEGORIES, ruleCategorize, buildCategoryCanonicalMap, resolveCandidateCategory, isMixedMerchantPayee, isUncategorizedCategory } from './import/categoryRules';
+import { isInteracPayee } from './transactions/detectTransfers';
+import { merchantKey, profileForPayee, type MerchantProfile } from './transactions/merchantProfile';
 import {
     creerClientCompatibleGemini,
     type GeminiCompatibleClient,
@@ -367,6 +369,13 @@ export const categorizeBackoffMs = (
     return Math.min(wait, maxMs);
 };
 
+interface CategorizeBatchContext {
+    fewShotExamples?: Array<{ merchant: string; category: string; sign: 'debit' | 'credit' }>;
+    merchantProfiles?: ReadonlyMap<string, MerchantProfile>;
+    budgetCategoryNames?: readonly string[];
+    groupByMerchant?: boolean;
+}
+
 /** Réglages injectables (tests : `sleep` synchrone → aucune attente réelle). */
 interface CategorizeBatchDeps {
     sleep?: (ms: number) => Promise<void>;
@@ -374,6 +383,38 @@ interface CategorizeBatchDeps {
     baseBackoffMs?: number;
     /** 0 désactive le pacing inter-chunk. */
     chunkPacingMs?: number;
+    context?: CategorizeBatchContext;
+}
+
+interface MerchantTxGroup {
+    rep: Transaction;
+    members: Transaction[];
+}
+
+function buildCategorizeGroups(transactions: Transaction[], groupByMerchant: boolean): MerchantTxGroup[] {
+    if (!groupByMerchant) {
+        return transactions.map((t) => ({ rep: t, members: [t] }));
+    }
+    const groups: MerchantTxGroup[] = [];
+    const byKey = new Map<string, MerchantTxGroup>();
+    for (const t of transactions) {
+        const canGroup = !isInteracPayee(t.payee) && !isMixedMerchantPayee(t.payee);
+        const mKey = canGroup ? merchantKey(t.payee || '') : '';
+        if (!mKey) {
+            groups.push({ rep: t, members: [t] });
+            continue;
+        }
+        const gKey = `${mKey}|${t.amount > 0 ? 'credit' : 'debit'}`;
+        const existing = byKey.get(gKey);
+        if (existing) {
+            existing.members.push(t);
+        } else {
+            const group: MerchantTxGroup = { rep: t, members: [t] };
+            byKey.set(gKey, group);
+            groups.push(group);
+        }
+    }
+    return groups;
 }
 
 export const categorizeBatch = async (
@@ -406,38 +447,87 @@ export const categorizeBatch = async (
     const maxAttempts = Math.max(1, deps.maxAttempts ?? CATEGORIZE_MAX_ATTEMPTS);
     const baseBackoffMs = deps.baseBackoffMs ?? CATEGORIZE_BASE_BACKOFF_MS;
     const chunkPacingMs = deps.chunkPacingMs ?? CATEGORIZE_CHUNK_PACING_MS;
+    const context = deps.context;
     /** Chunks ayant réellement APPELÉ l'API — le pacing ne s'applique qu'entre ceux-là. */
     let apiChunksDone = 0;
 
-    for (let i = 0; i < transactions.length; i += CHUNK_SIZE) {
-        const chunk = transactions.slice(i, i + CHUNK_SIZE);
+    // Filtre les transferts évidents avant l'appel LLM ; le reste est éventuellement regroupé par marchand.
+    const obviousTransfers = transactions
+        .filter((t) => isDefiniteTransfer(t.payee || '', t.amount))
+        .map((t) => ({
+            ...t,
+            category: 'Transfert' as string,
+            isTransfer: true,
+            isAiProcessed: true,
+            confidence: 100,
+            status: 'processed' as const,
+        }));
+    const candidateTxs = transactions.filter((t) => !isDefiniteTransfer(t.payee || '', t.amount));
 
-        // Filtre les transferts évidents avant l'appel LLM
-        const toAnalyze = chunk.filter(t => !isDefiniteTransfer(t.payee || '', t.amount));
-        const obvious = chunk.filter(t => isDefiniteTransfer(t.payee || '', t.amount))
-            .map(t => ({ ...t, category: 'Transfert' as string, isTransfer: true, isAiProcessed: true, confidence: 100, status: 'processed' as const }));
-        out.push(...obvious);
+    if (obviousTransfers.length > 0) {
+        out.push(...obviousTransfers);
+        processed += obviousTransfers.length;
+        onProgress?.(processed, transactions.length, `${obviousTransfers.length} transferts évidents.`, obviousTransfers);
+    }
 
-        if (toAnalyze.length === 0) {
-            processed += chunk.length;
-            onProgress?.(processed, transactions.length, `${chunk.length} transferts évidents.`, obvious);
-            continue;
-        }
+    const groups = buildCategorizeGroups(candidateTxs, Boolean(context?.groupByMerchant));
 
-        const txList = toAnalyze.map(t => `- {id: ${t.id}, payee: "${cleanMerchantName(t.payee || '')}", amount: ${Number.isFinite(t.amount) ? Math.round(t.amount) : 'null'}}`).join('\n');
+    const budgetSection = context?.budgetCategoryNames && context.budgetCategoryNames.length > 0
+        ? `\nPOSTES DU BUDGET À PRIVILÉGIER (noms exacts) : ${JSON.stringify(context.budgetCategoryNames.map((b) => sanitizePromptText(b)))}.`
+        : '';
 
-        const userPrompt = `CATÉGORIES AUTORISÉES (utilise UNIQUEMENT ces valeurs): ${JSON.stringify(safeCategories)}.
+    const fewShotSection = context?.fewShotExamples && context.fewShotExamples.length > 0
+        ? `\nEXEMPLES CONFIRMÉS PAR L'UTILISATEUR :\n${context.fewShotExamples.slice(0, 25).map((ex) => `- {merchant: "${cleanMerchantName(ex.merchant)}", sign: "${ex.sign}", category: "${sanitizePromptText(ex.category)}"}`).join('\n')}`
+        : '';
+
+    for (let i = 0; i < groups.length; i += CHUNK_SIZE) {
+        const chunkGroups = groups.slice(i, i + CHUNK_SIZE);
+        const chunkMembersCount = chunkGroups.reduce((acc, g) => acc + g.members.length, 0);
+
+        const txList = chunkGroups.map((g) => {
+            const t = g.rep;
+            const fields = [
+                `id: ${t.id}`,
+                `payee: "${cleanMerchantName(t.payee || '')}"`,
+                `sign: "${t.amount > 0 ? 'credit' : 'debit'}"`,
+                `amount: ${Number.isFinite(t.amount) ? Math.round(t.amount) : 'null'}`,
+            ];
+            if (g.members.length > 1) {
+                fields.push(`batchCount: ${g.members.length}`);
+            }
+            if (context?.merchantProfiles) {
+                const prof = profileForPayee(context.merchantProfiles, t.payee || '');
+                if (prof) {
+                    fields.push(`recurrence: "${prof.isRecurring ? prof.cadence : 'irregular'} (${prof.count}x)"`);
+                }
+            }
+            if (t.accountName && t.accountName !== 'Importé' && t.accountName !== 'Unknown') {
+                fields.push(`account: "${cleanMerchantName(t.accountName)}"`);
+            }
+            if (t.originalCategory && !isUncategorizedCategory(t.originalCategory) && t.originalCategory !== t.category) {
+                fields.push(`bankHint: "${cleanMerchantName(t.originalCategory)}"`);
+            }
+            return `- {${fields.join(', ')}}`;
+        }).join('\n');
+
+        const userPrompt = `CATÉGORIES AUTORISÉES (utilise UNIQUEMENT ces valeurs): ${JSON.stringify(safeCategories)}.${budgetSection}${fewShotSection}
 
 ${wrapUserData(txList)}
 
-Règle: Si tu ne peux pas déterminer la catégorie avec >50% de confiance, utilise "Autre".
+Règles Québec/Canada obligatoires :
+- Utilise en priorité les noms exacts des postes du budget fournis lorsqu'ils correspondent.
+- Un crédit/retour positif (sign: "credit") chez un commerçant ou sur carte est "Remboursement" (jamais un revenu), sauf paie/intérêts/ristourne.
+- Un virement Interac sortant vers un particulier ambigu sans contexte va dans "Autre" avec confidence <= 55.
+- Un paiement de carte de crédit ou transfert entre comptes propres va dans "Transfert" avec isTransfer: true.
+- Chez un marchand de plateforme (Apple, Google, Steam, Xbox, Amazon), un achat ponctuel va en Loisirs/Magasinage ; mets "Abonnements" seulement si recurrence indique une cadence mensuelle/annuelle régulière.
+- Étalonne honnêtement confidence (0-100) : < 75 dès qu'il y a un doute (la ligne sera marquée « À vérifier »).
 La catégorie DOIT être un élément exact de la liste autorisée — toute autre valeur sera rejetée.
 RÉPONDS UNIQUEMENT avec un JSON Array strict, sans markdown, sans commentaire:
 [{ "id": number, "category": string, "isTransfer": boolean, "confidence": number }]`;
 
         if (authAborted) {
-            out.push(...toAnalyze);
-            processed += chunk.length;
+            chunkGroups.forEach((g) => out.push(...g.members));
+            processed += chunkMembersCount;
             continue;
         }
 
@@ -456,32 +546,39 @@ RÉPONDS UNIQUEMENT avec un JSON Array strict, sans markdown, sans commentaire:
             const validated = safeJsonValidate(text, CategorizeArraySchema);
             if (validated) {
                 const byId = new Map(validated.map(v => [v.id, v]));
-                const chunkIds = new Set(toAnalyze.map(t => t.id));
+                const chunkIds = new Set(chunkGroups.map((g) => g.rep.id));
                 const usableIds = [...byId.keys()].filter(id => chunkIds.has(id)).length;
                 unknownIdCount += validated.length - usableIds;
-                const merged = toAnalyze.map(t => {
-                    const r = byId.get(t.id);
-                    if (!r) { missingIdCount++; return t; }
-                    const resolved = resolveCandidateCategory(r.category, allowedMap, t.payee || '', 'Autre');
-                    if (resolved.remapped) offListCount++;
+                const merged: Transaction[] = [];
+                for (const g of chunkGroups) {
+                    const r = byId.get(g.rep.id);
+                    if (!r) {
+                        missingIdCount += g.members.length;
+                        merged.push(...g.members);
+                        continue;
+                    }
+                    const resolved = resolveCandidateCategory(r.category, allowedMap, g.rep.payee || '', 'Autre');
+                    if (resolved.remapped) offListCount += g.members.length;
                     const isTransfer = resolved.category === 'Transfert'
                         ? true
                         : (resolved.remapped ? false : r.isTransfer);
                     const confidence = resolved.remapped
-                        ? (ruleCategorize(t.payee || '') !== null ? 100 : 0)
+                        ? (ruleCategorize(g.rep.payee || '') !== null ? 100 : 0)
                         : r.confidence;
-                    return {
-                        ...t,
-                        category: resolved.category,
-                        isTransfer,
-                        confidence,
-                        isAiProcessed: true,
-                        status: 'processed' as const,
-                    };
-                });
+                    for (const member of g.members) {
+                        merged.push({
+                            ...member,
+                            category: resolved.category,
+                            isTransfer,
+                            confidence,
+                            isAiProcessed: true,
+                            status: 'processed' as const,
+                        });
+                    }
+                }
                 out.push(...merged);
             } else {
-                out.push(...toAnalyze);
+                chunkGroups.forEach((g) => out.push(...g.members));
             }
         } catch (e) {
             const kind = classifyCategorizeError(e);
@@ -503,12 +600,12 @@ RÉPONDS UNIQUEMENT avec un JSON Array strict, sans markdown, sans commentaire:
             }
 
             failedChunks++;
-            out.push(...toAnalyze);
+            chunkGroups.forEach((g) => out.push(...g.members));
             done = true;
         }
         }
 
-        processed += chunk.length;
+        processed += chunkMembersCount;
         onProgress?.(processed, transactions.length, `Traité ${processed}/${transactions.length}`, out);
     }
 

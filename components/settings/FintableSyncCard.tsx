@@ -251,7 +251,7 @@ export const FintableSyncCard: React.FC = () => {
             // `getFreshState` qui la ferme, en relisant le store juste avant l'application.
             const current = useFinanceStore.getState() as unknown as AppState;
             const effectiveToken = nettoyerJetonSaisi(token || current.apiKeys?.fintable);
-            const { report: fresh, statePatch, incertaines: douteuses, echantillonsChampsInconnus } = await runFintableBrowserSync(current, effectiveToken, {
+            const { report: fresh, statePatch, incertaines: douteuses, echantillonsChampsInconnus, newTransactionIds } = await runFintableBrowserSync(current, effectiveToken, {
                 getFreshState: () => useFinanceStore.getState() as unknown as AppState,
                 backfill,
                 autoCreditCards: true,
@@ -294,6 +294,15 @@ export const FintableSyncCard: React.FC = () => {
             // (`services/fintable/applyStatePatch.ts` porte le pourquoi du delta par référence :
             // finding silent-failure PR #536, jamais de liste de clés à la main).
             setAppState(statePatch);
+            if (Array.isArray(newTransactionIds) && newTransactionIds.length > 0) {
+                void import('../../services/transactions/backgroundAiCategorize')
+                    .then((m) => m.scheduleBackgroundAiCategorization(newTransactionIds, {
+                        getState: () => useFinanceStore.getState(),
+                        setAppState: (patch) => useFinanceStore.getState().setAppState(patch),
+                        isTestModeNow: () => useFinanceStore.getState().isTestMode === true,
+                    }))
+                    .catch(() => {});
+            }
             // ⚠️ [FINTABLE-RATTRAPAGE] Le message qui manquait. « 0 transaction ajoutée » tout seul
             // se lit comme une PANNE — Marc l'a lu ainsi, à raison (2026-08-18), alors que la passe
             // venait d'en écarter des centaines parce qu'antérieures à la bascule. Un écran qui se
