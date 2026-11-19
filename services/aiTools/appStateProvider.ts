@@ -93,4 +93,34 @@ export const facadeStoreAssistant = {
     donneesFictives(): boolean {
         return modeDonneesFictives();
     },
+    porteeTest(): { isTestMode: boolean; personaId: string | null } {
+        const s = useFinanceStore.getState();
+        return {
+            isTestMode: Boolean(s.isTestMode),
+            personaId: s.isTestMode ? s.activeTestPersonaId : null,
+        };
+    },
+    async lancerComitePlacement(
+        etat: AppState,
+        question: string,
+        montantCibleCad?: number,
+        signal?: AbortSignal,
+    ) {
+        const s = useFinanceStore.getState();
+        if (s.isPrivacyMode) {
+            const { MESSAGE_IA_MODE_DISCRET } = await import('../messageErreurIa');
+            throw new Error(MESSAGE_IA_MODE_DISCRET);
+        }
+        const { cleGemini } = await import('../geminiAssistant');
+        const { runMultiAgentCommittee } = await import('../investments/multiAgentCommittee');
+        return runMultiAgentCommittee({
+            question,
+            state: etat,
+            apiKey: cleGemini(s),
+            isPrivacyMode: s.isPrivacyMode,
+            isTestMode: Boolean(s.isTestMode),
+            targetAmountCad: montantCibleCad,
+            signal,
+        });
+    },
 };

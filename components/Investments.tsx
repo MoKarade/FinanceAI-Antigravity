@@ -71,20 +71,19 @@ import { CeliAssetNudge } from './CeliAssetNudge';
 import { PrivateAmount } from './ui/PrivateAmount';
 import { ChartDataTable, type ChartDataColumn } from './ui/ChartDataTable';
 import { MASKED_AMOUNT_LABEL } from '../utils/privacyAria';
+import { MultiAgentCommitteeView } from './investments/MultiAgentCommitteeView';
 
-type PlacementsSubTab = 'overview' | 'allocation' | 'detail' | 'quant_advisor';
+export type PlacementsSubTab = 'portfolio' | 'ai_committee';
+type InitialPlacementsSubTab = PlacementsSubTab | 'quant_advisor';
 
 const PLACEMENTS_TABS: Array<{ id: PlacementsSubTab; label: string; icon: IconName }> = [
-    { id: 'overview', label: "Vue d'ensemble", icon: 'chart' },
-    { id: 'allocation', label: 'Allocation et rééquilibrage', icon: 'goal' },
-    { id: 'detail', label: 'Détail', icon: 'investments' },
-    { id: 'quant_advisor', label: 'Conseiller & 7 Agents', icon: 'sparkles' },
+    { id: 'portfolio', label: 'Mon portefeuille', icon: 'chart' },
+    { id: 'ai_committee', label: 'Analyse IA', icon: 'sparkles' },
 ];
 
-function resolveValoriaPlacementsSubTab(section?: string | null): PlacementsSubTab | null {
+function shouldOpenExpertTools(section?: string | null): boolean {
     const target = parseValoriaFocusSection(section);
-    if (!target.tab && !target.lab && !target.assetId) return null;
-    return 'quant_advisor';
+    return Boolean(target.tab || target.lab || target.assetId);
 }
 
 interface InvestmentsProps {
@@ -101,7 +100,7 @@ interface InvestmentsProps {
     projection: AppState['projection'];
     setProjection: (projection: AppState['projection']) => void;
     onOpenValoria?: () => void;
-    initialSubTab?: PlacementsSubTab;
+    initialSubTab?: InitialPlacementsSubTab;
 }
 
 // [Finding panel #496 — MOYEN] Couvre TOUTES les valeurs canoniques (CANONICAL_SECTORS/REGIONS) :
@@ -212,25 +211,33 @@ export const Investments: React.FC<InvestmentsProps> = ({
     // Phase E.3 — sous-onglets pour aérer la page (doc directives §4)
     // PH4-INV-4 — « moins de pages » : Rééquilibrage fusionné dans Allocation (4 → 3 sous-onglets).
     const pendingFocus = useFinanceStore(s => s.pendingFocus);
-    const [subTab, setSubTab] = useState<PlacementsSubTab>(() => {
+    const [subTab, setSubTab] = useState<PlacementsSubTab>(() =>
+        initialSubTab === 'ai_committee' ? 'ai_committee' : 'portfolio',
+    );
+    const [expertToolsOpen, setExpertToolsOpen] = useState<boolean>(() => {
+        if (initialSubTab === 'quant_advisor') return true;
         if (pendingFocus && (pendingFocus.tab === TabEnum.INVESTMENTS || pendingFocus.tab === TabEnum.VALORIA) && Date.now() <= pendingFocus.expiresAt) {
-            const matched = resolveValoriaPlacementsSubTab(pendingFocus.section);
-            if (matched) return matched;
+            return shouldOpenExpertTools(pendingFocus.section);
         }
-        return initialSubTab ?? 'overview';
+        return false;
     });
+    const [allocationOpen, setAllocationOpen] = useState(false);
+    const [detailOpen, setDetailOpen] = useState(false);
+    const [committeePrefillQuestion, setCommitteePrefillQuestion] = useState<string | null>(null);
     useEffect(() => {
         if (initialSubTab === 'quant_advisor') {
-            setSubTab('quant_advisor');
+            setExpertToolsOpen(true);
+        } else if (initialSubTab === 'ai_committee') {
+            setExpertToolsOpen(false);
+            setSubTab('ai_committee');
         }
     }, [initialSubTab]);
     useEffect(() => {
         if (!pendingFocus || (pendingFocus.tab !== TabEnum.INVESTMENTS && pendingFocus.tab !== TabEnum.VALORIA) || Date.now() > pendingFocus.expiresAt) {
             return;
         }
-        const matched = resolveValoriaPlacementsSubTab(pendingFocus.section);
-        if (matched) {
-            setSubTab(matched);
+        if (shouldOpenExpertTools(pendingFocus.section)) {
+            setExpertToolsOpen(true);
         }
     }, [pendingFocus]);
     const etroit = useViewportBelowLg();
@@ -357,10 +364,10 @@ export const Investments: React.FC<InvestmentsProps> = ({
     // désarme. Sinon l'état survivrait en SILENCE (cases cochées invisibles depuis Overview/
     // Allocation) et « Détail » rouvrirait un mode que l'utilisateur croyait quitté.
     useEffect(() => {
-        if (subTab === 'detail') return;
+        if (subTab === 'portfolio' && !expertToolsOpen && detailOpen) return;
         setIsCompareMode(false);
         setSelectedCompareSymbols(new Set());
-    }, [subTab]);
+    }, [subTab, expertToolsOpen, detailOpen]);
 
     // --- INSTANT DATA LOAD ---
     // Sprint 3B M3 + test-mode-complet : utilise usePortfolioHistory hook qui
@@ -727,8 +734,8 @@ export const Investments: React.FC<InvestmentsProps> = ({
 
     // D2 (activation) — sans aucun actif, la page affichait un score à 0, une allocation et des
     // graphes vides (barren). On propose un accueil clair « ajoute ton premier placement » +
-    // le formulaire d'ajout. Early-return placé APRÈS tous les hooks.
-    if (assets.length === 0 && subTab !== 'quant_advisor') {
+    // l'onglet Analyse IA accessible directement. Early-return placé APRÈS tous les hooks.
+    if (assets.length === 0 && subTab !== 'ai_committee' && !expertToolsOpen) {
         return (
             <div className="space-y-6 stagger-in pb-10 relative">
                 <PageHeader
@@ -739,19 +746,33 @@ export const Investments: React.FC<InvestmentsProps> = ({
                             label="Vues Placements"
                             tabs={PLACEMENTS_TABS}
                             active={subTab}
-                            onSelect={setSubTab}
+                            onSelect={(next) => {
+                                setExpertToolsOpen(false);
+                                setSubTab(next);
+                            }}
                         />
                     }
                     actions={
-                        <button
-                            type="button"
-                            onClick={() => setSubTab('quant_advisor')}
-                            aria-label="Conseiller 7 Agents · Quant IA"
-                            className="touch-target min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-bordure-champ bg-surface hover:bg-surface-douce text-xs font-semibold text-texte transition-colors whitespace-nowrap focus-ring"
-                        >
-                            <Icon name="sparkles" size={14} aria-hidden="true" />
-                            <span>Quant IA</span>
-                        </button>
+                        <span className="flex flex-wrap items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowAddStockForm(true)}
+                                className="touch-target min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent text-sur-accent text-xs font-semibold transition-opacity hover:opacity-90 whitespace-nowrap focus-ring"
+                            >
+                                <Icon name="plus" size={14} aria-hidden="true" />
+                                <span>Ajouter un titre</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setExpertToolsOpen(true)}
+                                aria-label="Outils experts · Quant IA"
+                                aria-expanded={expertToolsOpen}
+                                className="touch-target min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-bordure-champ bg-surface hover:bg-surface-douce text-xs font-semibold text-texte transition-colors whitespace-nowrap focus-ring"
+                            >
+                                <Icon name="flask" size={14} aria-hidden="true" />
+                                <span>Outils experts</span>
+                            </button>
+                        </span>
                     }
                 />
                 <div className="gf-terminal-card premium-card p-6">
@@ -760,15 +781,23 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         <h2 className="text-h2 text-ink-50 font-bold">Ajoute ton premier placement</h2>
                         <p className="text-meta text-ink-300 max-w-md mx-auto leading-snug">
                             Saisis un titre à la main pour voir ton score de diversification, ton allocation
-                            géographique/sectorielle et tes revenus passifs.
+                            géographique/sectorielle et tes revenus passifs, ou interroge directement le Comité IA.
                         </p>
-                        <div className="flex justify-center pt-2">
+                        <div className="flex flex-wrap justify-center gap-2.5 pt-2">
                             <button
                                 type="button"
                                 onClick={() => setShowAddStockForm(true)}
                                 className="gf-chip gf-chip-active px-4 py-2 rounded-full text-meta font-bold transition-colors focus-ring"
                             >
                                 Ajouter un titre
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSubTab('ai_committee')}
+                                className="touch-target min-h-11 gf-chip px-4 py-2 rounded-full border border-bordure-champ bg-surface-douce text-meta font-semibold text-texte hover:bg-bordure transition-colors focus-ring inline-flex items-center gap-1.5"
+                            >
+                                <Icon name="sparkles" size={14} aria-hidden="true" />
+                                <span>Analyser un titre ou Anthropic (IA)</span>
                             </button>
                         </div>
                     </div>
@@ -904,33 +933,76 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         label="Vues Placements"
                         tabs={PLACEMENTS_TABS}
                         active={subTab}
-                        onSelect={setSubTab}
+                        onSelect={(next) => {
+                            setExpertToolsOpen(false);
+                            setSubTab(next);
+                        }}
                     />
                 }
                 actions={
                     // [FX-FALLBACK-SILENCIEUX] : les totaux de cette page convertissent des avoirs
                     // étrangers en CAD — le signal doit vivre ICI (pastille à côté du score).
                     <span className="flex flex-wrap items-center justify-end gap-2">
-                        {subTab !== 'quant_advisor' && (
-                            <button
-                                type="button"
-                                onClick={() => setSubTab('quant_advisor')}
-                                aria-label="Conseiller 7 Agents · Quant IA"
-                                className="touch-target min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-bordure-champ bg-surface hover:bg-surface-douce text-xs font-semibold text-texte transition-colors whitespace-nowrap focus-ring"
-                            >
-                                <Icon name="sparkles" size={14} aria-hidden="true" />
-                                <span>Quant IA</span>
-                            </button>
-                        )}
+                        <button
+                            type="button"
+                            onClick={() => setShowAddStockForm(true)}
+                            className="touch-target min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent text-sur-accent text-xs font-semibold transition-opacity hover:opacity-90 whitespace-nowrap focus-ring"
+                        >
+                            <Icon name="plus" size={14} aria-hidden="true" />
+                            <span>Ajouter un titre</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setExpertToolsOpen((prev) => !prev)}
+                            aria-label="Outils experts · Quant IA"
+                            aria-expanded={expertToolsOpen}
+                            className="touch-target min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-bordure-champ bg-surface hover:bg-surface-douce text-xs font-semibold text-texte transition-colors whitespace-nowrap focus-ring"
+                        >
+                            <Icon name="flask" size={14} aria-hidden="true" />
+                            <span>Outils experts</span>
+                        </button>
                         <FxEstimateBadge size="md" />
                         {badgeScore}
                     </span>
                 }
             />
 
-            {/* Ruban d'allocation par enveloppe style Google Finance Beta (défilement horizontal compact sur mobile) */}
-            {subTab !== 'quant_advisor' && (
+            {expertToolsOpen ? (
+                <div className="space-y-4">
+                    <div className="gf-terminal-card bg-surface border border-bordure px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-xs sm:text-sm font-semibold text-ink-100">
+                            Outils quantitatifs avancés Valoria (7 Agents, Backtest, Black-Litterman)
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setExpertToolsOpen(false)}
+                            className="touch-target min-h-11 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-douce border border-bordure-champ text-xs font-semibold text-texte hover:bg-bordure transition-colors focus-ring"
+                        >
+                            <Icon name="chevron-left" size={14} aria-hidden="true" />
+                            <span>Retour à Placements</span>
+                        </button>
+                    </div>
+                    <Suspense fallback={<Skeleton variant="chart" className="h-96" />}>
+                        <ValoriaWorkspace embeddedInPlacements />
+                    </Suspense>
+                </div>
+            ) : (
+            <div key={subTab} role="tabpanel" id={panelId('placements', subTab)} aria-labelledby={tabId('placements', subTab)} tabIndex={0} className="space-y-5 focus-ring rounded-card animate-tab-in stagger-in">
+            {subTab === 'ai_committee' && (
+                <MultiAgentCommitteeView
+                    initialQuestion={committeePrefillQuestion}
+                    onClearInitialQuestion={() => setCommitteePrefillQuestion(null)}
+                    onAddTicker={() => setShowAddStockForm(true)}
+                    onOpenSettings={() => navigateWithFocus(TabEnum.SETTINGS)}
+                />
+            )}
+
+            {/* Ruban d'allocation par enveloppe + KPI + Graphe + Titres détenus + 2 sections repliables */}
+            {subTab === 'portfolio' && (
                 <>
+                    <CoursPerimesNotice titres={coursPerimes} />
+                    <CeliAssetNudge onAddAsset={() => setShowAddStockForm(true)} />
+                    <BrokerReconciliationCard variant="compact" />
                     <section
                         aria-label="Enveloppes fiscales et flux de dividendes"
                         className="gf-terminal-card bg-surface border border-bordure"
@@ -945,11 +1017,11 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                 key={env.id}
                                 role="button"
                                 tabIndex={0}
-                                onClick={() => setSubTab(env.id === 'cash' ? 'overview' : 'detail')}
+                                onClick={() => setDetailOpen(true)}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' || e.key === ' ') {
                                         e.preventDefault();
-                                        setSubTab(env.id === 'cash' ? 'overview' : 'detail');
+                                        setDetailOpen(true);
                                     }
                                 }}
                                 className="touch-target shrink-0 min-w-[160px] lg:min-w-0 px-3.5 py-2.5 text-left hover:bg-surface-douce flex items-center justify-between gap-2 transition-colors focus-ring cursor-pointer"
@@ -979,36 +1051,18 @@ export const Investments: React.FC<InvestmentsProps> = ({
                 </div>
                     </section>
 
-                    {/* [CELI-ASSET-NUDGE] virements CELI détectés mais aucun avoir CELI saisi → CELI affiché 0. */}
-                    <CeliAssetNudge onAddAsset={() => setShowAddStockForm(true)} />
-
-                    {/* [FINTABLE-6 Lot 2] Le total du COURTIER fait autorité (demande Marc) : affiché en mode compact sur Vue d'ensemble et complet dans Détail. */}
-                    <BrokerReconciliationCard variant={subTab === 'detail' ? 'full' : 'compact'} />
-                </>
-            )}
-
-            <div key={subTab} role="tabpanel" id={panelId('placements', subTab)} aria-labelledby={tabId('placements', subTab)} tabIndex={0} className="space-y-5 focus-ring rounded-card animate-tab-in stagger-in">
-            {subTab === 'quant_advisor' && (
-                <Suspense fallback={<Skeleton variant="chart" className="h-96" />}>
-                    <ValoriaWorkspace embeddedInPlacements />
-                </Suspense>
-            )}
-
-            {/* [COURS-AU-TROMPEUR] Sur la Vue d'ensemble, « Sur 24 h » peut afficher « — » : dire pourquoi. */}
-            {subTab === 'overview' && <CoursPerimesNotice titres={coursPerimes} />}
-            {subTab === 'overview' && (
                 <section aria-label="Chiffres clés" className="gf-quote-strip">
                     <div
                         role="button"
                         tabIndex={0}
-                        onClick={() => setSubTab('detail')}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSubTab('detail'); } }}
+                        onClick={() => setDetailOpen((o) => !o)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailOpen((o) => !o); } }}
                         className="gf-quote-cell touch-target cursor-pointer focus-ring group sm:col-span-1 lg:col-span-2"
                     >
                         <div className="flex items-center justify-between gap-2">
                             <span className={etiquetteTuile}>Valeur du portefeuille</span>
                             <span className="text-[11px] font-semibold text-ink-200 group-hover:text-ink-50">
-                                Ouvrir Détail ↗
+                                Voir le détail ▾
                             </span>
                         </div>
                         <div className="flex items-baseline gap-2.5 flex-wrap">
@@ -1067,9 +1121,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         {lienFutur}
                     </div>
                 </section>
-            )}
 
-            {subTab === 'overview' && (
                 <PerformanceComparee
                     donnees={filteredMarketData}
                     series={availableSeriesWithTrend}
@@ -1089,9 +1141,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         recherche par nom). Jamais rendu en mode test (tickers réels). */}
                     <HistorySyncDoctor onApplyQuoteSymbol={handleApplyQuoteSymbol} isSyncing={isRefreshingPrices} />
                 </PerformanceComparee>
-            )}
 
-            {subTab === 'overview' && (
                 <div className="space-y-5">
                     <TitresDetenus
                         lignes={lignesTitres}
@@ -1103,20 +1153,30 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         }}
                         onInspectValoria={(sym) => {
                             navigateWithFocus(TabEnum.INVESTMENTS, `asset:${sym}`);
-                            setSubTab('quant_advisor');
+                            setExpertToolsOpen(true);
+                        }}
+                        onAnalyzeAi={(sym, nom) => {
+                            setCommitteePrefillQuestion(
+                                `Est-ce que ça vaut le coup d’acheter, conserver ou renforcer ${nom ? `${nom} (${sym})` : sym} ?`,
+                            );
+                            setExpertToolsOpen(false);
+                            setSubTab('ai_committee');
                         }}
                     />
                     {/* CI-1000x Phase 1 (axe B) — répartition du portefeuille par personne (mode couple), pleine largeur sans colonne vide. */}
                     <NetWorthByOwnerCard assets={assets} setAssets={setAssets} />
                 </div>
-            )}
 
-            {/* 2. ALLOCATION PANORAMIQUE — Phase E.3 sub-tab 'allocation' */}
-            {subTab === 'allocation' && <CollapsibleSection
-                title="Analyse de l'Allocation"
+            {/* Section repliable 1 (fermée par défaut) : Répartition & rééquilibrage */}
+            <CollapsibleSection
+                title="Répartition & rééquilibrage"
+                subtitle="Donuts géographique/sectoriel et écarts par rapport aux cibles"
                 icon={<Icon name="goal" size={16} />}
-                defaultOpen={true}
+                headingLevel={2}
+                open={allocationOpen}
+                onToggle={setAllocationOpen}
             >
+                <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 min-h-[300px]">
 
                     {/* REGIONS — Phase E.6 : clic = filtre stocks */}
@@ -1295,24 +1355,8 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         </div>
                     </div>
                 )}
-            </CollapsibleSection>}
-
-            {/* 3. DIVIDEND CALENDAR — Phase E.3 visible en overview. [S5-REFONTE-PLACEMENTS] Absent des
-                maquettes : gardé, replié. */}
-            {subTab === 'overview' && (
-                <CollapsibleSection title="Revenus passifs" subtitle="Dividendes estimés : rente annuelle et calendrier des versements">
-                    <DividendPanel
-                        dividendCalendar={dividendCalendar}
-                        totalAnnualDividends={totalAnnualDividends}
-                        currentAllocation={currentAllocation}
-                        isLoading={isLoading}
-                        sansCadre
-                    />
-                </CollapsibleSection>
-            )}
-
-            {/* 4. VISUAL PORTFOLIO REBALANCING (V16) — sous « Allocation Phase E.3 sub-tab 'rebalance'  rééquilibrage » (PH4-INV-4) */}
-            {subTab === 'allocation' && currentAllocation.length > 0 && (() => {
+                {/* 4. VISUAL PORTFOLIO REBALANCING (V16) — intégré dans la section Répartition & rééquilibrage */}
+                {currentAllocation.length > 0 && (() => {
                 const alloc = currentAllocation as AllocationItem[];
                 const totalPortfolio = alloc.reduce((s, a) => s + a.value, 0);
 
@@ -1335,13 +1379,12 @@ export const Investments: React.FC<InvestmentsProps> = ({
                 const sumTargets = targetModel.reduce((sum, t) => sum + t.targetPct, 0);
 
                 return (
-                    <CollapsibleSection
-                        title="Rééquilibrage"
-                        icon={<Icon name="budget" size={20} />}
-                        defaultOpen={hasActions}
-                        badge={hasActions ? <Badge variant="warning" size="sm">Action requise</Badge> : <Badge variant="success" size="sm">OK</Badge>}
-                        className="mt-2"
-                    >
+                    <div className="pt-4 border-t border-bordure">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Icon name="budget" size={18} className="text-ink-200" />
+                            <h3 className="text-sm font-bold text-texte">Rééquilibrage</h3>
+                            {hasActions ? <Badge variant="warning" size="sm">Action requise</Badge> : <Badge variant="success" size="sm">OK</Badge>}
+                        </div>
                         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-bordure">
                             <div>
                                 <div className="text-[11px] font-bold uppercase tracking-wider text-ink-400">Assiette de rééquilibrage</div>
@@ -1533,15 +1576,28 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                 </div>
                             ))}
                         </div>
-                    </CollapsibleSection>
+                    </div>
                 );
             })()}
+                </div>
+            </CollapsibleSection>
 
-            {/* 5. STOCK CARDS GRID — Phase E.3 sub-tab 'detail' */}
-            {subTab === 'detail' && <>
+            {/* Section repliable 2 (fermée par défaut) : Détail des titres, DCA & dividendes */}
+            <CollapsibleSection
+                title="Détail des titres, DCA & dividendes"
+                subtitle="Performance par période, coûts moyens, comparaison multi-titres et dividendes"
+                icon={<Icon name="package" size={16} />}
+                headingLevel={2}
+                open={detailOpen}
+                onToggle={(next) => {
+                    setDetailOpen(next);
+                    if (!next) exitCompareMode();
+                }}
+                badge={<Badge variant="neutral" size="sm">{currentAllocation.length} actifs</Badge>}
+            >
+                <div className="space-y-5">
                 {/* [INVEST-PERF-PERIOD] Période AU CHOIX (24h par défaut) — pilote aussi la variation des
-                    cartes par titre ci-dessous. [S5-REFONTE-PLACEMENTS] Déplacée de la Vue d'ensemble
-                    (les maquettes n'y gardent que « Sur 24 h ») vers Détail, où ses titres la lisent. */}
+                    cartes par titre ci-dessous. */}
                 <Card
                     title={`Performance (${PERF_PERIOD_LABELS[perfPeriod]})`}
                     action={
@@ -1579,7 +1635,6 @@ export const Investments: React.FC<InvestmentsProps> = ({
                             Actualisé le {formatDate(lastPriceRefreshAt)} {new Date(lastPriceRefreshAt).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                     )}
-                    <CoursPerimesNotice titres={coursPerimes} />
                     <button
                         type="button"
                         onClick={handleRefreshPrices}
@@ -1630,12 +1685,6 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         + Ajouter une action
                     </button>
                 </div>
-                <CollapsibleSection
-                title="Portefeuille Détaillé"
-                icon={<Icon name="package" size={20} />}
-                defaultOpen={true}
-                badge={<Badge variant="neutral" size="sm">{currentAllocation.length} actifs</Badge>}
-            >
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {currentAllocation.map((asset) => {
                     // Try to find matching asset in props to get saved account type (matching EXACT)
@@ -1863,10 +1912,21 @@ export const Investments: React.FC<InvestmentsProps> = ({
                     );
                 })}
             </div>
+            <DividendPanel
+                dividendCalendar={dividendCalendar}
+                totalAnnualDividends={totalAnnualDividends}
+                currentAllocation={currentAllocation}
+                isLoading={isLoading}
+                sansCadre
+            />
+            <BrokerReconciliationCard variant="full" />
+            </div>
             </CollapsibleSection>
-            </>}
+            </>
+            )}
 
             </div>
+            )}
 
             {/* [REFONTE-NAV-L2b] Modale de comparaison superposée (ex-Accueil Phase D.4) :
                 1 titre → mode PRIX ; 2+ → base 100 (%) par défaut (toggle interne à StockChart). */}

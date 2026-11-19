@@ -119,9 +119,9 @@ async function ouvrirValoriaDepuisMenuPlusMobile(page: Page): Promise<Locator> {
   await expect(btnPlacements).toBeVisible({ timeout: 10_000 });
   await btnPlacements.click();
 
-  const tabConseiller = page.getByRole('tab', { name: /Conseiller\s*&\s*7 Agents/i });
-  await expect(tabConseiller).toBeVisible({ timeout: 10_000 });
-  await tabConseiller.click();
+  const btnOutilsExperts = page.getByRole('button', { name: /Outils experts|Quant IA/i }).first();
+  await expect(btnOutilsExperts).toBeVisible({ timeout: 10_000 });
+  await btnOutilsExperts.click();
 
   const workspace = page.getByTestId('valoria-workspace');
   await expect(workspace).toBeVisible({ timeout: 15_000 });

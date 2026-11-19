@@ -46,6 +46,7 @@ interface GeminiAssistantModalProps {
 
 const QUESTIONS_RAPIDES = [
     { id: 'bilan', label: 'Bilan express', question: 'Fais un bilan express de mon patrimoine et de mes priorités financières.' },
+    { id: 'opportunite', label: 'Analyser Anthropic / titre', question: 'Est-ce que ça vaut le coup d’acheter Anthropic ?' },
     { id: 'plan', label: 'Plan Jour → Décennie', question: 'Donne-moi mon plan d’action clair par jour, semaine, mois, année et décennie.' },
     { id: 'fiscalite', label: 'Optimiser CELI & REER', question: 'Comment optimiser mon CELI, mon REER et réduire mes impôts cette année ?' },
     { id: 'budget', label: 'Transactions & Budget', question: 'Analyse mon budget mensuel, mes transactions d’octobre et novembre et mon épargne.' },
@@ -538,7 +539,13 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
                             {enCours && (
                                 <div className="rounded-xl bg-surface-douce border border-bordure px-3.5 py-2.5 text-xs text-ink-200 flex items-center gap-2.5" data-testid="assistant-en-cours">
                                     <Icon name="sparkles" size={14} className="text-repere animate-spin shrink-0" aria-hidden="true" />
-                                    <span className="font-medium">{etape ? `Gemini utilise : ${etape.replace(/_/g, ' ')}…` : 'Gemini réfléchit…'}</span>
+                                    <span className="font-medium">
+                                        {etape === 'analyser_opportunite_placement'
+                                            ? 'Comité multi-agents en cours (4 analystes + synthèse)…'
+                                            : etape
+                                              ? `Gemini utilise : ${etape.replace(/_/g, ' ')}…`
+                                              : 'Gemini réfléchit…'}
+                                    </span>
                                 </div>
                             )}
                         </div>

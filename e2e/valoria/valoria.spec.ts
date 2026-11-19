@@ -134,9 +134,9 @@ async function ouvrirValoriaViaBarreLaterale(page: Page): Promise<Locator> {
   await expect(btnPlacements).toBeVisible({ timeout: 10_000 });
   await btnPlacements.click();
 
-  const tabConseiller = page.getByRole('tab', { name: /Conseiller\s*&\s*7 Agents/i });
-  await expect(tabConseiller).toBeVisible({ timeout: 10_000 });
-  await tabConseiller.click();
+  const btnOutilsExperts = page.getByRole('button', { name: /Outils experts|Quant IA/i }).first();
+  await expect(btnOutilsExperts).toBeVisible({ timeout: 10_000 });
+  await btnOutilsExperts.click();
 
   const workspace = page.getByTestId('valoria-workspace');
   await expect(workspace).toBeVisible({ timeout: 15_000 });
@@ -263,13 +263,13 @@ test.describe('Valoria · Quant IA — Desktop 1440×900', () => {
     expect(extraireNombresCAD(texteCeQueJai).length).toBeGreaterThan(0);
     expect(texteCeQueJai).toMatch(/\$|\bCAD\b/i);
 
-    // 2) Retour sur Vue d'ensemble de Placements puis ouverture via le bouton passerelle Quant IA
-    await page.getByRole('tab', { name: /Vue d[’']ensemble/i }).click();
+    // 2) Retour sur Mon portefeuille de Placements puis ouverture via le bouton Outils experts · Quant IA
+    await page.getByRole('tab', { name: /Mon portefeuille/i }).click();
     await expect(page.locator('#main h1').first()).toContainText(/Placements/i, { timeout: 10_000 });
 
     const boutonPasserelle = page
       .locator('#main')
-      .getByRole('button', { name: /Conseiller 7 Agents|Valoria|Quant IA/i })
+      .getByRole('button', { name: /Outils experts|Quant IA/i })
       .first();
     await expect(boutonPasserelle).toBeVisible({ timeout: 10_000 });
     await boutonPasserelle.click();
@@ -437,9 +437,9 @@ test.describe('Valoria · Quant IA — Desktop 1440×900', () => {
       }, { timeout: 10_000 })
       .not.toBe(JSON.stringify(cadsValoriaAvant));
 
-    // 3. Revenir sur Placements (Vue d'ensemble) et prouver l'immutabilité totale des avoirs réels FinanceAI
+    // 3. Revenir sur Placements (Mon portefeuille) et prouver l'immutabilité totale des avoirs réels FinanceAI
     await nav.getByRole('button', { name: 'Placements' }).click();
-    await page.getByRole('tab', { name: /Vue d[’']ensemble/i }).click();
+    await page.getByRole('tab', { name: /Mon portefeuille/i }).click();
     await expect(page.locator('#main h1').first()).toContainText(/Placements/i, { timeout: 10_000 });
     await expect(page.getByText(/Enveloppes fiscales et flux de dividendes|Titres détenus/i).first()).toBeVisible({ timeout: 10_000 });
 

@@ -68,8 +68,8 @@ describe('Investments — comparaison multi-titres (REFONTE-NAV-L2b)', () => {
 
     it('sous-onglet Détail : « Comparer » arme le mode, cocher 2 titres puis « Comparer (2) » ouvre la modale avec les 2 symboles', () => {
         renderInvestments();
-        // Aller au sous-onglet Détail.
-        fireEvent.click(screen.getByText('Détail'));
+        // Ouvrir la section repliable Détail des titres.
+        fireEvent.click(screen.getByRole('button', { name: /Détail des titres, DCA & dividendes/i }));
         // Pas de cases tant que le mode n'est pas armé.
         expect(screen.queryByRole('button', { name: /^Comparer VFV\.TO$/ })).toBeNull();
         expect(screen.queryByTestId('comparison-modal')).toBeNull();
@@ -89,7 +89,7 @@ describe('Investments — comparaison multi-titres (REFONTE-NAV-L2b)', () => {
 
     it('décocher ramène à « Voir courbe » puis au libellé d\'invite ; quitter le mode efface la sélection', () => {
         renderInvestments();
-        fireEvent.click(screen.getByText('Détail'));
+        fireEvent.click(screen.getByRole('button', { name: /Détail des titres, DCA & dividendes/i }));
         fireEvent.click(screen.getByRole('button', { name: 'Comparer' }));
         fireEvent.click(screen.getByRole('button', { name: 'Comparer VFV.TO' }));
         fireEvent.click(screen.getByRole('button', { name: 'Comparer AAPL' }));
@@ -111,7 +111,7 @@ describe('Investments — comparaison multi-titres (REFONTE-NAV-L2b)', () => {
     // monté (seul son libellé change) et garde le focus par construction.
     it('a11y : le focus clavier reste sur le bouton bascule au toggle (jamais perdu vers <body>)', () => {
         renderInvestments();
-        fireEvent.click(screen.getByText('Détail'));
+        fireEvent.click(screen.getByRole('button', { name: /Détail des titres, DCA & dividendes/i }));
         const toggle = screen.getByRole('button', { name: 'Comparer' });
         toggle.focus();
         expect(document.activeElement).toBe(toggle);
@@ -133,13 +133,13 @@ describe('Investments — comparaison multi-titres (REFONTE-NAV-L2b)', () => {
     // croyait quitté en naviguant ailleurs.
     it('changer de sous-onglet désarme le mode comparaison et purge la sélection', () => {
         renderInvestments();
-        fireEvent.click(screen.getByText('Détail'));
+        fireEvent.click(screen.getByRole('button', { name: /Détail des titres, DCA & dividendes/i }));
         fireEvent.click(screen.getByRole('button', { name: 'Comparer' }));
         fireEvent.click(screen.getByRole('button', { name: 'Comparer VFV.TO' }));
         expect(screen.getByRole('button', { name: 'Voir courbe' })).toBeInTheDocument();
         // Aller-retour par un autre sous-onglet.
-        fireEvent.click(screen.getByText("Vue d'ensemble"));
-        fireEvent.click(screen.getByText('Détail'));
+        fireEvent.click(screen.getByRole('tab', { name: /Analyse IA/i }));
+        fireEvent.click(screen.getByRole('tab', { name: /Mon portefeuille/i }));
         // Mode désarmé : plus de cases, bouton bascule revenu à « Comparer » (non pressé).
         expect(screen.queryByRole('button', { name: 'Comparer VFV.TO' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Voir courbe' })).toBeNull();

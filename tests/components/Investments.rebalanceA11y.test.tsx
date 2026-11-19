@@ -50,7 +50,7 @@ const monter = () => {
             apiKey="" transactions={[]} budgetItems={[]}
             config={config} projection={proj} setProjection={vi.fn()} />,
     );
-    fireEvent.click(screen.getByRole('tab', { name: /Allocation/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Répartition & rééquilibrage/i }));
     return screen.getByRole('button', { name: /Modifier Cibles/ });
 };
 

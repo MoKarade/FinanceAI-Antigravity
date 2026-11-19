@@ -77,7 +77,8 @@ export const TitresDetenus: React.FC<{
     etroit: boolean;
     onSelectSymbole?: (symbole: string) => void;
     onInspectValoria?: (symbole: string) => void;
-}> = ({ lignes, couple, etroit, onSelectSymbole, onInspectValoria }) => {
+    onAnalyzeAi?: (symbole: string, nom?: string) => void;
+}> = ({ lignes, couple, etroit, onSelectSymbole, onInspectValoria, onAnalyzeAi }) => {
     const hasHoldingDetails = lignes.some((l) => typeof l.quantite === 'number' && l.quantite > 0);
     const hasValoriaSignals = lignes.some((l) => Boolean(l.valoria));
     const classeSignalValoria = (sig?: 'RENFORCER' | 'CONSERVER' | 'ALLEGER') =>
@@ -157,6 +158,16 @@ export const TitresDetenus: React.FC<{
                                                 <span className="sr-only"> — Rayon-X Valoria de {l.symbole}</span>
                                             </button>
                                         )}
+                                        {onAnalyzeAi && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onAnalyzeAi(l.symbole, l.nom)}
+                                                aria-label={`Analyser ${l.symbole} avec le comité IA`}
+                                                className="touch-target min-h-11 inline-flex items-center px-2.5 py-1 rounded-full bg-surface-douce border border-bordure-champ text-[11px] font-semibold text-ink-100 hover:bg-bordure whitespace-nowrap focus-ring"
+                                            >
+                                                <span>Analyser IA</span>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </li>
@@ -183,6 +194,7 @@ export const TitresDetenus: React.FC<{
                         {couple && <th scope="col" className="px-2.5 font-semibold">Propriétaire</th>}
                         <th scope="col" className="px-2.5 font-semibold text-right whitespace-nowrap">Valeur</th>
                         <th scope="col" className="pl-2.5 pr-4 font-semibold text-right whitespace-nowrap">Poids</th>
+                        {onAnalyzeAi && <th scope="col" className="pl-2 pr-4 font-semibold text-right whitespace-nowrap">Comité IA</th>}
                     </tr>
                 </thead>
                 <tbody>
@@ -285,6 +297,18 @@ export const TitresDetenus: React.FC<{
                                 {couple && <td className="px-2.5 text-ink-300 whitespace-nowrap">{l.proprietaire}</td>}
                                 <td className="px-2.5 text-right whitespace-nowrap"><PrivateAmount className="font-mono text-ink-50">{formatCAD(l.valeur)}</PrivateAmount></td>
                                 <td className="pl-2.5 pr-4 text-right font-mono text-ink-300 whitespace-nowrap"><PrivateAmount>{poidsTexte(l.poids)}</PrivateAmount></td>
+                                {onAnalyzeAi && (
+                                    <td className="pl-2 pr-4 text-right whitespace-nowrap">
+                                        <button
+                                            type="button"
+                                            onClick={() => onAnalyzeAi(l.symbole, l.nom)}
+                                            aria-label={`Analyser ${l.symbole} avec le comité IA`}
+                                            className="touch-target min-h-11 inline-flex items-center px-2.5 py-1 rounded-full bg-surface-douce border border-bordure-champ text-xs font-semibold text-ink-100 hover:bg-bordure whitespace-nowrap focus-ring"
+                                        >
+                                            <span>Analyser IA</span>
+                                        </button>
+                                    </td>
+                                )}
                             </tr>
                         );
                     })}

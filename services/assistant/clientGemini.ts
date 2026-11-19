@@ -26,6 +26,8 @@ const NOMS_OUTILS_ESSENTIELS = new Set<string>([
     'lister_placements',
     'lister_postes_budget',
     'lister_dettes',
+    'consulter_diagnostic_valoria',
+    'analyser_opportunite_placement',
     'ajouter_transaction',
     'ajouter_dette',
     'modifier_poste_budget',

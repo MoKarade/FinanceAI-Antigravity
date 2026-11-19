@@ -472,6 +472,61 @@ const actionsApplication: ActionAssistant[] = [
             return { pourModele: enveloppeDonnees(buildValoriaAssistantDiagnostic(etatAvecValoria, new Date().getFullYear(), args.symbole, lastProj)) };
         },
     },
+    {
+        nom: 'analyser_opportunite_placement',
+        description: 'Exécute le Comité Multi-Agents réel (4 analystes indépendants + synthèse présidentielle avec recherche Web Google Search) pour évaluer un achat/vente de titre coté (action, FNB, crypto) OU d’entreprise privée non cotée (ex. Anthropic, OpenAI, SpaceX) avec impact portefeuille et fiscalité Québec/Canada.',
+        type: 'lecture',
+        tranches: [],
+        schema: z.object({
+            question: z.string().min(3).max(400),
+            montantCibleCad: z.number().positive().finite().optional(),
+        }).strict(),
+        executer: async (etat, args: { question: string; montantCibleCad?: number }, ctx) => {
+            const report = await facadeStoreAssistant.lancerComitePlacement(
+                etat,
+                args.question,
+                args.montantCibleCad,
+                ctx.signal,
+            );
+            const { buildCommitteeTableauBloc } = await import('../investments/multiAgentCommittee');
+            try {
+                const { saveCommitteeAnalysis } = await import('../investments/committeeHistoryStore');
+                await saveCommitteeAnalysis(facadeStoreAssistant.porteeTest(), report);
+            } catch {
+                // Sauvegarde historique best-effort : ne bloque jamais la réponse assistant.
+            }
+            return {
+                pourModele: enveloppeDonnees({
+                    sujet: report.subject,
+                    statutEntite: report.entityStatus,
+                    symboleCote: report.resolvedTicker,
+                    cotationReelle: report.liveQuote,
+                    verdict: report.verdict,
+                    libelleVerdict: report.verdictLabel,
+                    conviction: report.conviction,
+                    resumeExecutif: report.executiveSummary,
+                    accords: report.consensus,
+                    desaccords: report.disagreements,
+                    proxiesIndirects: report.indirectProxies,
+                    enveloppeRecommandee: report.recommendedWrapper,
+                    planAction: report.actionPlan,
+                    conditionsInvalidation: report.invalidationConditions,
+                    sources: report.sources,
+                    sourceMode: report.source,
+                    avertissementRepli: report.fallbackNotice,
+                    agents: report.agents.map((a) => ({
+                        agent: a.title,
+                        position: a.stance,
+                        confiance: a.confidence,
+                        synthese: a.summary,
+                        pointsCles: a.keyPoints,
+                        risques: a.risks,
+                    })),
+                }),
+                bloc: buildCommitteeTableauBloc(report),
+            };
+        },
+    },
 ];
 
 // ── Registre ───────────────────────────────────────────────────────────────
