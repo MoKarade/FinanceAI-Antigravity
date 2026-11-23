@@ -9,6 +9,7 @@
 import { useEffect, useRef } from 'react';
 import { showToast } from '../components/ui/Toast';
 import { useFinanceStore, getMigrationStatus, getHydrationStatus } from '../store/useFinanceStore';
+import { hydrateStoreFromIdbOnce } from '../store/idbBootHydration';
 import { loadApiKeysDetailed, saveApiKeys } from '../services/secureKeyStore';
 // [PERF-MARKETDATA-DYNIMPORT-INERTE] JAMAIS d'import statique de valeurs depuis
 // services/marketData ici : ce hook est tiré par le chunk d'ENTRÉE (App), et un seul import
@@ -27,8 +28,6 @@ import { requestPersistentStorage } from '../services/storagePersistence';
 import { ecritureFxSelonLecture } from '../services/fx/ecritureFx';
 import { modeDonneesFictives } from '../store/modeTestActif';
 import { surveillerSessionAccess } from '../utils/sessionAccess';
-import { STORAGE_KEYS } from '../utils/storageKeys';
-import type { AppState } from '../types';
 
 /** Tous les effets de boot d'App : handlers d'erreur, courbe verrouillée, service worker, purge
  *  persona, init sync Drive, filets migration/hydratation, provider marché, clés API chiffrées,
@@ -141,50 +140,10 @@ export function useAppBootEffects(): void {
 
         // Stockage illimité : réhydrate l'état complet depuis IndexedDB si le miroir localStorage
         // a été compacté, et charge l'empreinte protégée hors localStorage.
-        void (async () => {
-            try {
-                const { readFullStateFromIdb, isLocalMirrorCompacted } = await import('../services/unlimitedStateStorage');
-                void import('../services/dataRecovery')
-                    .then((m) => m.hydrateProtectedDossierCacheFromIdb())
-                    .catch(() => {});
-                const compacted = isLocalMirrorCompacted();
-                const fullJson = await readFullStateFromIdb(STORAGE_KEYS.persistStore);
-                if (!fullJson || useFinanceStore.getState().isTestMode) return;
-                const parsed = JSON.parse(fullJson) as { state?: Record<string, unknown> } | null;
-                const idbState = parsed?.state;
-                if (!idbState || typeof idbState !== 'object') return;
-                const current = useFinanceStore.getState();
-                const idbTx = Array.isArray(idbState.transactions) ? idbState.transactions : null;
-                const idbAssets = Array.isArray(idbState.assets) ? idbState.assets : null;
-                const idbLedger = Array.isArray(idbState.brokerLedger) ? idbState.brokerLedger : null;
-                const idbHistory = Array.isArray(idbState.fintableBrokerHistory) ? idbState.fintableBrokerHistory : null;
-                const idbDocs = Array.isArray(idbState.documents) ? idbState.documents : null;
-                const needsTransactions = idbTx !== null && idbTx.length > current.transactions.length;
-                const needsLedger = idbLedger !== null && idbLedger.length > (current.brokerLedger?.length ?? 0);
-                const needsHistory = idbHistory !== null && idbHistory.length > (current.fintableBrokerHistory?.length ?? 0);
-                const needsAssets = idbAssets !== null && idbAssets.some((a, idx) => {
-                    const cur = current.assets[idx];
-                    const aRec = a as Record<string, unknown> | undefined;
-                    const idbLen = Array.isArray(aRec?.priceHistory) ? aRec.priceHistory.length : 0;
-                    const curLen = Array.isArray(cur?.priceHistory) ? cur.priceHistory.length : 0;
-                    return idbLen > curLen;
-                });
-                const needsDocs = idbDocs !== null && idbDocs.length > (current.documents?.length ?? 0);
-                if (compacted || needsTransactions || needsLedger || needsHistory || needsAssets || needsDocs) {
-                    const patch: Partial<AppState> = {};
-                    if (needsTransactions) patch.transactions = idbTx as AppState['transactions'];
-                    if (needsLedger) patch.brokerLedger = idbLedger as AppState['brokerLedger'];
-                    if (needsHistory) patch.fintableBrokerHistory = idbHistory as AppState['fintableBrokerHistory'];
-                    if (needsAssets) patch.assets = idbAssets as AppState['assets'];
-                    if (needsDocs) patch.documents = idbDocs as AppState['documents'];
-                    if (Object.keys(patch).length > 0) {
-                        useFinanceStore.getState().setAppState(patch);
-                    }
-                }
-            } catch {
-                /* best-effort : le miroir synchrone localStorage reste disponible */
-            }
-        })();
+        void hydrateStoreFromIdbOnce();
+        void import('../services/dataRecovery')
+            .then((m) => m.hydrateProtectedDossierCacheFromIdb())
+            .catch(() => {});
 
         // Sync Google Drive — inerte si VITE_GOOGLE_CLIENT_ID absent. Init + sync silencieuse au
         // boot (uniquement si déjà connecté), puis push debouncé sur chaque changement du store.

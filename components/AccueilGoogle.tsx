@@ -303,6 +303,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 }) => {
     const variation = useNetWorthVariation();
     const lastProjection = useFinanceStore((s) => s.lastProjection);
+    const projectionStatus = useFinanceStore((s) => s.projectionStatus);
     const runMC = useFinanceStore((s) => s.projectionRunMC);
     const lockedProjection = useFinanceStore((s) => s.lockedProjection);
     const isProjectionLocked = useFinanceStore((s) => s.isProjectionLocked);
@@ -2366,7 +2367,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
                         <div className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
                             <PrivateAmount>
-                                {formatCompactCAD(pointAncre?.NetWorth ?? patrimoineNet)}
+                                {formatCompactCAD(patrimoineNet)}
                             </PrivateAmount>
                         </div>
                         <div className="text-xs text-ink-400">Bilan net actuel</div>
@@ -2412,11 +2413,16 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             <span className="w-2 h-2 rounded-full gf-alloc-reer shrink-0" aria-hidden="true" />
                         </div>
                         <div className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
-                            <PrivateAmount>
-                                {pointRetraite && Number.isFinite(pointRetraite.NetWorth)
-                                    ? formatCompactCAD(pointRetraite.NetWorth)
-                                    : formatCompactCAD(indicateursPouls.cibleRetraite)}
-                            </PrivateAmount>
+                            {lastProjection && pointRetraite && Number.isFinite(pointRetraite.NetWorth) ? (
+                                <PrivateAmount>{formatCompactCAD(pointRetraite.NetWorth)}</PrivateAmount>
+                            ) : (
+                                <>
+                                    <span aria-hidden="true">—</span>
+                                    <span className="sr-only">
+                                        {projectionStatus === 'computing' ? 'Calcul en cours' : 'Simulation requise'}
+                                    </span>
+                                </>
+                            )}
                         </div>
                         <div className="text-xs text-ink-400">Patrimoine projeté</div>
                     </button>
@@ -2435,12 +2441,18 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             <span className="w-2 h-2 rounded-full gf-alloc-nonreg shrink-0" aria-hidden="true" />
                         </div>
                         <div className="font-mono text-base sm:text-lg font-bold text-ink-50 tabular-nums">
-                            <PrivateAmount>
-                                {patrimoineKpi?.value ??
-                                    (dernierPoint && Number.isFinite(dernierPoint.NetWorth)
-                                        ? formatCompactCAD(dernierPoint.NetWorth)
-                                        : formatCompactCAD(patrimoineNet))}
-                            </PrivateAmount>
+                            {patrimoineKpi?.value ? (
+                                <PrivateAmount>{patrimoineKpi.value}</PrivateAmount>
+                            ) : lastProjection && dernierPoint && Number.isFinite(dernierPoint.NetWorth) ? (
+                                <PrivateAmount>{formatCompactCAD(dernierPoint.NetWorth)}</PrivateAmount>
+                            ) : (
+                                <>
+                                    <span aria-hidden="true">—</span>
+                                    <span className="sr-only">
+                                        {projectionStatus === 'computing' ? 'Calcul en cours' : 'Simulation requise'}
+                                    </span>
+                                </>
+                            )}
                         </div>
                         <div className="text-xs text-ink-400">Capital final simulé</div>
                     </button>

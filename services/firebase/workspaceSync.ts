@@ -30,6 +30,7 @@ import {
     type RemoteTransactionMonth,
 } from './transactionMonths';
 import { getOrCreateDeviceKey } from '../secureKeyStore';
+import { isLocalMirrorCompacted, isLocalMirrorBalanceTruncated } from '../unlimitedStateStorage';
 import type { AppState } from '../../types';
 
 /** Contraintes de validation extraites directement de firebase-blueprint.json */
@@ -108,12 +109,14 @@ export interface FirebaseWorkspaceSyncStatus {
     state: 'idle' | 'connecting' | 'synced' | 'syncing' | 'error';
     lastSyncedAt: number | null;
     errorMessage: string | null;
+    initialSyncSettled: boolean;
 }
 
 let currentSyncStatus: FirebaseWorkspaceSyncStatus = {
     state: 'idle',
     lastSyncedAt: null,
     errorMessage: null,
+    initialSyncSettled: false,
 };
 
 const statusListeners = new Set<(status: FirebaseWorkspaceSyncStatus) => void>();
@@ -461,7 +464,11 @@ export async function pullWorkspaceFromFirestoreNow(user: FirebaseUser): Promise
         try {
             if (typeof data.revisionId === 'string') {
                 lastKnownRevisionId = data.revisionId;
-                saveLastSyncedRevisionId(uid, data.revisionId);
+                saveLastSyncedRevisionId(
+                    uid,
+                    data.revisionId,
+                    Array.isArray(sanitizedRemote.transactions) ? sanitizedRemote.transactions.length : 0,
+                );
             }
             clearDirtySinceLastSync(uid);
             firestoreSessionSynced = true;
@@ -488,6 +495,7 @@ export async function pullWorkspaceFromFirestoreNow(user: FirebaseUser): Promise
             state: 'synced',
             lastSyncedAt: Date.now(),
             errorMessage: null,
+            initialSyncSettled: true,
         });
         return {
             restored: true,
@@ -662,12 +670,16 @@ export function hasFirestoreSyncedThisSession(): boolean {
 /** Taille maximale acceptée pour le document principal (limite Firestore : 1 048 576 octets). */
 const FIRESTORE_MAIN_DOC_MAX_UTF8_BYTES = 1_000_000;
 const LAST_SYNCED_REV_PREFIX = 'financeai:last_synced_revision:v1:';
+const LAST_SYNCED_TX_COUNT_PREFIX = 'financeai:last_synced_tx_count:v1:';
 const DIRTY_SINCE_SYNC_PREFIX = 'financeai:dirty_since_sync:v1:';
 
-function saveLastSyncedRevisionId(uid: string, revisionId: string): void {
+function saveLastSyncedRevisionId(uid: string, revisionId: string, txCount?: number): void {
     if (!revisionId || typeof localStorage === 'undefined') return;
     try {
         localStorage.setItem(`${LAST_SYNCED_REV_PREFIX}${uid}`, revisionId);
+        if (typeof txCount === 'number' && Number.isFinite(txCount) && txCount >= 0) {
+            localStorage.setItem(`${LAST_SYNCED_TX_COUNT_PREFIX}${uid}`, String(Math.floor(txCount)));
+        }
     } catch {
         // Ignorer si quota atteint
     }
@@ -679,6 +691,18 @@ function loadLastSyncedRevisionId(uid: string): string {
         return localStorage.getItem(`${LAST_SYNCED_REV_PREFIX}${uid}`) ?? '';
     } catch {
         return '';
+    }
+}
+
+function loadLastSyncedTxCount(uid: string): number | null {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+        const raw = localStorage.getItem(`${LAST_SYNCED_TX_COUNT_PREFIX}${uid}`);
+        if (raw === null) return null;
+        const n = Number(raw);
+        return Number.isInteger(n) && n >= 0 ? n : null;
+    } catch {
+        return null;
     }
 }
 
@@ -819,7 +843,7 @@ export async function pushWorkspaceToFirestore(user: FirebaseUser): Promise<void
         activeWorkspaceDocExists = true;
         firestoreSessionSynced = true;
         remoteMonthsState = { uid, fingerprints: plan.nextFingerprints };
-        saveLastSyncedRevisionId(uid, revisionId);
+        saveLastSyncedRevisionId(uid, revisionId, localTransactions.length);
         clearDirtySinceLastSync(uid);
         notifySyncStatus({ state: 'synced', lastSyncedAt: Date.now(), errorMessage: null });
     } catch (error) {
@@ -852,7 +876,7 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
     let reconcileInFlight = false;
     let snapshotSequence = 0;
 
-    notifySyncStatus({ state: 'connecting', errorMessage: null });
+    notifySyncStatus({ state: 'connecting', errorMessage: null, initialSyncSettled: false });
 
     /** Décision d'application d'un dossier Cloud complet (document principal + mois fusionnés). */
     const handleRemoteWorkspace = (
@@ -900,18 +924,34 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                     localLastUpdate > 0 &&
                     remoteUpdatedAtMs < localLastUpdate));
 
+        const syncedTxCount = loadLastSyncedTxCount(uid);
+        const localTxCount = Array.isArray(currentLocalState.transactions) ? currentLocalState.transactions.length : 0;
+        const sameRevisionAlreadyComplete =
+            remoteRevision !== '' &&
+            remoteRevision === lastKnownRevisionId &&
+            syncedTxCount !== null &&
+            localTxCount === syncedTxCount &&
+            localHasMeaningfulData &&
+            !isRemoteRicherThanLocal &&
+            !isLocalMirrorBalanceTruncated();
+
         if (
             remotePayload &&
             remoteHasData &&
             !remoteIsStarter &&
             (remoteRevision !== lastKnownRevisionId || !initialSnapshotHandled || isRemoteRicherThanLocal) &&
-            !isLocalExplicitlyNewer
+            !isLocalExplicitlyNewer &&
+            !sameRevisionAlreadyComplete
         ) {
             applyingRemoteSnapshot = true;
             try {
                 const sanitizedRemote = cleanCandidateState(remotePayload);
                 lastKnownRevisionId = remoteRevision;
-                saveLastSyncedRevisionId(uid, remoteRevision);
+                saveLastSyncedRevisionId(
+                    uid,
+                    remoteRevision,
+                    Array.isArray(sanitizedRemote.transactions) ? sanitizedRemote.transactions.length : 0,
+                );
                 clearDirtySinceLastSync(uid);
                 firestoreSessionSynced = true;
                 useFinanceStore.getState().setAppState({
@@ -939,11 +979,17 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                 state: 'synced',
                 lastSyncedAt: Date.now(),
                 errorMessage: null,
+                initialSyncSettled: true,
             });
         } else if (isLocalExplicitlyNewer) {
             initialSnapshotHandled = true;
             activeSessionHandledInitial = true;
             firestoreSessionSynced = true;
+            notifySyncStatus({
+                state: 'syncing',
+                errorMessage: null,
+                initialSyncSettled: true,
+            });
             void pushWorkspaceToFirestore(user).catch(() => {});
         } else if (!remoteHasData || remoteIsStarter) {
             initialSnapshotHandled = true;
@@ -952,22 +998,26 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                 await recoverOrEnsureInitialWorkspace(false);
                 if (!isStarterTemplateState(useFinanceStore.getState()) && hasMeaningfulData(useFinanceStore.getState())) {
                     await pushWorkspaceToFirestore(user).catch(() => {});
-                } else {
-                    notifySyncStatus({
-                        state: 'synced',
-                        lastSyncedAt: Date.now(),
-                        errorMessage: null,
-                    });
                 }
+                notifySyncStatus({
+                    state: 'synced',
+                    lastSyncedAt: Date.now(),
+                    errorMessage: null,
+                    initialSyncSettled: true,
+                });
             })();
         } else {
             initialSnapshotHandled = true;
             activeSessionHandledInitial = true;
             firestoreSessionSynced = true;
+            lastSerializedPayload = JSON.stringify(
+                extractSanitizedWorkspacePayload(useFinanceStore.getState()),
+            );
             notifySyncStatus({
                 state: 'synced',
                 lastSyncedAt: Date.now(),
                 errorMessage: null,
+                initialSyncSettled: true,
             });
         }
     };
@@ -988,13 +1038,13 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                 await recoverOrEnsureInitialWorkspace(false);
                 if (!isStarterTemplateState(useFinanceStore.getState()) && hasMeaningfulData(useFinanceStore.getState())) {
                     await pushWorkspaceToFirestore(user).catch(() => {});
-                } else {
-                    notifySyncStatus({
-                        state: 'synced',
-                        lastSyncedAt: Date.now(),
-                        errorMessage: null,
-                    });
                 }
+                notifySyncStatus({
+                    state: 'synced',
+                    lastSyncedAt: Date.now(),
+                    errorMessage: null,
+                    initialSyncSettled: true,
+                });
             }
         } catch {
             // Ignorer une erreur réseau transitoire lors de la réconciliation périodique
@@ -1014,8 +1064,48 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                 const remoteRevision = typeof data.revisionId === 'string' ? data.revisionId : '';
                 // Écho de notre propre écriture : les mois viennent d'être écrits par ce client.
                 if (initialSnapshotHandled && remoteRevision !== '' && remoteRevision === lastKnownRevisionId) {
-                    notifySyncStatus({ state: 'synced', lastSyncedAt: Date.now(), errorMessage: null });
+                    notifySyncStatus({
+                        state: 'synced',
+                        lastSyncedAt: Date.now(),
+                        errorMessage: null,
+                        initialSyncSettled: true,
+                    });
                     return;
+                }
+                // Voie rapide au démarrage : même révision que ce poste et état local complet déjà réhydraté.
+                if (
+                    !initialSnapshotHandled &&
+                    remoteRevision !== '' &&
+                    remoteRevision === lastKnownRevisionId &&
+                    !isLocalMirrorCompacted() &&
+                    !isLocalMirrorBalanceTruncated()
+                ) {
+                    const local = useFinanceStore.getState();
+                    const syncedTxCount = loadLastSyncedTxCount(uid);
+                    const localTxCount = Array.isArray(local.transactions) ? local.transactions.length : 0;
+                    if (
+                        syncedTxCount !== null &&
+                        localTxCount === syncedTxCount &&
+                        hasMeaningfulData(local) &&
+                        !isStarterTemplateState(local)
+                    ) {
+                        initialSnapshotHandled = true;
+                        activeSessionHandledInitial = true;
+                        firestoreSessionSynced = true;
+                        lastSerializedPayload = JSON.stringify(extractSanitizedWorkspacePayload(local));
+                        notifySyncStatus({
+                            state: 'synced',
+                            lastSyncedAt: Date.now(),
+                            errorMessage: null,
+                            initialSyncSettled: true,
+                        });
+                        void loadTransactionMonths(uid, user)
+                            .then((months) => {
+                                rememberRemoteMonths(uid, { months, monthsKnown: true });
+                            })
+                            .catch(() => {});
+                        return;
+                    }
                 }
                 // Nouveau `revisionId` : on recharge les mois de `transactionMonths` avant de décider.
                 void (async () => {
@@ -1029,6 +1119,7 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                                 notifySyncStatus({
                                     state: 'error',
                                     errorMessage: 'Lecture des mois de transactions Cloud impossible',
+                                    initialSyncSettled: true,
                                 });
                             }
                             return;
@@ -1047,13 +1138,13 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                     await recoverOrEnsureInitialWorkspace(false);
                     if (!isStarterTemplateState(useFinanceStore.getState()) && hasMeaningfulData(useFinanceStore.getState())) {
                         await pushWorkspaceToFirestore(user).catch(() => {});
-                    } else {
-                        notifySyncStatus({
-                            state: 'synced',
-                            lastSyncedAt: Date.now(),
-                            errorMessage: null,
-                        });
                     }
+                    notifySyncStatus({
+                        state: 'synced',
+                        lastSyncedAt: Date.now(),
+                        errorMessage: null,
+                        initialSyncSettled: true,
+                    });
                 })();
             }
         },
@@ -1061,6 +1152,7 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
             notifySyncStatus({
                 state: 'error',
                 errorMessage: 'Connexion temps réel Firestore interrompue',
+                initialSyncSettled: true,
             });
         },
         { expectedUid: uid, authenticatedUser: user },
@@ -1121,6 +1213,6 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
         }
         unsubscribeSnapshot();
         unsubscribeStore();
-        notifySyncStatus({ state: 'idle', errorMessage: null });
+        notifySyncStatus({ state: 'idle', errorMessage: null, initialSyncSettled: false });
     };
 }

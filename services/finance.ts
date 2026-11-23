@@ -120,31 +120,38 @@ export interface ResultatTauxFx {
  * verrait le même « taux estimés » sans le moindre signe que rien n'a été tenté. Un recours qui
  * ne peut pas s'exercer n'est pas un recours.
  */
-export const fetchFxRates = async (options?: { force?: boolean }): Promise<ResultatTauxFx> => {
+export const readCachedFxRatesSync = (): ResultatTauxFx | null => {
     const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 heures
     const now = Date.now();
-    const force = options?.force === true;
 
-    // Verifier le cache en memoire (toujours dispo, browser + Node)
-    if (!force && cachedFxRates && (now - cachedFxRates.lastFetched) < CACHE_DURATION_MS) {
+    if (cachedFxRates && (now - cachedFxRates.lastFetched) < CACHE_DURATION_MS) {
         return cachedFxRates;
     }
 
-    // Verifier le cache persistant si localStorage existe (browser uniquement)
-    if (!force) {
-        const stored = safeGetItem('fx_rates_cache');
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                if (parsed && (now - (parsed.lastFetched || 0)) < CACHE_DURATION_MS) {
-                    const hydrate = normaliserCache(parsed);
-                    if (hydrate) {
-                        cachedFxRates = hydrate;
-                        return hydrate;
-                    }
+    const stored = safeGetItem('fx_rates_cache');
+    if (stored) {
+        try {
+            const parsed = JSON.parse(stored);
+            if (parsed && (now - (parsed.lastFetched || 0)) < CACHE_DURATION_MS) {
+                const hydrate = normaliserCache(parsed);
+                if (hydrate) {
+                    cachedFxRates = hydrate;
+                    return hydrate;
                 }
-            } catch { /* JSON corrompu : on continue le fetch */ }
-        }
+            }
+        } catch { /* JSON corrompu : ignoré */ }
+    }
+
+    return null;
+};
+
+export const fetchFxRates = async (options?: { force?: boolean }): Promise<ResultatTauxFx> => {
+    const now = Date.now();
+    const force = options?.force === true;
+
+    if (!force) {
+        const cached = readCachedFxRatesSync();
+        if (cached) return cached;
     }
 
     // Fetch depuis la Banque du Canada

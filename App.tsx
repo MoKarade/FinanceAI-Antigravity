@@ -20,6 +20,7 @@ import { useAssetDataHydration } from './hooks/useAssetDataHydration';
 import { lazyWithRetry } from './utils/lazyWithRetry';
 import { pushNow, subscribeSyncStatus, getSyncStatus, type SyncStatus } from './services/sync/syncOrchestrator';
 import { PassphraseGate } from './components/auth/PassphraseGate';
+import { useFirebaseAuth } from './components/auth/FirebaseAuthGate';
 import { SyncStatusBanner } from './components/sync/SyncStatusBanner';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
@@ -92,13 +93,15 @@ export const App: React.FC = () => {
     useEffect(() => { isHydrated.current = true; }, []);
 
     const bootRecoveryRan = useRef(false);
+    const { authReady, user: firebaseUser } = useFirebaseAuth();
 
     // Récupération automatique au démarrage si une sauvegarde locale ou un bouclier anti-mode test existe,
     // sans injecter de données simulées en production (conformément à la règle No-fake-data).
     useEffect(() => {
+        if (!authReady) return;
         const current = useFinanceStore.getState();
         if (!bootRecoveryRan.current) {
-            if (hasFirestoreSyncedThisSession() || auth.currentUser) {
+            if (hasFirestoreSyncedThisSession() || auth.currentUser || firebaseUser) {
                 bootRecoveryRan.current = true;
                 return;
             }
@@ -112,7 +115,7 @@ export const App: React.FC = () => {
                 void recoverUser230kData(false);
             }
         }
-    }, []);
+    }, [authReady, firebaseUser]);
 
     // Bouclier zéro perte : chaque modification du dossier réel (hors mode test) met à jour l'empreinte protégée.
     useEffect(() => {

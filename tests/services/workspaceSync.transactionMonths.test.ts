@@ -350,6 +350,26 @@ describe('workspaceSync — transactions par mois dans Cloud Firestore', () => {
             expect(store.getState().transactions).toHaveLength(300);
         });
         expect(store.getState().transactions).toEqual(remote);
+        expect(sync.getFirebaseSyncStatus().initialSyncSettled).toBe(true);
+        stop();
+    });
+
+    it('voie rapide même révision : passe initialSyncSettled à true sans réécraser le store local et charge les empreintes en fond', async () => {
+        const original = buildTransactions(24, 3);
+        setLocalState(original);
+        await sync.pushWorkspaceToFirestore(user);
+        expect(sync.getFirebaseSyncStatus().initialSyncSettled).toBe(false);
+
+        const setAppStateSpy = vi.spyOn(store.getState(), 'setAppState');
+        fake.commits.length = 0;
+
+        const stop = sync.startWorkspaceRealtimeSync(user);
+        await vi.waitFor(() => {
+            expect(sync.getFirebaseSyncStatus().initialSyncSettled).toBe(true);
+        });
+        expect(setAppStateSpy).not.toHaveBeenCalled();
+        expect(store.getState().transactions).toEqual(original);
+        expect(sync.hasFirestoreSyncedThisSession()).toBe(true);
         stop();
     });
 });

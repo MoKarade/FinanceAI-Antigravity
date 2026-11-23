@@ -30,6 +30,12 @@ import {
 } from '../../services/dataRecovery';
 import { setStatus as setDriveSyncStatus } from '../../services/sync/syncStatusStore';
 import { setGateAuthedThisSession } from '../../services/sync/authGate';
+import {
+    needsBlockingIdbHydration,
+    hydrateStoreFromIdbOnce,
+    applyCachedFxRatesSyncIfNeeded,
+} from '../../store/idbBootHydration';
+import { isLocalMirrorCompacted } from '../../services/unlimitedStateStorage';
 import { Icon } from '../ui/Icon';
 import { showToast } from '../ui/Toast';
 
@@ -49,7 +55,40 @@ const DEFAULT_SYNC_STATUS: FirebaseWorkspaceSyncStatus = {
     state: 'idle',
     lastSyncedAt: null,
     errorMessage: null,
+    initialSyncSettled: false,
 };
+
+const IDB_BOOT_MAX_WAIT_MS = 400;
+const CLOUD_SYNC_BOOT_MAX_WAIT_MS = 2200;
+
+function isBootSyncBypassed(isTestEnv: boolean, forceAuthGate: boolean): boolean {
+    if (isTestEnv || forceAuthGate) return true;
+    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_AUDIT_HORS_RESEAU === '1') {
+        return true;
+    }
+    try {
+        if (
+            typeof sessionStorage !== 'undefined' &&
+            sessionStorage.getItem('financeai:offline_bypass') === '1'
+        ) {
+            return true;
+        }
+    } catch {
+        /* sessionStorage inaccessible */
+    }
+    try {
+        if (typeof window !== 'undefined' && window.location?.search) {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('nogate') || params.has('skipgate')) return true;
+        }
+    } catch {
+        /* URL inaccessible */
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return true;
+    }
+    return false;
+}
 
 const FirebaseAuthContext = createContext<FirebaseAuthContextValue>({
     user: null,
@@ -92,8 +131,52 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
     const [authError, setAuthError] = useState<string | null>(null);
     const [syncStatus, setSyncStatus] = useState<FirebaseWorkspaceSyncStatus>(getFirebaseSyncStatus);
     const [requireGateScreen, setRequireGateScreen] = useState<boolean>(forceAuthGate);
+    const [idbReady, setIdbReady] = useState<boolean>(() => isTestEnv || !needsBlockingIdbHydration());
+    const [syncBootTimedOut, setSyncBootTimedOut] = useState<boolean>(false);
+    const bootSyncBypassed = isBootSyncBypassed(isTestEnv, forceAuthGate);
 
     useEffect(() => subscribeFirebaseSyncStatus(setSyncStatus), []);
+
+    useEffect(() => {
+        if (isTestEnv) return;
+        applyCachedFxRatesSyncIfNeeded();
+        if (!idbReady) {
+            let cancelled = false;
+            const done = () => {
+                if (!cancelled) setIdbReady(true);
+            };
+            const timerId = setTimeout(done, IDB_BOOT_MAX_WAIT_MS);
+            void hydrateStoreFromIdbOnce()
+                .then(done)
+                .catch(done)
+                .finally(() => {
+                    clearTimeout(timerId);
+                });
+            return () => {
+                cancelled = true;
+                clearTimeout(timerId);
+            };
+        }
+        if (isLocalMirrorCompacted()) {
+            void hydrateStoreFromIdbOnce();
+        }
+        return undefined;
+    }, [isTestEnv, idbReady]);
+
+    useEffect(() => {
+        if (
+            bootSyncBypassed ||
+            syncBootTimedOut ||
+            requireGateScreen ||
+            !(!authReady || (user !== null && !syncStatus.initialSyncSettled))
+        ) {
+            return;
+        }
+        const timer = setTimeout(() => {
+            setSyncBootTimedOut(true);
+        }, CLOUD_SYNC_BOOT_MAX_WAIT_MS);
+        return () => clearTimeout(timer);
+    }, [bootSyncBypassed, syncBootTimedOut, requireGateScreen, authReady, user, syncStatus.initialSyncSettled]);
 
     useEffect(() => {
         if (isTestEnv) return;
@@ -157,7 +240,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
     }, [isTestEnv]);
 
     useEffect(() => {
-        if (isTestEnv || !authReady || !user) return;
+        if (isTestEnv || !authReady || !user || !idbReady) return;
 
         void upsertUserProfile(user).catch(() => {
             // Déjà journalisé par handleFirestoreError
@@ -167,7 +250,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
         return () => {
             stopSync();
         };
-    }, [isTestEnv, authReady, user]);
+    }, [isTestEnv, authReady, user, idbReady]);
 
     const signInWithGoogle = useCallback(async () => {
         setIsSigningIn(true);
@@ -238,6 +321,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
             await signOut(auth);
             setUser(null);
             setRequireGateScreen(true);
+            setSyncBootTimedOut(false);
             showToast('Session Google déconnectée.', 'info');
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Échec de la déconnexion.';
@@ -293,6 +377,14 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
         syncWorkspaceNow,
         restoreInitialDataNow,
     };
+
+    const waitingForIdb = !isTestEnv && !idbReady;
+    const waitingForCloudSync =
+        !bootSyncBypassed &&
+        !syncBootTimedOut &&
+        !requireGateScreen &&
+        (!authReady || (user !== null && !syncStatus.initialSyncSettled));
+    const isBootHydrating = waitingForIdb || waitingForCloudSync;
 
     if (isTestEnv) {
         return (
@@ -423,6 +515,40 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                             )}
                         </div>
                     </section>
+                </main>
+            </FirebaseAuthContext.Provider>
+        );
+    }
+
+    if (isBootHydrating) {
+        return (
+            <FirebaseAuthContext.Provider value={contextValue}>
+                <main
+                    data-testid="firebase-boot-hydrating"
+                    role="status"
+                    aria-busy="true"
+                    aria-label="Chargement de votre patrimoine"
+                    className="min-h-screen bg-fond text-ink-100 px-4 sm:px-8 py-8"
+                >
+                    <div className="max-w-[1440px] mx-auto rounded-2xl bg-surface border border-bordure p-6 sm:p-8 space-y-6">
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="h-8 w-44 rounded-full skeleton-box" />
+                            <div className="h-9 w-72 rounded-full skeleton-box hidden sm:block" />
+                            <div className="h-8 w-32 rounded-full skeleton-box" />
+                        </div>
+                        <div className="space-y-3">
+                            <div className="h-4 w-36 rounded-lg skeleton-box" />
+                            <div className="h-11 w-64 rounded-xl skeleton-box" />
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                            <div className="h-20 rounded-xl border border-bordure bg-fond skeleton-box" />
+                            <div className="h-20 rounded-xl border border-bordure bg-fond skeleton-box" />
+                            <div className="h-20 rounded-xl border border-bordure bg-fond skeleton-box" />
+                            <div className="h-20 rounded-xl border border-bordure bg-fond skeleton-box" />
+                        </div>
+                        <div className="h-[340px] sm:h-[400px] rounded-xl border border-bordure bg-fond skeleton-box" />
+                        <p className="text-xs text-ink-400">Synchronisation de vos soldes…</p>
+                    </div>
                 </main>
             </FirebaseAuthContext.Provider>
         );

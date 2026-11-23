@@ -24,6 +24,7 @@ export const IDB_DB_NAME = 'financeai-unlimited-state';
 export const IDB_STORE_NAME = 'kv';
 const IDB_VERSION = 1;
 export const OVERFLOW_FLAG_KEY = 'financeai:idb_overflow:v1';
+export const PARTIAL_MIRROR_FLAG_KEY = 'financeai:idb_partial_mirror:v1';
 export const PROTECTED_DOSSIER_IDB_KEY = 'financeai:protected_dossier:v1';
 export const LOCAL_MIRROR_SOFT_LIMIT_CHARS = 1_800_000;
 const MIRROR_COMPACT_TARGET_CHARS = 1_400_000;
@@ -37,6 +38,7 @@ interface CachedEntry {
 const _inMemoryStates = new Map<string, CachedEntry>();
 const _idbWriteQueues = new Map<string, Promise<void>>();
 let _writeSeq = 0;
+let _pendingIdbBootRestore = false;
 
 function safeLocalGet(key: string): string | null {
     try {
@@ -200,30 +202,33 @@ export async function clearIdbEntries(): Promise<void> {
  * Ne crée AUCUNE nouvelle clé dans `state` afin de rester 100 % compatible avec `verifierTypesRestaures`.
  * L'intégralité des données (historiques complets + 100 % des transactions) reste en mémoire et dans IndexedDB.
  */
-export function buildCompactLocalMirror(rawEnvelopeJson: string): string {
+function buildCompactLocalMirrorDetailed(rawEnvelopeJson: string): { json: string; balancesAffected: boolean } {
     let parsed: unknown;
     try {
         parsed = JSON.parse(rawEnvelopeJson);
     } catch {
-        return rawEnvelopeJson;
+        return { json: rawEnvelopeJson, balancesAffected: false };
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        return rawEnvelopeJson;
+        return { json: rawEnvelopeJson, balancesAffected: false };
     }
     const env = parsed as Record<string, unknown>;
     const rawState = env.state;
     if (!rawState || typeof rawState !== 'object' || Array.isArray(rawState)) {
-        return rawEnvelopeJson;
+        return { json: rawEnvelopeJson, balancesAffected: false };
     }
 
     const compactState: Record<string, unknown> = { ...(rawState as Record<string, unknown>) };
 
-    // 1. Caches & historiques volumineux reproductibles
+    // Passe 1 (impact nul sur les soldes) : caches et historiques boursiers reproductibles
     if ('realDataSnapshot' in compactState) {
         compactState.realDataSnapshot = null;
     }
     if (Array.isArray(compactState.fintableBrokerHistory)) {
         compactState.fintableBrokerHistory = [];
+    }
+    if (Array.isArray(compactState.lockedProjectionCurve)) {
+        compactState.lockedProjectionCurve = [];
     }
     if (Array.isArray(compactState.assets)) {
         compactState.assets = compactState.assets.map((asset) => {
@@ -234,15 +239,15 @@ export function buildCompactLocalMirror(rawEnvelopeJson: string): string {
             return rec;
         });
     }
-    if (Array.isArray(compactState.aiConversation) && compactState.aiConversation.length > 20) {
-        compactState.aiConversation = compactState.aiConversation.slice(-20);
+    if (Array.isArray(compactState.aiConversation) && compactState.aiConversation.length > 10) {
+        compactState.aiConversation = compactState.aiConversation.slice(-10);
     }
     if (Array.isArray(compactState.aiConversations)) {
         compactState.aiConversations = compactState.aiConversations.map((conv) => {
             if (!conv || typeof conv !== 'object' || Array.isArray(conv)) return conv;
             const rec = { ...(conv as Record<string, unknown>) };
-            if (Array.isArray(rec.messages) && rec.messages.length > 20) {
-                rec.messages = rec.messages.slice(-20);
+            if (Array.isArray(rec.messages) && rec.messages.length > 10) {
+                rec.messages = rec.messages.slice(-10);
             }
             return rec;
         });
@@ -250,40 +255,63 @@ export function buildCompactLocalMirror(rawEnvelopeJson: string): string {
 
     let serialized = JSON.stringify({ ...env, state: compactState });
     if (serialized.length <= MIRROR_COMPACT_TARGET_CHARS) {
-        return serialized;
+        return { json: serialized, balancesAffected: false };
     }
 
-    // 2. Si le volume de transactions dépasse encore le miroir synchrone, on garde les plus récentes dans le miroir seul
-    if (Array.isArray(compactState.transactions) && compactState.transactions.length > 1500) {
-        compactState.transactions = compactState.transactions.slice(-1500);
+    // Passe 2 (impact nul sur les soldes présents) : pièces jointes/documents, grand livre courtier et historique IA
+    if (Array.isArray(compactState.documents)) {
+        compactState.documents = [];
     }
-    if (Array.isArray(compactState.brokerLedger) && compactState.brokerLedger.length > 1000) {
-        compactState.brokerLedger = compactState.brokerLedger.slice(-1000);
+    if (Array.isArray(compactState.brokerLedger)) {
+        compactState.brokerLedger = [];
     }
-    if (Array.isArray(compactState.lockedProjectionCurve)) {
-        compactState.lockedProjectionCurve = [];
+    if (Array.isArray(compactState.investmentTransactions)) {
+        compactState.investmentTransactions = [];
+    }
+    if (Array.isArray(compactState.aiConversation)) {
+        compactState.aiConversation = [];
+    }
+    if (Array.isArray(compactState.aiConversations)) {
+        compactState.aiConversations = [];
     }
     serialized = JSON.stringify({ ...env, state: compactState });
     if (serialized.length <= MIRROR_COMPACT_TARGET_CHARS) {
-        return serialized;
+        return { json: serialized, balancesAffected: false };
     }
 
-    // 3. Dernier repli pour le miroir localStorage si très gros volume de documents/transactions
-    if (Array.isArray(compactState.transactions) && compactState.transactions.length > 250) {
-        compactState.transactions = compactState.transactions.slice(-250);
-    }
-    if (Array.isArray(compactState.brokerLedger) && compactState.brokerLedger.length > 250) {
-        compactState.brokerLedger = compactState.brokerLedger.slice(-250);
-    }
-    if (Array.isArray(compactState.documents) && compactState.documents.length > 20) {
-        compactState.documents = compactState.documents.slice(-20);
+    // Passe 3 (dernier recours) : troncature des transactions (affecte la dérivation des soldes si lu sans IDB)
+    let balancesAffected = false;
+    if (Array.isArray(compactState.transactions) && compactState.transactions.length > 1500) {
+        compactState.transactions = compactState.transactions.slice(-1500);
+        balancesAffected = true;
     }
     serialized = JSON.stringify({ ...env, state: compactState });
-    return serialized;
+    if (serialized.length <= MIRROR_COMPACT_TARGET_CHARS) {
+        return { json: serialized, balancesAffected };
+    }
+
+    if (Array.isArray(compactState.transactions) && compactState.transactions.length > 250) {
+        compactState.transactions = compactState.transactions.slice(-250);
+        balancesAffected = true;
+    }
+    serialized = JSON.stringify({ ...env, state: compactState });
+    return { json: serialized, balancesAffected };
+}
+
+export function buildCompactLocalMirror(rawEnvelopeJson: string): string {
+    return buildCompactLocalMirrorDetailed(rawEnvelopeJson).json;
 }
 
 export function isLocalMirrorCompacted(): boolean {
     return safeLocalGet(OVERFLOW_FLAG_KEY) === '1';
+}
+
+export function isLocalMirrorBalanceTruncated(): boolean {
+    return safeLocalGet(PARTIAL_MIRROR_FLAG_KEY) === '1';
+}
+
+export function markIdbBootHydrationComplete(): void {
+    _pendingIdbBootRestore = false;
 }
 
 export function getLatestPersistedStateJson(key: string = STORAGE_KEYS.persistStore): string | null {
@@ -296,6 +324,9 @@ export function getLatestPersistedStateJson(key: string = STORAGE_KEYS.persistSt
             return lsValue;
         }
         return cached.full;
+    }
+    if (key === STORAGE_KEYS.persistStore && (isLocalMirrorCompacted() || isLocalMirrorBalanceTruncated())) {
+        _pendingIdbBootRestore = true;
     }
     return lsValue;
 }
@@ -343,6 +374,10 @@ export const unlimitedStateStorage: Storage = {
     },
 
     setItem(key: string, value: string): void {
+        if (key === STORAGE_KEYS.persistStore && _pendingIdbBootRestore) {
+            return;
+        }
+
         // Purge proactive de l'ancien doublon localStorage pour libérer de l'espace immédiatement.
         safeLocalRemove(PROTECTED_DOSSIER_IDB_KEY);
 
@@ -355,6 +390,7 @@ export const unlimitedStateStorage: Storage = {
                 localStorage.setItem(key, value);
                 lsFullSucceeded = true;
                 safeLocalRemove(OVERFLOW_FLAG_KEY);
+                safeLocalRemove(PARTIAL_MIRROR_FLAG_KEY);
                 _inMemoryStates.delete(key);
             } catch (err) {
                 if (!isQuotaDomException(err)) {
@@ -367,14 +403,21 @@ export const unlimitedStateStorage: Storage = {
 
         // Débordement au-delà du quota localStorage : on écrit un miroir compact dans localStorage
         // tout en conservant 100 % des données dans IndexedDB et en mémoire.
-        const compact = buildCompactLocalMirror(value);
+        const { json: compact, balancesAffected } = buildCompactLocalMirrorDetailed(value);
         let compactWritten = false;
         if (typeof localStorage !== 'undefined') {
             try {
                 localStorage.setItem(key, compact);
                 compactWritten = true;
                 safeLocalSet(OVERFLOW_FLAG_KEY, '1');
+                if (balancesAffected) {
+                    safeLocalSet(PARTIAL_MIRROR_FLAG_KEY, '1');
+                } else {
+                    safeLocalRemove(PARTIAL_MIRROR_FLAG_KEY);
+                }
             } catch (err) {
+                safeLocalSet(OVERFLOW_FLAG_KEY, '1');
+                safeLocalSet(PARTIAL_MIRROR_FLAG_KEY, '1');
                 if (isQuotaDomException(err)) {
                     logError({
                         source: 'storage',
@@ -403,12 +446,15 @@ export const unlimitedStateStorage: Storage = {
         _inMemoryStates.delete(key);
         safeLocalRemove(key);
         if (key === STORAGE_KEYS.persistStore) {
+            _pendingIdbBootRestore = false;
             safeLocalRemove(OVERFLOW_FLAG_KEY);
+            safeLocalRemove(PARTIAL_MIRROR_FLAG_KEY);
         }
         void deleteIdbEntry(key);
     },
 
     clear(): void {
+        _pendingIdbBootRestore = false;
         _inMemoryStates.clear();
         try {
             if (typeof localStorage !== 'undefined') {
@@ -423,6 +469,7 @@ export const unlimitedStateStorage: Storage = {
 
 /** Réservé aux tests : vide le cache mémoire et la file IndexedDB en mémoire. */
 export function _resetUnlimitedStateStorageForTests(): void {
+    _pendingIdbBootRestore = false;
     _inMemoryStates.clear();
     _idbWriteQueues.clear();
     _writeSeq = 0;
