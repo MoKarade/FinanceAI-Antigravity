@@ -151,3 +151,74 @@ test('runPortfolioMonteCarlo10k generates 10,000 scenarios rapidly with strict q
 
   assert.ok(mc.probabilityOfGainPct > 50 && mc.probabilityOfGainPct <= 100);
 });
+
+test('runPortfolioMonteCarlo10k raccord la courbe réelle depuis janv. 2025 et calibre sur dailyHistoryCad', () => {
+  const prices = getLatestPrices();
+  const baseSpot = prices.XBB ?? 100;
+
+  const dailyCalm: [string, number][] = [];
+  const dailyVolatile: [string, number][] = [];
+  for (let i = 0; i < 23; i++) {
+    const y = 2025 + Math.floor(i / 12);
+    const m = (i % 12) + 1;
+    const dt = `${y}-${String(m).padStart(2, '0')}-20`;
+    dailyCalm.push([dt, baseSpot * (0.96 + i * 0.002)]);
+    dailyVolatile.push([dt, baseSpot * (i % 2 === 0 ? 1.18 : 0.79)]);
+  }
+
+  const mcCalm = runPortfolioMonteCarlo10k({
+    lots: [
+      {
+        id: 'calm-lot',
+        assetId: 'XBB',
+        investedAmount: 50_000,
+        purchaseYearMonth: '2025-01',
+        purchaseDate: '2025-01-10',
+        quantity: 500,
+        baseSpotPriceCad: dailyCalm[dailyCalm.length - 1][1],
+        dailyHistoryCad: dailyCalm,
+      },
+    ],
+    livePrices: prices,
+    monthlyContribution: 300,
+    horizonYears: 10,
+    scenarioCount: 10000,
+    seed: 99,
+  });
+
+  const mcVol = runPortfolioMonteCarlo10k({
+    lots: [
+      {
+        id: 'vol-lot',
+        assetId: 'XBB',
+        investedAmount: 50_000,
+        purchaseYearMonth: '2025-01',
+        purchaseDate: '2025-01-10',
+        quantity: 500,
+        baseSpotPriceCad: dailyVolatile[dailyVolatile.length - 1][1],
+        dailyHistoryCad: dailyVolatile,
+      },
+    ],
+    livePrices: prices,
+    monthlyContribution: 300,
+    horizonYears: 10,
+    scenarioCount: 10000,
+    seed: 99,
+  });
+
+  assert.equal(mcCalm.historicalStats.usedRealDailyCurveSince2025, true);
+  assert.equal(mcVol.historicalStats.usedRealDailyCurveSince2025, true);
+  assert.ok(
+    mcVol.historicalStats.annualizedVolatilityPct >
+      mcCalm.historicalStats.annualizedVolatilityPct
+  );
+
+  const histPts = mcCalm.historicalCurvePoints ?? [];
+  assert.ok(histPts.length >= 12);
+  assert.equal(histPts[0].yearMonth, '2025-01');
+  for (let i = 1; i < histPts.length; i++) {
+    assert.ok(histPts[i].yearDecimal > histPts[i - 1].yearDecimal);
+  }
+  assert.equal(histPts[histPts.length - 1].portfolioValueCad, mcCalm.initialCapital);
+  assert.equal(histPts[histPts.length - 1].yearDecimal, mcCalm.anchorYearDecimal);
+});

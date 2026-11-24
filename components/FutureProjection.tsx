@@ -1177,6 +1177,18 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         return i === -1 ? displayData.length - 1 : i;
     })();
     const todayPresetRange = centeredWindowRange(displayData.length, todayArrayIndex, 7);
+    const since2025PresetRange: [number, number] | null = (() => {
+        const idx2025 = (displayData as ProjectionChartPoint[]).findIndex(
+            (d) => calendarFromMonthIndex(startYear, startMonth, d.monthIndex).year >= 2025,
+        );
+        if (idx2025 < 0 || idx2025 >= todayArrayIndex) return null;
+        const idx3Y = (displayData as ProjectionChartPoint[]).findIndex((d) => d.monthIndex >= 3 * 12);
+        const endIdx =
+            idx3Y === -1
+                ? displayData.length - 1
+                : Math.min(displayData.length - 1, Math.max(todayArrayIndex + 12, idx3Y));
+        return endIdx > idx2025 ? [idx2025, endIdx] : null;
+    })();
 
     const finScenarioP50 = activeScenarioOutput.milestones.finalNetWorthP50;
     const resultsScenarioPatrimoine =
@@ -1444,6 +1456,9 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                             </span>
                             <span className="text-tiny text-texte-doux">
                                 {deepForecast.activeReport.isDeepRun ? 'Fourchette [P10, P90] profonde' : 'Fourchette [P10, P90] estimée'}
+                                {deepForecast.activeReport.pastDiagnostic.pastCurveCalibration?.hasUsableCurve
+                                    ? ' · calibrée depuis janv. 2025'
+                                    : ''}
                             </span>
                         </div>
 
@@ -1492,6 +1507,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                     variant={etroit ? 'compact' : 'buttons'}
                                     zoom={zoom}
                                     todayPresetRange={todayPresetRange}
+                                    since2025PresetRange={since2025PresetRange}
                                     idxForYears={idxForYears}
                                     lastMonthIndex={lastMonthIndex}
                                     onFullscreen={() => zoom.containerEl.current?.requestFullscreen?.()}

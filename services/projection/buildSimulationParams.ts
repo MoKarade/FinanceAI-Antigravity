@@ -43,6 +43,7 @@ import type {
 } from '../../types';
 import type { SimulationParams, LiveCSVBalances } from '../projection';
 import type { ValoriaEngineSchedule } from './types';
+import type { SimulationPastCurveCalibration } from './pastCurveCalibration';
 import { computeValoriaFutureForecast } from './valoriaFutureEngine';
 import { derivePortfolioStartingBalances, derivePortfolioStartingACBs } from './startingBalancesFromAssets';
 import { buildBehavioralProfileFromTransactions, type BehavioralProfile } from './behavioralProfile';
@@ -118,6 +119,7 @@ export interface BuildSimulationParamsInputs {
     initialNonRegACB?: number;
     initialCryptoACB?: number;
     valoriaSchedule?: ValoriaEngineSchedule;
+    pastCurveCalibration?: SimulationPastCurveCalibration;
 }
 
 
@@ -254,6 +256,7 @@ export function buildSimulationParams(inputs: BuildSimulationParamsInputs): Simu
         ...(inputs.initialNonRegACB !== undefined ? { initialNonRegACB: inputs.initialNonRegACB } : {}),
         ...(inputs.initialCryptoACB !== undefined ? { initialCryptoACB: inputs.initialCryptoACB } : {}),
         ...(inputs.valoriaSchedule !== undefined ? { valoriaSchedule: inputs.valoriaSchedule } : {}),
+        ...(inputs.pastCurveCalibration !== undefined ? { pastCurveCalibration: inputs.pastCurveCalibration } : {}),
     };
 
 

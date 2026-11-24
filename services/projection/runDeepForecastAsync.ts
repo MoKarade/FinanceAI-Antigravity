@@ -529,6 +529,7 @@ export async function runDeepForecastAsync(
         config: input.config ?? input.params.config,
         projection: input.projection ?? input.params.projection,
         retirementGoal: input.retirementGoal ?? input.params.retirementGoal,
+        calculatedStartingCash: input.params.calculatedStartingCash,
         referenceDateIso: input.referenceDateIso,
     });
     throwIfAborted(signal);

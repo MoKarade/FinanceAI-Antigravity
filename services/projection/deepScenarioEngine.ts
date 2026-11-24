@@ -51,6 +51,7 @@ import {
     type ActiveCrisisState,
 } from './macroRegimes';
 import { ASSET_LOCATION_BONUS_PP } from './strategySpace';
+import type { PastCurveCalibration } from './pastCurveCalibration';
 import type { CompactMonthlyQuantileShard, MacroRegimeId } from './types';
 import type { ValoriaFutureForecastResult } from './valoriaFutureEngine';
 
@@ -108,6 +109,10 @@ export interface DeepScenarioBaseline {
     lifeExpectancy: number;
     baseReturnPct: number;
     baseVolatilityPct: number;
+    /** Ajustement prudent (pp/an) issu des courbes réelles depuis janv. 2025, amorti sur 5 ans. */
+    pastCurveReturnTiltPp: number;
+    /** Facteur d'échelle des sauts extrêmes si un creux historique > 15 % a été observé depuis 2025. */
+    mertonJumpScale: number;
     mertonLambda: number;
     mertonMeanJump: number;
     mertonJumpVol: number;
@@ -878,6 +883,7 @@ function extractBaselineFromProjection(input: {
     expenseVolatilityPct: number;
     annualCreepExtraPct: number;
     valoriaForecast: ValoriaFutureForecastResult | null;
+    pastCurveCalibration?: PastCurveCalibration | null;
 }): DeepScenarioBaseline {
     const { id, proj, params } = input;
     const pts = normalizeFutureChartPoints(proj.chartData);
@@ -893,13 +899,28 @@ function extractBaselineFromProjection(input: {
     const baseReturnPct = computeWeightedPortfolioReturnPct(params);
     const baseInflationPct = safeFinite(params.projection?.inflationRate, 2.0);
     const valVol = input.valoriaForecast?.schedule?.annualVolatilityPct;
-    const baseVolatilityPct = valVol
+    const priorVolatilityPct = valVol
         ? round2(clamp(0.45 * valVol.celi + 0.40 * valVol.reer + 0.15 * valVol.nonReg, 7, 26))
         : 14.5;
+    const pastCal = input.pastCurveCalibration;
+    const hasPastCal = Boolean(
+        pastCal?.hasUsableCurve &&
+            pastCal.calibratedVolatilityPct !== null &&
+            Number.isFinite(pastCal.calibratedVolatilityPct),
+    );
+    const baseVolatilityPct = hasPastCal
+        ? valVol
+            ? round2(clamp(0.6 * priorVolatilityPct + 0.4 * (pastCal!.calibratedVolatilityPct as number), 6, 30))
+            : round2(clamp(pastCal!.calibratedVolatilityPct as number, 6, 32))
+        : priorVolatilityPct;
+    const pastCurveReturnTiltPp = hasPastCal
+        ? round2(clamp(pastCal?.calibratedReturnTiltPp ?? 0, -2.0, 2.0))
+        : 0;
+    const mertonJumpScale = hasPastCal ? clamp(pastCal?.mertonJumpScale ?? 1.0, 1.0, 1.35) : 1.0;
 
     const merton = input.valoriaForecast?.schedule?.mertonJump ?? params.valoriaSchedule?.mertonJump;
-    const mertonLambda = merton?.annualLambda ?? DEFAULT_MERTON_LAMBDA;
-    const mertonMeanJump = merton?.meanJumpPct ?? DEFAULT_MERTON_MEAN_JUMP;
+    const mertonLambda = (merton?.annualLambda ?? DEFAULT_MERTON_LAMBDA) * mertonJumpScale;
+    const mertonMeanJump = (merton?.meanJumpPct ?? DEFAULT_MERTON_MEAN_JUMP) * (1 + (mertonJumpScale - 1) * 0.5);
     const mertonJumpVol = merton?.jumpVolPct ?? DEFAULT_MERTON_JUMP_VOL;
 
     const detFinAssets = new Array<number>(len).fill(0);
@@ -1002,6 +1023,8 @@ function extractBaselineFromProjection(input: {
         lifeExpectancy,
         baseReturnPct,
         baseVolatilityPct,
+        pastCurveReturnTiltPp,
+        mertonJumpScale,
         mertonLambda,
         mertonMeanJump,
         mertonJumpVol,
@@ -1172,12 +1195,17 @@ export function prepareDeepScenarioBaselines(input: {
     const aiBaseRate = computeWeightedPortfolioReturnPct(aiPlan.winningParams);
     const favBaseRate = computeWeightedPortfolioReturnPct(favParams);
 
+    const pastCal = pastDiagnostic.pastCurveCalibration;
+    const pastCurveMentionFr = pastCal?.hasUsableCurve
+        ? ` · Calibré sur tes courbes réelles depuis janv. 2025`
+        : '';
+
     const baselines: Record<DeepScenarioId, DeepScenarioBaseline> = {
         real_trajectory: extractBaselineFromProjection({
             id: 'real_trajectory',
             proj: realDet,
             params: realParams,
-            assumptionsSummaryFr: `Rendement nominal moyen ${formatPercent(realBaseRate, 1)} · Inflation ${formatPercent(realParams.projection.inflationRate ?? 2, 1)} · Ajustement actus ${newsTiltPp >= 0 ? '+' : ''}${newsTiltPp.toFixed(2).replace('.', ',')} %/an · Régimes macro Markov actifs.`,
+            assumptionsSummaryFr: `Rendement nominal moyen ${formatPercent(realBaseRate, 1)} · Inflation ${formatPercent(realParams.projection.inflationRate ?? 2, 1)} · Ajustement actus ${newsTiltPp >= 0 ? '+' : ''}${newsTiltPp.toFixed(2).replace('.', ',')} %/an · Régimes macro Markov actifs${pastCurveMentionFr}.`,
             appliedOptimizationsFr: [],
             scenarioReturnShiftPct: newsTiltPp,
             scenarioVolMultiplier: newsVolMult,
@@ -1187,12 +1215,13 @@ export function prepareDeepScenarioBaselines(input: {
             expenseVolatilityPct: obsExpVol,
             annualCreepExtraPct: Math.max(0, obsCreepPct * 0.25),
             valoriaForecast,
+            pastCurveCalibration: pastCal,
         }),
         prudent_stress: extractBaselineFromProjection({
             id: 'prudent_stress',
             proj: prudentDet,
             params: prudentParams,
-            assumptionsSummaryFr: `Rendement abaissé ${formatPercent(prudentBaseRate, 1)} (−1,8 %/an) · Volatilité ×${(1.28 * newsVolMult).toFixed(2).replace('.', ',')} · Inflation ${formatPercent(prudentParams.projection.inflationRate ?? 2.7, 1)} (+0,7 %) · Renouvellements hypothécaires +1,25 % · Crises historiques activées.`,
+            assumptionsSummaryFr: `Rendement abaissé ${formatPercent(prudentBaseRate, 1)} (−1,8 %/an) · Volatilité ×${(1.28 * newsVolMult).toFixed(2).replace('.', ',')} · Inflation ${formatPercent(prudentParams.projection.inflationRate ?? 2.7, 1)} (+0,7 %) · Renouvellements hypothécaires +1,25 % · Crises historiques activées${pastCurveMentionFr}.`,
             appliedOptimizationsFr: [],
             scenarioReturnShiftPct: -0.35 + Math.min(0, newsTiltPp),
             scenarioVolMultiplier: round2(1.28 * newsVolMult),
@@ -1202,12 +1231,13 @@ export function prepareDeepScenarioBaselines(input: {
             expenseVolatilityPct: Math.min(18, obsExpVol * 1.25),
             annualCreepExtraPct: Math.max(0.35, obsCreepPct * 0.5),
             valoriaForecast,
+            pastCurveCalibration: pastCal,
         }),
         ai_optimized: extractBaselineFromProjection({
             id: 'ai_optimized',
             proj: aiDet,
             params: aiPlan.winningParams,
-            assumptionsSummaryFr: `Rendement optimisé ${formatPercent(aiBaseRate, 1)} (localisation + RFG) · Stratégie ${aiPlan.winningStrategy} · Écart budgétaire maîtrisé et fiscalité ARC/RQ optimisée.`,
+            assumptionsSummaryFr: `Rendement optimisé ${formatPercent(aiBaseRate, 1)} (localisation + RFG) · Stratégie ${aiPlan.winningStrategy} · Écart budgétaire maîtrisé et fiscalité ARC/RQ optimisée${pastCurveMentionFr}.`,
             appliedOptimizationsFr: aiPlan.appliedOptimizationsFr,
             scenarioReturnShiftPct: Math.max(0.15, newsTiltPp * 0.5 + 0.15),
             scenarioVolMultiplier: round2(Math.max(0.92, newsVolMult * 0.96)),
@@ -1217,12 +1247,13 @@ export function prepareDeepScenarioBaselines(input: {
             expenseVolatilityPct: Math.max(2.0, obsExpVol * 0.75),
             annualCreepExtraPct: 0,
             valoriaForecast,
+            pastCurveCalibration: pastCal,
         }),
         favorable_tailwinds: extractBaselineFromProjection({
             id: 'favorable_tailwinds',
             proj: favDet,
             params: favParams,
-            assumptionsSummaryFr: `Rendement porteur ${formatPercent(favBaseRate, 1)} (+1,5 %/an) · Inflation modérée ${formatPercent(favParams.projection.inflationRate ?? 1.7, 1)} (−0,3 %) · Volatilité contenue · Discipline d’épargne respectée.`,
+            assumptionsSummaryFr: `Rendement porteur ${formatPercent(favBaseRate, 1)} (+1,5 %/an) · Inflation modérée ${formatPercent(favParams.projection.inflationRate ?? 1.7, 1)} (−0,3 %) · Volatilité contenue · Discipline d’épargne respectée${pastCurveMentionFr}.`,
             appliedOptimizationsFr: [
                 'Maintien intégral de la discipline budgétaire (dérive du train de vie à 0 %)',
                 'Réinvestissement systématique des flux excédentaires en marchés porteurs',
@@ -1235,6 +1266,7 @@ export function prepareDeepScenarioBaselines(input: {
             expenseVolatilityPct: Math.max(2.0, obsExpVol * 0.8),
             annualCreepExtraPct: 0,
             valoriaForecast,
+            pastCurveCalibration: pastCal,
         }),
     };
 
@@ -1535,9 +1567,10 @@ export function computeDeepScenarioShard(
                 const isRet = m >= b.retirementMonthIndex;
                 const glideFactor = isRet ? 0.60 : yearsToRet < 10 ? yearsToRet / 10 : 1.0;
 
-                // Taux nominal annuel avant choc
+                // Taux nominal annuel avant choc (incluant le tilt prudent du passé depuis janv. 2025 amorti sur 5 ans)
+                const pastTiltAtM = (b.pastCurveReturnTiltPp ?? 0) * Math.exp(-m / 60);
                 const baseEffAnnual =
-                    (b.baseReturnPct + b.scenarioReturnShiftPct) * glideFactor +
+                    (b.baseReturnPct + b.scenarioReturnShiftPct + pastTiltAtM) * glideFactor +
                     (b.baseInflationPct + 1.0) * (1 - glideFactor);
 
                 const eqScale = 0.45 + 0.55 * glideFactor;
@@ -2529,7 +2562,18 @@ export function computeQuickFourScenarios(input: {
     const aiPoints: DeepScenarioPoint[] = [];
     const favPoints: DeepScenarioPoint[] = [];
 
-    const sigmaAnnual = 0.145;
+    const pastCal = pastDiagnostic.pastCurveCalibration;
+    const hasPastCal = Boolean(
+        pastCal?.hasUsableCurve &&
+            pastCal.calibratedVolatilityPct !== null &&
+            Number.isFinite(pastCal.calibratedVolatilityPct),
+    );
+    const sigmaAnnual = hasPastCal
+        ? clamp((pastCal!.calibratedVolatilityPct as number) / 100, 0.06, 0.32)
+        : 0.145;
+    const pastTiltAnnualDec = hasPastCal
+        ? clamp((pastCal?.calibratedReturnTiltPp ?? 0) / 100, -0.02, 0.02)
+        : 0;
     const aiMonthlyRateBoost = (ASSET_LOCATION_BONUS_PP + merSavingsPp) / 100;
 
     for (const pt of pts) {
@@ -2538,8 +2582,13 @@ export function computeQuickFourScenarios(input: {
         const age = pt.age ?? currentAge + Math.floor(m / 12);
         const t = m / 12;
 
-        const baseP50 = round2(safeFinite(pt.P50 ?? pt.NetWorth, 0));
+        const rawP50 = round2(safeFinite(pt.P50 ?? pt.NetWorth, 0));
         const hasBands = typeof pt.P10 === 'number' && Number.isFinite(pt.P10) && typeof pt.P90 === 'number' && Number.isFinite(pt.P90);
+        const tiltCumFactor = !hasBands && pastTiltAnnualDec !== 0
+            ? Math.exp(pastTiltAnnualDec * 5 * (1 - Math.exp(-t / 5)))
+            : 1;
+        const baseP50 =
+            rawP50 >= 0 && tiltCumFactor !== 1 ? round2(rawP50 * tiltCumFactor) : rawP50;
         const spread = 1.2816 * sigmaAnnual * Math.sqrt(Math.max(0, t));
         const realMag = Math.max(0, baseP50);
 
@@ -2696,7 +2745,9 @@ export function computeQuickFourScenarios(input: {
         retirementMonthIndex,
         lifeExpectancy: params.retirementGoal?.lifeExpectancy || 90,
         baseReturnPct: baseRatePct,
-        baseVolatilityPct: 14.5,
+        baseVolatilityPct: hasPastCal ? round2(sigmaAnnual * 100) : 14.5,
+        pastCurveReturnTiltPp: round2(pastTiltAnnualDec * 100),
+        mertonJumpScale: hasPastCal ? clamp(pastCal?.mertonJumpScale ?? 1.0, 1.0, 1.35) : 1.0,
         mertonLambda: DEFAULT_MERTON_LAMBDA,
         mertonMeanJump: DEFAULT_MERTON_MEAN_JUMP,
         mertonJumpVol: DEFAULT_MERTON_JUMP_VOL,
@@ -2737,7 +2788,7 @@ export function computeQuickFourScenarios(input: {
             id: 'real_trajectory',
             label: SCENARIO_META.real_trajectory.label,
             shortDescription: SCENARIO_META.real_trajectory.shortDescription,
-            assumptionsSummaryFr: `Aperçu rapide · Rendement ${formatPercent(baseRatePct, 1)} · Inflation ${formatPercent(baseInflationPct, 1)} · Fiscalité ARC/RQ complète.`,
+            assumptionsSummaryFr: `Aperçu rapide · Rendement ${formatPercent(baseRatePct, 1)} · Inflation ${formatPercent(baseInflationPct, 1)} · Fiscalité ARC/RQ complète${hasPastCal ? ' · Calibré sur tes courbes réelles depuis janv. 2025' : ''}.`,
             points: realPoints,
             milestones: realMs,
             turningPoints: buildTurningPointsForScenario({

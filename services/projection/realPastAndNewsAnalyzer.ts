@@ -49,6 +49,11 @@ import type {
     RealPastDiagnostic,
 } from './deepForecastTypes';
 import { round2 } from './helpers';
+import {
+    MONTE_CARLO_PAST_ANCHOR_YM,
+    computePastCurveCalibration,
+    type PastCurveCalibration,
+} from './pastCurveCalibration';
 import type { SimulationParams } from './types';
 import {
     computeValoriaFutureForecast,
@@ -65,6 +70,8 @@ export interface RealPastAnalyzerInput {
     config?: BudgetConfig;
     projection?: ProjectionConfig;
     retirementGoal?: RetirementGoal;
+    /** Cash de départ calculé (optionnel — active la mesure du patrimoine net depuis janv. 2025). */
+    calculatedStartingCash?: number;
     /** Date ISO de référence optionnelle (tests déterministes). */
     referenceDateIso?: string;
 }
@@ -216,6 +223,33 @@ export function analyzeRealPastDossier(input: RealPastAnalyzerInput): RealPastDi
         input.assets,
         input.fxRates,
     );
+    const priorReturnPct =
+        typeof input.projection?.returnRate === 'number' && Number.isFinite(input.projection.returnRate)
+            ? input.projection.returnRate
+            : 6.5;
+    const pastCurveCalibration: PastCurveCalibration = computePastCurveCalibration({
+        assets: input.assets ?? [],
+        fxRates: input.fxRates ?? {},
+        transactions: validTx,
+        debts: input.debts ?? [],
+        realEstateGoals: input.realEstateGoals ?? [],
+        calculatedStartingCash: input.calculatedStartingCash,
+        priorReturnPct,
+        referenceDateIso: input.referenceDateIso,
+    });
+    const curveFindingFr =
+        pastCurveCalibration.hasUsableCurve &&
+        pastCurveCalibration.realizedAnnualizedReturnPct !== null &&
+        pastCurveCalibration.realizedAnnualizedVolatilityPct !== null
+            ? (() => {
+                  const retSign = pastCurveCalibration.realizedAnnualizedReturnPct > 0 ? '+' : '';
+                  const ddTxt =
+                      pastCurveCalibration.realizedMaxDrawdownPct !== null
+                          ? `, creux max ${formatPercent(pastCurveCalibration.realizedMaxDrawdownPct, 1)}`
+                          : '';
+                  return `Courbe réelle depuis janv. 2025 (${pastCurveCalibration.portfolioMonthsObserved} mois) : rendement ${retSign}${formatPercent(pastCurveCalibration.realizedAnnualizedReturnPct, 1)}/an, volatilité ${formatPercent(pastCurveCalibration.realizedAnnualizedVolatilityPct, 1)}${ddTxt} (calibrage Monte Carlo).`;
+              })()
+            : null;
 
     // Cas dossier sans historique bancaire exploitable
     if (transactionsAnalyzed === 0 || monthsCovered === 0) {
@@ -230,6 +264,9 @@ export function analyzeRealPastDossier(input: RealPastAnalyzerInput): RealPastDi
             emptyFindings.push(
                 'Aucun poste de dépenses budgétaires configuré : complétez l’onglet Budget ou importez vos relevés pour affiner le diagnostic.',
             );
+        }
+        if (curveFindingFr) {
+            emptyFindings.push(curveFindingFr);
         }
         if (weightedMerPct !== null && estimatedAnnualFeeAndTaxDragCad !== null) {
             emptyFindings.push(
@@ -259,6 +296,7 @@ export function analyzeRealPastDossier(input: RealPastAnalyzerInput): RealPastDi
             weightedMerPct,
             estimatedAnnualFeeAndTaxDragCad,
             expenseVolatilityPct: null,
+            pastCurveCalibration,
             findingsFr: emptyFindings.slice(0, 5),
         };
     }
@@ -296,7 +334,13 @@ export function analyzeRealPastDossier(input: RealPastAnalyzerInput): RealPastDi
     }
 
     const spendingMonthsSorted = Array.from(spendingByYm.keys()).sort();
-    const recentSpendingMonths = spendingMonthsSorted.slice(-12);
+    // Prend en compte tout l'historique depuis janv. 2025 dès qu'au moins 3 mois >= 2025-01 existent,
+    // au lieu de tronquer arbitrairement à 12 mois glissants.
+    const spendingMonthsSince2025 = spendingMonthsSorted.filter((ym) => ym >= MONTE_CARLO_PAST_ANCHOR_YM);
+    const recentSpendingMonths =
+        spendingMonthsSince2025.length >= 3
+            ? spendingMonthsSince2025
+            : spendingMonthsSorted.slice(-12);
 
     let observedMonthlyExpensesCad: number | null = null;
     let fixedExpensesSharePct: number | null = null;
@@ -451,6 +495,10 @@ export function analyzeRealPastDossier(input: RealPastAnalyzerInput): RealPastDi
         );
     }
 
+    if (curveFindingFr) {
+        findingsFr.push(curveFindingFr);
+    }
+
     if (peakSpendingMonthLabel && lowSpendingMonthLabel && expenseVolatilityPct !== null) {
         findingsFr.push(
             `Saisonnalité : mois le plus chargé en ${peakSpendingMonthLabel} et le plus léger en ${lowSpendingMonthLabel} (volatilité mensuelle de ${formatPercent(expenseVolatilityPct, 1)}).`,
@@ -481,6 +529,7 @@ export function analyzeRealPastDossier(input: RealPastAnalyzerInput): RealPastDi
         weightedMerPct,
         estimatedAnnualFeeAndTaxDragCad,
         expenseVolatilityPct,
+        pastCurveCalibration,
         findingsFr: findingsFr.slice(0, 5),
     };
 }

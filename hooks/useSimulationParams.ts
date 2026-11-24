@@ -17,6 +17,7 @@ import { buildBehavioralProfileFromTransactions } from '../services/projection/b
 import { computeAccountReturnRatesForMode } from '../services/assetFundamentals';
 import type { SimulationParams } from '../services/projection';
 import { computeValoriaFutureForecast } from '../services/projection/valoriaFutureEngine';
+import { computePastCurveCalibration, toSimulationPastCurveCalibration, type SimulationPastCurveCalibration } from '../services/projection/pastCurveCalibration';
 import type { Transaction, User } from '../types';
 import { usePastPortfolioHistory } from './usePastPortfolioHistory';
 import { deriveStartingBalancesFromHistory } from '../services/history/startingBalancesFromHistory';
@@ -89,6 +90,7 @@ interface SimulationParamsBundle {
     startYear: number;
     startMonth: number;
     todayMonthIndex: number;
+    pastCurveCalibration?: SimulationPastCurveCalibration;
 }
 
 /**
@@ -301,9 +303,40 @@ export function useSimulationParams(calculatedMonthlySavings: number): Simulatio
         });
     }, [storeProjection, calculatedStartingCash, ledgerCash.termesFautifs, liveCSVBalances, realEstateGoals, debts, childGoals, travelGoals, lifeEvents, retirementGoal, config, budgetItems, calculatedMonthlySavings, insurancePolicies, vehicleReplacements, majorRenovations, charitableGoals, rentalProperties, privateBusinesses, financialGoals, startYear, startMonth, todayIsoPourDettes, transactions, assetsPourRegime, fxPourRegime, valoriaRiskProfile]);
 
+    const pastCurveCalibration = useMemo(
+        () =>
+            toSimulationPastCurveCalibration(
+                computePastCurveCalibration({
+                    assets: assetsPourRegime ?? EMPTY_ARRAY,
+                    fxRates: fxPourRegime ?? {},
+                    transactions: transactions as Transaction[],
+                    debts,
+                    realEstateGoals,
+                    calculatedStartingCash,
+                    priorReturnPct:
+                        typeof storeProjection?.returnRate === 'number' &&
+                        Number.isFinite(storeProjection.returnRate)
+                            ? storeProjection.returnRate
+                            : 6.5,
+                    referenceDateIso: todayIsoPourDettes,
+                }),
+            ),
+        [
+            assetsPourRegime,
+            fxPourRegime,
+            transactions,
+            debts,
+            realEstateGoals,
+            calculatedStartingCash,
+            storeProjection?.returnRate,
+            todayIsoPourDettes,
+        ],
+    );
+
     return {
         params, pastHistory, liveCSVBalances, calculatedStartingCash,
         startYear, startMonth, todayMonthIndex,
         mentionAutoriteCourtier: mentionAutorite,
+        ...(pastCurveCalibration ? { pastCurveCalibration } : {}),
     };
 }

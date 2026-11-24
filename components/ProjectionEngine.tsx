@@ -40,7 +40,11 @@ interface ProjectionEngineProps {
  * bascule `projectionStatus` à `'error'` pour l'UI.
  */
 const ProjectionEngineInner: React.FC<ProjectionEngineProps> = ({ calculatedMonthlySavings }) => {
-    const { params } = useSimulationParams(calculatedMonthlySavings);
+    const { params, pastCurveCalibration } = useSimulationParams(calculatedMonthlySavings);
+    const engineParams = useMemo(
+        () => (pastCurveCalibration ? { ...params, pastCurveCalibration } : params),
+        [params, pastCurveCalibration],
+    );
     const runMC = useFinanceStore((s) => s.projectionRunMC);
     const setLastProjection = useFinanceStore((s) => s.setLastProjection);
     const setProjectionStatus = useFinanceStore((s) => s.setProjectionStatus);
@@ -55,8 +59,8 @@ const ProjectionEngineInner: React.FC<ProjectionEngineProps> = ({ calculatedMont
 
     // PH2-b — signature de contenu : permet à runAsync de RE-RACCROCHER à un calcul déjà en vol.
     const mcDedupKey = useMemo(() => {
-        try { return JSON.stringify(params); } catch { return undefined; }
-    }, [params]);
+        try { return JSON.stringify(engineParams); } catch { return undefined; }
+    }, [engineParams]);
 
     // PH2-c-3 — calcul (déterministe OU Monte-Carlo selon runMC) dans un Web Worker, debounce 300 ms.
     // [ENG-INFINITY-NON-GARDE-A-LA-FRONTIERE] Deuxième condition de refus, à côté de `reqsMet` et
@@ -69,10 +73,10 @@ const ProjectionEngineInner: React.FC<ProjectionEngineProps> = ({ calculatedMont
     // qui aurait fait re-tourner l'effet de publication à chaque render. Une chaîne se compare par
     // valeur — `null` sur le chemin nominal, donc l'effet ne bouge plus.
     const refus = useMemo(
-        () => (params.entreesRefusees?.length
-            ? { entrees: params.entreesRefusees, message: messageDeRefus(params.entreesRefusees) }
+        () => (engineParams.entreesRefusees?.length
+            ? { entrees: engineParams.entreesRefusees, message: messageDeRefus(engineParams.entreesRefusees) }
             : null),
-        [params.entreesRefusees],
+        [engineParams.entreesRefusees],
     );
     const messageRefus = refus?.message ?? null;
 
@@ -87,7 +91,7 @@ const ProjectionEngineInner: React.FC<ProjectionEngineProps> = ({ calculatedMont
         const controller = new AbortController();
         const timer = setTimeout(() => {
             setProjectionStatus('computing');
-            runProjectionAsync(params, runMC, 0, undefined, mcDedupKey, { signal: controller.signal })
+            runProjectionAsync(engineParams, runMC, 0, undefined, mcDedupKey, { signal: controller.signal })
                 .then((r) => { if (!cancelled) setAsyncResults(r); })
                 .catch((e) => {
                     // Une annulation N'EST PAS un crash : la router en « CRITICAL SIMULATION ERROR »
@@ -105,7 +109,7 @@ const ProjectionEngineInner: React.FC<ProjectionEngineProps> = ({ calculatedMont
                 });
         }, runMC ? 180 : 60);
         return () => { cancelled = true; controller.abort(); clearTimeout(timer); };
-    }, [params, runMC, reqsMet, messageRefus, mcDedupKey, setProjectionStatus]);
+    }, [engineParams, runMC, reqsMet, messageRefus, mcDedupKey, setProjectionStatus]);
 
     const results = asyncResults;
 

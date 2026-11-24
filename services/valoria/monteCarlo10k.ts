@@ -29,6 +29,11 @@ export interface PortfolioHistoricalStats {
   monthlyMeanLogReturn: number;
   monthlyStdLogReturn: number;
   observationsCount: number;
+  pastWindowStartYm?: string;
+  pastSince2025Months?: number;
+  pastSince2025ReturnPct?: number | null;
+  pastSince2025VolatilityPct?: number | null;
+  usedRealDailyCurveSince2025?: boolean;
   assetVolatilities: {
     assetId: string;
     name: string;
@@ -36,6 +41,15 @@ export interface PortfolioHistoricalStats {
     historicalVolatilityPct: number;
     historicalReturnPct: number;
   }[];
+}
+
+export interface MonteCarloHistoricalCurvePoint {
+  yearMonth: string;
+  yearDecimal: number;
+  label: string;
+  portfolioValueCad: number;
+  investedCumulativeCad: number;
+  source: 'real_daily' | 'historical_series';
 }
 
 export interface MonteCarlo10kYearPoint {
@@ -58,6 +72,8 @@ export interface MonteCarlo10kResult {
   initialCapital: number;
   monthlyContribution: number;
   historicalStats: PortfolioHistoricalStats;
+  historicalCurvePoints?: MonteCarloHistoricalCurvePoint[];
+  anchorYearDecimal?: number;
   yearlyQuantiles: MonteCarlo10kYearPoint[];
   samplePaths: number[][]; // 24 representative trajectories of length (horizonYears + 1)
   finalDistributionBins: {
@@ -627,9 +643,265 @@ export function buildBenchmarkComparisonSeries(params: {
   return normalizeWindowPoints(rawMonthly);
 }
 
+const MC_PAST_ANCHOR_YM = '2025-01';
+const MC_PAST_ANCHOR_ISO = '2025-01-01';
+
+function ymToYearDecimalMc(ym: string): number {
+  const [y, m] = ym.split('-').map(Number);
+  return Number(((y || 2025) + ((m || 1) - 1) / 12).toFixed(4));
+}
+
+function endOfMonthIsoMc(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(Date.UTC(y || 2025, m || 1, 0)).toISOString().slice(0, 10);
+}
+
+function computeMonthlyStatsFromSimpleReturns(rets: number[]): {
+  annReturnPct: number;
+  annVolPct: number;
+} | null {
+  const n = rets.length;
+  if (n < 3) return null;
+  let cum = 1;
+  const logs: number[] = [];
+  for (const r of rets) {
+    if (!Number.isFinite(r) || r <= -0.95) continue;
+    cum *= 1 + r;
+    logs.push(Math.log(Math.max(1e-4, 1 + r)));
+  }
+  if (logs.length < 3) return null;
+  const mean = logs.reduce((s, x) => s + x, 0) / logs.length;
+  const variance =
+    logs.reduce((s, x) => s + (x - mean) * (x - mean), 0) /
+    Math.max(1, logs.length - 1);
+  return {
+    annReturnPct: Number(((Math.pow(cum, 12 / logs.length) - 1) * 100).toFixed(2)),
+    annVolPct: Number((Math.sqrt(variance * 12) * 100).toFixed(2)),
+  };
+}
+
+function computeDailyTwrReturnsSince2025(
+  validLots: PortfolioLot[],
+  livePrices: Record<string, number>,
+  totalValue: number
+): { annReturnPct: number; annVolPct: number; months: number } | null {
+  if (totalValue <= 0) return null;
+  let dailyValue = 0;
+  const dailyLots: PortfolioLot[] = [];
+  for (const l of validLots) {
+    if (
+      l.dailyHistoryCad &&
+      l.dailyHistoryCad.length >= 2 &&
+      l.dailyHistoryCad[l.dailyHistoryCad.length - 1][0] >= MC_PAST_ANCHOR_ISO
+    ) {
+      dailyValue += evaluateLotMarketPosition(l, livePrices).currentValue;
+      dailyLots.push(l);
+    }
+  }
+  if (dailyLots.length === 0 || dailyValue / totalValue < 0.2) {
+    return null;
+  }
+
+  const since2025Months = HISTORICAL_SERIES.filter(
+    (p) => p.yearMonth >= MC_PAST_ANCHOR_YM
+  ).map((p) => p.yearMonth);
+  if (since2025Months.length < 4) return null;
+
+  const monthlyRets: number[] = [];
+  for (let i = 1; i < since2025Months.length; i++) {
+    const ymPrev = since2025Months[i - 1];
+    const ymCurr = since2025Months[i];
+    const isoPrev = endOfMonthIsoMc(ymPrev);
+    const isoCurr = endOfMonthIsoMc(ymCurr);
+    const monthStartCurr = `${ymCurr}-01`;
+
+    let prevVal = 0;
+    let currSameVal = 0;
+    let anyNewObs = false;
+
+    for (const l of dailyLots) {
+      const hist = l.dailyHistoryCad!;
+      if (hist[hist.length - 1][0] < monthStartCurr) continue;
+      if (l.purchaseYearMonth > ymPrev) continue;
+      if (hist[0][0] > isoPrev) continue;
+
+      const pPrev = lookupStepPriceOnOrBefore(hist, isoPrev);
+      const pCurr = lookupStepPriceOnOrBefore(hist, isoCurr);
+      const qty =
+        l.quantity && l.quantity > 0
+          ? l.quantity
+          : evaluateLotMarketPosition(l, livePrices).units;
+      if (pPrev <= 0 || pCurr <= 0 || qty <= 0) continue;
+
+      // Vérifie qu'au moins un point réel existe entre isoPrev et isoCurr
+      if (hist.some(([d]) => d > isoPrev && d <= isoCurr)) {
+        anyNewObs = true;
+      }
+      prevVal += qty * pPrev;
+      currSameVal += qty * pCurr;
+    }
+
+    if (anyNewObs && prevVal > 0 && currSameVal > 0) {
+      const r = currSameVal / prevVal - 1;
+      if (Number.isFinite(r) && r > -0.95 && r < 3.0) {
+        monthlyRets.push(r);
+      }
+    }
+  }
+
+  const stats = computeMonthlyStatsFromSimpleReturns(monthlyRets);
+  if (!stats) return null;
+  return { ...stats, months: monthlyRets.length };
+}
+
+function buildHistoricalCurveSince2025(params: {
+  validLots: PortfolioLot[];
+  livePrices: Record<string, number>;
+  initialCapital: number;
+  baseYear: number;
+}): {
+  points: MonteCarloHistoricalCurvePoint[];
+  anchorYearDecimal: number;
+} {
+  const { validLots, livePrices, initialCapital, baseYear } = params;
+  const since2025 = HISTORICAL_SERIES.filter(
+    (p) => p.yearMonth >= MC_PAST_ANCHOR_YM
+  );
+  if (since2025.length === 0) {
+    return { points: [], anchorYearDecimal: baseYear };
+  }
+
+  const lastPt = since2025[since2025.length - 1];
+  const lastHistDecimal = ymToYearDecimalMc(lastPt.yearMonth);
+  const anchorYearDecimal =
+    baseYear > Math.floor(lastHistDecimal) ? baseYear : lastHistDecimal;
+
+  const latestSeriesPrices = HISTORICAL_SERIES[HISTORICAL_SERIES.length - 1].prices;
+  const getTickMult = (assetId: string): number => {
+    const base = latestSeriesPrices[assetId] ?? 0;
+    const live = livePrices[assetId];
+    return base > 0 && typeof live === 'number' && Number.isFinite(live) && live > 0
+      ? live / base
+      : 1;
+  };
+
+  let currentComputedCap = 0;
+  for (const l of validLots) {
+    currentComputedCap += evaluateLotMarketPosition(l, livePrices).currentValue;
+  }
+
+  // Fallback neutre si aucun lot sélectionné : utilise un panier mondial pondéré (XBB)
+  if (validLots.length === 0 || currentComputedCap <= 0) {
+    const endIdx = Math.max(1e-6, lastPt.prices.XBB ?? 100);
+    const points: MonteCarloHistoricalCurvePoint[] = since2025.map((pt, idx) => {
+      const isLast = idx === since2025.length - 1;
+      const ratio = (pt.prices.XBB ?? endIdx) / endIdx;
+      return {
+        yearMonth: pt.yearMonth,
+        yearDecimal: isLast ? anchorYearDecimal : ymToYearDecimalMc(pt.yearMonth),
+        label: pt.label,
+        portfolioValueCad: isLast ? initialCapital : Math.round(initialCapital * ratio),
+        investedCumulativeCad: initialCapital,
+        source: 'historical_series',
+      };
+    });
+    return { points, anchorYearDecimal };
+  }
+
+  let hasAnyRealDaily = false;
+  const rawSeries: Array<{
+    ym: string;
+    label: string;
+    portVal: number;
+    invCum: number;
+    hasRealDailyAtPoint: boolean;
+  }> = since2025.map((pt, idx) => {
+    const isLast = idx === since2025.length - 1;
+    const isoEnd = endOfMonthIsoMc(pt.yearMonth);
+    let heldVal = 0;
+    let backcastVal = 0;
+    let invCum = 0;
+    let pointUsedRealDaily = false;
+
+    for (const l of validLots) {
+      const pos = evaluateLotMarketPosition(l, livePrices);
+      const tickMult = getTickMult(l.assetId);
+      const seriesLastPx = latestSeriesPrices[l.assetId] ?? 100;
+      const seriesMonthPx = pt.prices[l.assetId] ?? seriesLastPx;
+      const relPriceRatio = seriesLastPx > 0 ? seriesMonthPx / seriesLastPx : 1;
+
+      const hasDailyList = Boolean(l.dailyHistoryCad && l.dailyHistoryCad.length >= 2);
+      const firstDailyIso = hasDailyList ? l.dailyHistoryCad![0][0] : '';
+      let assetValAtMonth = pos.currentValue * relPriceRatio;
+
+      if (hasDailyList && firstDailyIso <= isoEnd) {
+        const pxDaily = lookupStepPriceOnOrBefore(l.dailyHistoryCad!, isoEnd);
+        if (pxDaily > 0) {
+          const qty = l.quantity && l.quantity > 0 ? l.quantity : pos.units;
+          assetValAtMonth = qty * pxDaily * (isLast ? tickMult : 1);
+          pointUsedRealDaily = true;
+          hasAnyRealDaily = true;
+        }
+      } else if (hasDailyList) {
+        const qty = l.quantity && l.quantity > 0 ? l.quantity : pos.units;
+        const firstDailyPx = l.dailyHistoryCad![0][1];
+        const firstDailyYm = firstDailyIso.slice(0, 7);
+        const seriesAtFirstDaily =
+          HISTORICAL_SERIES.find((s) => s.yearMonth === firstDailyYm)?.prices[
+            l.assetId
+          ] ?? seriesLastPx;
+        const ratioFromFirstDaily =
+          seriesAtFirstDaily > 0 ? seriesMonthPx / seriesAtFirstDaily : relPriceRatio;
+        if (firstDailyPx > 0 && qty > 0) {
+          assetValAtMonth = qty * firstDailyPx * ratioFromFirstDaily;
+        }
+      }
+
+      backcastVal += assetValAtMonth;
+      if (l.purchaseYearMonth <= pt.yearMonth) {
+        heldVal += assetValAtMonth;
+        invCum += l.investedAmount;
+      }
+    }
+
+    // Si aucun lot n'était encore acheté en début 2025, rétro-projette le panier actuel
+    // pour montrer la vraie trajectoire boursière du portefeuille depuis janv. 2025.
+    const effectiveVal = heldVal > 0 ? heldVal : backcastVal;
+    const effectiveInv = invCum > 0 ? invCum : validLots.reduce((s, l) => s + l.investedAmount, 0);
+
+    return {
+      ym: pt.yearMonth,
+      label: pt.label,
+      portVal: effectiveVal,
+      invCum: effectiveInv,
+      hasRealDailyAtPoint: pointUsedRealDaily,
+    };
+  });
+
+  const lastRaw = rawSeries[rawSeries.length - 1]?.portVal ?? initialCapital;
+  const anchorScale = lastRaw > 0 ? initialCapital / lastRaw : 1;
+
+  const points: MonteCarloHistoricalCurvePoint[] = rawSeries.map((pt, idx) => {
+    const isLast = idx === rawSeries.length - 1;
+    return {
+      yearMonth: pt.ym,
+      yearDecimal: isLast ? anchorYearDecimal : ymToYearDecimalMc(pt.ym),
+      label: pt.label,
+      portfolioValueCad: isLast
+        ? initialCapital
+        : Math.max(0, Math.round(pt.portVal * anchorScale)),
+      investedCumulativeCad: Math.round(pt.invCum),
+      source: hasAnyRealDaily && pt.hasRealDailyAtPoint ? 'real_daily' : 'historical_series',
+    };
+  });
+
+  return { points, anchorYearDecimal };
+}
+
 /**
  * Computes empirical historical annualized volatility & return from the 2015-2026 monthly series
- * for the user's exact selected asset weights (accounting for real historical cross-asset co-movements).
+ * AND calibrates on real past curves since Jan 2025 (`dailyHistoryCad` / recent regime)
+ * for the user's exact selected asset weights.
  */
 export function computeHistoricalPortfolioStats(
   lots: PortfolioLot[],
@@ -656,6 +928,11 @@ export function computeHistoricalPortfolioStats(
       monthlyMeanLogReturn: 0.065 / 12,
       monthlyStdLogReturn: 0.12 / Math.sqrt(12),
       observationsCount: HISTORICAL_SERIES.length - 1,
+      pastWindowStartYm: MC_PAST_ANCHOR_YM,
+      pastSince2025Months: 0,
+      pastSince2025ReturnPct: null,
+      pastSince2025VolatilityPct: null,
+      usedRealDailyCurveSince2025: false,
       assetVolatilities: [],
     };
   }
@@ -697,6 +974,7 @@ export function computeHistoricalPortfolioStats(
     })
     .sort((a, b) => b.weightPct - a.weightPct);
 
+  const recentSeriesSimpleReturns: number[] = [];
   for (let t = 1; t < HISTORICAL_SERIES.length; t++) {
     let portSimpleRet = 0;
     for (const id of assetIds) {
@@ -705,6 +983,9 @@ export function computeHistoricalPortfolioStats(
       portSimpleRet += weights[id] * (pCurr / pPrev - 1);
     }
     portfolioMonthlyLogReturns[t - 1] = Math.log(Math.max(0.1, 1 + portSimpleRet));
+    if (HISTORICAL_SERIES[t].yearMonth >= '2025-02') {
+      recentSeriesSimpleReturns.push(portSimpleRet);
+    }
   }
 
   const rawMeanMonthly =
@@ -715,22 +996,66 @@ export function computeHistoricalPortfolioStats(
       0
     ) / Math.max(1, nObs - 1);
 
-  const stdMonthly = Math.sqrt(varianceMonthly);
-  const annVolPct = stdMonthly * Math.sqrt(12) * 100;
+  const longStdMonthly = Math.sqrt(varianceMonthly);
+  const longAnnVolPct = longStdMonthly * Math.sqrt(12) * 100;
 
   const weightedAnchoredAnnualRetPct = assetVolatilities.reduce(
     (s, item) => s + (item.weightPct / 100) * item.historicalReturnPct,
     0
   );
-  const effectiveMonthlyDrift =
-    Math.log(1 + weightedAnchoredAnnualRetPct / 100) / 12;
+
+  // Calibrage sur les courbes réelles depuis janv. 2025 (`dailyHistoryCad` en priorité, sinon série 2025+)
+  const daily2025Stats = computeDailyTwrReturnsSince2025(
+    validLots,
+    livePrices,
+    totalValue
+  );
+  const series2025Stats =
+    computeMonthlyStatsFromSimpleReturns(recentSeriesSimpleReturns);
+
+  const usedRealDailyCurveSince2025 = daily2025Stats !== null;
+  const past2025Stats = daily2025Stats ?? series2025Stats;
+  const pastSince2025Months = daily2025Stats
+    ? daily2025Stats.months
+    : recentSeriesSimpleReturns.length;
+
+  let calibratedVolPct = longAnnVolPct;
+  let calibratedRetPct = weightedAnchoredAnnualRetPct;
+
+  if (past2025Stats) {
+    const n25 = pastSince2025Months;
+    const wVol = usedRealDailyCurveSince2025
+      ? Math.min(0.45, n25 / (n25 + 18))
+      : 0.2;
+    calibratedVolPct = (1 - wVol) * longAnnVolPct + wVol * past2025Stats.annVolPct;
+
+    const wRet = usedRealDailyCurveSince2025
+      ? Math.min(0.25, n25 / (n25 + 36))
+      : 0.12;
+    const maxTilt = usedRealDailyCurveSince2025 ? 2.0 : 1.5;
+    const diff = Math.max(
+      -maxTilt,
+      Math.min(maxTilt, wRet * (past2025Stats.annReturnPct - weightedAnchoredAnnualRetPct))
+    );
+    calibratedRetPct = weightedAnchoredAnnualRetPct + diff;
+  }
+
+  const effectiveVolPct = Number(Math.max(0.4, calibratedVolPct).toFixed(2));
+  const effectiveRetPct = Number(calibratedRetPct.toFixed(2));
+  const effectiveStdMonthly = effectiveVolPct / 100 / Math.sqrt(12);
+  const effectiveMonthlyDrift = Math.log(1 + effectiveRetPct / 100) / 12;
 
   return {
-    annualizedReturnPct: Number(weightedAnchoredAnnualRetPct.toFixed(2)),
-    annualizedVolatilityPct: Number(Math.max(0.4, annVolPct).toFixed(2)),
+    annualizedReturnPct: effectiveRetPct,
+    annualizedVolatilityPct: effectiveVolPct,
     monthlyMeanLogReturn: effectiveMonthlyDrift,
-    monthlyStdLogReturn: stdMonthly,
+    monthlyStdLogReturn: effectiveStdMonthly,
     observationsCount: nObs,
+    pastWindowStartYm: MC_PAST_ANCHOR_YM,
+    pastSince2025Months,
+    pastSince2025ReturnPct: past2025Stats ? past2025Stats.annReturnPct : null,
+    pastSince2025VolatilityPct: past2025Stats ? past2025Stats.annVolPct : null,
+    usedRealDailyCurveSince2025,
     assetVolatilities,
   };
 }
@@ -909,12 +1234,25 @@ export function runPortfolioMonteCarlo10k(params: {
     bin.sharePct = Number(((bin.count / N) * 100).toFixed(1));
   }
 
+  const validLots = lots.filter(
+    (l) => l.investedAmount > 0 && Boolean(getAssetById(l.assetId))
+  );
+  const { points: historicalCurvePoints, anchorYearDecimal } =
+    buildHistoricalCurveSince2025({
+      validLots,
+      livePrices,
+      initialCapital,
+      baseYear,
+    });
+
   return {
     scenarioCount: N,
     horizonYears: years,
     initialCapital,
     monthlyContribution,
     historicalStats: stats,
+    historicalCurvePoints,
+    anchorYearDecimal,
     yearlyQuantiles,
     samplePaths,
     finalDistributionBins: bins,

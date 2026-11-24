@@ -8,6 +8,7 @@ import { gaussianRandom, applyShock } from './helpers';
 import { canadianInflationFor, type YearReturn } from './historicalReturns';
 import type { BaseRates } from './glidepathRates';
 import { stepAndComputeRegimeRates, type MacroRegimeState } from './macroRegimes';
+import type { SimulationPastCurveCalibration } from './pastCurveCalibration';
 import type { ValoriaEngineSchedule } from './types';
 
 const INV_12 = 1 / 12;
@@ -45,9 +46,22 @@ export function computeMonthlyMarketRates(
     rng: () => number,
     macroState?: MacroRegimeState | null,
     valoriaSchedule?: Readonly<ValoriaEngineSchedule> | null,
+    pastCurveCalibration?: Readonly<SimulationPastCurveCalibration> | null,
 ): MarketRatesResult {
     if (enableMonteCarlo && macroState && !historicalSequence) {
-        const regRates = stepAndComputeRegimeRates(m, baseRates, simInflation, macroState, rng);
+        const pastTilt = pastCurveCalibration
+            ? pastCurveCalibration.calibratedReturnTiltPp * Math.exp(-m / 60)
+            : 0;
+        const effectiveBaseRates =
+            pastTilt !== 0
+                ? {
+                      ...baseRates,
+                      celi: baseRates.celi + pastTilt,
+                      reer: baseRates.reer + pastTilt,
+                      nonReg: baseRates.nonReg + pastTilt,
+                  }
+                : baseRates;
+        const regRates = stepAndComputeRegimeRates(m, effectiveBaseRates, simInflation, macroState, rng);
         if (stressTest?.enabled) {
             const crashStartMonth = stressTest.year * 12;
             if (m >= crashStartMonth && m <= crashStartMonth + stressTest.recoveryMonths) {
@@ -73,20 +87,34 @@ export function computeMonthlyMarketRates(
         const Z_inflation_shock = (-Z_market * 0.4 + Z_macro * 0.6 + gaussianRandom(rng, 0, 1) * 0.5);
         const Z_cash = (Z_inflation_shock * 0.5 + gaussianRandom(rng, 0, 1) * 0.5);
 
-        const volCeli = valoriaSchedule?.annualVolatilityPct.celi ?? 15;
-        const volReer = valoriaSchedule?.annualVolatilityPct.reer ?? 15;
-        const volNonReg = valoriaSchedule?.annualVolatilityPct.nonReg ?? 15;
+        const pastTilt = pastCurveCalibration
+            ? pastCurveCalibration.calibratedReturnTiltPp * Math.exp(-m / 60)
+            : 0;
+        const blendEquityVol = (priorVol: number): number =>
+            pastCurveCalibration
+                ? valoriaSchedule
+                    ? 0.6 * priorVol + 0.4 * pastCurveCalibration.calibratedVolatilityPct
+                    : pastCurveCalibration.calibratedVolatilityPct
+                : priorVol;
+
+        const volCeli = blendEquityVol(valoriaSchedule?.annualVolatilityPct.celi ?? 15);
+        const volReer = blendEquityVol(valoriaSchedule?.annualVolatilityPct.reer ?? 15);
+        const volNonReg = blendEquityVol(valoriaSchedule?.annualVolatilityPct.nonReg ?? 15);
         const volCrypto = valoriaSchedule?.annualVolatilityPct.crypto ?? 45;
 
-        mcCeliRate = applyShock(baseRates.celi, volCeli, Z_stocks);
-        mcReerRate = !valoriaSchedule && baseRates.reer === baseRates.celi
+        const baseCeli = baseRates.celi + pastTilt;
+        const baseReer = baseRates.reer + pastTilt;
+        const baseNonReg = baseRates.nonReg + pastTilt;
+
+        mcCeliRate = applyShock(baseCeli, volCeli, Z_stocks);
+        mcReerRate = !valoriaSchedule && baseReer === baseCeli && volReer === volCeli
             ? mcCeliRate
-            : applyShock(baseRates.reer, volReer, Z_stocks);
-        mcNonRegRate = !valoriaSchedule && baseRates.nonReg === baseRates.celi
+            : applyShock(baseReer, volReer, Z_stocks);
+        mcNonRegRate = !valoriaSchedule && baseNonReg === baseCeli && volNonReg === volCeli
             ? mcCeliRate
-            : !valoriaSchedule && baseRates.nonReg === baseRates.reer
+            : !valoriaSchedule && baseNonReg === baseReer && volNonReg === volReer
                 ? mcReerRate
-                : applyShock(baseRates.nonReg, volNonReg, Z_stocks);
+                : applyShock(baseNonReg, volNonReg, Z_stocks);
         mcCryptoRate = applyShock(baseRates.crypto, volCrypto, Z_crypto);
         mcCashRate = applyShock(baseRates.cash, 2, Z_cash);
         currentInflation = applyShock(simInflation, 1.5, Z_inflation_shock);

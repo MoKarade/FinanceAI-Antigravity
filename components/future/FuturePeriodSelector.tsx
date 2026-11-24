@@ -12,6 +12,7 @@ interface Props {
     variant: 'buttons' | 'compact';
     zoom: TimeChartZoom<ProjectionChartPoint>;
     todayPresetRange: [number, number] | null;
+    since2025PresetRange?: [number, number] | null;
     idxForYears: (years: number) => number;
     lastMonthIndex: number;
     onFullscreen: () => void;
@@ -21,6 +22,7 @@ export const FuturePeriodSelector: React.FC<Props> = ({
     variant,
     zoom,
     todayPresetRange,
+    since2025PresetRange = null,
     idxForYears,
     lastMonthIndex,
     onFullscreen,
@@ -30,6 +32,12 @@ export const FuturePeriodSelector: React.FC<Props> = ({
             zoom.isZoomed &&
             zoom.range?.[0] === todayPresetRange[0] &&
             zoom.range?.[1] === todayPresetRange[1],
+    );
+    const isSince2025Range = Boolean(
+        since2025PresetRange &&
+            zoom.isZoomed &&
+            zoom.range?.[0] === since2025PresetRange[0] &&
+            zoom.range?.[1] === since2025PresetRange[1],
     );
 
     const horizons = [5, 10, 20].filter((y) => y * 12 < lastMonthIndex);
@@ -90,6 +98,25 @@ export const FuturePeriodSelector: React.FC<Props> = ({
                         Tout voir
                     </button>
                 )}
+                {since2025PresetRange && (
+                    <button
+                        type="button"
+                        aria-pressed={isSince2025Range}
+                        onClick={() =>
+                            isSince2025Range
+                                ? zoom.reset()
+                                : zoom.showRange(since2025PresetRange[0], since2025PresetRange[1])
+                        }
+                        className={`h-11 px-3 rounded-full text-xs font-medium border transition-colors focus-ring ${
+                            isSince2025Range
+                                ? 'gf-delta-amber'
+                                : 'bg-surface border-bordure text-ink-200 hover:text-ink-50'
+                        }`}
+                        title="Afficher la courbe réelle depuis janvier 2025 jusqu'aux 5 prochaines années"
+                    >
+                        2025→
+                    </button>
+                )}
                 {todayPresetRange && (
                     <button
                         type="button"
@@ -125,6 +152,21 @@ export const FuturePeriodSelector: React.FC<Props> = ({
     return (
         <div role="group" aria-label="Contrôles de zoom fluide" className="flex items-center gap-2 flex-wrap">
             <div className="gf-chart-toolbar">
+                {since2025PresetRange && (
+                    <button
+                        type="button"
+                        aria-pressed={isSince2025Range}
+                        onClick={() =>
+                            isSince2025Range
+                                ? zoom.reset()
+                                : zoom.showRange(since2025PresetRange[0], since2025PresetRange[1])
+                        }
+                        className={`touch-target gf-chart-ctrl-btn focus-ring ${isSince2025Range ? 'gf-chart-ctrl-btn-active' : ''}`}
+                        title="Afficher la courbe réelle depuis janvier 2025 et les 3 prochaines années"
+                    >
+                        2025→
+                    </button>
+                )}
                 {horizons.map((y) => {
                     const targetEnd = idxForYears(y);
                     const actif = Boolean(zoom.isZoomed && zoom.range?.[0] === 0 && zoom.range?.[1] === targetEnd);

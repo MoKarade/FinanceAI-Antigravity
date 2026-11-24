@@ -183,6 +183,52 @@ export const FutureUnifiedInsightsPanel: React.FC<FutureUnifiedInsightsPanelProp
                                         )}
                                 </div>
                             </div>
+
+                            <div className="rounded-lg border border-bordure bg-fond p-2.5 min-w-0">
+                                <div className="text-tiny text-texte-doux">Courbe placements (depuis janv. 2025)</div>
+                                <div className="text-body font-mono font-bold text-texte tabular-nums mt-0.5 break-words">
+                                    <PrivateAmount>
+                                        {past.pastCurveCalibration?.hasUsableCurve &&
+                                        past.pastCurveCalibration.realizedAnnualizedReturnPct !== null &&
+                                        Number.isFinite(past.pastCurveCalibration.realizedAnnualizedReturnPct)
+                                            ? `${past.pastCurveCalibration.realizedAnnualizedReturnPct > 0 ? '+' : ''}${formatPercent(past.pastCurveCalibration.realizedAnnualizedReturnPct, 1)}/an`
+                                            : '—'}
+                                    </PrivateAmount>
+                                    {past.pastCurveCalibration?.hasUsableCurve &&
+                                        past.pastCurveCalibration.realizedAnnualizedVolatilityPct !== null &&
+                                        Number.isFinite(past.pastCurveCalibration.realizedAnnualizedVolatilityPct) && (
+                                            <span className="text-tiny font-normal text-texte-doux">
+                                                {' · vol. '}
+                                                <PrivateAmount>
+                                                    {formatPercent(past.pastCurveCalibration.realizedAnnualizedVolatilityPct, 1)}
+                                                </PrivateAmount>
+                                            </span>
+                                        )}
+                                </div>
+                            </div>
+
+                            <div className="rounded-lg border border-bordure bg-fond p-2.5 min-w-0">
+                                <div className="text-tiny text-texte-doux">Creux max &amp; variation (depuis janv. 2025)</div>
+                                <div className="text-body font-mono font-bold text-texte tabular-nums mt-0.5 break-words">
+                                    <PrivateAmount>
+                                        {past.pastCurveCalibration?.hasUsableCurve &&
+                                        past.pastCurveCalibration.realizedMaxDrawdownPct !== null &&
+                                        Number.isFinite(past.pastCurveCalibration.realizedMaxDrawdownPct)
+                                            ? formatPercent(past.pastCurveCalibration.realizedMaxDrawdownPct, 1)
+                                            : '—'}
+                                    </PrivateAmount>
+                                    {past.pastCurveCalibration?.realizedNetWorthDeltaCad !== null &&
+                                        past.pastCurveCalibration?.realizedNetWorthDeltaCad !== undefined &&
+                                        Number.isFinite(past.pastCurveCalibration.realizedNetWorthDeltaCad) && (
+                                            <span className="text-tiny font-normal text-texte-doux">
+                                                {' · '}
+                                                <PrivateAmount>
+                                                    {`${past.pastCurveCalibration.realizedNetWorthDeltaCad > 0 ? '+' : ''}${formatCAD(Math.round(past.pastCurveCalibration.realizedNetWorthDeltaCad))}`}
+                                                </PrivateAmount>
+                                            </span>
+                                        )}
+                                </div>
+                            </div>
                         </div>
 
                         {past.findingsFr.length > 0 && (

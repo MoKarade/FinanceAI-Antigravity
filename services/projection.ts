@@ -869,7 +869,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
         // --- 1. GROWTH & MARKET SHOCKS ---
         // Cycle 27 split: chocs de marché + bootstrap historique + stress test inflation → ./projection/marketShocks
         const { mcCeliRate, mcReerRate, mcNonRegRate, mcCryptoRate, mcCashRate, currentInflation } =
-            computeMonthlyMarketRates(m, enableMonteCarlo, yearBaseRates, simInflation, historicalSequence, stressTestConfig, rng, macroState, activeValoriaSchedule);
+            computeMonthlyMarketRates(m, enableMonteCarlo, yearBaseRates, simInflation, historicalSequence, stressTestConfig, rng, macroState, activeValoriaSchedule, params.pastCurveCalibration);
 
         if (m > 0) {
             cumulativeCpiMultiplier *= Math.pow(Math.max(1e-6, 1 + currentInflation / 100), 1 / 12);

@@ -4,6 +4,8 @@
 // mémoire persistante chiffrée IndexedDB.
 // Règle no-fake-data : toute mesure absente ou non calculable vaut `null`, jamais `0`.
 
+import type { PastCurveCalibration } from './pastCurveCalibration';
+
 export type DeepScenarioId =
     | 'real_trajectory'
     | 'prudent_stress'
@@ -68,6 +70,8 @@ export interface RealPastDiagnostic {
     estimatedAnnualFeeAndTaxDragCad: number | null;
     /** Volatilité mensuelle observée des dépenses (%), ou null. */
     expenseVolatilityPct: number | null;
+    /** Calibrage réel des courbes placements + patrimoine net depuis janv. 2025. */
+    pastCurveCalibration?: PastCurveCalibration | null;
     /** Résumés en français clair directement issus des constats réels. */
     findingsFr: string[];
 }

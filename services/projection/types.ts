@@ -4,6 +4,7 @@
 
 import type { EntreeRefusee } from './verifierEntreesMoteur';
 import type { BehavioralProfile } from './behavioralProfile';
+import type { SimulationPastCurveCalibration } from './pastCurveCalibration';
 import type {
     ProjectionConfig,
     RealEstateGoal,
@@ -98,6 +99,8 @@ export interface SimulationParams {
     initialCryptoACB?: number;
     /** Calendrier multi-horizon optionnel des 7 agents Valoria (uniquement en mode `'valoria_agents'`). */
     valoriaSchedule?: ValoriaEngineSchedule;
+    /** Calibrage Monte Carlo dérivé des courbes réelles depuis janvier 2025 (optionnel). */
+    pastCurveCalibration?: SimulationPastCurveCalibration;
 }
 
 

@@ -233,6 +233,7 @@ export function useDeepForecast(
                 config: config ?? params.config,
                 projection: params.projection,
                 retirementGoal: params.retirementGoal,
+                calculatedStartingCash: params.calculatedStartingCash,
             }),
         [
             transactions,
@@ -247,6 +248,7 @@ export function useDeepForecast(
             params.config,
             params.projection,
             params.retirementGoal,
+            params.calculatedStartingCash,
         ],
     );
 

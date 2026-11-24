@@ -933,3 +933,189 @@ describe('projection.worker.ts — mode deepForecastShard zero-copy', () => {
         expect(new Set(resultPost!.transfer).size).toBe(resultPost!.transfer!.length);
     });
 });
+
+describe('calibrage Monte Carlo Futur 4.0 depuis janvier 2025', () => {
+    function make22MonthsSinceJan2025(highVol: boolean): {
+        txs: Transaction[];
+        assets: Asset[];
+    } {
+        const txs: Transaction[] = [];
+        let id = 1;
+        for (let idx = 0; idx < 22; idx++) {
+            const year = 2025 + Math.floor(idx / 12);
+            const month = (idx % 12) + 1;
+            const ym = `${year}-${String(month).padStart(2, '0')}`;
+            txs.push(
+                {
+                    id: id++,
+                    date: `${ym}-01`,
+                    payee: 'PaieSynth',
+                    amount: 5000,
+                    category: 'Revenu',
+                    status: 'processed',
+                },
+                {
+                    id: id++,
+                    date: `${ym}-10`,
+                    payee: 'DepenseSynth',
+                    amount: -3100,
+                    category: 'Logement',
+                    status: 'processed',
+                },
+            );
+        }
+
+        const calmPrices = [
+            100, 100.5, 101, 101.2, 102, 102.4, 103, 103.5, 104, 104.3, 105, 105.6,
+            106, 106.5, 107, 107.6, 108, 108.5, 109, 109.4, 110, 110.5,
+        ];
+        const volatilePrices = [
+            100, 89, 107, 79, 98, 84, 111, 91, 118, 95, 123, 99,
+            127, 103, 130, 101, 134, 108, 137, 106, 139, 112,
+        ];
+        const prices = highVol ? volatilePrices : calmPrices;
+        const priceHistory = prices.map((price, idx) => {
+            const year = 2025 + Math.floor(idx / 12);
+            const month = (idx % 12) + 1;
+            const endDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+            return {
+                date: `${year}-${String(month).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`,
+                price,
+            };
+        });
+
+        const assets: Asset[] = [
+            {
+                symbol: 'SYNTH_EQ',
+                name: 'FNB synthétique 2025',
+                quantity: 500,
+                currentPrice: prices[prices.length - 1],
+                performance: highVol ? 11 : 6.5,
+                accountType: 'CELI',
+                currency: 'CAD',
+                dateBought: '2025-01-02',
+                purchases: [{ date: '2025-01-02', quantity: 500, price: 100 }],
+                priceHistory,
+            },
+        ];
+
+        return { txs, assets };
+    }
+
+    it('couvre tout l’historique depuis janvier 2025 (> 12 mois) et calibre la volatilité Monte Carlo', () => {
+        const calm = make22MonthsSinceJan2025(false);
+        const vol = make22MonthsSinceJan2025(true);
+
+        const diagCalm = analyzeRealPastDossier({
+            transactions: calm.txs,
+            assets: calm.assets,
+            fxRates: {},
+            calculatedStartingCash: 25_000,
+            referenceDateIso: '2026-10-31',
+        });
+        const diagVol = analyzeRealPastDossier({
+            transactions: vol.txs,
+            assets: vol.assets,
+            fxRates: {},
+            calculatedStartingCash: 25_000,
+            referenceDateIso: '2026-10-31',
+        });
+
+        expect(diagVol.monthsCovered).toBe(22);
+        expect(diagCalm.pastCurveCalibration?.hasUsableCurve).toBe(true);
+        expect(diagVol.pastCurveCalibration?.hasUsableCurve).toBe(true);
+        expect(diagVol.pastCurveCalibration!.calibratedVolatilityPct!).toBeGreaterThan(
+            diagCalm.pastCurveCalibration!.calibratedVolatilityPct!,
+        );
+
+        const params = makeBaseParams(10);
+        const baseDet = calculateFutureProjection(params, false, 0);
+
+        const quickCalm = computeQuickFourScenarios({
+            params,
+            baseProjection: baseDet,
+            pastDiagnostic: diagCalm,
+            inputsSig: 'df1:calm:0:1',
+        });
+        const quickVol = computeQuickFourScenarios({
+            params,
+            baseProjection: baseDet,
+            pastDiagnostic: diagVol,
+            inputsSig: 'df1:vol:0:1',
+        });
+
+        const endCalm = quickCalm.scenarios.real_trajectory.points.at(-1)!;
+        const endVol = quickVol.scenarios.real_trajectory.points.at(-1)!;
+        expect(endVol.p90 - endVol.p10).toBeGreaterThan(endCalm.p90 - endCalm.p10);
+        for (const pt of quickVol.scenarios.real_trajectory.points) {
+            expect(pt.p10).toBeLessThanOrEqual(pt.p50);
+            expect(pt.p50).toBeLessThanOrEqual(pt.p90);
+        }
+
+        const neutralNews = {
+            collectedAtIso: '2026-10-31T00:00:00.000Z',
+            liveArticlesUsed: 0,
+            offlineFallbackUsed: true,
+            portfolioSentimentScore: null,
+            portfolioSentimentLabel: 'Neutre',
+            annualizedReturnAdjustmentPct: 0,
+            volatilityMultiplier: 1,
+            macroHeadlineFr: 'Neutre',
+            keySignals: [],
+            aiSynthesisFr: null,
+            usedGemini: false,
+        };
+        const prepCalm = prepareDeepScenarioBaselines({
+            params,
+            pastDiagnostic: diagCalm,
+            newsBundle: neutralNews,
+            valoriaForecast: null,
+        });
+        const prepVol = prepareDeepScenarioBaselines({
+            params,
+            pastDiagnostic: diagVol,
+            newsBundle: neutralNews,
+            valoriaForecast: null,
+        });
+
+        const shardCalm = computeDeepScenarioShard({
+            baselines: prepCalm.baselines,
+            classifiedGoals: prepCalm.classifiedGoals,
+            startIter: 0,
+            count: 200,
+            seed: 42,
+        });
+        const shardVol = computeDeepScenarioShard({
+            baselines: prepVol.baselines,
+            classifiedGoals: prepVol.classifiedGoals,
+            startIter: 0,
+            count: 200,
+            seed: 42,
+        });
+
+        const aggCalm = aggregateDeepForecastShards({
+            shards: [shardCalm],
+            baselines: prepCalm.baselines,
+            classifiedGoals: prepCalm.classifiedGoals,
+            pastDiagnostic: diagCalm,
+            newsBundle: neutralNews,
+            valoriaSummary: null,
+            inputsSig: 'df1:aggcalm:0:1',
+            durationMs: 10,
+        });
+        const aggVol = aggregateDeepForecastShards({
+            shards: [shardVol],
+            baselines: prepVol.baselines,
+            classifiedGoals: prepVol.classifiedGoals,
+            pastDiagnostic: diagVol,
+            newsBundle: neutralNews,
+            valoriaSummary: null,
+            inputsSig: 'df1:aggvol:0:1',
+            durationMs: 10,
+        });
+
+        const deepEndCalm = aggCalm.scenarios.real_trajectory.points.at(-1)!;
+        const deepEndVol = aggVol.scenarios.real_trajectory.points.at(-1)!;
+        expect(deepEndVol.p90 - deepEndVol.p10).toBeGreaterThan(deepEndCalm.p90 - deepEndCalm.p10);
+    });
+});
