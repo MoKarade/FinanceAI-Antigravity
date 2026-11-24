@@ -428,3 +428,84 @@ describe('[PASSE-REEL-1] buildEnrichedMonth avec todayIso — trou dans le pass�
         expect(p.diffNW, 'un écart a été calculé par-dessus un trou de plusieurs jours').toBeUndefined();
     });
 });
+
+describe('[MC-RACCORD-MOIS-COURANT] buildDailyLedger + mergeDailyRealPoint — continuité P10/P50/P90 sans fuite sur le passé', () => {
+    it('amorce P10/P50/P90 sur les jours futurs du mois courant même quand le mois passé est dépourvu de bandes MC', () => {
+        const pastMonth = {
+            monthIndex: -1,
+            dateLabel: '2026-10',
+            year: 2026,
+            age: 35,
+            isPast: true,
+            NetWorth: 100_000,
+        } as unknown as ProjectionChartPoint;
+        const currentMonth = {
+            monthIndex: 0,
+            dateLabel: '2026-11',
+            year: 2026,
+            age: 35,
+            NetWorth: 103_000,
+            P10: 98_000,
+            P50: 103_500,
+            P90: 109_000,
+        } as unknown as ProjectionChartPoint;
+
+        const days = buildDailyLedger({
+            months: [pastMonth, currentMonth],
+            startYear: 2026,
+            startMonth: 10, // novembre 2026
+            dated: { recurring: [], monthlyNetSalary: 5_000, monthlyDebtPayment: 0 },
+        });
+
+        expect(days.length).toBe(30);
+        const lastDay = days[days.length - 1]!;
+        expect(lastDay.P10).toBe(98_000);
+        expect(lastDay.P50).toBe(103_500);
+        expect(lastDay.P90).toBe(109_000);
+
+        const realPastRow = {
+            date: '2026-11-10',
+            isDated: false,
+            labels: [],
+            Liquidites: 10_000,
+            Immobilier: 0,
+            Entreprise: 0,
+            DettesNonImmo: 0,
+            NetWorth: 101_000,
+            Income: 0,
+            Expenses: 0,
+            Savings: 0,
+            NetTransferLiquid: 0,
+            deposits: {},
+            growth: {},
+        } as unknown as DailyPastRow;
+        const byDate = new Map([['2026-11-10', realPastRow]]);
+
+        const pastMerged = mergeDailyRealPoint(
+            days[9]!,
+            2026,
+            10,
+            byDate,
+            null,
+            null,
+            '2026-11-15',
+        ) as unknown as Record<string, unknown>;
+        expect(pastMerged.dayIsReal).toBe(true);
+        expect(pastMerged.P10).toBeUndefined();
+        expect(pastMerged.P90).toBeUndefined();
+
+        const futureDay = mergeDailyRealPoint(
+            days[24]!, // 2026-11-25 (> todayIso)
+            2026,
+            10,
+            byDate,
+            null,
+            null,
+            '2026-11-15',
+        ) as unknown as Record<string, unknown>;
+        expect(futureDay.dayIsReal).toBeUndefined();
+        expect(futureDay.P10).toBeGreaterThan(0);
+        expect(futureDay.P50).toBeGreaterThan(0);
+        expect(futureDay.P90).toBeGreaterThan(futureDay.P10 as number);
+    });
+});

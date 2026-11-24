@@ -852,18 +852,45 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     }, [isDailyCurve, daysInWindow, dailyWindowRange, zoom.visibleData]);
 
     const chartSeriesWithRibbon = useMemo<Array<Record<string, unknown>>>(() => {
-        return chartSeries.map((pt) => {
+        const hasPointBounds = (p: ProjectionChartPoint | undefined): boolean =>
+            Boolean(
+                p &&
+                    typeof p.P10 === 'number' &&
+                    Number.isFinite(p.P10) &&
+                    typeof p.P90 === 'number' &&
+                    Number.isFinite(p.P90),
+            );
+        return chartSeries.map((pt, idx) => {
             const p10 = pt.P10;
             const p90 = pt.P90;
-            const hasBounds =
+            if (
                 typeof p10 === 'number' &&
                 Number.isFinite(p10) &&
                 typeof p90 === 'number' &&
-                Number.isFinite(p90);
-            const mcRange: [number, number] | null = hasBounds
-                ? [Math.min(p10, p90), Math.max(p10, p90)]
-                : null;
-            return { ...pt, mcRange };
+                Number.isFinite(p90)
+            ) {
+                const lo = Math.min(p10, p90);
+                const hi = Math.max(p10, p90);
+                return { ...pt, P10: lo, P90: hi, mcRange: [lo, hi] as [number, number] };
+            }
+            // Ancrage visuel uniquement : ouvre le cône et les courbes P10/P90 sans coupure depuis Aujourd'hui.
+            const next = chartSeries[idx + 1];
+            const prev = idx > 0 ? chartSeries[idx - 1] : undefined;
+            const anchorsCone =
+                (hasPointBounds(next) || hasPointBounds(prev)) &&
+                typeof pt.NetWorth === 'number' &&
+                Number.isFinite(pt.NetWorth);
+            if (anchorsCone) {
+                const nw = pt.NetWorth;
+                return {
+                    ...pt,
+                    P10: nw,
+                    P50: nw,
+                    P90: nw,
+                    mcRange: [nw, nw] as [number, number],
+                };
+            }
+            return { ...pt, mcRange: null };
         });
     }, [chartSeries]);
 
@@ -1454,12 +1481,32 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                 <span className="w-2 h-2 rounded-full bg-accent" aria-hidden="true" />
                                 Scénario affiché : {activeScenarioOutput.label}
                             </span>
-                            <span className="text-tiny text-texte-doux">
-                                {deepForecast.activeReport.isDeepRun ? 'Fourchette [P10, P90] profonde' : 'Fourchette [P10, P90] estimée'}
-                                {deepForecast.activeReport.pastDiagnostic.pastCurveCalibration?.hasUsableCurve
-                                    ? ' · calibrée depuis janv. 2025'
-                                    : ''}
-                            </span>
+                            <button
+                                type="button"
+                                data-testid="futur-toggle-mc"
+                                aria-pressed={isVisible('montecarlo')}
+                                onClick={() => toggleSeries('montecarlo')}
+                                title={isVisible('montecarlo') ? 'Masquer les courbes Monte Carlo [P10, P90]' : 'Afficher les courbes Monte Carlo [P10, P90]'}
+                                className={`touch-target min-h-11 inline-flex flex-wrap items-center gap-2 rounded-full border px-3 py-1 text-tiny transition-colors focus-ring ${
+                                    isVisible('montecarlo')
+                                        ? 'border-bordure-champ bg-surface-douce text-texte'
+                                        : 'border-bordure bg-fond text-texte-doux'
+                                }`}
+                            >
+                                <span className="inline-flex items-center gap-1" aria-hidden="true">
+                                    <span className="w-3.5 border-t-2 border-dashed" style={{ borderColor: couleurSerie('montecarlo') }} />
+                                    <span className="w-3.5 border-t-2 border-dashed" style={{ borderColor: 'var(--gf-rouge)' }} />
+                                </span>
+                                <span className="font-semibold">
+                                    {deepForecast.activeReport.isDeepRun ? 'Fourchette [P10, P90] profonde' : 'Fourchette [P10, P90] estimée'}
+                                </span>
+                                <span className="text-texte-doux">
+                                    P90 · P50 · P10
+                                    {deepForecast.activeReport.pastDiagnostic.pastCurveCalibration?.hasUsableCurve
+                                        ? ' · calibrée depuis janv. 2025'
+                                        : ''}
+                                </span>
+                            </button>
                         </div>
 
                         <GoogleFinanceHero
@@ -1650,8 +1697,8 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                                     <stop offset="100%" stopColor={couleurSerie('NetWorth')} stopOpacity={0} />
                                                 </linearGradient>
                                                 <linearGradient id="gfConfidenceRibbonGrad" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="0%" stopColor={couleurSerie('montecarlo')} stopOpacity={0.22} />
-                                                    <stop offset="100%" stopColor={couleurSerie('montecarlo')} stopOpacity={0.07} />
+                                                    <stop offset="0%" stopColor={couleurSerie('montecarlo')} stopOpacity={0.28} />
+                                                    <stop offset="100%" stopColor={couleurSerie('montecarlo')} stopOpacity={0.09} />
                                                 </linearGradient>
                                             </defs>
                                             <CartesianGrid stroke="var(--bordure)" strokeOpacity={0.6} vertical={false} />
@@ -1815,6 +1862,38 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                                         animationDuration={300}
                                                         animationEasing="ease-out"
                                                     />
+                                                    {isVisible('montecarlo') && (
+                                                        <>
+                                                            <Line
+                                                                type="monotone"
+                                                                dataKey="P90"
+                                                                stroke={couleurSerie('montecarlo')}
+                                                                strokeWidth={1.85}
+                                                                strokeDasharray="5 4"
+                                                                strokeOpacity={0.95}
+                                                                connectNulls={false}
+                                                                dot={false}
+                                                                activeDot={false}
+                                                                name="Scénario favorable (P90)"
+                                                                isAnimationActive={!zoom.isPanning}
+                                                                animationDuration={280}
+                                                            />
+                                                            <Line
+                                                                type="monotone"
+                                                                dataKey="P10"
+                                                                stroke="var(--gf-rouge)"
+                                                                strokeWidth={1.85}
+                                                                strokeDasharray="5 4"
+                                                                strokeOpacity={0.9}
+                                                                connectNulls={false}
+                                                                dot={false}
+                                                                activeDot={false}
+                                                                name="Scénario prudent (P10)"
+                                                                isAnimationActive={!zoom.isPanning}
+                                                                animationDuration={280}
+                                                            />
+                                                        </>
+                                                    )}
                                                 </>
                                             )}
 
@@ -1832,6 +1911,52 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                             )}
                                             {modeCourbe === 'empilee' && isVisible('NetWorth') && (
                                                 <Line type="monotone" dataKey="NetWorth" stroke={couleurSerie('NetWorth')} strokeWidth={1.85} dot={false} activeDot={GF_ACTIVE_DOT} name="Valeur Nette Totale" isAnimationActive={!zoom.isPanning} animationDuration={320} animationEasing="ease-out" />
+                                            )}
+                                            {modeCourbe === 'empilee' && isVisible('montecarlo') && (
+                                                <>
+                                                    <Line
+                                                        type="monotone"
+                                                        dataKey="P90"
+                                                        stroke={couleurSerie('montecarlo')}
+                                                        strokeWidth={1.85}
+                                                        strokeDasharray="5 4"
+                                                        strokeOpacity={0.95}
+                                                        connectNulls={false}
+                                                        dot={false}
+                                                        activeDot={false}
+                                                        name="Scénario favorable (P90)"
+                                                        isAnimationActive={!zoom.isPanning}
+                                                        animationDuration={280}
+                                                    />
+                                                    <Line
+                                                        type="monotone"
+                                                        dataKey="P50"
+                                                        stroke={couleurSerie('montecarlo')}
+                                                        strokeWidth={1.5}
+                                                        strokeDasharray="3 3"
+                                                        strokeOpacity={0.75}
+                                                        connectNulls={false}
+                                                        dot={false}
+                                                        activeDot={false}
+                                                        name="Médiane Monte Carlo (P50)"
+                                                        isAnimationActive={!zoom.isPanning}
+                                                        animationDuration={280}
+                                                    />
+                                                    <Line
+                                                        type="monotone"
+                                                        dataKey="P10"
+                                                        stroke="var(--gf-rouge)"
+                                                        strokeWidth={1.85}
+                                                        strokeDasharray="5 4"
+                                                        strokeOpacity={0.9}
+                                                        connectNulls={false}
+                                                        dot={false}
+                                                        activeDot={false}
+                                                        name="Scénario prudent (P10)"
+                                                        isAnimationActive={!zoom.isPanning}
+                                                        animationDuration={280}
+                                                    />
+                                                </>
                                             )}
                                             {lockedByMonth && (
                                                 <Line type="monotone" dataKey="lockedNetWorth" stroke="var(--repere)" strokeWidth={1.6} strokeDasharray="6 3" dot={false} name="Courbe verrouillée" isAnimationActive={!zoom.isPanning} animationDuration={320} />

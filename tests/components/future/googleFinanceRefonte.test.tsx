@@ -589,6 +589,25 @@ describe('Refonte Google Finance — GoogleFinanceHero & FutureScenarioHeader', 
         expect(btnHorizon5A).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByTestId('recharts-trajectory-entrance')).toHaveAttribute('data-chart-horizon', '5A');
 
+        const btnHorizon2025 = screen.getByRole('button', { name: '2025→' });
+        fireEvent.click(btnHorizon2025);
+        expect(btnHorizon2025).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('recharts-trajectory-entrance')).toHaveAttribute('data-chart-horizon', '2025');
+
+        const btnToggleMc = screen.getByTestId('accueil-toggle-mc');
+        const initialMc = btnToggleMc.getAttribute('aria-pressed') === 'true';
+        fireEvent.click(btnToggleMc);
+        expect(btnToggleMc).toHaveAttribute('aria-pressed', String(!initialMc));
+        expect(useFinanceStore.getState().projectionRunMC).toBe(!initialMc);
+        fireEvent.click(btnToggleMc);
+        expect(btnToggleMc).toHaveAttribute('aria-pressed', String(initialMc));
+        expect(useFinanceStore.getState().projectionRunMC).toBe(initialMc);
+        if (!useFinanceStore.getState().projectionRunMC) {
+            fireEvent.click(btnToggleMc);
+        }
+        expect(screen.getByTestId('accueil-mc-legend')).toHaveTextContent(/Favorable \(P90\)/i);
+        expect(screen.getByTestId('accueil-mc-legend')).toHaveTextContent(/Prudent \(P10\)/i);
+
         // Vérifie la présence du Plan d'action patrimonial amélioré et de ses priorités personnalisées
         expect(screen.getByTestId('plan-action-ameliore')).toBeInTheDocument();
         expect(screen.getByLabelText(/Plan d'action patrimonial/i)).toBeInTheDocument();

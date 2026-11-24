@@ -105,7 +105,7 @@ interface AccueilGoogleProps {
     currentLiquidity: number;
 }
 
-type HorizonCle = '1M' | '3M' | '1A' | '5A' | '10A' | 'MAX';
+type HorizonCle = '1M' | '3M' | '1A' | '5A' | '10A' | 'MAX' | '2025';
 type LentilleHero = 'net' | 'portefeuille' | 'liquidites' | 'immobilier';
 type ModeCourbe = 'nette' | 'complete';
 
@@ -165,6 +165,9 @@ type PointTrajectoire = ProjectionChartPoint & {
     avoirs: number | null;
     dettes: number;
     portefeuille: number | null;
+    mcP10: number | null;
+    mcP50: number | null;
+    mcP90: number | null;
 };
 
 interface PartRepartition {
@@ -209,6 +212,7 @@ const HORIZONS: ReadonlyArray<{ cle: HorizonCle; label: string; annees: number; 
     { cle: '5A', label: '5A', annees: 5, tempsFort: true },
     { cle: '10A', label: '10A', annees: 10, tempsFort: true },
     { cle: 'MAX', label: 'MAX', annees: 30, tempsFort: true },
+    { cle: '2025', label: '2025→', annees: 3, tempsFort: true },
 ];
 
 const LENTILLES_HERO: ReadonlyArray<{ cle: LentilleHero; label: string; ticker: string }> = [
@@ -305,6 +309,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     const lastProjection = useFinanceStore((s) => s.lastProjection);
     const projectionStatus = useFinanceStore((s) => s.projectionStatus);
     const runMC = useFinanceStore((s) => s.projectionRunMC);
+    const setRunMC = useFinanceStore((s) => s.setProjectionRunMC);
     const lockedProjection = useFinanceStore((s) => s.lockedProjection);
     const isProjectionLocked = useFinanceStore((s) => s.isProjectionLocked);
     const fintableSyncAt = useFinanceStore((s) => s.fintableSyncReport?.at);
@@ -346,6 +351,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         startYear,
         startMonth,
         todayMonthIndex,
+        pastCurveCalibration,
     } = useSimulationParams(calculatedMonthlySavings);
     const { syncStatus } = useFirebaseAuth();
 
@@ -738,11 +744,15 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         if (horizon === '5A') {
             return [Math.max(minMois, xAuj - 12), Math.min(maxMois, xAuj + 60)];
         }
+        if (horizon === '2025') {
+            const idxJan2025 = (2025 - startYear) * 12 - startMonth;
+            return [Math.max(minMois, idxJan2025), Math.min(maxMois, xAuj + 36)];
+        }
         if (horizon === '10A') {
             return [Math.max(minMois, xAuj - 24), Math.min(maxMois, xAuj + 120)];
         }
         return [minMois, maxMois];
-    }, [horizon, pastStartIndex, lastMonthIndex, xAuj]);
+    }, [horizon, pastStartIndex, lastMonthIndex, xAuj, startYear, startMonth]);
 
     const dailyWindowRange = useMemo<[number, number]>(() => {
         if (dailyAll.length === 0) return [0, 0];
@@ -796,6 +806,21 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
 
     const donneesTrajectoire = useMemo<PointTrajectoire[]>(() => {
         const idxTransition = indexAujourdhui(chartSeriesBrute, xAuj);
+        const hasFutureMcBounds = (startIdx: number): boolean => {
+            for (let j = startIdx + 1; j < Math.min(chartSeriesBrute.length, startIdx + 4); j++) {
+                const cand = chartSeriesBrute[j];
+                if (
+                    cand &&
+                    typeof cand.P10 === 'number' &&
+                    Number.isFinite(cand.P10) &&
+                    typeof cand.P90 === 'number' &&
+                    Number.isFinite(cand.P90)
+                ) {
+                    return true;
+                }
+            }
+            return false;
+        };
         return chartSeriesBrute.map((pt, idx) => {
             const celi = Number(pt.CELI) || 0;
             const celiapp = Number(pt.CELIAPP) || 0;
@@ -821,6 +846,31 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 pt.dayIso ||
                 (pt.year !== undefined ? `${MOIS_COURTS[cal.month] ?? ''} ${pt.year}`.trim() : `${cal.year}`);
 
+            const p10Raw = pt.P10;
+            const p50Raw = pt.P50;
+            const p90Raw = pt.P90;
+            const hasMcBounds =
+                typeof p10Raw === 'number' &&
+                Number.isFinite(p10Raw) &&
+                typeof p90Raw === 'number' &&
+                Number.isFinite(p90Raw);
+
+            let mcP10: number | null = null;
+            let mcP50: number | null = null;
+            let mcP90: number | null = null;
+
+            if (lentilleHero === 'net' && runMC && !estPassePt) {
+                if (hasMcBounds) {
+                    mcP10 = Math.min(p10Raw, p90Raw);
+                    mcP90 = Math.max(p10Raw, p90Raw);
+                    mcP50 = typeof p50Raw === 'number' && Number.isFinite(p50Raw) ? p50Raw : null;
+                } else if (estTransitionPt && typeof valLentille === 'number' && hasFutureMcBounds(idx)) {
+                    mcP10 = valLentille;
+                    mcP50 = valLentille;
+                    mcP90 = valLentille;
+                }
+            }
+
             return {
                 ...pt,
                 annee: labelDate,
@@ -831,9 +881,30 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 avoirs: avoirsPt > 0 ? avoirsPt : valLentille,
                 dettes: dettesPt,
                 portefeuille: portefeuillePt,
+                mcP10,
+                mcP50,
+                mcP90,
             };
         });
-    }, [chartSeriesBrute, extraireValeurLentillePoint, xAuj, startYear, startMonth]);
+    }, [chartSeriesBrute, extraireValeurLentillePoint, xAuj, startYear, startMonth, lentilleHero, runMC]);
+
+    const donneesTrajectoireAvecRuban = useMemo<Array<Record<string, unknown>>>(() => {
+        return donneesTrajectoire.map((pt) => {
+            const mcRange: [number, number] | null =
+                typeof pt.mcP10 === 'number' &&
+                Number.isFinite(pt.mcP10) &&
+                typeof pt.mcP90 === 'number' &&
+                Number.isFinite(pt.mcP90)
+                    ? [Math.min(pt.mcP10, pt.mcP90), Math.max(pt.mcP10, pt.mcP90)]
+                    : null;
+            return { ...pt, mcRange };
+        });
+    }, [donneesTrajectoire]);
+
+    const hasMcSeries = useMemo(
+        () => donneesTrajectoire.some((p) => p.mcP10 !== null && p.mcP90 !== null && p.periode === 'futur'),
+        [donneesTrajectoire],
+    );
 
     const selectSeries = isDailyCurve ? daysInWindow : chartSeriesBrute;
 
@@ -872,13 +943,18 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                 garder(p.NetWorth);
                 garder(detteSousZero(p));
                 garder(p.ImpotLatent);
+                if (runMC) {
+                    garder(p.mcP10);
+                    garder(p.mcP50);
+                    garder(p.mcP90);
+                }
             } else {
                 garder(p.valeur);
                 if (modeCourbe === 'complete') garder(p.avoirs);
                 if (lentilleHero === 'net' && runMC) {
-                    garder(p.P10);
-                    garder(p.P50);
-                    garder(p.P90);
+                    garder(p.mcP10);
+                    garder(p.mcP50);
+                    garder(p.mcP90);
                 }
             }
         }
@@ -1756,7 +1832,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             <div
                                 role="group"
                                 aria-label="Horizon de la courbe"
-                                className="inline-flex items-center p-1 rounded-full border border-bordure bg-fond gap-1"
+                                className="inline-flex items-center p-1 rounded-full border border-bordure bg-fond gap-1 max-w-full overflow-x-auto no-scrollbar"
                             >
                                 {HORIZONS.map((h) => (
                                     <button
@@ -1818,6 +1894,28 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                             >
                                 <span className="gf-amber-dot shrink-0" aria-hidden="true" />
                                 <span>Temps forts</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                data-testid="accueil-toggle-mc"
+                                aria-pressed={runMC}
+                                onClick={() => {
+                                    const next = !runMC;
+                                    setRunMC(next);
+                                    if (next && lentilleHero !== 'net') {
+                                        setLentilleHero('net');
+                                    }
+                                }}
+                                title={runMC ? 'Masquer les courbes Monte Carlo (P10–P90)' : 'Afficher les courbes Monte Carlo (P10–P90)'}
+                                className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium inline-flex items-center gap-2 border transition-all duration-150 focus-ring ${
+                                    runMC
+                                        ? 'gf-subtab-pill-active'
+                                        : 'bg-fond text-ink-300 border-bordure hover:text-ink-50 hover:border-bordure-champ'
+                                }`}
+                            >
+                                <span className="w-2 h-2 rounded-full gf-alloc-nonreg shrink-0" aria-hidden="true" />
+                                <span>Monte Carlo</span>
                             </button>
                         </div>
 
@@ -1907,6 +2005,51 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                         </div>
                     )}
 
+                    {lentilleHero === 'net' && (
+                        <div
+                            data-testid="accueil-mc-legend"
+                            className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-ink-300"
+                        >
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                                <span className="inline-flex items-center gap-1.5">
+                                    <span className="w-4 border-t-2" style={{ borderColor: 'var(--gf-bleu)' }} aria-hidden="true" />
+                                    <span>Passé réel</span>
+                                </span>
+                                <span className="inline-flex items-center gap-1.5">
+                                    <span className="w-4 border-t-2" style={{ borderColor: 'var(--gf-vert)' }} aria-hidden="true" />
+                                    <span>Projection</span>
+                                </span>
+                                {runMC && (
+                                    <>
+                                        <span className="inline-flex items-center gap-1.5">
+                                            <span className="w-4 border-t-2 border-dashed" style={{ borderColor: 'var(--gf-violet)' }} aria-hidden="true" />
+                                            <span>Favorable (P90)</span>
+                                        </span>
+                                        <span className="inline-flex items-center gap-1.5">
+                                            <span className="w-4 border-t-2 border-dotted" style={{ borderColor: 'var(--gf-bleu)' }} aria-hidden="true" />
+                                            <span>Médiane (P50)</span>
+                                        </span>
+                                        <span className="inline-flex items-center gap-1.5">
+                                            <span className="w-4 border-t-2 border-dashed" style={{ borderColor: 'var(--gf-rouge)' }} aria-hidden="true" />
+                                            <span>Prudent (P10)</span>
+                                        </span>
+                                    </>
+                                )}
+                            </div>
+                            {runMC && (
+                                <span className="text-ink-400">
+                                    {!hasMcSeries
+                                        ? projectionStatus === 'computing'
+                                            ? 'Calcul Monte Carlo en cours…'
+                                            : 'En attente de projection'
+                                        : pastCurveCalibration
+                                          ? 'Calibré depuis janv. 2025'
+                                          : 'Fourchette Monte Carlo active'}
+                                </span>
+                            )}
+                        </div>
+                    )}
+
                     {/* Courbe principale plein cadre */}
                     <div
                         data-testid="recharts-trajectory-entrance"
@@ -1920,7 +2063,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     >
                         <ResponsiveContainer width="100%" height="100%">
                             <ComposedChart
-                                data={donneesTrajectoire}
+                                data={donneesTrajectoireAvecRuban}
                                 margin={{ top: 18, right: 12, left: 0, bottom: 4 }}
                                 onMouseMove={(s) => {
                                     const raw = (s as { activeTooltipIndex?: number | string | null } | null)?.activeTooltipIndex;
@@ -1953,8 +2096,8 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                         <stop offset="100%" stopColor="var(--gf-vert)" stopOpacity={0.0} />
                                     </linearGradient>
                                     <linearGradient id="accueilMcGrad" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="0%" stopColor="var(--gf-bleu)" stopOpacity={0.16} />
-                                        <stop offset="100%" stopColor="var(--gf-bleu)" stopOpacity={0.03} />
+                                        <stop offset="0%" stopColor="var(--gf-violet)" stopOpacity={0.28} />
+                                        <stop offset="100%" stopColor="var(--gf-violet)" stopOpacity={0.08} />
                                     </linearGradient>
                                     {(
                                         [
@@ -2166,6 +2309,49 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             activeDot={GF_ACTIVE_DOT}
                                             isAnimationActive={false}
                                         />
+                                        {runMC && (
+                                            <>
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="mcP90"
+                                                    name="Scénario favorable (P90)"
+                                                    stroke="var(--gf-violet)"
+                                                    strokeWidth={1.85}
+                                                    strokeDasharray="5 4"
+                                                    strokeOpacity={0.95}
+                                                    connectNulls={false}
+                                                    dot={false}
+                                                    activeDot={false}
+                                                    isAnimationActive={false}
+                                                />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="mcP50"
+                                                    name="Médiane Monte Carlo (P50)"
+                                                    stroke="var(--gf-bleu)"
+                                                    strokeWidth={1.6}
+                                                    strokeDasharray="3 3"
+                                                    strokeOpacity={0.85}
+                                                    connectNulls={false}
+                                                    dot={false}
+                                                    activeDot={false}
+                                                    isAnimationActive={false}
+                                                />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="mcP10"
+                                                    name="Scénario prudent (P10)"
+                                                    stroke="var(--gf-rouge)"
+                                                    strokeWidth={1.85}
+                                                    strokeDasharray="5 4"
+                                                    strokeOpacity={0.9}
+                                                    connectNulls={false}
+                                                    dot={false}
+                                                    activeDot={false}
+                                                    isAnimationActive={false}
+                                                />
+                                            </>
+                                        )}
                                     </>
                                 ) : (
                                     <>
@@ -2182,39 +2368,18 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             />
                                         )}
                                         {lentilleHero === 'net' && runMC && (
-                                            <>
-                                                <Area
-                                                    type="monotone"
-                                                    dataKey="P90"
-                                                    baseValue={echelleYTrajectoire.domaine[0]}
-                                                    stroke="var(--gf-bleu)"
-                                                    strokeWidth={1}
-                                                    strokeDasharray="3 3"
-                                                    strokeOpacity={0.5}
-                                                    fill="url(#accueilMcGrad)"
-                                                    isAnimationActive={false}
-                                                />
-                                                <Line
-                                                    type="monotone"
-                                                    dataKey="P50"
-                                                    stroke="var(--gf-bleu)"
-                                                    strokeWidth={1.5}
-                                                    strokeDasharray="4 3"
-                                                    strokeOpacity={0.75}
-                                                    dot={false}
-                                                    isAnimationActive={false}
-                                                />
-                                                <Line
-                                                    type="monotone"
-                                                    dataKey="P10"
-                                                    stroke="var(--gf-rouge)"
-                                                    strokeWidth={1.25}
-                                                    strokeDasharray="3 3"
-                                                    strokeOpacity={0.65}
-                                                    dot={false}
-                                                    isAnimationActive={false}
-                                                />
-                                            </>
+                                            <Area
+                                                type="monotone"
+                                                dataKey="mcRange"
+                                                stroke="none"
+                                                fill="url(#accueilMcGrad)"
+                                                fillOpacity={1}
+                                                connectNulls={false}
+                                                dot={false}
+                                                activeDot={false}
+                                                name="Fourchette P10–P90"
+                                                isAnimationActive={false}
+                                            />
                                         )}
                                         {modeCourbe === 'complete' && lentilleHero === 'net' && (
                                             <Area
@@ -2314,6 +2479,49 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                                             }}
                                             isAnimationActive={false}
                                         />
+                                        {lentilleHero === 'net' && runMC && (
+                                            <>
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="mcP90"
+                                                    name="Scénario favorable (P90)"
+                                                    stroke="var(--gf-violet)"
+                                                    strokeWidth={1.85}
+                                                    strokeDasharray="5 4"
+                                                    strokeOpacity={0.95}
+                                                    connectNulls={false}
+                                                    dot={false}
+                                                    activeDot={false}
+                                                    isAnimationActive={false}
+                                                />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="mcP50"
+                                                    name="Médiane Monte Carlo (P50)"
+                                                    stroke="var(--gf-bleu)"
+                                                    strokeWidth={1.6}
+                                                    strokeDasharray="3 3"
+                                                    strokeOpacity={0.85}
+                                                    connectNulls={false}
+                                                    dot={false}
+                                                    activeDot={false}
+                                                    isAnimationActive={false}
+                                                />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="mcP10"
+                                                    name="Scénario prudent (P10)"
+                                                    stroke="var(--gf-rouge)"
+                                                    strokeWidth={1.85}
+                                                    strokeDasharray="5 4"
+                                                    strokeOpacity={0.9}
+                                                    connectNulls={false}
+                                                    dot={false}
+                                                    activeDot={false}
+                                                    isAnimationActive={false}
+                                                />
+                                            </>
+                                        )}
                                     </>
                                 )}
 
@@ -3141,7 +3349,9 @@ const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({
                 </div>
             )}
 
-            {typeof enrichi.P10 === 'number' &&
+            {!enrichi.dayIsReal &&
+                brut.periode !== 'present' &&
+                typeof enrichi.P10 === 'number' &&
                 typeof enrichi.P90 === 'number' &&
                 Number.isFinite(enrichi.P10) &&
                 Number.isFinite(enrichi.P90) && (

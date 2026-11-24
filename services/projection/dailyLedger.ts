@@ -425,6 +425,8 @@ export function dayLabel(year: number, month: number, day: number): string {
 
 const isPlainNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
+const MC_BAND_KEYS: ReadonlySet<string> = new Set(['P5', 'P10', 'P25', 'P50', 'P75', 'P90', 'P95']);
+
 /**
  * Ventile une fenêtre de mois consécutifs en points quotidiens portant TOUS les champs.
  *
@@ -488,8 +490,20 @@ export function buildDailyLedger(input: BuildDailyLedgerInput): DailyLedgerPoint
         for (const key of Object.keys(FIELD_KIND)) {
             if (FIELD_KIND[key] !== 'stock') continue;
             if (!wants(key) || !(key in cur)) continue;
+            // Au raccord Passé réel (monthIndex < 0, sans bandes MC) → mois courant (monthIndex === 0),
+            // amorce les bandes MC depuis le patrimoine net précédent pour éviter un trou sur le mois en cours.
+            let startVal = prev[key];
+            if (
+                !isPlainNumber(startVal) &&
+                MC_BAND_KEYS.has(key) &&
+                (prev.isPast === true || Number(prev.monthIndex) < 0) &&
+                hostMonthIndex === 0 &&
+                isPlainNumber(prev.NetWorth)
+            ) {
+                startVal = prev.NetWorth;
+            }
             stocks.set(key, stockSeries(
-                prev[key], cur[key], nDays,
+                startVal, cur[key], nDays,
                 datedDeltasForField(key, ctx),
                 shapeForStock(key, ctx, weightsFor),
             ));
