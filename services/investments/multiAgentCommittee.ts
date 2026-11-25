@@ -21,6 +21,13 @@ import { calculateFiscalReport } from '../../utils/tax';
 import { MESSAGE_IA_MODE_DISCRET } from '../messageErreurIa';
 import { signalerUsageIa } from '../aiChat/coutIa';
 import { MODEL_IDS } from '../aiChat/models';
+import {
+    buildGeminiModelCandidates,
+    cleanGeminiApiKey,
+    createLazyGoogleGenAI,
+    isAbortError,
+    isGeminiAuthError,
+} from '../aiChat/geminiCore';
 import type { BlocTableau } from '../assistant/blocsRiches';
 import {
     PROMPT_DATA_ISOLATION_NOTE,
@@ -47,12 +54,6 @@ import type {
 } from './multiAgentCommitteeTypes';
 
 const DEFAULT_COMMITTEE_MODEL = MODEL_IDS.sonnet;
-const COMMITTEE_FALLBACK_MODELS = [
-    MODEL_IDS.sonnet,
-    MODEL_IDS.haiku,
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-] as const;
 const MARKET_FETCH_TIMEOUT_MS = 3500;
 const MAX_HOLDINGS_PROMPT = 12;
 
@@ -230,7 +231,7 @@ export const PRIVATE_COMPANY_DIRECTORY: ReadonlyArray<{
     },
 ];
 
-export const VERDICT_LABELS: Record<CommitteeVerdict, string> = {
+const VERDICT_LABELS: Record<CommitteeVerdict, string> = {
     ACHETER: 'Acheter',
     ACCUMULER: 'Accumuler graduellement',
     EXPOSITION_INDIRECTE: 'Non coté — Exposition indirecte',
@@ -320,7 +321,7 @@ export function extractSubjectFromQuestion(question: string): {
     };
 }
 
-export interface AnonymizedHoldingSummary {
+interface AnonymizedHoldingSummary {
     code: string;
     sector: string;
     region: string;
@@ -330,7 +331,7 @@ export interface AnonymizedHoldingSummary {
     matchesSubject: boolean;
 }
 
-export interface AnonymizedPortfolioContext {
+interface AnonymizedPortfolioContext {
     totalValueCad: number | null;
     holdingCount: number;
     envelopesCad: Record<string, number>;
@@ -343,7 +344,7 @@ export interface AnonymizedPortfolioContext {
     riskProfileLabel: string | null;
 }
 
-export function anonymizePortfolioForCommittee(
+function anonymizePortfolioForCommittee(
     state: AppState,
     resolvedTicker: string | null,
     subject: string,
@@ -458,7 +459,7 @@ export function anonymizePortfolioForCommittee(
     };
 }
 
-export interface CommitteeCollectedContext {
+interface CommitteeCollectedContext {
     question: string;
     subject: string;
     entityStatus: CommitteeEntityStatus;
@@ -534,7 +535,7 @@ function mergeSources(...groups: Array<ReadonlyArray<CommitteeSourceLink>>): Com
     return out.slice(0, 14);
 }
 
-export async function collectCommitteeContext(params: {
+async function collectCommitteeContext(params: {
     question: string;
     state: AppState;
     isPrivacyMode?: boolean;
@@ -714,17 +715,6 @@ export async function collectCommitteeContext(params: {
 
 // ── Client Gemini paresseux avec Google Search Grounding ───────────────────────
 
-const estErreurCleOuAuth = (err: unknown): boolean => {
-    const status = (err as { status?: unknown } | null)?.status;
-    const msg = String((err as { message?: unknown } | null)?.message ?? '');
-    if (status === 401 || status === 403) return true;
-    return status === 400 && /API_KEY_INVALID|API key not valid|PERMISSION_DENIED/i.test(msg);
-};
-
-const estAbortError = (err: unknown): boolean =>
-    (err instanceof Error && err.name === 'AbortError') ||
-    (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError');
-
 function extractGroundingSources(rep: unknown): CommitteeSourceLink[] {
     const candidates = (rep as { candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string; title?: string } }> } }> } | null)?.candidates;
     const chunks = candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
@@ -741,20 +731,17 @@ function extractGroundingSources(rep: unknown): CommitteeSourceLink[] {
     return mergeSources(collected);
 }
 
-export function createGeminiCommitteeRunner(apiKey: string): CommitteeAgentRunner {
-    const cleanKey = apiKey.replace(/^["'\s]+|["'\s]+$/g, '');
+function createGeminiCommitteeRunner(apiKey: string): CommitteeAgentRunner {
+    const cleanKey = cleanGeminiApiKey(apiKey);
     if (!cleanKey) {
         throw new Error('Clé API Google Gemini manquante.');
     }
-    let sdkPromise: Promise<typeof import('@google/genai')> | null = null;
 
     return async (req: CommitteeAgentCallRequest): Promise<CommitteeAgentCallResponse> => {
         if (req.signal?.aborted) {
             throw req.signal.reason ?? new DOMException('Aborted', 'AbortError');
         }
-        sdkPromise ??= import('@google/genai');
-        const { GoogleGenAI } = await sdkPromise;
-        const ai = new GoogleGenAI({ apiKey: cleanKey });
+        const ai = await createLazyGoogleGenAI(cleanKey);
 
         const invokeOnce = async (modelId: string, withSearch: boolean): Promise<CommitteeAgentCallResponse> => {
             const rep = await ai.models.generateContent({
@@ -788,23 +775,20 @@ export function createGeminiCommitteeRunner(apiKey: string): CommitteeAgentRunne
             };
         };
 
-        const modelsToTry = [
-            req.model,
-            ...COMMITTEE_FALLBACK_MODELS.filter((m) => m !== req.model),
-        ];
+        const modelsToTry = buildGeminiModelCandidates(req.model);
         let lastErr: unknown;
 
         for (const modelId of modelsToTry) {
             try {
                 return await invokeOnce(modelId, req.useWebSearch);
             } catch (err) {
-                if (estAbortError(err) || estErreurCleOuAuth(err)) throw err;
+                if (isAbortError(err) || isGeminiAuthError(err)) throw err;
                 lastErr = err;
                 if (req.useWebSearch) {
                     try {
                         return await invokeOnce(modelId, false);
                     } catch (errNoSearch) {
-                        if (estAbortError(errNoSearch) || estErreurCleOuAuth(errNoSearch)) throw errNoSearch;
+                        if (isAbortError(errNoSearch) || isGeminiAuthError(errNoSearch)) throw errNoSearch;
                         lastErr = errNoSearch;
                     }
                 }
@@ -1358,8 +1342,8 @@ export async function runMultiAgentCommittee(
                     sourceMode: resp.usedWebSearch ? 'gemini_web' : 'gemini',
                 };
             } catch (err) {
-                if (estAbortError(err)) throw err;
-                if (estErreurCleOuAuth(err)) {
+                if (isAbortError(err)) throw err;
+                if (isGeminiAuthError(err)) {
                     anyAuthError = err;
                 }
                 agentStates[id] = 'fallback';
@@ -1497,7 +1481,7 @@ export async function runMultiAgentCommittee(
             modelUsed: chairResp.modelUsed || modelUsed,
         };
     } catch (err) {
-        if (estAbortError(err)) throw err;
+        if (isAbortError(err)) throw err;
         agentStates.chair_synthesis = 'fallback';
         emit('done', 'Synthèse locale complétée.');
         return buildFallbackReport({

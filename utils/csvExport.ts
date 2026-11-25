@@ -78,7 +78,7 @@ export function downloadCSV(filename: string, content: string): void {
  * appelant (autre bouton, raccourci, outil MCP, script). Même motif que `clampSplitPct`, où la
  * borne UI seule laissait passer un import de sauvegarde.
  */
-export class CsvRefusedPrivacyError extends Error {
+class CsvRefusedPrivacyError extends Error {
     constructor() {
         super('Export CSV refusé : le mode discret est actif.');
         this.name = 'CsvRefusedPrivacyError';

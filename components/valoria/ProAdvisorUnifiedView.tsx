@@ -269,6 +269,7 @@ export const ProAdvisorUnifiedView: React.FC<ProAdvisorUnifiedViewProps> = ({
     'Désinflation & Croissance';
 
   const targetTickerList = useMemo(() => {
+    void marketUniverseVersion;
     const heldTickers = Array.from(
       new Set(
         lots
@@ -386,14 +387,16 @@ export const ProAdvisorUnifiedView: React.FC<ProAdvisorUnifiedViewProps> = ({
   );
 
   const fullUniverse = useMemo(
-    () =>
-      analyzeFullMarketUniverse({
+    () => {
+      void marketUniverseVersion;
+      return analyzeFullMarketUniverse({
         livePrices,
         macro,
         riskProfile,
         evaluatedLots: portfolioSummary.lots,
         totalPortfolioValue: portfolioSummary.totalCurrentValue,
-      }),
+      });
+    },
     [
       livePrices,
       macro,
@@ -405,8 +408,9 @@ export const ProAdvisorUnifiedView: React.FC<ProAdvisorUnifiedViewProps> = ({
   );
 
   const advisory = useMemo(
-    () =>
-      buildProAnalystAdvisory({
+    () => {
+      void marketUniverseVersion;
+      return buildProAnalystAdvisory({
         lots,
         livePrices,
         macro,
@@ -415,7 +419,8 @@ export const ProAdvisorUnifiedView: React.FC<ProAdvisorUnifiedViewProps> = ({
         watchlistIds,
         liveArticles,
         liveAgentOverrides,
-      }),
+      });
+    },
     [
       lots,
       livePrices,

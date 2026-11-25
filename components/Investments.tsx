@@ -7,24 +7,23 @@ import {
     Transaction,
     BudgetCategory,
     BudgetConfig,
-    RegisteredAccountType,
     Tab as TabEnum,
 } from '../types';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as ReTooltip } from 'recharts';
 import { Card } from './ui/Card';
 import { PageHeader } from './ui/PageHeader';
 import { ProjectionStaleBanner } from './ui/ProjectionStaleBanner';
-import { Icon, type IconName } from './ui/Icon';
+import { Icon } from './ui/Icon';
 import { Pill } from './ui/Pill';
 import { SubTabs, panelId, tabId } from './ui/SubTabs';
 import { Skeleton } from './ui/Skeleton';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
-import { parseValoriaFocusSection, type ValoriaQuickSignal } from '../services/valoria/valoriaIntegration';
+import { type ValoriaQuickSignal } from '../services/valoria/valoriaIntegration';
 
 const ValoriaWorkspace = lazyWithRetry(
     () => import('./valoria/ValoriaWorkspace').then((m) => ({ default: m.ValoriaWorkspace })),
     'ValoriaWorkspace',
 );
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as ReTooltip } from 'recharts';
 import { Badge } from './ui/Badge';
 import { FxEstimateBadge } from './ui/FxEstimateBadge';
 import { CollapsibleSection } from './ui/CollapsibleSection';
@@ -33,38 +32,26 @@ import { usePortfolioHistory } from '../hooks/usePortfolioHistory';
 import { HistoryCoverageNote } from './dashboard/HistoryCoverageNote';
 import { HistorySyncDoctor } from './investments/HistorySyncDoctor';
 import { historyKeyMatchesSymbol } from '../services/history/buildMarketData';
-import { variation24hSerieSiRecente, variation24hTitreAffichable, titresAuCoursPerime } from '../services/history/fraicheurCours';
+import { variation24hSerieSiRecente } from '../services/history/fraicheurCours';
 import { CoursPerimesNotice } from './investments/CoursPerimesNotice';
 import { todayIsoLocal } from '../services/projection/dailyRefine';
-import { seriesReturnPct, priceReturnPct, isBenchmarkCandidate, PERF_PERIODS, PERF_PERIOD_LABELS, type PerfPeriod } from '../services/history/periodReturn';
+import { PERF_PERIODS, PERF_PERIOD_LABELS, type PerfPeriod } from '../services/history/periodReturn';
 import { PerformanceComparee, variationFenetre, type PeriodeGraphe } from './investments/PerformanceComparee';
 import { TitresDetenus, type LigneTitre } from './investments/TitresDetenus';
 import { useViewportBelowLg } from '../hooks/useViewportBelowLg';
 import { isCoupleMode } from '../services/couple/netWorthByOwner';
 import { TAB_LABELS } from '../constants';
-import { resolveAssetMeta, lookupSeedMeta, CANONICAL_SECTORS, CANONICAL_REGIONS } from '../services/assetMeta';
+import { CANONICAL_SECTORS, CANONICAL_REGIONS } from '../services/assetMeta';
 import { assetValueCad, toCurrencyFactor } from '../services/portfolio';
-// Investments est un chunk PARESSEUX (TabRouter → lazyWithRetry) : l'import statique est
-// LÉGITIME ici — marketData part dans CE chunk, pas dans celui d'entrée
-// ([PERF-MARKETDATA-DYNIMPORT-INERTE] ne vise que le code atteignable au boot).
-import { getQuote, getQuoteDetaille, hasQuoteProvider, clearMarketDataCache, clearNegativeCache, getHistoryDetaille, hasHistoryProvider } from '../services/marketData';
-import { verifierSymboleCotation } from '../services/verifierSymboleCotation';
-import { refreshAssetPrices, applyPricePatches } from '../services/priceRefresh';
 import { DividendPanel } from './investments/DividendPanel';
 import { formatCAD, formatDate, formatNumber, formatVariationPct } from '../utils/format';
 import { logError } from '../services/errorLogger';
-import { getRebalanceJustifications, type RebalanceActionInput } from '../services/gemini';
-import { messageErreurIa, MESSAGE_IA_MODE_DISCRET } from '../services/messageErreurIa';
 import { AddStockForm } from './investments/AddStockForm';
-import { showToast } from './ui/Toast';
 import { ImportBrokerPositions } from './investments/ImportBrokerPositions';
 import { computePurchaseStats } from '../utils/assetPurchases';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { horizonAnnees } from '../services/projection/horizon';
 import { NetWorthByOwnerCard, nomProprietaire } from './investments/NetWorthByOwnerCard';
-// [REFONTE-NAV-L2b] Comparaison multi-titres (ex-Accueil Phase D.4) — la modale vit
-// désormais dans components/investments/, son seul consommateur restant est ici (+ l'ex-
-// Dashboard jusqu'à sa suppression à l'intégration).
 import { StockComparisonModal } from './investments/StockComparisonModal';
 import { BrokerReconciliationCard } from './investments/BrokerReconciliationCard';
 import { CeliAssetNudge } from './CeliAssetNudge';
@@ -72,19 +59,94 @@ import { PrivateAmount } from './ui/PrivateAmount';
 import { ChartDataTable, type ChartDataColumn } from './ui/ChartDataTable';
 import { MASKED_AMOUNT_LABEL } from '../utils/privacyAria';
 import { MultiAgentCommitteeView } from './investments/MultiAgentCommitteeView';
+import { getRebalanceJustifications, type RebalanceActionInput } from '../services/gemini';
+import { messageErreurIa, MESSAGE_IA_MODE_DISCRET } from '../services/messageErreurIa';
+import {
+    PLACEMENTS_TABS,
+    shouldOpenExpertTools,
+    type InitialPlacementsSubTab,
+    type PlacementsSubTab,
+    type TargetModelEntry,
+} from './investments/investmentsHelpers';
+import { useInvestmentsPortfolio } from './investments/useInvestmentsPortfolio';
 
-export type PlacementsSubTab = 'portfolio' | 'ai_committee';
-type InitialPlacementsSubTab = PlacementsSubTab | 'quant_advisor';
+export type { PlacementsSubTab } from './investments/investmentsHelpers';
 
-const PLACEMENTS_TABS: Array<{ id: PlacementsSubTab; label: string; icon: IconName }> = [
-    { id: 'portfolio', label: 'Mon portefeuille', icon: 'chart' },
-    { id: 'ai_committee', label: 'Analyse IA', icon: 'sparkles' },
+const COLORS_SECTOR: Record<string, string> = {
+    'Technologie': '#5b82bf',
+    'Industrie': '#c2974f',
+    'Finance': '#4f9d86',
+    'Mines/Or': '#b8a45e',
+    'Index': '#8a7cc0',
+    'Crypto': '#f97316',
+    'Autre': '#6b7280',
+};
+
+const COLORS_REGION: Record<string, string> = {
+    'USA': '#5b82bf',
+    'Canada': '#ef8fa0',
+    'Europe': '#4f9d86',
+    'Asie': '#ef4444',
+    'Global': '#8a7cc0',
+    'Ameriques': '#c2974f',
+    'Autre': '#6b7280',
+};
+
+const DEFAULT_TARGET_MODEL: ReadonlyArray<TargetModelEntry> = [
+    { id: 'index', label: 'Index Mondial', targetPct: 40, sectors: ['Index'], icon: 'globe', color: '#8a7cc0' },
+    { id: 'tech', label: 'Technologie', targetPct: 30, sectors: ['Technologie'], icon: 'cpu', color: '#5b82bf' },
+    { id: 'ind_fin', label: 'Industrie & Finance', targetPct: 15, sectors: ['Industrie', 'Finance'], icon: 'factory', color: '#c2974f' },
+    { id: 'gold', label: 'Or & Matières', targetPct: 10, sectors: ['Mines/Or'], icon: 'gem', color: '#b8a45e' },
+    { id: 'cash', label: 'Liquidités', targetPct: 5, sectors: [], icon: 'cash', color: '#4f9d86' },
 ];
 
-function shouldOpenExpertTools(section?: string | null): boolean {
-    const target = parseValoriaFocusSection(section);
-    return Boolean(target.tab || target.lab || target.assetId);
+interface AllocationDonutTooltipProps {
+    active?: boolean;
+    payload?: Array<{ payload?: { name?: string; value?: number; percent?: number }; fill?: string }>;
+    isPrivacyMode: boolean;
+    categoryLabel: string;
 }
+
+const AllocationDonutTooltip: React.FC<AllocationDonutTooltipProps> = ({ active, payload, isPrivacyMode, categoryLabel }) => {
+    if (!active || !payload?.length || !payload[0].payload) return null;
+    const item = payload[0].payload;
+    const val = Number(item.value) || 0;
+    const pct = Number(item.percent) || 0;
+
+    return (
+        <div className="gf-tooltip-card sm:min-w-[205px]">
+            <div className="gf-tooltip-header">
+                <span className="font-sans text-[12px] font-bold text-ink-50 truncate max-w-[130px]">{item.name}</span>
+                <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-neutral">
+                    {categoryLabel}
+                </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3 sm:mb-2">
+                <span className="gf-tooltip-hero text-xs sm:text-[16px]">
+                    {isPrivacyMode ? MASKED_AMOUNT_LABEL : <PrivateAmount>{formatCAD(val)}</PrivateAmount>}
+                </span>
+                <span className="font-mono text-[11px] font-bold text-ink-200">
+                    {isPrivacyMode ? MASKED_AMOUNT_LABEL : <PrivateAmount>{pct.toFixed(1)} %</PrivateAmount>}
+                </span>
+            </div>
+            {!isPrivacyMode && (
+                <div className="hidden sm:block gf-tooltip-bar-track">
+                    <div
+                        className="gf-tooltip-bar-fill"
+                        style={{
+                            // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
+                            width: `${Math.min(100, Math.max(0, pct))}%`,
+                            background: 'var(--repere)',
+                        }}
+                    />
+                </div>
+            )}
+            <div className="hidden sm:block mt-1.5 text-[10px] text-ink-400">
+                Cliquer pour filtrer les positions
+            </div>
+        </div>
+    );
+};
 
 interface InvestmentsProps {
     assets: Asset[];
@@ -102,83 +164,6 @@ interface InvestmentsProps {
     onOpenValoria?: () => void;
     initialSubTab?: InitialPlacementsSubTab;
 }
-
-// [Finding panel #496 — MOYEN] Couvre TOUTES les valeurs canoniques (CANONICAL_SECTORS/REGIONS) :
-// « Crypto »/« Canada »/« Autre » sont désormais atteignables (résolution + auto-populate + selects)
-// — sans couleur dédiée, leur segment tombait sur le gris de repli, indiscernable.
-const COLORS_SECTOR: Record<string, string> = {
-    "Technologie": "#5b82bf", // Blue
-    "Industrie": "#c2974f", // Orange
-    "Finance": "#4f9d86", // Green
-    "Mines/Or": "#b8a45e", // Yellow
-    "Index": "#8a7cc0", // Purple
-    "Crypto": "#f97316",  // Orange vif
-    "Autre": "#6b7280"
-};
-
-const COLORS_REGION: Record<string, string> = {
-    "USA": "#5b82bf",
-    "Canada": "#ef8fa0",
-    "Europe": "#4f9d86",
-    "Asie": "#ef4444",
-    "Global": "#8a7cc0",
-    "Ameriques": "#c2974f",
-    "Autre": "#6b7280"
-};
-
-
-interface AllocationItem {
-    id: string;
-    value: number;
-    /** Performance % de PRIX NATIF sur la période choisie ; null = pas d'historique (« — »). */
-    trendPct: number | null;
-    weight: number;
-    dividendYearly: number;
-    name: string;
-    sector: string;
-    region: string;
-    yield: number;
-    freq: number;
-    nextPayMonth?: number;
-    symbol?: string;
-}
-
-interface SeriesWithTrend {
-    id: string;
-    name: string;
-    /** Variation % sur la période choisie ; null = pas de baseline dans la fenêtre (« — »). */
-    trend: number | null;
-    isTotal: boolean;
-}
-
-interface DividendItem extends AllocationItem {
-    nextPayout: string;
-    amountPerPayout: number;
-}
-
-/**
- * [INVEST-CIBLES-DEFAUT-MUTEES] Le MODÈLE de référence, en lecture seule — même classe que le lot 34
- * (`[HISTORY-OBJET-VIDE-PARTAGE]`), mais c'était ici la variante ACTIVE : quand
- * `projection.investmentTargetPcts` est absent, l'état des cibles était initialisé avec CE tableau
- * tel quel, et l'éditeur faisait `[...targetModel]` — un spread qui copie le TABLEAU, jamais ses
- * ÉLÉMENTS — avant d'écrire `newModel[i].targetPct`. L'objet muté était donc celui du module.
- *
- * Mesuré avant correctif : après avoir porté une cible à 77, un remontage NEUF du composant sans
- * aucune persistance affichait `77,30,15,10,5` au lieu de `40,30,15,10,5` — les « défauts » du
- * modèle n'étaient plus ceux du modèle, pour toute la session.
- *
- * Le `readonly` n'est pas décoratif : c'est lui qui rend l'écriture indexée impossible à ÉCRIRE
- * (le typecheck la refuse). La copie fraîche à l'initialisation, elle, garantit qu'aucun état ne
- * référence plus jamais ce tableau — les deux visent des choses différentes.
- */
-type TargetModelEntry = Readonly<{ id: string; label: string; targetPct: number; sectors: ReadonlyArray<string>; icon: IconName; color: string }>;
-const DEFAULT_TARGET_MODEL: ReadonlyArray<TargetModelEntry> = [
-    { id: 'index', label: 'Index Mondial', targetPct: 40, sectors: ['Index'], icon: 'globe', color: '#8a7cc0' },
-    { id: 'tech', label: 'Technologie', targetPct: 30, sectors: ['Technologie'], icon: 'cpu', color: '#5b82bf' },
-    { id: 'ind_fin', label: 'Industrie & Finance', targetPct: 15, sectors: ['Industrie', 'Finance'], icon: 'factory', color: '#c2974f' },
-    { id: 'gold', label: 'Or & Matières', targetPct: 10, sectors: ['Mines/Or'], icon: 'gem', color: '#b8a45e' },
-    { id: 'cash', label: 'Liquidités', targetPct: 5, sectors: [], icon: 'cash', color: '#4f9d86' },
-];
 
 export const Investments: React.FC<InvestmentsProps> = ({
     assets, setAssets, projection, setProjection, apiKey, onOpenValoria, initialSubTab,
@@ -401,7 +386,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
         return () => { cancelled = true; };
     }, [portfolioHistory]);
 
-    // --- ANALYSIS ENGINE ---
+    const clearConfirmDelete = useCallback(() => setConfirmDeleteId(null), []);
     const {
         currentAllocation,
         geoBreakdown,
@@ -413,316 +398,25 @@ export const Investments: React.FC<InvestmentsProps> = ({
         portfolioTrend,
         benchmarkTrend,
         benchmarkTrend24,
-    } = useMemo(() => {
-        // PH4-INV-2 — SOURCE DE VÉRITÉ de l'allocation = le portefeuille `assets` saisi (qty × prix
-        // courant), PAS le CSV historique (Google Sheet déprécié) qui divergeait du portefeuille réel
-        // (bug Marc : allocation fausse dès qu'un CSV existait). Le CSV ne sert plus qu'aux SÉRIES
-        // temporelles (tendances sur la période choisie, benchmark, score de santé) quand il est présent.
-
-        // (a) Dernières valeurs par colonne du CSV (si présent) — pour l'EXISTENCE des séries.
-        // [INVEST-PERF-PERIOD] La tendance elle-même vient de seriesReturnPct (période au choix),
-        // plus du couple latest/prev « 2 dernières lignes » (qui était figé 24h).
-        const latestValues: Record<string, number> = {};
-        if (marketData.length > 0) {
-            const allKeys = new Set<string>();
-            marketData.forEach(row => Object.keys(row).forEach(k => allKeys.add(k)));
-            const cleanKeys = Array.from(allKeys).filter(k =>
-                k !== 'date' && k !== 'Date' && !k.startsWith('Taux') && k.trim() !== '' && k !== '1' && k.toLowerCase() !== 'colonne 1' && k !== 'Unnamed: 1',
-            );
-            cleanKeys.forEach(k => {
-                for (let i = marketData.length - 1; i >= 0; i--) {
-                    const val = Number(marketData[i][k]);
-                    if (val > 0) { latestValues[k] = val; break; }
-                }
-            });
-        }
-
-        // (b) Séries + tendances (depuis le CSV). Vide s'il n'y a pas de CSV.
-        // [panel 2026-07-22] `isTotal` = STRICTEMENT la clé 'TOTAL' : l'ancien `includes('TOTAL')`
-        // flaggait AUSSI les buckets TOTAL_CELI/TOTAL_REER/… → 4-5 chips toutes étiquetées « TOTAL
-        // PORTEFEUILLE » et le KPI « Votre Portefeuille (24h) » pouvait lire la tendance d'un
-        // bucket (comparateur de tri inconsistant quand plusieurs isTotal). Chaque bucket garde
-        // désormais son propre libellé.
-        const BUCKET_LABELS: Record<string, string> = {
-            TOTAL_CELI: 'CELI (total)', TOTAL_REER: 'REER (total)',
-            'TOTAL_NON-ENREG': 'Non-enregistré (total)', TOTAL_CRYPTO: 'Crypto (total)',
-        };
-        const availableSeriesWithTrend = Object.keys(latestValues).map(k => {
-            const current = latestValues[k] || 0;
-            if (current === 0) return null;
-            // [INVEST-PERF-PERIOD] Variation de VALEUR de la série sur la période choisie ;
-            // null (« — ») quand la série est plus récente que la période (no-fake-data).
-            const trend = seriesReturnPct(marketData, k, perfPeriod, isSyntheticValue);
-            const isTotal = k === 'TOTAL';
-            const meta = lookupSeedMeta(k) || { name: assets.find(a => a.symbol === k)?.name || k.replace('NASDAQ:', '').replace('NYSE:', '') };
-            const name = isTotal ? 'TOTAL PORTEFEUILLE' : (BUCKET_LABELS[k] ?? meta.name);
-            return { id: k, name, trend, isTotal };
-        }).filter((x): x is SeriesWithTrend => x !== null).sort((a, b) => {
-            if (a.isTotal !== b.isTotal) return a.isTotal ? -1 : 1;
-            // « — » (null) en queue — sans soustraction d'Infinity (deux null → NaN, comparateur
-            // hors-spec ; finding FAIBLE panel #498).
-            if (a.trend === null && b.trend === null) return 0;
-            if (a.trend === null) return 1;
-            if (b.trend === null) return -1;
-            return b.trend - a.trend;
-        });
-        const totalSerie = availableSeriesWithTrend.find(s => s.isTotal);
-        // [PORTFOLIO-HISTORY / no-fake-data] null = « pas de donnée » (affiché « — »), jamais un
-        // +0.00% présenté comme mesuré quand l'historique manque (finding scout 2026-07-22).
-        const portfolioTrend = totalSerie?.trend ?? null;
-        // [INVEST-PERF-PERIOD] Benchmark = performance de PRIX NATIF du titre MSCI World suivi
-        // (insensible aux ACHATS — une série en valeur gonflerait le « marché » de chaque apport).
-        // Matching STRICT via isBenchmarkCandidate (finding ÉLEVÉ panel #498 : `includes('MSCI')`
-        // nu matchait un autre MSCI (Asie émergente) → mauvais titre affiché comme benchmark mondial).
-        // Repli série CSV (sémantique VALEUR) restreint à 24H : au-delà, la valeur diverge du prix
-        // à chaque apport → « — » honnête plutôt qu'un chiffre à sémantique différente sous le
-        // même libellé (finding MOYEN panel #498).
-        const benchAsset = assets.find(a => isBenchmarkCandidate(a.symbol, a.name));
-        const cw8Serie = availableSeriesWithTrend.find(s => isBenchmarkCandidate(s.id, s.name));
-        const benchmarkTrend = priceReturnPct(benchAsset?.priceHistory, perfPeriod)
-            ?? (perfPeriod === '24H' ? cw8Serie?.trend ?? null : null);
-
-        // (c) ALLOCATION = portefeuille réel (assets). trendPct = performance de PRIX NATIF du titre
-        // sur la période choisie ([INVEST-PERF-PERIOD] — insensible aux achats, règle ASSET-FX « les
-        // % sont des ratios natifs ») ; l'ancien calcul lisait 2 lignes du CSV (valeur, figé 24h).
-        const FREQ_MAP: Record<string, number> = { Monthly: 12, Quarterly: 4, Yearly: 1 };
-        const allocation = assets.map(a => {
-            // [ASSET-FX-DISPLAY] valeur en CAD (prix natif × FX) — l'ancien qty×prix brut mélangeait
-            // USD/EUR/CAD (portefeuille sous-affiché de plusieurs dizaines de milliers de dollars, incident 2026-07-14).
-            const value = assetValueCad(a, fxRates);
-            // [INVEST-ALLOC-GEO-SECTOR] Résolution PARTAGÉE (champ persisté > seed normalisé
-            // préfixe↔suffixe > crypto > Autre) — l'ancien lookup statique `ASSET_META[a.symbol]`
-            // ratait même les titres du seed (clés « EPA:XXX » vs symboles réels « XXX.PA »)
-            // → donuts « tout en Autre » (bug Marc).
-            const { source: _metaSource, ...meta } = resolveAssetMeta(a);
-            void _metaSource; // la provenance ne fait pas partie d'AllocationItem (affichage seul)
-            // [COURS-AU-TROMPEUR] Sur 24 h, un close vieux de plusieurs jours n'est pas « la variation
-            // du jour » : « — » plutôt qu'un % d'il y a deux semaines. Les autres périodes gardent
-            // leur règle (leur baseline est datée par construction).
-            const trendPct = perfPeriod === '24H' && !variation24hTitreAffichable(a.priceHistory, todayIsoLocal())
-                ? null
-                : priceReturnPct(a.priceHistory, perfPeriod);
-            // PH4-INV-3 — dividendes : priorité au rendement/fréquence SAISIS sur l'Asset (réels du
-            // titre) sur l'estimation de la table statique ASSET_META.
-            const effYield = a.dividendYield != null && a.dividendYield > 0 ? a.dividendYield : meta.yield;
-            const effFreq = a.dividendFreq ? (FREQ_MAP[a.dividendFreq] ?? meta.freq) : meta.freq;
-            return { id: a.symbol, value, trendPct, weight: 0, ...meta, yield: effYield, freq: effFreq, dividendYearly: value * (effYield / 100) };
-        }).filter((a): a is AllocationItem => a.value > 0);
-        const totalPortfolio = allocation.reduce((s, a) => s + a.value, 0) || 1;
-        allocation.forEach(a => { a.weight = (a.value / totalPortfolio) * 100; });
-        allocation.sort((a, b) => b.value - a.value);
-
-        // (d) Répartitions géographique / sectorielle (depuis l'allocation réelle).
-        const geoMap: Record<string, number> = {};
-        const sectorMap: Record<string, number> = {};
-        allocation.forEach(a => {
-            geoMap[a.region] = (geoMap[a.region] || 0) + a.value;
-            sectorMap[a.sector] = (sectorMap[a.sector] || 0) + a.value;
-        });
-        const geoData = Object.entries(geoMap).map(([name, value]) => ({ name, value, percent: (value / totalPortfolio) * 100 })).sort((a, b) => b.value - a.value);
-        const sectorData = Object.entries(sectorMap).map(([name, value]) => ({ name, value, percent: (value / totalPortfolio) * 100 })).sort((a, b) => b.value - a.value);
-
-        // (e) Calendrier de dividendes (depuis l'allocation réelle).
-        const dividendList: DividendItem[] = [];
-        let totalDivs = 0;
-        const today = new Date();
-        allocation.forEach(asset => {
-            if (asset.dividendYearly > 0) {
-                totalDivs += asset.dividendYearly;
-                let nextMonth = asset.nextPayMonth || (today.getMonth() + 2);
-                if (nextMonth > 12) nextMonth -= 12;
-                const monthName = new Date(today.getFullYear(), nextMonth - 1, 1).toLocaleDateString('fr-CA', { month: 'long' });
-                dividendList.push({ ...asset, nextPayout: monthName, amountPerPayout: asset.dividendYearly / asset.freq });
-            }
-        });
-        const sortedDividends = dividendList.sort((a, b) => b.dividendYearly - a.dividendYearly);
-
-        // (f) Score de santé : part « défensive » (Index/Or) depuis l'allocation réelle + momentum (CSV).
-        let indexWeight = 0;
-        allocation.forEach(a => { if (a.sector === 'Index' || a.sector === 'Mines/Or') indexWeight += a.weight; });
-        let safePts = (indexWeight / 40) * 60;
-        if (safePts > 60) safePts = 60;
-        let trendPts = 20;
-        // [INVEST-PERF-PERIOD] Le momentum du score reste FIXÉ sur 24h (indépendant du sélecteur
-        // d'affichage — sinon le badge « Diversification » du header changerait selon la période
-        // regardée, un score instable pour la même réalité). Momentum NEUTRE (ni bonus ni malus)
-        // quand l'historique manque (trend null) — pas de donnée ≠ performance nulle.
-        const portfolioTrend24 = seriesReturnPct(marketData, 'TOTAL', '24H');
-        const benchmarkTrend24 = priceReturnPct(benchAsset?.priceHistory, '24H')
-            ?? (cw8Serie ? seriesReturnPct(marketData, cw8Serie.id, '24H') : null);
-        const pt = portfolioTrend24 ?? 0;
-        const bt = benchmarkTrend24 ?? 0;
-        if (portfolioTrend24 !== null && pt > bt && pt > 0) trendPts += 20;
-        else if (portfolioTrend24 !== null && pt > 0) trendPts += 10;
-        else if (portfolioTrend24 !== null && pt < 0) trendPts -= 10;
-        if (trendPts > 40) trendPts = 40;
-        if (trendPts < 0) trendPts = 0;
-        const diversificationScore = Math.round(safePts + trendPts);
-
-        return {
-            currentAllocation: allocation,
-            geoBreakdown: geoData,
-            sectorBreakdown: sectorData,
-            dividendCalendar: sortedDividends,
-            totalAnnualDividends: totalDivs,
-            availableSeriesWithTrend,
-            diversificationScore,
-            portfolioTrend,
-            benchmarkTrend,
-            benchmarkTrend24,
-        };
-    }, [marketData, assets, fxRates, perfPeriod, isSyntheticValue]); // perfPeriod : leçon BUDGET-MONTH-NAV (dep manquante = memo figé)
-
-    // --- FILTERED DATA FOR CHART ---
-    const filteredMarketData = useMemo(() => {
-        if (marketData.length === 0) return [];
-
-        const now = new Date();
-        let startDate = new Date(marketData[0].date);
-
-        switch (timeRange) {
-            case '1M': startDate = new Date(); startDate.setMonth(now.getMonth() - 1); break;
-            case '3M': startDate = new Date(); startDate.setMonth(now.getMonth() - 3); break;
-            case '6M': startDate = new Date(); startDate.setMonth(now.getMonth() - 6); break;
-        }
-
-        return marketData.filter(d => new Date(d.date) >= startDate);
-    }, [marketData, timeRange]);
-
-    // [PRICE-REFRESH-LIVE] — actualise les currentPrice via les quotes live (séquentiel provider-aware).
-    // HONNÊTE sur la couverture : les symboles non quotables (forfait Finnhub, titres manuels/GIC)
-    // sont listés dans le toast au lieu d'être silencieusement laissés périmés. Fusion par symbole
-    // sur l'état FRAIS du store (anti-course avec un pull Drive pendant le refresh).
-    const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
-    const lastPriceRefreshAt = useMemo(() => {
-        const stamps = assets.map(a => a.priceUpdatedAt || 0).filter(t => t > 0);
-        return stamps.length > 0 ? Math.max(...stamps) : null;
-    }, [assets]);
-    const coursPerimes = useMemo(() => titresAuCoursPerime(assets, todayIsoLocal()), [assets]);
-    const handleRefreshPrices = async () => {
-        setIsRefreshingPrices(true);
-        try {
-            // [HIST-MULTI-PROVIDER] Le geste couvre aussi les HISTORIQUES : purge du cache
-            // 'history' du jour (un « vide » caché 24 h bloquerait le nouvel essai) + hydratation
-            // FORCÉE (variantes de suffixe incluses) + publication du diagnostic par titre.
-            // AVANT le refresh des quotes : une variante résolue ici sert immédiatement aux quotes.
-            // [Finding silent-failure #494 — ÉLEVÉ] L'échec de CETTE moitié du geste doit remonter
-            // au TOAST final : sinon « N cours mis à jour » (vert) masque un resync d'historique
-            // raté — le cœur même du bouton.
-            let historySyncFailed = false;
-            try {
-                const { hydrateAssetHistories, applyHistoryPatches } = await import('../services/history/hydrateAssetHistories');
-                const { setHistorySyncReport } = await import('../services/history/syncDiagnostics');
-                clearMarketDataCache('history');
-                // [QUOTE-NEGATIVE-CACHE] Geste EXPLICITE = repartir de zéro : les skips négatifs
-                // (quotes/profils) sautent aussi — un titre corrigé/nouvellement couvert ré-essaie
-                // immédiatement au lieu d'attendre l'expiration du TTL.
-                clearNegativeCache();
-                const current = useFinanceStore.getState().assets ?? [];
-                const histRes = await hydrateAssetHistories(current, { getHistory: getHistoryDetaille, hasProvider: hasHistoryProvider }, { force: true });
-                setHistorySyncReport({ at: Date.now(), skipped: histRes.skipped, patchedCount: histRes.patches.size });
-                if (histRes.patches.size > 0) {
-                    const freshAssets = useFinanceStore.getState().assets ?? [];
-                    setAssets(applyHistoryPatches(freshAssets, histRes.patches));
-                }
-            } catch (e) {
-                // L'échec de l'hydratation ne bloque PAS le refresh des quotes (indépendants),
-                // mais il est TRACÉ en erreur et DIT dans le toast final (jamais avalé).
-                historySyncFailed = true;
-                logError({ source: 'network', severity: 'error', message: 'Resynchronisation des historiques échouée (les quotes sont quand même actualisées).', error: e });
-            }
-            // force:true = geste explicite (le gate 5 min du service ne s'applique pas au bouton ;
-            // le cache quote 5 min absorbe de toute façon les re-clics rapprochés côté réseau).
-            // État FRAIS du store (pas la capture du render) : un historySymbol résolu par
-            // l'hydratation ci-dessus sert immédiatement de symbole de cotation.
-            const res = await refreshAssetPrices(useFinanceStore.getState().assets ?? [], { getQuote, hasProvider: hasQuoteProvider }, { force: true });
-            if (res.patches.size > 0) {
-                const fresh = useFinanceStore.getState().assets ?? [];
-                setAssets(applyPricePatches(fresh, res.patches));
-            }
-            // [PRICE-SYNC-REPORT] Skips de quotes publiés au doctor ([] efface les périmés).
-            const { updateQuoteSkips } = await import('../services/history/syncDiagnostics');
-            updateQuoteSkips(res.skipped);
-            const uncovered = res.skipped.filter(s => s.reason === 'no-quote' || s.reason === 'invalid-price' || s.reason === 'error');
-            const mismatched = res.skipped.filter(s => s.reason === 'currency-mismatch');
-            if (res.refreshed.length + res.unchanged.length + uncovered.length + mismatched.length === 0) {
-                showToast('Aucun titre valorisé à actualiser.', 'info');
-            } else {
-                const parts: string[] = [`${res.refreshed.length} cours mis à jour`];
-                if (res.unchanged.length > 0) parts.push(`${res.unchanged.length} déjà à jour`);
-                if (uncovered.length > 0) parts.push(`${uncovered.length} sans cours disponible (${uncovered.map(s => s.symbol).slice(0, 4).join(', ')}${uncovered.length > 4 ? '…' : ''}) — introuvable chez Finnhub/Yahoo : fixe le symbole de cotation dans le diagnostic sous le graphe`);
-                if (mismatched.length > 0) parts.push(`${mismatched.length} ignoré(s) : devise du quote ≠ devise stockée (${mismatched.map(s => s.symbol).join(', ')})`);
-                if (historySyncFailed) parts.push('historiques de cours NON resynchronisés (échec inattendu) — réessaie dans un instant');
-                showToast(parts.join(' · '), historySyncFailed ? 'error' : (uncovered.length + mismatched.length > 0 ? 'info' : 'success'));
-            }
-        } catch (e) {
-            // [PRICE-SYNC-REPORT] Échec TOTAL du refresh : on GARDE les quoteSkips précédents du
-            // doctor (décision, finding #520) — ils restent VRAIS (ces titres n'ont toujours pas de
-            // prix frais) ; fabriquer un [] « tout va bien » serait pire. L'échec global, lui, est
-            // porté par le toast + logError.
-            logError({ source: 'network', severity: 'warning', message: 'Actualisation des cours échouée (prix existants conservés)', error: e });
-            showToast('Actualisation des cours impossible (réseau/fournisseur). Prix existants conservés.', 'error');
-        } finally {
-            setIsRefreshingPrices(false);
-        }
-    };
-
-    // [HIST-MULTI-PROVIDER] Fixe le symbole de COTATION d'un actif (saisie utilisateur ou
-    // suggestion de recherche) : purge l'historique du titre (un historique fusionné d'un MAUVAIS
-    // titre ne doit pas survivre à la correction — même classe que le scénario « variante d'un
-    // autre titre » du panel #493) puis relance la resynchronisation complète.
-    const handleApplyQuoteSymbol = async (assetSymbol: string, quoteSymbol: string) => {
-        const trimmed = quoteSymbol.trim();
-        if (!trimmed) return;
-        const current = useFinanceStore.getState().assets ?? [];
-        // [QUOTE-SYMBOLE-SANS-CONTROLE] Vérifier AVANT de purger : l'application efface la courbe du
-        // titre, et un symbole coté dans une autre devise verrait ensuite tous ses cours rejetés
-        // (prix figé, sans alerte). Refus nommé = rien n'est modifié.
-        const actif = current.find((a) => a.symbol === assetSymbol);
-        if (!actif) return;
-        const verdict = verifierSymboleCotation(actif, trimmed, await getQuoteDetaille(trimmed));
-        if (verdict.verdict === 'refuse') {
-            showToast(verdict.message, 'error');
-            return;
-        }
-        const next = current.map((a) => a.symbol === assetSymbol
-            ? { ...a, historySymbol: trimmed === a.symbol ? undefined : trimmed, priceHistory: [], lastHistorySync: undefined }
-            : a);
-        setAssets(next);
-        // [Finding silent-failure #494] AWAIT (pas fire-and-forget) : la purge du priceHistory est
-        // optimiste — le resync doit aboutir (ou son échec être dit par le toast/rapport) avant que
-        // le geste soit considéré terminé.
-        await handleRefreshPrices(); // recharge historique (cache purgé + force) + quotes
-        // Dit APRÈS le toast du rafraîchissement, sinon il le recouvrirait et disparaîtrait avec lui.
-        if (verdict.avertissement) showToast(verdict.avertissement, 'info');
-    };
-
-    // [INVEST-ALLOC-GEO-SECTOR] Édition inline région/secteur : appliquée à TOUS les actifs du
-    // symbole (même titre en 2 comptes = même secteur/région — jamais deux classifications).
-    const handleAssetMetaChange = (symbolKey: string, field: 'sector' | 'region', value: string) => {
-        const next = assets.map((a) => historyKeyMatchesSymbol(symbolKey, a.symbol) ? { ...a, [field]: value } : a);
-        setAssets(next);
-    };
-
-    const handleAssetAccountChange = (symbolKey: string, newAccount: string) => {
-        // Matching EXACT (l'id d'allocation EST le symbole) — `includes` faisait matcher « VFV.TO »
-        // avec l'actif « V » (Visa) selon l'ordre du tableau → mauvais actif modifié/supprimé.
-        const assetIdx = assets.findIndex(a => historyKeyMatchesSymbol(symbolKey, a.symbol));
-        if (assetIdx >= 0) {
-            const newAssets = [...assets];
-            newAssets[assetIdx] = { ...newAssets[assetIdx], accountType: newAccount as RegisteredAccountType };
-            setAssets(newAssets);
-        }
-    };
-
-    // Retire une position du portefeuille (le symbolKey est l'id d'allocation, qui contient le symbole).
-    const handleDeleteAsset = (symbolKey: string) => {
-        const target = assets.find(a => historyKeyMatchesSymbol(symbolKey, a.symbol));
-        if (!target) return;
-        setAssets(assets.filter(a => a !== target));
-        setConfirmDeleteId(null);
-        showToast(`Position ${target.symbol} retirée du portefeuille.`, 'info');
-    };
+        filteredMarketData,
+        isRefreshingPrices,
+        lastPriceRefreshAt,
+        coursPerimes,
+        handleRefreshPrices,
+        handleApplyQuoteSymbol,
+        handleAssetMetaChange,
+        handleAssetAccountChange,
+        handleDeleteAsset,
+    } = useInvestmentsPortfolio({
+        assets,
+        setAssets,
+        fxRates,
+        marketData,
+        perfPeriod,
+        timeRange,
+        isSyntheticValue,
+        onAfterDelete: clearConfirmDelete,
+    });
 
     // D2 (activation) — sans aucun actif, la page affichait un score à 0, une allocation et des
     // graphes vides (barren). On propose un accueil clair « ajoute ton premier placement » +
@@ -1169,408 +863,369 @@ export const Investments: React.FC<InvestmentsProps> = ({
                 onToggle={setAllocationOpen}
             >
                 <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 min-h-[300px]">
-
-                    {/* REGIONS — Phase E.6 : clic = filtre stocks */}
-                    <div className="gf-terminal-card p-5 flex flex-col">
-                        <div className="flex items-center justify-between gap-2 mb-4 pb-2.5 border-b border-bordure">
-                            <h4 className="text-ink-300 text-[11px] font-bold uppercase tracking-wider">Répartition Géographique</h4>
-                            <span className="font-mono text-[11px] text-ink-400">{geoBreakdown.length} zones</span>
-                        </div>
-                        <div className="flex-1 flex flex-col lg:flex-row items-center gap-4">
-                            <div className="flex-1 w-full h-[200px]" role="img" aria-label="Donut de répartition géographique du portefeuille">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={geoBreakdown}
-                                            innerRadius={60}
-                                            outerRadius={80}
-                                            paddingAngle={5}
-                                            dataKey="value"
-                                            stroke="none"
-                                            isAnimationActive={true}
-                                            animationDuration={340}
-                                            animationEasing="ease-out"
-                                            onClick={(entry: { name?: string }) => entry.name && setAllocationFilter({ type: 'region', value: entry.name })}
-                                            cursor="pointer"
-                                        >
-                                            {geoBreakdown.map((entry, index) => (
-                                                <Cell
-                                                    key={`cell-${index}`}
-                                                    fill={COLORS_REGION[entry.name] || '#444'}
-                                                    opacity={allocationFilter?.type === 'region' && allocationFilter.value !== entry.name ? 0.3 : 1}
-                                                />
-                                            ))}
-                                        </Pie>
-                                        <ReTooltip isAnimationActive={true} animationDuration={90} content={<AllocationDonutTooltip isPrivacyMode={isPrivacyMode} categoryLabel="Région" />} />
-                                    </PieChart>
-                                </ResponsiveContainer>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 min-h-[300px]">
+                        {/* REGIONS */}
+                        <div className="gf-terminal-card p-5 flex flex-col">
+                            <div className="flex items-center justify-between gap-2 mb-4 pb-2.5 border-b border-bordure">
+                                <h4 className="text-ink-300 text-[11px] font-bold uppercase tracking-wider">Répartition Géographique</h4>
+                                <span className="font-mono text-[11px] text-ink-400">{geoBreakdown.length} zones</span>
                             </div>
-                            <ChartDataTable
-                                caption="Répartition géographique du portefeuille"
-                                columns={allocationColumns}
-                                rows={geoBreakdown}
-                            />
-                            <div className="flex-1 w-full space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
-                                {geoBreakdown.map(item => {
-                                    const isActive = allocationFilter?.type === 'region' && allocationFilter.value === item.name;
-                                    return (
-                                        <button
-                                            key={item.name}
-                                            type="button"
-                                            onClick={() => setAllocationFilter(isActive ? null : { type: 'region', value: item.name })}
-                                            className={`gf-row w-full flex justify-between items-center text-meta px-3 py-2 rounded-lg transition-colors focus-ring ${
-                                                isActive ? 'bg-bordure border border-bordure-champ' : 'bg-surface-douce hover:bg-bordure border border-transparent'
-                                            }`}
-                                            aria-pressed={isActive}
-                                        >
-                                            <div className="flex items-center gap-2.5 min-w-0">
-                                                <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: COLORS_REGION[item.name] || '#444' }}></span>
-                                                <span className="text-ink-100 font-medium truncate">{item.name}</span>
-                                            </div>
-                                            <div className="text-right shrink-0">
-                                                <PrivateAmount as="div" className="text-texte font-mono font-bold tabular-nums">{formatCAD(item.value)}</PrivateAmount>
-                                                <div className="text-tiny font-mono text-ink-400 tabular-nums"><PrivateAmount>{item.percent.toFixed(1)}%</PrivateAmount></div>
-                                            </div>
-                                        </button>
-                                    );
-                                })}
+                            <div className="flex-1 flex flex-col lg:flex-row items-center gap-4">
+                                <div className="flex-1 w-full h-[200px]" role="img" aria-label="Donut de répartition géographique du portefeuille">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={geoBreakdown}
+                                                innerRadius={60}
+                                                outerRadius={80}
+                                                paddingAngle={5}
+                                                dataKey="value"
+                                                stroke="none"
+                                                isAnimationActive={true}
+                                                animationDuration={340}
+                                                animationEasing="ease-out"
+                                                onClick={(entry: { name?: string }) => entry.name && setAllocationFilter({ type: 'region', value: entry.name })}
+                                                cursor="pointer"
+                                            >
+                                                {geoBreakdown.map((entry, index) => (
+                                                    <Cell
+                                                        key={`cell-${index}`}
+                                                        fill={COLORS_REGION[entry.name] || '#444'}
+                                                        opacity={allocationFilter?.type === 'region' && allocationFilter.value !== entry.name ? 0.3 : 1}
+                                                    />
+                                                ))}
+                                            </Pie>
+                                            <ReTooltip isAnimationActive={true} animationDuration={90} content={<AllocationDonutTooltip isPrivacyMode={isPrivacyMode} categoryLabel="Région" />} />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <ChartDataTable
+                                    caption="Répartition géographique du portefeuille"
+                                    columns={allocationColumns}
+                                    rows={geoBreakdown as unknown as ReadonlyArray<Record<string, unknown>>}
+                                />
+                                <div className="flex-1 w-full space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
+                                    {geoBreakdown.map(item => {
+                                        const isActive = allocationFilter?.type === 'region' && allocationFilter.value === item.name;
+                                        return (
+                                            <button
+                                                key={item.name}
+                                                type="button"
+                                                onClick={() => setAllocationFilter(isActive ? null : { type: 'region', value: item.name })}
+                                                className={`gf-row w-full flex justify-between items-center text-meta px-3 py-2 rounded-lg transition-colors focus-ring ${
+                                                    isActive ? 'bg-bordure border border-bordure-champ' : 'bg-surface-douce hover:bg-bordure border border-transparent'
+                                                }`}
+                                                aria-pressed={isActive}
+                                            >
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: COLORS_REGION[item.name] || '#444' }}></span>
+                                                    <span className="text-ink-100 font-medium truncate">{item.name}</span>
+                                                </div>
+                                                <div className="text-right shrink-0">
+                                                    <PrivateAmount as="div" className="text-texte font-mono font-bold tabular-nums">{formatCAD(item.value)}</PrivateAmount>
+                                                    <div className="text-tiny font-mono text-ink-400 tabular-nums"><PrivateAmount>{item.percent.toFixed(1)}%</PrivateAmount></div>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* SECTORS */}
+                        <div className="gf-terminal-card p-5 flex flex-col">
+                            <div className="flex items-center justify-between gap-2 mb-4 pb-2.5 border-b border-bordure">
+                                <h4 className="text-ink-300 text-[11px] font-bold uppercase tracking-wider">Répartition Sectorielle</h4>
+                                <span className="font-mono text-[11px] text-ink-400">{sectorBreakdown.length} secteurs</span>
+                            </div>
+                            <div className="flex-1 flex flex-col lg:flex-row items-center gap-4">
+                                <div className="flex-1 w-full h-[200px]" role="img" aria-label="Donut de répartition sectorielle du portefeuille">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={sectorBreakdown}
+                                                innerRadius={60}
+                                                outerRadius={80}
+                                                paddingAngle={5}
+                                                dataKey="value"
+                                                stroke="none"
+                                                isAnimationActive={true}
+                                                animationDuration={340}
+                                                animationEasing="ease-out"
+                                                onClick={(entry: { name?: string }) => entry.name && setAllocationFilter({ type: 'sector', value: entry.name })}
+                                                cursor="pointer"
+                                            >
+                                                {sectorBreakdown.map((entry, index) => (
+                                                    <Cell
+                                                        key={`cell-${index}`}
+                                                        fill={COLORS_SECTOR[entry.name] || '#444'}
+                                                        opacity={allocationFilter?.type === 'sector' && allocationFilter.value !== entry.name ? 0.3 : 1}
+                                                    />
+                                                ))}
+                                            </Pie>
+                                            <ReTooltip isAnimationActive={true} animationDuration={90} content={<AllocationDonutTooltip isPrivacyMode={isPrivacyMode} categoryLabel="Secteur" />} />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <ChartDataTable
+                                    caption="Répartition sectorielle du portefeuille"
+                                    columns={allocationColumns}
+                                    rows={sectorBreakdown as unknown as ReadonlyArray<Record<string, unknown>>}
+                                />
+                                <div className="flex-1 w-full space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
+                                    {sectorBreakdown.map(item => {
+                                        const isActive = allocationFilter?.type === 'sector' && allocationFilter.value === item.name;
+                                        return (
+                                            <button
+                                                key={item.name}
+                                                type="button"
+                                                onClick={() => setAllocationFilter(isActive ? null : { type: 'sector', value: item.name })}
+                                                className={`gf-row w-full flex justify-between items-center text-meta px-3 py-2 rounded-lg transition-colors focus-ring ${
+                                                    isActive ? 'bg-bordure border border-bordure-champ' : 'bg-surface-douce hover:bg-bordure border border-transparent'
+                                                }`}
+                                                aria-pressed={isActive}
+                                            >
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: COLORS_SECTOR[item.name] || '#444' }}></span>
+                                                    <span className="text-ink-100 font-medium truncate">{item.name}</span>
+                                                </div>
+                                                <div className="text-right shrink-0">
+                                                    <PrivateAmount as="div" className="text-texte font-mono font-bold tabular-nums">{formatCAD(item.value)}</PrivateAmount>
+                                                    <div className="text-tiny font-mono text-ink-400 tabular-nums"><PrivateAmount>{item.percent.toFixed(1)}%</PrivateAmount></div>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* SECTORS — Phase E.6 : clic = filtre stocks */}
-                    <div className="gf-terminal-card p-5 flex flex-col">
-                        <div className="flex items-center justify-between gap-2 mb-4 pb-2.5 border-b border-bordure">
-                            <h4 className="text-ink-300 text-[11px] font-bold uppercase tracking-wider">Répartition Sectorielle</h4>
-                            <span className="font-mono text-[11px] text-ink-400">{sectorBreakdown.length} secteurs</span>
-                        </div>
-                        <div className="flex-1 flex flex-col lg:flex-row items-center gap-4">
-                            <div className="flex-1 w-full h-[200px]" role="img" aria-label="Donut de répartition sectorielle du portefeuille">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={sectorBreakdown}
-                                            innerRadius={60}
-                                            outerRadius={80}
-                                            paddingAngle={5}
-                                            dataKey="value"
-                                            stroke="none"
-                                            isAnimationActive={true}
-                                            animationDuration={340}
-                                            animationEasing="ease-out"
-                                            onClick={(entry: { name?: string }) => entry.name && setAllocationFilter({ type: 'sector', value: entry.name })}
-                                            cursor="pointer"
-                                        >
-                                            {sectorBreakdown.map((entry, index) => (
-                                                <Cell
-                                                    key={`cell-${index}`}
-                                                    fill={COLORS_SECTOR[entry.name] || '#444'}
-                                                    opacity={allocationFilter?.type === 'sector' && allocationFilter.value !== entry.name ? 0.3 : 1}
-                                                />
-                                            ))}
-                                        </Pie>
-                                        <ReTooltip isAnimationActive={true} animationDuration={90} content={<AllocationDonutTooltip isPrivacyMode={isPrivacyMode} categoryLabel="Secteur" />} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                            <ChartDataTable
-                                caption="Répartition sectorielle du portefeuille"
-                                columns={allocationColumns}
-                                rows={sectorBreakdown}
-                            />
-                            <div className="flex-1 w-full space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
-                                {sectorBreakdown.map(item => {
-                                    const isActive = allocationFilter?.type === 'sector' && allocationFilter.value === item.name;
-                                    return (
-                                        <button
-                                            key={item.name}
-                                            type="button"
-                                            onClick={() => setAllocationFilter(isActive ? null : { type: 'sector', value: item.name })}
-                                            className={`gf-row w-full flex justify-between items-center text-meta px-3 py-2 rounded-lg transition-colors focus-ring ${
-                                                isActive ? 'bg-bordure border border-bordure-champ' : 'bg-surface-douce hover:bg-bordure border border-transparent'
-                                            }`}
-                                            aria-pressed={isActive}
-                                        >
-                                            <div className="flex items-center gap-2.5 min-w-0">
-                                                <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: COLORS_SECTOR[item.name] || '#444' }}></span>
-                                                <span className="text-ink-100 font-medium truncate">{item.name}</span>
-                                            </div>
-                                            <div className="text-right shrink-0">
-                                                <PrivateAmount as="div" className="text-texte font-mono font-bold tabular-nums">{formatCAD(item.value)}</PrivateAmount>
-                                                <div className="text-tiny font-mono text-ink-400 tabular-nums"><PrivateAmount>{item.percent.toFixed(1)}%</PrivateAmount></div>
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </div>
-
-                </div>
-
-                {/* Phase E.6 — Liste des stocks filtrés par geo/sector cliqué */}
-                {allocationFilter && (
-                    <div className="mt-4 p-4 gf-terminal-card">
-                        <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-bordure">
-                            <h4 className="text-body font-bold text-texte flex items-center gap-2">
-                                <Icon name={allocationFilter.type === 'region' ? 'globe' : 'building'} size={16} className="text-ink-300" />
-                                Actions en <span className="text-primary">{allocationFilter.value}</span>
-                            </h4>
-                            <button
-                                type="button"
-                                onClick={() => setAllocationFilter(null)}
-                                className="gf-chip text-tiny text-ink-300 hover:text-ink-100 px-3 py-1 rounded-full transition-colors focus-ring"
-                            >
-                                Effacer filtre
-                            </button>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                            {currentAllocation
-                                .filter(a => allocationFilter.type === 'region' ? a.region === allocationFilter.value : a.sector === allocationFilter.value)
-                                .sort((a, b) => b.value - a.value)
-                                .map(a => (
-                                    <div key={a.id} className="gf-row bg-surface-douce p-3.5 rounded-xl border border-bordure flex flex-col justify-between gap-1.5">
-                                        <div className="flex justify-between items-start gap-2">
-                                            <span className="font-bold text-texte text-body truncate">{a.name}</span>
-                                            <span className="px-1.5 py-0.5 rounded-sm bg-fond border border-bordure text-tiny text-ink-300 font-mono tabular-nums"><PrivateAmount>{a.weight.toFixed(1)}%</PrivateAmount></span>
-                                        </div>
-                                        <div className="flex items-baseline justify-between gap-2 pt-1">
-                                            <PrivateAmount as="div" className="text-meta font-mono font-bold text-ink-100 tabular-nums">{formatCAD(a.value)}</PrivateAmount>
-                                            <div className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-tiny font-mono font-semibold tabular-nums ${a.trendPct === null ? 'gf-delta-neutral text-ink-400' : a.trendPct >= 0 ? 'gf-delta-up text-success-400' : 'gf-delta-down text-danger-400'}`}>
-                                                {/* MONTANT-PUBLIC : variation du PRIX DE MARCHÉ du titre (décision de Marc : laissée visible). */}
-                                                {a.trendPct === null ? '—' : `${a.trendPct >= 0 ? '+' : ''}${a.trendPct.toFixed(2)}%`} ({PERF_PERIOD_LABELS[perfPeriod]})
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                        </div>
-                    </div>
-                )}
-                {/* 4. VISUAL PORTFOLIO REBALANCING (V16) — intégré dans la section Répartition & rééquilibrage */}
-                {currentAllocation.length > 0 && (() => {
-                const alloc = currentAllocation as AllocationItem[];
-                const totalPortfolio = alloc.reduce((s, a) => s + a.value, 0);
-
-                const rebalancingActions = targetModel.map(target => {
-                    const currentVal = alloc
-                        .filter(a => target.sectors.some(s => a.sector === s))
-                        .reduce((s, a) => s + a.value, 0);
-                    const currentPct = totalPortfolio > 0 ? (currentVal / totalPortfolio) * 100 : 0;
-                    const diffPct = currentPct - target.targetPct;
-                    const diffAmount = (diffPct / 100) * totalPortfolio;
-
-                    let action: 'SELL' | 'BUY' | 'OK' = 'OK';
-                    if (diffPct > 3) action = 'SELL';
-                    else if (diffPct < -3) action = 'BUY';
-
-                    return { ...target, currentPct, diffPct, diffAmount, action };
-                });
-
-                const hasActions = rebalancingActions.some(a => a.action !== 'OK');
-                const sumTargets = targetModel.reduce((sum, t) => sum + t.targetPct, 0);
-
-                return (
-                    <div className="pt-4 border-t border-bordure">
-                        <div className="flex items-center gap-2 mb-3">
-                            <Icon name="budget" size={18} className="text-ink-200" />
-                            <h3 className="text-sm font-bold text-texte">Rééquilibrage</h3>
-                            {hasActions ? <Badge variant="warning" size="sm">Action requise</Badge> : <Badge variant="success" size="sm">OK</Badge>}
-                        </div>
-                        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-bordure">
-                            <div>
-                                <div className="text-[11px] font-bold uppercase tracking-wider text-ink-400">Assiette de rééquilibrage</div>
-                                <PrivateAmount as="div" className="text-2xl font-bold font-mono text-texte tabular-nums">
-                                    {formatCAD(totalPortfolio)}
-                                </PrivateAmount>
-                            </div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                                {/* Phase E.7 — bouton justifications IA */}
-                                {hasActions && geminiKey && (
-                                    <button
-                                        type="button"
-                                        onClick={async () => {
-                                            // [AI-PRIVACY-CONSEILS-NON-GATES] (décision Marc 2026-09-05 : MASQUER —
-                                            // audit 2026-09-07) Le prompt porte le Δ en dollars de chaque action.
-                                            if (useFinanceStore.getState().isPrivacyMode) {
-                                                setJustificationsError(MESSAGE_IA_MODE_DISCRET);
-                                                return;
-                                            }
-                                            setIsFetchingJustifications(true);
-                                            setJustificationsError(null);
-                                            const inputs: RebalanceActionInput[] = rebalancingActions.map(a => ({
-                                                id: a.id,
-                                                label: a.label,
-                                                action: a.action,
-                                                currentPct: a.currentPct,
-                                                targetPct: a.targetPct,
-                                                diffAmount: a.diffAmount,
-                                            }));
-                                            const res = await getRebalanceJustifications(inputs, geminiKey);
-                                            // [AI-REBALANCE-CAUSE-PERDUE] Chaque forme a sa phrase.
-                                            // « rien à justifier » n'est PAS un échec : le bouton
-                                            // est gardé par `hasActions`, donc ce cas n'arrive pas
-                                            // ici — et s'il arrivait, l'afficher en rouge serait
-                                            // faux. Il ne dit donc rien.
-                                            if (res.forme === 'ok') {
-                                                const map = new Map<string, string>();
-                                                res.justifications.forEach(j => map.set(j.actionId, j.reason));
-                                                setIaJustifications(map);
-                                            } else if (res.forme === 'echec') {
-                                                setJustificationsError(messageErreurIa(res.err));
-                                            } else if (res.forme === 'sans-cle') {
-                                                setJustificationsError(messageErreurIa(null, { cleAbsente: true }));
-                                            } else if (res.forme === 'sans-reponse') {
-                                                setJustificationsError("L'IA n'a rien rendu d'exploitable pour ces actions. Réessaie.");
-                                            }
-                                            setIsFetchingJustifications(false);
-                                        }}
-                                        disabled={isFetchingJustifications}
-                                        className="gf-chip px-3 py-1.5 bg-surface-douce text-texte border border-bordure-champ rounded-full text-meta font-bold hover:bg-accent hover:text-sur-accent transition-colors disabled:opacity-50"
-                                    >
-                                        {isFetchingJustifications ? 'Analyse…' : 'Pourquoi ces actions ?'}
-                                    </button>
-                                )}
-                                {justificationsError !== null && (
-                                    <p role="status" className="text-danger-400 text-tiny">
-                                        {/* [AI-REBALANCE-CAUSE-PERDUE] Cet écran était le SEUL qui ne pouvait pas
-                                            nommer sa cause après `[AI-BUDGETMODAL-ERROR-COLLAPSE]` : le service
-                                            avalait l'erreur (`catch → return []`) et il ne recevait qu'un tableau
-                                            vide. Il disait donc ce qu'il savait. La cause remonte maintenant
-                                            jusqu'ici, et le message la nomme. */}
-                                        {justificationsError}
-                                    </p>
-                                )}
+                    {allocationFilter && (
+                        <div className="mt-4 p-4 gf-terminal-card">
+                            <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-bordure">
+                                <h4 className="text-body font-bold text-texte flex items-center gap-2">
+                                    <Icon name={allocationFilter.type === 'region' ? 'globe' : 'building'} size={16} className="text-ink-300" />
+                                    Actions en <span className="text-primary">{allocationFilter.value}</span>
+                                </h4>
                                 <button
-                                    aria-pressed={isRebalanceEdit}
-                                    onClick={() => setIsRebalanceEdit(!isRebalanceEdit)}
-                                    className={`gf-chip px-3 py-1.5 border rounded-full text-meta font-bold transition-colors ${isRebalanceEdit ? 'gf-chip-active' : 'bg-surface-douce text-texte border-bordure-champ hover:bg-accent hover:text-sur-accent'}`}
+                                    type="button"
+                                    onClick={() => setAllocationFilter(null)}
+                                    className="gf-chip text-tiny text-ink-300 hover:text-ink-100 px-3 py-1 rounded-full transition-colors focus-ring"
                                 >
-                                    {isRebalanceEdit ? 'Terminer' : 'Modifier Cibles'}
+                                    Effacer filtre
                                 </button>
                             </div>
-                        </div>
-
-                        {isRebalanceEdit && (
-                            // [A11Y-REBALANCE-CIBLES] Région live PERMANENTE : le conteneur reste MONTÉ tant
-                            // qu'on édite, et seul son TEXTE change (WCAG 4.1.3). Un nœud fraîchement inséré
-                            // qui porte `role="status"` n'est pas annoncé de façon fiable — c'est justement la
-                            // PREMIÈRE transition, celle où l'utilisateur casse le total, qui se perdrait.
-                            // ⚠️ Le premier jet copiait le bloc `justificationsError` voisin, qui a le même
-                            // défaut : copier le voisin immédiat n'est pas copier le BON patron. Les trois
-                            // régions live correctes du dépôt (`CategoryReviewPanel`, `StockChart`,
-                            // `ImportBankStatement`) montent toutes leur conteneur en permanence et le VIDENT.
-                            // `polite` et non `alert` : la valeur se tape chiffre par chiffre, un rôle assertif
-                            // interromprait la saisie à chaque frappe.
-                            // `animate-pulse` est déjà neutralisé par la règle globale
-                            // `@media (prefers-reduced-motion: reduce)` d'`index.css` — rien à ajouter ici.
-                            <div
-                                role="status"
-                                aria-live="polite"
-                                className={sumTargets !== 100
-                                    ? 'text-danger-400 text-meta font-bold mb-4 bg-erreur-fond p-3 rounded-lg border border-danger-500/20 animate-pulse flex items-center gap-2'
-                                    : 'sr-only'}
-                            >
-                                {sumTargets !== 100 && (
-                                    <><Icon name="alert" size={14} /> Le total des cibles doit être de 100% (Actuel : {sumTargets}%)</>
-                                )}
-                            </div>
-                        )}
-
-                        <div className="space-y-3 mb-6">
-                            {rebalancingActions.map((item, i) => (
-                                <div key={i} className={`gf-terminal-card p-4 rounded-xl border transition-all ${!isRebalanceEdit && item.action === 'SELL' ? 'border-danger-500/30 bg-erreur-fond' :
-                                    !isRebalanceEdit && item.action === 'BUY' ? 'border-succes-texte/30 bg-succes-fond' :
-                                        'border-bordure bg-surface-douce'
-                                    }`}>
-                                    <div className="flex items-center justify-between gap-3 mb-2">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-9 h-9 rounded-lg bg-fond border border-bordure flex items-center justify-center shrink-0">
-                                                <Icon name={item.icon} size={18} className="text-ink-200" />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                                {currentAllocation
+                                    .filter(a => allocationFilter.type === 'region' ? a.region === allocationFilter.value : a.sector === allocationFilter.value)
+                                    .sort((a, b) => b.value - a.value)
+                                    .map(a => (
+                                        <div key={a.id} className="gf-row bg-surface-douce p-3.5 rounded-xl border border-bordure flex flex-col justify-between gap-1.5">
+                                            <div className="flex justify-between items-start gap-2">
+                                                <span className="font-bold text-texte text-body truncate">{a.name}</span>
+                                                <span className="px-1.5 py-0.5 rounded-sm bg-fond border border-bordure text-tiny text-ink-300 font-mono tabular-nums"><PrivateAmount>{a.weight.toFixed(1)}%</PrivateAmount></span>
                                             </div>
-                                            <div>
-                                                <div className="text-texte font-bold text-body">{item.label}</div>
-                                                <div className="text-tiny text-ink-400 flex items-center gap-2 mt-1 font-mono">
-                                                    <span>Actuel: <span className="text-ink-200 font-bold"><PrivateAmount>{item.currentPct.toFixed(1)}%</PrivateAmount></span></span>
-                                                    <span className="opacity-50">|</span>
-                                                    {isRebalanceEdit ? (
-                                                        <div className="flex items-center gap-1">
-                                                            <span>Cible:</span>
-                                                            <div className="relative">
-                                                                <input
-                                                                    // [A11Y-REBALANCE-CIBLES] Le nom accessible porte le SECTEUR : les cinq
-                                                                    // champs partageaient « Allocation cible (pourcentage) », donc en mode
-                                                                    // formulaire (lecteurs d'écran) ou dans le rotor VoiceOver on entendait cinq
-                                                                    // fois la même chose. Le libellé visible est un `div` voisin, jamais lié
-                                                                    // programmatiquement — il ne rattrapait rien.
-                                                                    aria-label={`Allocation cible pour ${item.label} (pourcentage)`}
-                                                                    type="number"
-                                                                    min="0"
-                                                                    max="100"
-                                                                    className="w-16 bg-fond/50 border border-bordure-champ rounded-sm px-2 py-0.5 text-texte font-bold outline-hidden focus:border-accent focus:ring-1 focus:ring-accent transition-all text-right"
-                                                                    value={item.targetPct}
-                                                                    onChange={(e) => {
-                                                                        // Remplace l'ENTRÉE, ne la mute pas : `[...targetModel]` copiait le
-                                                                        // tableau et laissait ses éléments partagés (`[INVEST-CIBLES-DEFAUT-MUTEES]`).
-                                                                        const cible = Number(e.target.value);
-                                                                        setTargetModel(targetModel.map((m, idx) => (idx === i ? { ...m, targetPct: cible } : m)));
-                                                                    }}
-                                                                />
-                                                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-300 pointer-events-none text-tiny">%</span>
-                                                            </div>
+                                            <div className="flex items-baseline justify-between gap-2 pt-1">
+                                                <PrivateAmount as="div" className="text-meta font-mono font-bold text-ink-100 tabular-nums">{formatCAD(a.value)}</PrivateAmount>
+                                                <div className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-tiny font-mono font-semibold tabular-nums ${a.trendPct === null ? 'gf-delta-neutral text-ink-400' : a.trendPct >= 0 ? 'gf-delta-up text-success-400' : 'gf-delta-down text-danger-400'}`}>
+                                                    {/* MONTANT-PUBLIC : variation du PRIX DE MARCHÉ du titre (décision de Marc : laissée visible). */}
+                                                    {a.trendPct === null ? '—' : `${a.trendPct >= 0 ? '+' : ''}${a.trendPct.toFixed(2)}%`} ({PERF_PERIOD_LABELS[perfPeriod]})
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {currentAllocation.length > 0 && (() => {
+                        const totalPortfolio = currentAllocation.reduce((s, a) => s + a.value, 0);
+
+                        const rebalancingActions = targetModel.map(target => {
+                            const currentVal = currentAllocation
+                                .filter(a => target.sectors.some(s => a.sector === s))
+                                .reduce((s, a) => s + a.value, 0);
+                            const currentPct = totalPortfolio > 0 ? (currentVal / totalPortfolio) * 100 : 0;
+                            const diffPct = currentPct - target.targetPct;
+                            const diffAmount = (diffPct / 100) * totalPortfolio;
+
+                            let action: 'SELL' | 'BUY' | 'OK' = 'OK';
+                            if (diffPct > 3) action = 'SELL';
+                            else if (diffPct < -3) action = 'BUY';
+
+                            return { ...target, currentPct, diffPct, diffAmount, action };
+                        });
+
+                        const hasActions = rebalancingActions.some(a => a.action !== 'OK');
+                        const sumTargets = targetModel.reduce((sum, t) => sum + t.targetPct, 0);
+
+                        return (
+                            <div className="pt-4 border-t border-bordure">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Icon name="budget" size={18} className="text-ink-200" />
+                                    <h3 className="text-sm font-bold text-texte">Rééquilibrage</h3>
+                                    {hasActions ? <Badge variant="warning" size="sm">Action requise</Badge> : <Badge variant="success" size="sm">OK</Badge>}
+                                </div>
+                                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-bordure">
+                                    <div>
+                                        <div className="text-[11px] font-bold uppercase tracking-wider text-ink-400">Assiette de rééquilibrage</div>
+                                        <PrivateAmount as="div" className="text-2xl font-bold font-mono text-texte tabular-nums">
+                                            {formatCAD(totalPortfolio)}
+                                        </PrivateAmount>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        {hasActions && geminiKey && (
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    if (useFinanceStore.getState().isPrivacyMode) {
+                                                        setJustificationsError(MESSAGE_IA_MODE_DISCRET);
+                                                        return;
+                                                    }
+                                                    setIsFetchingJustifications(true);
+                                                    setJustificationsError(null);
+                                                    const inputs: RebalanceActionInput[] = rebalancingActions.map(a => ({
+                                                        id: a.id,
+                                                        label: a.label,
+                                                        action: a.action,
+                                                        currentPct: a.currentPct,
+                                                        targetPct: a.targetPct,
+                                                        diffAmount: a.diffAmount,
+                                                    }));
+                                                    const res = await getRebalanceJustifications(inputs, geminiKey);
+                                                    if (res.forme === 'ok') {
+                                                        const map = new Map<string, string>();
+                                                        res.justifications.forEach(j => map.set(j.actionId, j.reason));
+                                                        setIaJustifications(map);
+                                                    } else if (res.forme === 'echec') {
+                                                        setJustificationsError(messageErreurIa(res.err));
+                                                    } else if (res.forme === 'sans-cle') {
+                                                        setJustificationsError(messageErreurIa(null, { cleAbsente: true }));
+                                                    } else if (res.forme === 'sans-reponse') {
+                                                        setJustificationsError("L'IA n'a rien rendu d'exploitable pour ces actions. Réessaie.");
+                                                    }
+                                                    setIsFetchingJustifications(false);
+                                                }}
+                                                disabled={isFetchingJustifications}
+                                                className="gf-chip px-3 py-1.5 bg-surface-douce text-texte border border-bordure-champ rounded-full text-meta font-bold hover:bg-accent hover:text-sur-accent transition-colors disabled:opacity-50"
+                                            >
+                                                {isFetchingJustifications ? 'Analyse…' : 'Pourquoi ces actions ?'}
+                                            </button>
+                                        )}
+                                        {justificationsError !== null && (
+                                            <p role="status" className="text-danger-400 text-tiny">
+                                                {justificationsError}
+                                            </p>
+                                        )}
+                                        <button
+                                            aria-pressed={isRebalanceEdit}
+                                            onClick={() => setIsRebalanceEdit(!isRebalanceEdit)}
+                                            className={`gf-chip px-3 py-1.5 border rounded-full text-meta font-bold transition-colors ${isRebalanceEdit ? 'gf-chip-active' : 'bg-surface-douce text-texte border-bordure-champ hover:bg-accent hover:text-sur-accent'}`}
+                                        >
+                                            {isRebalanceEdit ? 'Terminer' : 'Modifier Cibles'}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {isRebalanceEdit && (
+                                    <div
+                                        role="status"
+                                        aria-live="polite"
+                                        className={sumTargets !== 100
+                                            ? 'text-danger-400 text-meta font-bold mb-4 bg-erreur-fond p-3 rounded-lg border border-danger-500/20 animate-pulse flex items-center gap-2'
+                                            : 'sr-only'}
+                                    >
+                                        {sumTargets !== 100 && (
+                                            <><Icon name="alert" size={14} /> Le total des cibles doit être de 100% (Actuel : {sumTargets}%)</>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="space-y-3 mb-6">
+                                    {rebalancingActions.map((item, i) => (
+                                        <div key={i} className={`gf-terminal-card p-4 rounded-xl border transition-all ${!isRebalanceEdit && item.action === 'SELL' ? 'border-danger-500/30 bg-erreur-fond' :
+                                            !isRebalanceEdit && item.action === 'BUY' ? 'border-succes-texte/30 bg-succes-fond' :
+                                                'border-bordure bg-surface-douce'
+                                            }`}>
+                                            <div className="flex items-center justify-between gap-3 mb-2">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-9 h-9 rounded-lg bg-fond border border-bordure flex items-center justify-center shrink-0">
+                                                        <Icon name={item.icon} size={18} className="text-ink-200" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-texte font-bold text-body">{item.label}</div>
+                                                        <div className="text-tiny text-ink-400 flex items-center gap-2 mt-1 font-mono">
+                                                            <span>Actuel: <span className="text-ink-200 font-bold"><PrivateAmount>{item.currentPct.toFixed(1)}%</PrivateAmount></span></span>
+                                                            <span className="opacity-50">|</span>
+                                                            {isRebalanceEdit ? (
+                                                                <div className="flex items-center gap-1">
+                                                                    <span>Cible:</span>
+                                                                    <div className="relative">
+                                                                        <input
+                                                                            aria-label={`Allocation cible pour ${item.label} (pourcentage)`}
+                                                                            type="number"
+                                                                            min="0"
+                                                                            max="100"
+                                                                            className="w-16 bg-fond/50 border border-bordure-champ rounded-sm px-2 py-0.5 text-texte font-bold outline-hidden focus:border-accent focus:ring-1 focus:ring-accent transition-all text-right"
+                                                                            value={item.targetPct}
+                                                                            onChange={(e) => {
+                                                                                const cible = Number(e.target.value);
+                                                                                setTargetModel(targetModel.map((m, idx) => (idx === i ? { ...m, targetPct: cible } : m)));
+                                                                            }}
+                                                                        />
+                                                                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-300 pointer-events-none text-tiny">%</span>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <span>Cible: <span className="text-texte font-bold">{item.targetPct}%</span></span>
+                                                            )}
                                                         </div>
-                                                    ) : (
-                                                        <span>Cible: <span className="text-texte font-bold">{item.targetPct}%</span></span>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right shrink-0">
+                                                    {!isRebalanceEdit && item.action === 'SELL' && (
+                                                        <div className="inline-flex items-center px-2.5 py-1 rounded-full font-mono font-bold text-meta gf-delta-down text-danger-400">
+                                                            → Vendre <PrivateAmount>{formatCAD(Math.round(Math.abs(item.diffAmount)))}</PrivateAmount>
+                                                        </div>
+                                                    )}
+                                                    {!isRebalanceEdit && item.action === 'BUY' && (
+                                                        <div className="inline-flex items-center px-2.5 py-1 rounded-full font-mono font-bold text-meta gf-delta-up text-succes-texte">
+                                                            → Acheter <PrivateAmount>{formatCAD(Math.round(Math.abs(item.diffAmount)))}</PrivateAmount>
+                                                        </div>
+                                                    )}
+                                                    {!isRebalanceEdit && item.action === 'OK' && (
+                                                        <div className="inline-flex items-center px-2.5 py-1 rounded-full font-mono text-tiny font-bold gf-delta-neutral text-ink-300">
+                                                            CIBLE ATTEINTE
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
-                                        </div>
-                                        <div className="text-right shrink-0">
-                                            {!isRebalanceEdit && item.action === 'SELL' && (
-                                                <div className="inline-flex items-center px-2.5 py-1 rounded-full font-mono font-bold text-meta gf-delta-down text-danger-400">
-                                                    → Vendre <PrivateAmount>{formatCAD(Math.round(Math.abs(item.diffAmount)))}</PrivateAmount>
+                                            <div className="relative w-full h-2 bg-fond/50 rounded-full overflow-hidden mt-3 shadow-inner">
+                                                <div
+                                                    className="absolute left-0 top-0 h-full rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(255,255,255,0.2)]"
+                                                    style={{
+                                                        width: `${isPrivacyMode ? 0 : Math.min(100, item.currentPct)}%`,
+                                                        backgroundColor: item.color,
+                                                    }}
+                                                />
+                                                <div
+                                                    className="absolute top-0 h-full w-0.5 bg-texte opacity-80 shadow-[0_0_5px_var(--texte)]"
+                                                    style={{ left: `${item.targetPct}%` }}
+                                                />
+                                            </div>
+                                            {iaJustifications.has(item.id) && (
+                                                <div className="mt-3 pt-3 border-t border-bordure text-tiny text-ink-300 italic flex gap-2">
+                                                    <Icon name="sparkles" size={12} className="text-ink-400 shrink-0 mt-0.5" />
+                                                    <span className="leading-relaxed">{iaJustifications.get(item.id)}</span>
                                                 </div>
                                             )}
-                                            {!isRebalanceEdit && item.action === 'BUY' && (
-                                                <div className="inline-flex items-center px-2.5 py-1 rounded-full font-mono font-bold text-meta gf-delta-up text-succes-texte">
-                                                    → Acheter <PrivateAmount>{formatCAD(Math.round(Math.abs(item.diffAmount)))}</PrivateAmount>
-                                                </div>
-                                            )}
-                                            {!isRebalanceEdit && item.action === 'OK' && (
-                                                <div className="inline-flex items-center px-2.5 py-1 rounded-full font-mono text-tiny font-bold gf-delta-neutral text-ink-300">
-                                                    CIBLE ATTEINTE
-                                                </div>
-                                            )}
                                         </div>
-                                    </div>
-                                    {/* Progress Bar */}
-                                    <div className="relative w-full h-2 bg-fond/50 rounded-full overflow-hidden mt-3 shadow-inner">
-                                        <div
-                                            className="absolute left-0 top-0 h-full rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(255,255,255,0.2)]"
-                                            style={{
-                                                width: `${isPrivacyMode ? 0 : Math.min(100, item.currentPct)}%`, // barre = ratio perso : vide en mode discret
-                                                backgroundColor: item.color
-                                            }}
-                                        />
-                                        {/* Target line indicator */}
-                                        <div
-                                            className="absolute top-0 h-full w-0.5 bg-texte opacity-80 shadow-[0_0_5px_var(--texte)]"
-                                            style={{ left: `${item.targetPct}%` }}
-                                        />
-                                    </div>
-                                    {/* Phase E.7 — justification IA */}
-                                    {iaJustifications.has(item.id) && (
-                                        <div className="mt-3 pt-3 border-t border-bordure text-tiny text-ink-300 italic flex gap-2">
-                                            <Icon name="sparkles" size={12} className="text-ink-400 shrink-0 mt-0.5" />
-                                            <span className="leading-relaxed">{iaJustifications.get(item.id)}</span>
-                                        </div>
-                                    )}
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-                );
-            })()}
+                            </div>
+                        );
+                    })()}
                 </div>
             </CollapsibleSection>
 
@@ -1954,54 +1609,6 @@ export const Investments: React.FC<InvestmentsProps> = ({
                 }}
             />
 
-        </div>
-    );
-};
-
-interface AllocationDonutTooltipProps {
-    active?: boolean;
-    payload?: Array<{ payload?: { name?: string; value?: number; percent?: number }; fill?: string }>;
-    isPrivacyMode: boolean;
-    categoryLabel: string;
-}
-
-const AllocationDonutTooltip: React.FC<AllocationDonutTooltipProps> = ({ active, payload, isPrivacyMode, categoryLabel }) => {
-    if (!active || !payload?.length || !payload[0].payload) return null;
-    const item = payload[0].payload;
-    const val = Number(item.value) || 0;
-    const pct = Number(item.percent) || 0;
-
-    return (
-        <div className="gf-tooltip-card sm:min-w-[205px]">
-            <div className="gf-tooltip-header">
-                <span className="font-sans text-[12px] font-bold text-ink-50 truncate max-w-[130px]">{item.name}</span>
-                <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-semibold gf-delta-neutral">
-                    {categoryLabel}
-                </span>
-            </div>
-            <div className="flex items-baseline justify-between gap-3 sm:mb-2">
-                <span className="gf-tooltip-hero text-xs sm:text-[16px]">
-                    {isPrivacyMode ? MASKED_AMOUNT_LABEL : <PrivateAmount>{formatCAD(val)}</PrivateAmount>}
-                </span>
-                <span className="font-mono text-[11px] font-bold text-ink-200">
-                    {isPrivacyMode ? MASKED_AMOUNT_LABEL : <PrivateAmount>{pct.toFixed(1)} %</PrivateAmount>}
-                </span>
-            </div>
-            {!isPrivacyMode && (
-                <div className="hidden sm:block gf-tooltip-bar-track">
-                    <div
-                        className="gf-tooltip-bar-fill"
-                        style={{
-                            // MONTANT-MASQUE-AILLEURS : bloc entier sous !isPrivacyMode
-                            width: `${Math.min(100, Math.max(0, pct))}%`,
-                            background: 'var(--repere)',
-                        }}
-                    />
-                </div>
-            )}
-            <div className="hidden sm:block mt-1.5 text-[10px] text-ink-400">
-                Cliquer pour filtrer les positions
-            </div>
         </div>
     );
 };

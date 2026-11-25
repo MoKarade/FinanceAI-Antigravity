@@ -13,7 +13,6 @@ import { useViewportBelowSm } from '../../hooks/useViewportBelowSm';
 import { ValeurMaxMaisonField } from './macroFields/ValeurMaxMaisonField';
 import { ProjectionControlsMobile } from './ProjectionControlsMobile';
 import { STOCHASTIC_TOGGLES, INFLATION_CATEGORIES, REPLAY_OPTIONS } from './projectionControlsConstants';
-export { STOCHASTIC_TOGGLES, INFLATION_CATEGORIES, REPLAY_OPTIONS };
 
 interface LiveCSVBalances {
     CELI: number;

@@ -3,9 +3,9 @@
 // d'abonnements, conseils immobiliers/fiscaux/rééquilibrage et extraction multimodale (Vision PDF/image).
 //
 // Décisions par usage :
-//   - chat / chatStream      → gemini-2.5-flash       (équilibre qualité/coût)
-//   - categorizeBatch        → gemini-2.5-flash-lite  (vitesse, gros volumes)
-//   - detectSubscriptions    → gemini-2.5-flash-lite
+//   - chat / chatStream      → gemini-3.8-flash       (équilibre qualité/coût)
+//   - categorizeBatch        → gemini-3.5-flash-lite  (vitesse, gros volumes)
+//   - detectSubscriptions    → gemini-3.5-flash-lite
 
 import { formatCAD } from '../utils/format';
 import { z } from 'zod';

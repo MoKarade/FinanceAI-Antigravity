@@ -200,33 +200,6 @@ export const VERIFIED_SOVEREIGN_YIELD_CURVE_2026_11: {
   ]
 };
 
-export const VERIFIED_YAHOO_SYMBOL_MAP: Record<string, string> = {
-  "CASH": "PSA.TO",
-  "NOVO": "NOVO-B.CO",
-  "GOLD": "GLD",
-  "GOVT": "IEF",
-  "CORP": "LQD",
-  "BRKB": "BRK-B",
-  "ECL": "UFO",
-  "BTC": "BTC-CAD",
-  "ETH": "ETH-CAD",
-  "SOL": "SOL-CAD",
-  "BNB": "BNB-CAD",
-  "XRP": "XRP-CAD",
-  "ADA": "ADA-CAD",
-  "DOGE": "DOGE-CAD",
-  "AVAX": "AVAX-CAD",
-  "LINK": "LINK-CAD",
-  "DOT": "DOT-CAD",
-  "AAVE": "AAVE-CAD",
-  "NEAR": "NEAR-USD",
-  "SUI": "SUI20947-USD",
-  "UNI": "UNI7083-USD",
-  "RNDR": "RENDER-USD",
-  "TAO": "TAO22974-USD",
-  "ARB": "ARB11841-USD"
-};
-
 export interface VerifiedTrailingReturnSnapshot {
   r1dPct: number;
   r5dPct: number;

@@ -39,6 +39,7 @@ FinanceAI/
 ├── App.tsx                  Point d'entrée React (Layout + TabRouter)
 ├── components/              UI React, 1 composant ≈ 1 onglet/page
 │   ├── ui/                  Primitives (Button, Card, KPIStat, …)
+│   ├── accueil/             Sous-modules d'AccueilGoogle (Omnibox, Héro/courbe, Colonnes)
 │   ├── projection/          Sous-composants FutureProjection
 │   ├── dashboard/           sous-composants Dashboard
 │   ├── investments/         DividendPanel
@@ -51,6 +52,7 @@ FinanceAI/
 │   ├── projection/          57 sous-modules (split Phase 3, mesuré 2026-09-07)
 │   ├── projection.worker.ts Worker MC
 │   ├── gemini.ts            Wrapper Google Gemini SDK (@google/genai)
+│   ├── aiChat/geminiCore.ts Socle léger unifié (fallback modèles, auth, SDK paresseux)
 │   ├── geminiAssistant.ts   Orchestrateur conversationnel et analytique Gemini
 │   ├── firebase/            Firebase Auth + Cloud Firestore (firebaseClient, firestoreService, workspaceSync)
 │   ├── secureKeyStore.ts    AES-256-GCM + IndexedDB (clé device)
@@ -59,7 +61,7 @@ FinanceAI/
 │   ├── marketData/          providers/ coingecko.ts, finnhub.ts (pricing)
 │   ├── portfolio.ts         Historique CSV portfolio
 │   ├── realEstate.ts        Amortissement hypothèque
-│   └── …                    finance, macroApi, pdfReport, cloudBackup
+│   └── …                    finance, macroApi, cloudBackup
 ├── server/                  Proxys et garde-fou de débit Express local (`proxies.ts`, `garde.ts`)
 ├── store/
 │   └── useFinanceStore.ts   Zustand store unique (schema v7, persist)
@@ -95,7 +97,6 @@ Règles structurelles :
   - `services/dataRecovery.ts` (diagnostic et récupération locale/infonuagique des données)
   - `services/fintable/autoSync.ts` (synchronisation automatique courtier)
   - `services/firebase/workspaceSync.ts` (synchronisation temps réel avec Cloud Firestore `users/{uid}/workspaces/main`)
-  - `services/pdfReport.ts` (génération du bilan PDF)
   Tout nouvel importeur du store dans `services/` est une décision d'architecture (à documenter ici, puis à ajouter à l'inventaire).
   ⚠️ Jamais de `getState() as unknown as …` : `FinanceState extends AppState`, l'assignation
   directe est déjà typée — un cast désactive tsc exactement là où l'IA écrit (garde dédiée).

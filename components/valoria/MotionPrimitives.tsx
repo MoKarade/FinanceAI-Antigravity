@@ -2,34 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   motion,
   useReducedMotion,
-  useScroll,
 } from 'framer-motion';
 import type { SemanticTone } from '../../services/valoria/dailyTechnicalIndicators';
 import { useFinanceStore } from '../../store/useFinanceStore';
 
 const EASE_OUT_EXPO: [number, number, number, number] = [0.16, 1, 0.3, 1];
-
-/**
- * Top 2px viewport scroll progress bar using GPU-only scaleX transform.
- */
-export const ScrollProgressBar: React.FC = () => {
-  const prefersReduced = useReducedMotion();
-  const { scrollYProgress } = useScroll();
-
-  if (prefersReduced) return null;
-
-  return (
-    <div
-      aria-hidden="true"
-      className="fixed top-0 left-0 right-0 z-50 h-[2px] bg-surface/70 pointer-events-none"
-    >
-      <motion.div
-        style={{ scaleX: scrollYProgress }}
-        className="h-full w-full origin-left bg-linear-to-r from-texte-doux via-texte to-succes-texte"
-      />
-    </div>
-  );
-};
 
 /**
  * Scroll-triggered section entrance using compositor-only transform & opacity.

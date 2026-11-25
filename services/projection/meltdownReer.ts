@@ -34,7 +34,7 @@ const MELTDOWN_NW_MID  = 1_000_000;
 const MELTDOWN_TARGET_HIGH = 220_000;
 const MELTDOWN_TARGET_MID  = 140_000;
 /** Exporté pour les gardes : un test qui recopie ce chiffre dérive en silence quand il change. */
-export const MELTDOWN_TARGET_BASE =  90_000;
+const MELTDOWN_TARGET_BASE =  90_000;
 
 export interface MeltdownCtx {
     m: number;

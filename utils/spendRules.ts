@@ -57,15 +57,6 @@ export const isTransferOrVirement = (t: Transaction): boolean =>
     && t.amount !== 0
     && (Boolean(t.isTransfer) || t.category === 'Transfert' || t.category === 'Virement' || t.category === 'Virements');
 
-/** Catégorie effective d'un transfert (repli sur « Transfert » si non renseignée ou statut brut). */
-export const effectiveTransferCategory = (t: Transaction): string => {
-    const c = (t.category ?? '').trim();
-    if (!c || c === 'Uncategorized' || c === 'Inconnu' || c === 'Unknown' || c === 'Non catégorisé') {
-        return 'Transfert';
-    }
-    return c;
-};
-
 /** Une ligne compte-t-elle dans les DÉPENSES d'un poste (sortie, ou crédit qui les réduit) ? */
 export const isSpend = (t: Transaction, _includeTransfers = false): boolean => {
     if (t.isDuplicate || t.isTransfer || isTransferOrVirement(t)) return false;

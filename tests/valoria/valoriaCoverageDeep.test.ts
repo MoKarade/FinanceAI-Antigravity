@@ -8,7 +8,6 @@ import {
   isSafeRemoteUrl,
   registerValoriaRoutes,
   resetValoriaServerState,
-  sanitizeBlindTimeMachinePayload,
   sanitizeIncomingBridgePayload,
 } from '../../services/valoria/serverRoutes';
 import {

@@ -447,30 +447,6 @@ function getInstitutionalTierMeta(tier: InstitutionalSourceTier): {
   }
 }
 
-function classifyPublisherToInstitutionalTier(
-  publisher: string,
-  title: string
-): {
-  tier: InstitutionalSourceTier;
-  code: string;
-} {
-  const hay = `${publisher} ${title}`.toUpperCase();
-  if (/SEC\b|EDGAR|10-Q|10-K|8-K|FORM 4|SEDAR|AMF|BSIF/.test(hay)) {
-    const formMatch = hay.match(/\b(10-Q|10-K|8-K|6-K|FORM 4|SEDAR\+)\b/);
-    return {
-      tier: 'REGULATOR_FILING',
-      code: formMatch ? `SEC ${formMatch[1]}` : 'SEC / SEDAR+',
-    };
-  }
-  if (/BANQUE DU CANADA|BANK OF CANADA|FEDERAL RESERVE|FOMC|TRÉSOR|TREASURY|BCE\b|ECB/.test(hay)) {
-    return { tier: 'CENTRAL_BANK_MACRO', code: 'Banque Centrale' };
-  }
-  if (/REUTERS|BLOOMBERG|FINANCIAL POST|GLOBE AND MAIL|WSJ|WALL STREET|CNBC|LES AFFAIRES|FT\b/.test(hay)) {
-    return { tier: 'TIER1_WIRE', code: publisher.slice(0, 14) };
-  }
-  return { tier: 'SELL_SIDE_CONSENSUS', code: publisher.slice(0, 14) || 'Consensus' };
-}
-
 function computePearsonCorrelation(xs: number[], ys: number[]): number {
   const n = Math.min(xs.length, ys.length);
   if (n < 2) return 0;

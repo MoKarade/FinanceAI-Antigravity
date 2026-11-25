@@ -56,17 +56,20 @@ export const D3WatchlistVolatilityChart: React.FC<
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   const volSummary = useMemo(
-    () =>
-      computeWatchlistHistoricalVolatility({
+    () => {
+      void marketUniverseVersion;
+      return computeWatchlistHistoricalVolatility({
         watchlistIds,
         lots,
         livePrices,
         riskFreeAnnualPct: riskFreeRatePct,
-      }),
+      });
+    },
     [watchlistIds, lots, livePrices, riskFreeRatePct, marketUniverseVersion]
   );
 
   const availableToAdd = useMemo(() => {
+    void marketUniverseVersion;
     const watched = new Set(watchlistIds);
     return ASSETS.filter((a) => !watched.has(a.id) && a.id !== 'CASH');
   }, [watchlistIds, marketUniverseVersion]);

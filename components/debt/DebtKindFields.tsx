@@ -68,7 +68,7 @@ export const phraseLienIgnore = (
         : null;
 
 /** [DEBT-BALANCE-NAN-SILENCIEUX] (audit 2026-09-07) Les trois champs numériques d'une dette. */
-export const CHAMPS_NUMERIQUES_DETTE = ['balance', 'interestRate', 'minimumPayment'] as const;
+const CHAMPS_NUMERIQUES_DETTE = ['balance', 'interestRate', 'minimumPayment'] as const;
 const LIBELLE_CHAMP: Record<(typeof CHAMPS_NUMERIQUES_DETTE)[number], string> = {
     balance: 'le solde', interestRate: 'le taux', minimumPayment: 'le paiement minimum',
 };

@@ -19,7 +19,6 @@ import {
   VERIFIED_SOVEREIGN_YIELD_CURVE_2026_11,
   VERIFIED_SPOT_CAD_2026_11 as BASE_VERIFIED_SPOT_CAD_2026_11,
   VERIFIED_TRAILING_RETURNS_CAD_2026_11 as BASE_VERIFIED_TRAILING_RETURNS_CAD_2026_11,
-  VERIFIED_YAHOO_SYMBOL_MAP,
   type SovereignYieldPoint,
   type VerifiedTrailingReturnSnapshot,
 } from './verifiedMarketHistory2026';
@@ -121,13 +120,6 @@ export const GOAL_LABELS: Record<InvestmentGoal, { label: string; description: s
     label: 'Projet à moyen terme (3–5 ans)',
     description: 'Préserver le capital tout en battant l’inflation avant un achat immobilier ou personnel.',
   },
-};
-
-const CATEGORY_LABELS: Record<AssetCategory, string> = {
-  actions: 'Actions',
-  obligations: 'Obligations',
-  crypto: 'Cryptomonnaies',
-  refuge: 'Valeurs refuges & Cash',
 };
 
 export const MARKET_REGIMES: MarketRegimePreset[] = [

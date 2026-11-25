@@ -75,6 +75,7 @@ export const PortfolioControlHubModal: React.FC<PortfolioControlHubModalProps> =
   const [formError, setFormError] = useState<string | null>(null);
 
   const groupedPickerOptions = useMemo(() => {
+    void marketUniverseVersion;
     const q = searchFilter.trim().toUpperCase();
     const filtered = ASSETS.filter((a) => {
       if (!q) return true;

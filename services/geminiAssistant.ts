@@ -1,15 +1,14 @@
 // services/geminiAssistant.ts
 //
-// Assistant patrimonial interactif Google Gemini (gemini-2.5-flash) pour FinanceAI :
-// Synthèse instantanée + appel Gemini 2.5 Flash accessible depuis l'Omnibox de la page d'accueil
+// Assistant patrimonial interactif Google Gemini (gemini-3.8-flash) pour FinanceAI :
+// Synthèse instantanée + appel Gemini accessible depuis l'Omnibox de la page d'accueil
 // et la barre de navigation.
 // branché sur les sources uniques du moteur : `assetValueCad`, `computePresentNetWorth`,
 // `computeCurrentLiquidity`, `computeTotalDebt`, `presentTermesOfGoal`, `calculateFiscalReport`
 // et `state.lastProjection?.chartData`.
 
 import { formatCAD } from '../utils/format';
-import { MESSAGE_IA_MODE_DISCRET, messageErreurIa } from './messageErreurIa';
-import { chat } from './gemini';
+import { cleanGeminiApiKey } from './aiChat/geminiCore';
 import {
     assetValueCad,
     computeAssetBreakdown,
@@ -369,72 +368,5 @@ export function genererSyntheseLocaleGemini(
  * une variable d'environnement `VITE_*` (elle serait inlinée dans le bundle public).
  */
 export function cleGemini(state: Pick<AppState, 'apiKeys'>): string {
-    return (state.apiKeys?.gemini ?? '').replace(/^["'\s]+|["'\s]+$/g, '');
-}
-
-/**
- * Interroge Google Gemini 2.5 Flash avec le contexte patrimonial réel de l'utilisateur.
- * Respecte strictement le mode discret (`isPrivacyMode`).
- */
-export async function interrogerAssistantGemini(
-    question: string,
-    state: AppState,
-    isPrivacyMode: boolean,
-    signal?: AbortSignal,
-): Promise<ReponseAssistantGemini> {
-    if (isPrivacyMode) {
-        throw new Error(MESSAGE_IA_MODE_DISCRET);
-    }
-
-    const ctx = extraireContextePatrimonial(state);
-    const syntheseLocale = genererSyntheseLocaleGemini(question, ctx);
-    const apiKey = cleGemini(state);
-
-    if (!apiKey) {
-        return syntheseLocale;
-    }
-
-    try {
-        const promptSysteme = [
-            'Tu es Gemini, le conseiller financier personnel intégré à FinanceAI (Québec / Canada 2026).',
-            'Réponds en français, en tutoyant l’utilisateur, de manière claire, structurée et concise (maximum 4 phrases + 3 points d’action concrets séparés par des sauts de ligne commençant par "- ").',
-            `Contexte patrimonial réel de ${ctx.prenom} :`,
-            `- Valeur nette : ${promptCad(ctx.patrimoineNet)}`,
-            `- CELI : ${promptCad(ctx.celi)} | REER : ${promptCad(ctx.reer)} | Non-enregistré : ${promptCad(ctx.nonEnregistre)}`,
-            `- Liquidités : ${promptCad(ctx.liquidites)} | Équité immobilière possédée : ${promptCad(ctx.immobilierNet)} | Dettes : ${promptCad(ctx.dettesTotales)}`,
-            `- Salaire brut mensuel ménage : ${promptCad(ctx.salaireBrutMensuel)} | Revenu net mensuel après impôt QC/Féd : ${promptCad(ctx.revenuNetMensuel)} | Épargne mensuelle : ${promptCad(ctx.epargneMensuelle)}`,
-            `- Impôt annuel estimé (ARC + Revenu Québec) : ${promptCad(ctx.impotAnnuelEstime)} (taux marginal : ${Number.isFinite(ctx.tauxMarginalPct) ? `${ctx.tauxMarginalPct.toFixed(1)} %` : '(non disponible)'})`,
-            `- Retraite visée : ${ctx.ageRetraiteCible} ans (actuel : ${ctx.ageActuel} ans) avec ${promptCad(ctx.revenuRetraiteCible)}/mois (patrimoine projeté par le moteur : ${promptCad(ctx.patrimoineProjeteRetraite)}).`,
-        ].join('\n');
-
-        const texteBrut = await chat(
-            [{ role: 'user', content: question }],
-            apiKey,
-            { system: promptSysteme, maxTokens: 700, signal },
-        );
-
-        const lignes = texteBrut
-            .split('\n')
-            .map((l) => l.trim())
-            .filter(Boolean);
-        const puces = lignes
-            .filter((l) => l.startsWith('- ') || l.startsWith('• ') || /^\d+\.\s/.test(l))
-            .map((l) => l.replace(/^(- |• |\d+\.\s*)/, '').trim())
-            .slice(0, 4);
-        const paragraphes = lignes.filter((l) => !l.startsWith('- ') && !l.startsWith('• ') && !/^\d+\.\s/.test(l));
-
-        return {
-            texte: paragraphes.join(' ') || texteBrut.trim() || syntheseLocale.texte,
-            pointsCles: puces.length > 0 ? puces : syntheseLocale.pointsCles,
-            actionsSuggerees: syntheseLocale.actionsSuggerees,
-            source: 'gemini-api',
-        };
-    } catch (err) {
-        const msg = messageErreurIa(err);
-        if (msg === null) throw err;
-        return {
-            ...syntheseLocale,
-            pointsCles: [...syntheseLocale.pointsCles, `Note service IA : ${msg}`],
-        };
-    }
+    return cleanGeminiApiKey(state.apiKeys?.gemini ?? '');
 }

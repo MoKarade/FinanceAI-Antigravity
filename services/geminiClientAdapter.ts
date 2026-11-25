@@ -9,6 +9,12 @@
 
 import type { GenerateContentResponse } from '@google/genai';
 import { MODEL_IDS } from './aiChat/models';
+import {
+    GEMINI_FALLBACK_CASCADE,
+    buildGeminiModelCandidates,
+    cleanGeminiApiKey,
+    isGeminiAuthHttpError,
+} from './aiChat/geminiCore';
 
 type _GeminiOfficialResponse = GenerateContentResponse;
 
@@ -334,26 +340,6 @@ interface ResultatAppelGemini {
     resolvedModel: string;
 }
 
-const GEMINI_FALLBACK_MODELS: readonly string[] = [
-    MODEL_IDS.sonnet,
-    MODEL_IDS.haiku,
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-];
-
-function modelesCandidatsGemini(primaryModel: string): string[] {
-    const out: string[] = [primaryModel];
-    for (const m of GEMINI_FALLBACK_MODELS) {
-        if (!out.includes(m)) out.push(m);
-    }
-    return out;
-}
-
-function estErreurCleGemini(status: number, detail: string): boolean {
-    if (status === 401 || status === 403) return true;
-    return status === 400 && /API_KEY_INVALID|API key not valid|PERMISSION_DENIED/i.test(detail);
-}
-
 function estErreurModeleIndisponible(status: number, detail: string): boolean {
     if (status === 404) return true;
     return status === 400 && /models\/|not found|is not supported for generateContent|model.*not.*supported/i.test(detail);
@@ -386,7 +372,7 @@ export async function testerCleApiGemini(
     apiKey: string,
     signal?: AbortSignal,
 ): Promise<TestCleGeminiResult> {
-    const cleanKey = apiKey.replace(/^["'\s]+|["'\s]+$/g, '');
+    const cleanKey = cleanGeminiApiKey(apiKey);
     if (!cleanKey) {
         return { ok: false, message: 'Aucune clé saisie.', cause: 'cle-refusee' };
     }
@@ -406,7 +392,7 @@ export async function testerCleApiGemini(
 
     try {
         let lastModelError: { status: number; message: string } | null = null;
-        for (const model of GEMINI_FALLBACK_MODELS) {
+        for (const model of GEMINI_FALLBACK_CASCADE) {
             const res = await fetch(`${GEMINI_API_BASE}/${model}:generateContent`, {
                 method: 'POST',
                 headers: {
@@ -420,7 +406,7 @@ export async function testerCleApiGemini(
                 return { ok: true, model };
             }
             const detail = await lireDetailErreurGemini(res);
-            if (estErreurCleGemini(res.status, detail)) {
+            if (isGeminiAuthHttpError(res.status, detail)) {
                 return { ok: false, status: res.status, message: detail, cause: 'cle-refusee' };
             }
             if (res.status === 429) {
@@ -463,7 +449,7 @@ async function appelerGeminiRest(
         throw signal.reason ?? new DOMException('Aborted', 'AbortError');
     }
 
-    const cleanKey = apiKey.replace(/^["'\s]+|["'\s]+$/g, '');
+    const cleanKey = cleanGeminiApiKey(apiKey);
     const primaryModel = resoudreModeleGemini(params.model);
     const systemText = extraireSystemTexte(params.system);
     const contents = convertirMessagesPourGemini(params.messages ?? []);
@@ -489,7 +475,7 @@ async function appelerGeminiRest(
         return out;
     };
 
-    const candidates = modelesCandidatsGemini(primaryModel);
+    const candidates = buildGeminiModelCandidates(primaryModel);
     let lastError: unknown;
 
     for (let modelIdx = 0; modelIdx < candidates.length; modelIdx++) {
@@ -528,7 +514,7 @@ async function appelerGeminiRest(
             if (!res.ok) {
                 const detail = await lireDetailErreurGemini(res);
                 const httpErr = Object.assign(new Error(detail), { status: res.status });
-                if (estErreurCleGemini(res.status, detail)) {
+                if (isGeminiAuthHttpError(res.status, detail)) {
                     throw httpErr;
                 }
                 if (

@@ -9,6 +9,12 @@
 
 import type { Content } from '@google/genai';
 import { signalerUsageIa } from '../aiChat/coutIa';
+import {
+    buildGeminiModelCandidates,
+    cleanGeminiApiKey,
+    createLazyGoogleGenAI,
+    isGeminiAuthError,
+} from '../aiChat/geminiCore';
 import type { ClientGemini, RequeteGemini, ReponseGemini } from './agentLoop';
 import type { DeclarationOutil } from './actionRegistry';
 
@@ -35,29 +41,12 @@ const NOMS_OUTILS_ESSENTIELS = new Set<string>([
     'modifier_configuration_menage',
 ]);
 
-const estErreurCleInvalide = (err: unknown): boolean => {
-    const status = (err as { status?: unknown } | null)?.status;
-    const msg = String((err as { message?: unknown } | null)?.message ?? '');
-    if (status === 401 || status === 403) return true;
-    return status === 400 && /API_KEY_INVALID|API key not valid|PERMISSION_DENIED/i.test(msg);
-};
-
-const MODELES_REPLI_ASSISTANT = [
-    'gemini-3.8-flash',
-    'gemini-3.5-flash-lite',
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-] as const;
-
 export function creerClientGemini(apiKey: string): ClientGemini {
-    const cle = apiKey.replace(/^["'\s]+|["'\s]+$/g, '');
+    const cle = cleanGeminiApiKey(apiKey);
     if (!cle) throw new Error('Clé API Google Gemini manquante.');
-    let sdk: Promise<typeof import('@google/genai')> | null = null;
     return {
         async generer(req: RequeteGemini): Promise<ReponseGemini> {
-            sdk ??= import('@google/genai');
-            const { GoogleGenAI } = await sdk;
-            const ai = new GoogleGenAI({ apiKey: cle });
+            const ai = await createLazyGoogleGenAI(cle);
 
             const appeler = async (modele: string, outils: DeclarationOutil[]): Promise<ReponseGemini> => {
                 const rep = await ai.models.generateContent({
@@ -80,13 +69,13 @@ export function creerClientGemini(apiKey: string): ClientGemini {
             };
 
             const outilsEssentiels = req.outils.filter((o) => NOMS_OUTILS_ESSENTIELS.has(o.name));
-            const modeles = [req.modele, ...MODELES_REPLI_ASSISTANT.filter((m) => m !== req.modele)];
+            const modeles = buildGeminiModelCandidates(req.modele);
             let derniereErreur: unknown;
 
             try {
                 return await appeler(req.modele, req.outils);
             } catch (err) {
-                if (req.signal?.aborted || estErreurCleInvalide(err)) throw err;
+                if (req.signal?.aborted || isGeminiAuthError(err)) throw err;
                 derniereErreur = err;
             }
 
@@ -94,7 +83,7 @@ export function creerClientGemini(apiKey: string): ClientGemini {
                 try {
                     return await appeler(modele, outilsEssentiels);
                 } catch (err) {
-                    if (req.signal?.aborted || estErreurCleInvalide(err)) throw err;
+                    if (req.signal?.aborted || isGeminiAuthError(err)) throw err;
                     derniereErreur = err;
                 }
             }
@@ -103,7 +92,7 @@ export function creerClientGemini(apiKey: string): ClientGemini {
                 try {
                     return await appeler(modele, []);
                 } catch (err) {
-                    if (req.signal?.aborted || estErreurCleInvalide(err)) throw err;
+                    if (req.signal?.aborted || isGeminiAuthError(err)) throw err;
                     derniereErreur = err;
                 }
             }

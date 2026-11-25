@@ -1,8 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
-    "index.tsx",
-    "server.ts",
     "scripts/*.{ts,cjs}",
     "public/sw.js",
     "vitest.mutation.config.ts"

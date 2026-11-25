@@ -721,19 +721,6 @@ const STOCK_FUNDAMENTALS: Record<string, StockFundamentalProfile> = {
   ...EXPANDED_STOCK_FUNDAMENTALS,
 };
 
-function registerDynamicStockFundamental(
-  assetId: string,
-  profile: StockFundamentalProfile
-): void {
-  STOCK_FUNDAMENTALS[assetId] = profile;
-}
-
-function getStockFundamentalProfile(
-  assetId: string
-): StockFundamentalProfile | undefined {
-  return STOCK_FUNDAMENTALS[assetId];
-}
-
 function computeEMA(values: number[], period: number): number[] {
   if (values.length === 0) return [];
   const k = 2 / (period + 1);
