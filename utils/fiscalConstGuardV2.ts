@@ -588,6 +588,10 @@ export const FISCAL_CONST_INVENTORY: readonly InventoryEntry[] = [
 
     { file: 'store/useFinanceStore.ts', value: '5000', family: 'structural',
       reason: 'Durée de vie en ms d’un focus d’onglet en attente (5 s). Paramètre d’interface.' },
+    { file: 'store/useFinanceStore.ts', value: '6', family: 'structural',
+      reason: 'Précision de 6 décimales (`toFixed(6)`) pour l’arrondi des montants journaliers USD du coût IA (`aiChatCostUsdByDay`). Formatage numérique, aucun rapport fiscal.' },
+    { file: 'store/useFinanceStore.ts', value: '400', family: 'structural',
+      reason: '[×2] Fenêtre de rétention glissante (400 jours) de l’historique journalier `aiChatCostUsdByDay` (test du seuil puis troncature). Structure de stockage, hors périmètre fiscal.' },
 ];
 
 /**
@@ -666,7 +670,6 @@ export const FISCAL_MODULES = [
     // littéraux déménagent (UN-PERIMETRE-EXCLU-SE-JUSTIFIE-PAR-CE-QU-IL-CONTIENT).
     'store/etatParDefaut.ts',
     'store/migrationsPersistees.ts',
-    'store/actionsModeTest.ts',
     'store/optionsPersistance.ts',
 ] as const;
 
@@ -682,9 +685,9 @@ export const FISCAL_MODULES = [
  *   sous-modules ») ; **SCANNÉ depuis le 2026-09-01** (`[FISC-GUARD-PROJECTION-TS]`, voir
  *   `FISCAL_MODULES`) : vrai des barèmes, faux des bornes d'âge décidées dans la boucle.
  *   Cette ligne disait encore « trou connu et assumé » six jours après — audit 2026-09-07.
- * - `services/projection/historicalReturns.ts` (58), `services/pdfReport.ts` (61),
+ * - `services/projection/historicalReturns.ts` (58),
  *   `services/projection/monthlyCalcs.ts` (15), `services/testPersonas/*`, `services/fintable/*`,
- *   `services/marketData/*` — rendements de marché, mise en page, fixtures de démo, codes HTTP et
+ *   `services/marketData/*` — rendements de marché, fixtures de démo, codes HTTP et
  *   durées en ms. Aucun n'écrit de barème ; les inclure noierait le signal (leçon déjà payée sur
  *   `helpers.ts`, où les entrailles du générateur pseudo-aléatoire ont imposé d'exclure les
  *   opérateurs binaires).
@@ -695,7 +698,6 @@ export const FISCAL_MODULES_HORS_PERIMETRE = [
     // Ces trois-ci étaient chiffrés en PROSE seulement : une métrique qu'aucun test ne relit dérive
     // en silence (`DOC-METRIQUE-RECOPIEE`). Elles rejoignent la table pour être vérifiées.
     { file: 'services/projection/historicalReturns.ts', literals: 58, reason: 'rendements de marché observés' },
-    { file: 'services/pdfReport.ts', literals: 61, reason: 'mise en page du rapport PDF' },
     { file: 'services/projection/monthlyCalcs.ts', literals: 15, reason: 'agrégats mensuels, aucun barème' },
     // ⚠️ AJOUTÉ le 2026-08-20 (revue de `[GROSSFROMNET-ANNEE-FIGEE]`). Ce module ASSEMBLE les
     // paramètres du moteur ; il ne calcule aucun barème, mais il porte désormais un défaut d'année

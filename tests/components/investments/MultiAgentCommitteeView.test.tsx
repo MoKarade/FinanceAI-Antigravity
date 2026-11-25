@@ -59,8 +59,6 @@ describe('MultiAgentCommitteeView', () => {
         vi.stubGlobal('indexedDB', undefined);
         act(() => {
             useFinanceStore.setState({
-                isTestMode: false,
-                activeTestPersonaId: null,
                 isPrivacyMode: false,
                 apiKeys: { gemini: 'gemini-test-key', finnhub: '' },
                 assets: [],

@@ -105,26 +105,21 @@ export function usePastPortfolioHistory(): UsePastPortfolioHistoryResult {
     const assets = useFinanceStore((s) => s.assets);
     const fxRates = useFinanceStore((s) => s.fxRates);
     const finnhubKey = useFinanceStore((s) => s.apiKeys.finnhub);
-    const isTestMode = useFinanceStore((s) => s.isTestMode);
 
     // [PH2-c-1] priceHistory récupéré via Finnhub — lu depuis le cache MODULE partagé :
     // toutes les instances voient le même état, en même temps.
     const fetched = useSyncExternalStore(_subscribe, _getFetched);
     const isLoading = useSyncExternalStore(_subscribe, _getLoading);
 
-    // Reconstruction immédiate avec ce qu'on a (priceHistory du store en test,
-    // + ce qui a déjà été récupéré en réel). ⚠️ Revue #245 (M3) : en mode TEST, on n'applique PAS
-    // le cache Finnhub — un fetch réel résolu APRÈS la bascule en test polluerait sinon la fixture
-    // d'un symbole partagé (symbole réel vs symbole persona) → fuite réel→test.
     const result = useMemo<PortfolioHistoryResult>(() => {
         if (!assets || assets.length === 0) return emptyResult();
-        const minimal = assets.map((a) => toMinimal(a, isTestMode ? undefined : fetched[a.symbol]));
+        const minimal = assets.map((a) => toMinimal(a, fetched[a.symbol]));
         return reconstructPortfolioHistory(minimal, fxRates as Record<string, number>);
-    }, [assets, fxRates, fetched, isTestMode]);
+    }, [assets, fxRates, fetched]);
 
-    // Mode réel : compléter priceHistory via Finnhub pour les titres qui n'en ont pas.
+    // Compléter priceHistory via Finnhub pour les titres qui n'en ont pas.
     useEffect(() => {
-        if (isTestMode || !finnhubKey || !assets || assets.length === 0) return;
+        if (!finnhubKey || !assets || assets.length === 0) return;
 
         const missing = assets.filter((a) => {
             const hasLocal = (a.priceHistory && a.priceHistory.length > 0) || fetched[a.symbol];
@@ -195,7 +190,7 @@ export function usePastPortfolioHistory(): UsePastPortfolioHistoryResult {
             // Filet final (un throw dans _notify/listeners) : jamais d'unhandled rejection muette.
             logError({ source: 'network', severity: 'warning', message: 'usePastPortfolioHistory: échec du lot de fetch.', error: e instanceof Error ? e : new Error(String(e)) });
         });
-    }, [assets, finnhubKey, isTestMode, fetched]);
+    }, [assets, finnhubKey, fetched]);
 
     return { ...result, isLoading };
 }

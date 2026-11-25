@@ -28,10 +28,10 @@ import { snapshotAppState } from '../../services/aiTools/appStateProvider';
 import { createBackupNow } from '../../services/backupAuto';
 import { logError } from '../../services/errorLogger';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { applyDebtSpec } from '../../mcp/tools/applyDebt.spec';
-import { setCashSpec } from '../../mcp/tools/setCash.spec';
-import { TEST_PERSONAS } from '../../services/testPersonas';
-import { normalizeAppState } from '../../mcp/state/loadAppState';
+import { applyDebtSpec } from '../../services/aiTools/specs/applyDebt.spec';
+import { setCashSpec } from '../../services/aiTools/specs/setCash.spec';
+import { TEST_PERSONAS } from '../fixtures/testPersonas';
+import { normalizeAppState } from '../../services/aiTools/appStateDefaults';
 import { computeStartingCash } from '../../services/projection/buildSimulationParams';
 
 const baseState = (): AppState =>

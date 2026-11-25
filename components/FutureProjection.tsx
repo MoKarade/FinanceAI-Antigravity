@@ -280,7 +280,6 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     const projectionRefus = useFinanceStore((s) => s.projectionRefus);
     const liveResults = useFinanceStore((s) => s.lastProjection);
     const hasForeignHoldings = useFinanceStore((s) => hasForeignCurrencyAssets(s.assets));
-    const isTestModeActive = useFinanceStore((s) => s.isTestMode);
 
     const results = liveResults;
     const curveVisible = results !== null;
@@ -298,7 +297,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     }, [reqsMet, hasError, results, projectionStatus]);
 
     const curveRestoring =
-        (reqsMet || isTestModeActive) && !hasError && !restoringTimedOut && results === null;
+        reqsMet && !hasError && !restoringTimedOut && results === null;
 
     const {
         chartData = [] as ProjectionChartPoint[],
@@ -1387,7 +1386,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
 
             {!curveVisible && !curveRestoring && (
                 <div className="space-y-4">
-                    {!reqsMet && !isTestModeActive ? (
+                    {!reqsMet ? (
                         <section aria-label="Données requises pour la projection" className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-5 space-y-3">
                             <div className="space-y-1">
                                 <h2 className="text-base font-bold text-texte">Complète ton dossier pour calculer ta trajectoire</h2>

@@ -26,7 +26,6 @@ beforeEach(() => {
     clearHistorySyncReport();
     useFinanceStore.getState().resetState();
     useFinanceStore.setState({
-        isTestMode: false,
         assets: [{ symbol: 'ZKIL', name: 'Fonds MSCI World', quantity: 10, currency: 'EUR', currentPrice: 500 }],
     } as never);
 });
@@ -106,13 +105,6 @@ describe('HistorySyncDoctor', () => {
         const { container } = render(<HistorySyncDoctor onApplyQuoteSymbol={onApply} isSyncing={false} />);
         expect(container.textContent).not.toContain('12345');
         expect(container.textContent).toContain('Diagnostic masqué');
-    });
-
-    it('MODE TEST → aucun rendu (les diagnostics portent les tickers RÉELS)', () => {
-        useFinanceStore.setState({ isTestMode: true } as never);
-        setHistorySyncReport({ at: 1, patchedCount: 0, skipped: [{ symbol: 'ZKIL', reason: 'empty' }] });
-        const { container } = render(<HistorySyncDoctor onApplyQuoteSymbol={onApply} isSyncing={false} />);
-        expect(container.firstChild).toBeNull();
     });
 
     it('[Finding code-reviewer #494] même symbole en 2 comptes (2 skips) → UNE seule ligne (pas de clé/id dupliqués)', () => {

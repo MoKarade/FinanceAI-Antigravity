@@ -326,22 +326,6 @@ export function getErrorStats(): { total: number; bySource: Record<string, numbe
 }
 
 /**
- * Export JSON téléchargeable des erreurs (pour partage/support).
- * @returns Blob URL — caller doit appeler URL.revokeObjectURL après usage.
- */
-export function exportErrorsAsJSON(): string {
-    const entries = readState().entries;
-    const payload = {
-        exportedAt: new Date().toISOString(),
-        count: entries.length,
-        stats: getErrorStats(),
-        entries,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    return URL.createObjectURL(blob);
-}
-
-/**
  * Installe les hooks globaux : window.onerror et unhandledrejection.
  * À appeler UNE FOIS au boot de l'app (depuis App.tsx).
  */

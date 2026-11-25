@@ -12,19 +12,17 @@
 // ⚠️ apiKeys : le snapshot les EXCLUT (défauts vides) → appliquer nextState TEL QUEL écraserait
 // les vraies clés en mémoire. On les retire toujours du patch appliqué.
 
-import type { AnyWriteToolSpec } from '../../mcp/tools/_toolSpec';
-import type { ToolTextResult } from '../../mcp/tools/_dataAware';
-import { jsonContent } from '../../mcp/tools/_dataAware';
-import { applyDocument, type Change } from '../../mcp/ingest/applyDocument';
+import type { AnyWriteToolSpec } from './specs/_toolSpec';
+import type { ToolTextResult } from './specs/_dataAware';
+import { jsonContent } from './specs/_dataAware';
+import { applyDocument, type Change } from '../ingest/applyDocument';
 import { snapshotAppState } from './appStateProvider';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { createBackupNow } from '../backupAuto';
 import { logError } from '../errorLogger';
 import { sanitizePromptText } from '../../utils/promptSafety';
-// [MCP-WRITE-SUMMARY-SCRUB] Désinfection du résultat renvoyé au modèle — helper PARTAGÉ avec le
-// serveur MCP (runApply) pour éviter la dérive « delta appliqué à une seule copie ». Voir le module.
-import { scrubWriteResultForModel } from '../../mcp/tools/scrubWriteResult';
-import { modeDonneesFictives } from '../../store/modeTestActif';
+// [MCP-WRITE-SUMMARY-SCRUB] Désinfection du résultat renvoyé au modèle.
+import { scrubWriteResultForModel } from './specs/scrubWriteResult';
 
 /** Aperçu montré dans le modal de confirmation. */
 export interface WritePreview {
@@ -73,7 +71,7 @@ export async function executeWriteTool(
     // FILET, jamais refusé sur données fictives : ce module fait de la réussite du backup la
     // CONDITION de l'écriture, donc un refus interdirait à l'assistant toute écriture dans le
     // bac à sable — l'usage même que le bac à sable sert.
-    const backup = await createBackupNow('auto', { intent: 'filet', donneesFictives: modeDonneesFictives() });
+    const backup = await createBackupNow('auto', { intent: 'filet', donneesFictives: false });
     if (!backup.ok) {
         logError({
             source: 'storage', severity: 'error',

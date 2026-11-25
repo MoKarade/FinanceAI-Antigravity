@@ -122,14 +122,6 @@ describe('Export : toute clé persistée est dans le fichier', () => {
         expect(blobs).toHaveLength(0);
         expect(vi.mocked(showToast)).toHaveBeenCalledWith(expect.stringMatching(/illisible/), 'error');
     });
-
-    it('mode test → aucun fichier, message qui dit pourquoi', async () => {
-        useFinanceStore.setState({ transactions: TX, isTestMode: true } as Partial<FinanceState>);
-        render(<BackupPanel />);
-        fireEvent.click(screen.getByRole('button', { name: 'Exporter JSON' }));
-        expect(blobs).toHaveLength(0);
-        expect(vi.mocked(showToast)).toHaveBeenCalledWith(expect.stringMatching(/mode test/), 'error');
-    });
 });
 
 describe('Restauration : aller-retour par l\'écran', () => {

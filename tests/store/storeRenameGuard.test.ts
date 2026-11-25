@@ -28,7 +28,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { migratePersistedState } from '../../store/useFinanceStore';
-import { buildDefaultAppState } from '../../mcp/state/appStateDefaults';
+import { buildDefaultAppState } from '../../services/aiTools/appStateDefaults';
 import { INITIAL_CONFIG } from '../../constants';
 import { stripComments } from '../../utils/stripComments';
 

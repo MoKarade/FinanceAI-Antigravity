@@ -20,8 +20,8 @@
 import { STORAGE_KEYS } from '../utils/storageKeys';
 import { logError } from './errorLogger';
 
-export const IDB_DB_NAME = 'financeai-unlimited-state';
-export const IDB_STORE_NAME = 'kv';
+const IDB_DB_NAME = 'financeai-unlimited-state';
+const IDB_STORE_NAME = 'kv';
 const IDB_VERSION = 1;
 export const OVERFLOW_FLAG_KEY = 'financeai:idb_overflow:v1';
 export const PARTIAL_MIRROR_FLAG_KEY = 'financeai:idb_partial_mirror:v1';
@@ -170,7 +170,7 @@ async function performIdbDelete(key: string): Promise<void> {
     }
 }
 
-export function deleteIdbEntry(key: string): Promise<void> {
+function deleteIdbEntry(key: string): Promise<void> {
     _writeSeq += 1;
     const prev = _idbWriteQueues.get(key) ?? Promise.resolve();
     const next = prev.catch(() => undefined).then(() => performIdbDelete(key));
@@ -178,7 +178,7 @@ export function deleteIdbEntry(key: string): Promise<void> {
     return next;
 }
 
-export async function clearIdbEntries(): Promise<void> {
+async function clearIdbEntries(): Promise<void> {
     _writeSeq += 1;
     if (typeof indexedDB === 'undefined') return;
     let db: IDBDatabase | null = null;
@@ -296,10 +296,6 @@ function buildCompactLocalMirrorDetailed(rawEnvelopeJson: string): { json: strin
     }
     serialized = JSON.stringify({ ...env, state: compactState });
     return { json: serialized, balancesAffected };
-}
-
-export function buildCompactLocalMirror(rawEnvelopeJson: string): string {
-    return buildCompactLocalMirrorDetailed(rawEnvelopeJson).json;
 }
 
 export function isLocalMirrorCompacted(): boolean {

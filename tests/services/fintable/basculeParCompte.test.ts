@@ -21,8 +21,6 @@ import { mapFintableSnapshot, type FintableAccountRole } from '../../../services
 import { runFintableBrowserSync } from '../../../services/fintable/browserSync';
 import type { FintableClient } from '../../../services/fintable/client';
 import type { FintableSnapshot } from '../../../services/fintable/types';
-import { runFintableSync } from '../../../mcp/runFintableSync';
-import type { StateStore } from '../../../mcp/state/stateStore';
 import type { AppState, Transaction } from '../../../types';
 
 const CHEQUE = { id: 'acc_cheque', label: 'Chèque' };
@@ -280,43 +278,6 @@ describe('browserSync — la borne de la REQUÊTE recule jusqu\'au compte le plu
         expect(q?.date_from).toBe('2026-09-10');
     });
 });
-
-// ── 6. Le CÂBLAGE côté CRON — même correctif des deux côtés, prouvé des deux côtés ──────────────
-
-describe('runFintableSync (cron) — la borne de la REQUÊTE recule aussi', () => {
-    it('passe `date_from` = la borne du compte lent, jamais la bascule globale', async () => {
-        // ⚠️ Le chemin serveur et le chemin navigateur partagent `syncCore` PAR CONSTRUCTION, mais
-        // chacun pose sa propre `dateFrom` : un correctif appliqué à un seul côté laisserait
-        // l'autre bogué sans que rien ne le signale (c'est l'histoire de `syncCore` lui-même).
-        const vuQuery: Record<string, unknown>[] = [];
-        const client = {
-            get: vi.fn(async (path: string) => {
-                if (path === '/accounts') return { data: [], nextCursor: null, snapshotDate: null };
-                throw new Error(`route inattendue : ${path}`);
-            }),
-            getAllPages: vi.fn(async (path: string, query: Record<string, unknown>) => {
-                if (path === '/transactions') vuQuery.push(query);
-                return [];
-            }),
-        } as unknown as FintableClient;
-
-        const state = {
-            transactions: [tx('2026-09-15', 'Chèque'), tx('2026-09-10', 'Carte')],
-        } as unknown as AppState;
-        const store: StateStore = {
-            get: async () => state,
-            getWithVersion: async () => ({ state, version: 1 }),
-            save: async () => ({ backupPath: '/backup' }),
-            canWrite: true,
-        };
-
-        await runFintableSync(store, { token: 't', roles: ROLES, client });
-
-        const q = vuQuery.find((x) => 'date_from' in x);
-        expect(q?.date_from).toBe('2026-09-10');
-    });
-});
-
 
 // ── 7. Ce que la revue du panel a trouvé, et que j'avais introduit ──────────────────────────────
 

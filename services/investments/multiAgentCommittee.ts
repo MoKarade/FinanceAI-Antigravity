@@ -23,7 +23,6 @@ import { signalerUsageIa } from '../aiChat/coutIa';
 import { MODEL_IDS } from '../aiChat/models';
 import type { BlocTableau } from '../assistant/blocsRiches';
 import {
-    marquerSystemFictif,
     PROMPT_DATA_ISOLATION_NOTE,
     sanitizePromptText,
     wrapUserData,
@@ -927,7 +926,6 @@ function buildPromptDataBlock(ctx: CommitteeCollectedContext): string {
 
 function buildSpecialistSystemPrompt(
     agentId: CommitteeSpecialistAgentId,
-    isTestMode: boolean | undefined,
 ): string {
     const directives: Record<CommitteeSpecialistAgentId, string> = {
         market_news:
@@ -940,19 +938,17 @@ function buildSpecialistSystemPrompt(
             'Tu es l’Agent Portefeuille & Fiscalité Québec/Canada. Analyse l’ajustement au portefeuille anonymisé (ACTIF_01..12), le chevauchement sectoriel/technologique, la taille de position prudente, et l’enveloppe fiscale canadienne optimale (CELI vs REER vs CELIAPP vs Non-enregistré, en tenant compte de la retenue US 15 % sur dividendes US en CELI vs exemption en REER selon le traité Canada-US).',
     };
 
-    const base = [
+    return [
         directives[agentId],
         'RÈGLE STRICTE NO-FAKE-DATA : si un chiffre exact (PER, valorisation, chiffre d’affaires, cours) est inconnu ou non confirmé, dis-le explicitement ou mets confidence: null — n’invente JAMAIS de montant ou de multiple.',
         'Réponds UNIQUEMENT en JSON valide (sans texte hors JSON) respectant exactement ce schéma :',
         '{"stance":"FAVORABLE|PRUDENT|DEFAVORABLE|INDIRECT|NEUTRE","confidence":0-100|null,"summary":"2-3 phrases directes en français","keyPoints":["..."],"risks":["..."]}',
         PROMPT_DATA_ISOLATION_NOTE,
     ].join('\n');
-
-    return marquerSystemFictif(base, Boolean(isTestMode)) ?? base;
 }
 
-function buildChairSystemPrompt(isTestMode: boolean | undefined): string {
-    const base = [
+function buildChairSystemPrompt(): string {
+    return [
         'Tu es le Président du Comité d’Investissement de FinanceAI (Québec / Canada). Tu viens de lire les rapports de tes 4 agents indépendants.',
         'Rends un verdict final clair, nuancé et actionnable en français.',
         'RÈGLES CRITIQUES :',
@@ -964,8 +960,6 @@ function buildChairSystemPrompt(isTestMode: boolean | undefined): string {
         '{"entityStatus":"public_listed|private_unlisted|sector_or_theme|portfolio_question","resolvedTicker":"SYMBOLE|null","verdict":"ACHETER|ACCUMULER|EXPOSITION_INDIRECTE|ATTENDRE|EVITER|CONSERVER","conviction":0-100|null,"executiveSummary":"3-4 phrases directes commençant par la conclusion honnête","consensus":["..."],"disagreements":["..."],"actionPlan":["..."],"indirectProxies":[{"symbol":"...","name":"...","rationale":"..."}],"invalidationConditions":["..."],"recommendedWrapper":"CELI|REER|CELIAPP|Non-enregistré|Non applicable (privé)|null"}',
         PROMPT_DATA_ISOLATION_NOTE,
     ].join('\n');
-
-    return marquerSystemFictif(base, Boolean(isTestMode)) ?? base;
 }
 
 // ── Repli déterministe honnête sans fabrication de chiffres ───────────────────
@@ -1244,7 +1238,6 @@ export async function runMultiAgentCommittee(
     options: RunMultiAgentCommitteeOptions,
 ): Promise<CommitteeAnalysisReport> {
     const isPrivacy = options.isPrivacyMode ?? Boolean((options.state as AppState & { isPrivacyMode?: boolean }).isPrivacyMode);
-    const isTestMode = options.isTestMode ?? Boolean((options.state as AppState & { isTestMode?: boolean }).isTestMode);
     if (isPrivacy) {
         throw new Error(MESSAGE_IA_MODE_DISCRET);
     }
@@ -1331,7 +1324,7 @@ export async function runMultiAgentCommittee(
                 const resp = await runner({
                     agentId: id,
                     model,
-                    systemInstruction: buildSpecialistSystemPrompt(id, isTestMode),
+                    systemInstruction: buildSpecialistSystemPrompt(id),
                     prompt: `Analyse cette demande d'investissement selon ton rôle spécialisé :\n\n${dataBlock}`,
                     useWebSearch: meta.useWebSearch,
                     signal: options.signal,
@@ -1427,7 +1420,7 @@ export async function runMultiAgentCommittee(
         const chairResp = await runner({
             agentId: 'chair_synthesis',
             model,
-            systemInstruction: buildChairSystemPrompt(isTestMode),
+            systemInstruction: buildChairSystemPrompt(),
             prompt: `Synthétise ces 4 rapports indépendants et tranche pour l’utilisateur :\n\n${reportsForChair}`,
             useWebSearch: false,
             signal: options.signal,

@@ -72,7 +72,6 @@ const estAnnulation = (err: unknown): boolean => err instanceof Error && err.nam
 
 export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOpen, onClose, initialQuery = '', depotInjecte }) => {
     const isPrivacyMode = useFinanceStore((s) => s.isPrivacyMode);
-    const isTestMode = useFinanceStore((s) => s.isTestMode);
     const aiChatModel = useFinanceStore((s) => s.aiChatModel);
     const apiKeyGemini = useFinanceStore((s) => cleGemini(s));
     const updateApiKeys = useFinanceStore((s) => s.updateApiKeys);
@@ -103,7 +102,7 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
     const ctxDossier = useMemo(
         () => extraireContextePatrimonial(useFinanceStore.getState()),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [isOpen, conversation.messages.length, isTestMode],
+        [isOpen, conversation.messages.length],
     );
     const avisDossierInitial = useMemo(() => genererAvisHonneteDossier(ctxDossier), [ctxDossier]);
 
@@ -168,13 +167,13 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({ isOp
         if (!isOpen) return;
         let actif = true;
         void (async () => {
-            const d = depotInjecte ?? await choisirDepot({ donneesFictives: isTestMode });
+            const d = depotInjecte ?? await choisirDepot({ donneesFictives: false });
             if (!actif) return;
             setDepot(d);
             await rafraichirListe(d);
         })();
         return () => { actif = false; };
-    }, [isOpen, isTestMode, depotInjecte, rafraichirListe]);
+    }, [isOpen, depotInjecte, rafraichirListe]);
 
     useEffect(() => () => controllerRef.current?.abort(), []);
 

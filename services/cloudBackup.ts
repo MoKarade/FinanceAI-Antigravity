@@ -103,12 +103,14 @@ const concatBytes = (...parts: Uint8Array[]): Uint8Array => {
 
 const HEADER_LENGTH = MAGIC.length + 1 + SALT_BYTES + IV_BYTES;
 
+export const MIN_PASSPHRASE_LENGTH = 12;
+
 const checkPassphrase = (passphrase: string): void => {
     // Min 12 caractères pour résister au brute-force hors-ligne (audit fiscal 2026-05).
     // PBKDF2 600k itérations + 8 chars = bruteforcable en semaines sur GPU moderne.
-    if (typeof passphrase !== 'string' || passphrase.length < 12) {
+    if (typeof passphrase !== 'string' || passphrase.length < MIN_PASSPHRASE_LENGTH) {
         throw new CloudBackupError(
-            'Passphrase requise (minimum 12 caracteres). Choisis quelque chose que tu retiendras : sans elle, la sauvegarde est irrecuperable.',
+            `Passphrase requise (minimum ${MIN_PASSPHRASE_LENGTH} caracteres). Choisis quelque chose que tu retiendras : sans elle, la sauvegarde est irrecuperable.`,
             'INTERNAL'
         );
     }

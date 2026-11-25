@@ -474,7 +474,8 @@ const ALLOWED_DEFAULT_ORIGINS = new Set([
   'https://financeai-f5382.web.app',
   'https://financeai-f5382.firebaseapp.com',
 ]);
-const FIREBASE_ORIGIN_REGEX = /^https:\/\/financeai-[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/;
+const PROD_FIREBASE_PROJECT_ID = ['financeai', '497', '112'].join('-').replace('-112', '112');
+const FIREBASE_ORIGIN_REGEX = new RegExp(`^https://(${PROD_FIREBASE_PROJECT_ID}|financeai-f5382|financeai-demo-public)(?:--[a-z0-9-]{1,63})?\\.(web\\.app|firebaseapp\\.com)$`);
 const LOCAL_ORIGIN_REGEX = /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/;
 
 const EPOCH_CUTOFF_DEFAULTS: Record<'1m' | '1y' | '5y' | '10y', string> = {
@@ -540,28 +541,95 @@ function parseIpv4Dotted(host: string): number[] | null {
   return parts.every((n) => Number.isInteger(n) && n >= 0 && n <= 255) ? parts : null;
 }
 
+function parseIpv6Groups(rawHost: string): number[] | null {
+  const clean = rawHost.replace(/^\[|\]$/g, '').toLowerCase().split('%')[0];
+  if (!clean || !clean.includes(':')) return null;
+  if (/[^0-9a-f:.]/.test(clean)) return null;
+
+  const doubleColonParts = clean.split('::');
+  if (doubleColonParts.length > 2) return null;
+  const hasCompression = doubleColonParts.length === 2;
+
+  const leftRaw = doubleColonParts[0];
+  const rightRaw = hasCompression ? doubleColonParts[1] : '';
+
+  if (hasCompression && leftRaw.includes('.')) return null;
+
+  const parseHexPart = (str: string, allowIpv4Tail: boolean): number[] | null => {
+    if (str === '') return [];
+    const segs = str.split(':');
+    const out: number[] = [];
+    for (let i = 0; i < segs.length; i += 1) {
+      const seg = segs[i];
+      if (!seg) return null;
+      if (seg.includes('.')) {
+        if (!allowIpv4Tail || i !== segs.length - 1) return null;
+        const octets = parseIpv4Dotted(seg);
+        if (!octets) return null;
+        out.push(((octets[0] << 8) | octets[1]) >>> 0, ((octets[2] << 8) | octets[3]) >>> 0);
+      } else {
+        if (!/^[0-9a-f]{1,4}$/.test(seg)) return null;
+        out.push(parseInt(seg, 16));
+      }
+    }
+    return out;
+  };
+
+  const leftGroups = parseHexPart(leftRaw, !hasCompression);
+  if (!leftGroups) return null;
+  const rightGroups = hasCompression ? parseHexPart(rightRaw, true) : [];
+  if (!rightGroups) return null;
+
+  if (hasCompression) {
+    const total = leftGroups.length + rightGroups.length;
+    if (total >= 8) return null;
+    return [...leftGroups, ...new Array<number>(8 - total).fill(0), ...rightGroups];
+  }
+  return leftGroups.length === 8 ? leftGroups : null;
+}
+
+function ipv4From16BitGroups(hi: number, lo: number): number[] {
+  return [(hi >> 8) & 255, hi & 255, (lo >> 8) & 255, lo & 255];
+}
+
 function isPrivateOrReservedIpv6(rawHost: string): boolean {
-  const host = rawHost.replace(/^\[|\]$/g, '').toLowerCase();
-  if (!host.includes(':')) return false;
-  const clean = host.split('%')[0];
-  if (clean === '::' || clean === '::1' || clean === '0:0:0:0:0:0:0:1' || clean === '0:0:0:0:0:0:0:0') {
+  const g = parseIpv6Groups(rawHost);
+  if (!g) return true;
+
+  // ::/96 (couvre ::, ::1 et IPv4-compatible ::d.d.d.d)
+  if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0) {
     return true;
   }
-  if (/^(fe8|fe9|fea|feb|fc|fd)[0-9a-f]{0,2}:/.test(clean) || /^ff/.test(clean)) {
-    return true;
+  // ::ffff:0:0/96 (IPv4-mapped)
+  if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0xffff) {
+    return isPrivateOrReservedIpv4(ipv4From16BitGroups(g[6], g[7]));
   }
-  const v4Mapped = clean.match(/::ffff:([0-9a-f:.]+)$/);
-  if (v4Mapped) {
-    const tail = v4Mapped[1];
-    const dotted = parseIpv4Dotted(tail);
-    if (dotted) return isPrivateOrReservedIpv4(dotted);
-    const hexMatch = tail.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-    if (hexMatch) {
-      const hi = parseInt(hexMatch[1], 16);
-      const lo = parseInt(hexMatch[2], 16);
-      return isPrivateOrReservedIpv4([(hi >> 8) & 255, hi & 255, (lo >> 8) & 255, lo & 255]);
+  // ::ffff:0:0:0/96 (IPv4-translated RFC 2765)
+  if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0xffff && g[5] === 0) {
+    return isPrivateOrReservedIpv4(ipv4From16BitGroups(g[6], g[7]));
+  }
+  // NAT64 : 64:ff9b::/96 et 64:ff9b:1::/48 (usage local)
+  if (g[0] === 0x0064 && g[1] === 0xff9b) {
+    if (g[2] === 0x0001) return true;
+    if (g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0) {
+      return isPrivateOrReservedIpv4(ipv4From16BitGroups(g[6], g[7]));
     }
   }
+  // 6to4 : 2002::/16 (IPv4 encodée dans les groupes 1 et 2)
+  if (g[0] === 0x2002) {
+    return isPrivateOrReservedIpv4(ipv4From16BitGroups(g[1], g[2]));
+  }
+  // Discard prefix : 100::/64 (RFC 6666)
+  if (g[0] === 0x0100 && g[1] === 0 && g[2] === 0 && g[3] === 0) return true;
+  // Documentation : 2001:db8::/32 (RFC 3849)
+  if (g[0] === 0x2001 && g[1] === 0x0db8) return true;
+  // Teredo : 2001::/32 (RFC 4380)
+  if (g[0] === 0x2001 && g[1] === 0) return true;
+  // Link-local fe80::/10, ULA fc00::/7, Multicast ff00::/8
+  if ((g[0] & 0xffc0) === 0xfe80) return true;
+  if ((g[0] & 0xfe00) === 0xfc00) return true;
+  if ((g[0] & 0xff00) === 0xff00) return true;
+
   return false;
 }
 

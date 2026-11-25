@@ -20,12 +20,12 @@ import type { AppState } from '../../types';
 import { Tab } from '../../types';
 import { READ_SPECS, WRITE_SPECS } from '../aiTools/registry';
 import { snapshotAppState, facadeStoreAssistant } from '../aiTools/appStateProvider';
-import type { AnyReadToolSpec, AnyWriteToolSpec } from '../../mcp/tools/_toolSpec';
-import type { ToolTextResult } from '../../mcp/tools/_dataAware';
-import { scrubMcpDeep } from '../../mcp/tools/_dataAware';
-import { applyDocument } from '../../mcp/ingest/applyDocument';
-import { scrubWriteResultForModel } from '../../mcp/tools/scrubWriteResult';
-import { validateAppStateShape } from '../../mcp/state/appStateSchema';
+import type { AnyReadToolSpec, AnyWriteToolSpec } from '../aiTools/specs/_toolSpec';
+import type { ToolTextResult } from '../aiTools/specs/_dataAware';
+import { scrubMcpDeep } from '../aiTools/specs/_dataAware';
+import { applyDocument } from '../ingest/applyDocument';
+import { scrubWriteResultForModel } from '../aiTools/specs/scrubWriteResult';
+import { validateAppStateShape } from '../aiTools/appStateSchema';
 import { verifierTypesRestaures, resumeTechniqueDesFautifs } from '../verifierTypesRestaures';
 import { PROMPT_DATA_ISOLATION_NOTE } from '../../utils/promptSafety';
 import { TRANCHES, jsonSur, type TrancheCollection, type TrancheListeTexte, type TrancheObjet } from './tranches';
@@ -491,7 +491,7 @@ const actionsApplication: ActionAssistant[] = [
             const { buildCommitteeTableauBloc } = await import('../investments/multiAgentCommittee');
             try {
                 const { saveCommitteeAnalysis } = await import('../investments/committeeHistoryStore');
-                await saveCommitteeAnalysis(facadeStoreAssistant.porteeTest(), report);
+                await saveCommitteeAnalysis({ isTestMode: false, personaId: null }, report);
             } catch {
                 // Sauvegarde historique best-effort : ne bloque jamais la réponse assistant.
             }

@@ -40,7 +40,7 @@ describe('bundle construit : aucun jeton de relais', () => {
     });
 
     it('aucune source client ou route API ne référence VITE_PROXY_ACCESS_TOKEN ni x-financeai-proxy', () => {
-        const repertoires = ['api', 'components', 'hooks', 'services', 'store', 'utils'];
+        const repertoires = ['server', 'components', 'hooks', 'services', 'store', 'utils'];
         const tousLesFichiers = [
             ...repertoires.flatMap((r) => fichiers(join(RACINE, r))),
             join(RACINE, 'vite.config.ts'),

@@ -39,7 +39,7 @@ export const AccountsSection: React.FC<AccountsSectionProps> = ({
         <h3 className="text-h2 text-ink-50">Comptes &amp; données</h3>
         <p className="text-meta text-ink-400 mt-0.5">
           Importe tes revenus et transactions, puis fixe tes soldes de départ. Le CSV reste 100 % local ;
-          les PDF/images (relevé, paie) sont analysés par l'IA (Claude).
+          les PDF/images (relevé, paie) sont analysés par l'IA (Google Gemini).
         </p>
       </header>
 

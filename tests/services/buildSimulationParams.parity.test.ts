@@ -11,8 +11,8 @@
 // la fonction pure. Le moteur lui-même reste inchangé (suite complète verte).
 
 import { describe, it, expect } from 'vitest';
-import { TEST_PERSONAS } from '../../services/testPersonas';
-import { normalizeAppState } from '../../mcp/state/loadAppState';
+import { TEST_PERSONAS } from '../fixtures/testPersonas';
+import { normalizeAppState } from '../../services/aiTools/appStateDefaults';
 import {
     buildSimulationParams,
     buildSimulationParamsFromState,

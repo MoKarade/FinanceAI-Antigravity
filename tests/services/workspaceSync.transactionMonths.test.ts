@@ -142,8 +142,6 @@ function buildTransactions(total: number, monthCount: number) {
 function setLocalState(transactions: unknown[]) {
     const config = store.getState().config;
     store.setState({
-        isTestMode: false,
-        activeTestPersonaId: null,
         config: { ...config, users: [{ ...(config.users?.[0] ?? {}), name: 'Camille' }, ...(config.users ?? []).slice(1)] },
         transactions: transactions as never,
     } as never);

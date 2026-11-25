@@ -15,7 +15,6 @@ import React from 'react';
 import './i18n';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
-import { LoginGate } from './components/auth/LoginGate';
 import { FirebaseAuthGate } from './components/auth/FirebaseAuthGate';
 import { installPreloadErrorReload } from './utils/lazyWithRetry';
 import { useFinanceStore } from './store/useFinanceStore';
@@ -54,9 +53,7 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <FirebaseAuthGate>
-      <LoginGate>
-        <App />
-      </LoginGate>
+      <App />
     </FirebaseAuthGate>
   </React.StrictMode>
 );

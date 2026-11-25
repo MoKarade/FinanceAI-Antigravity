@@ -111,18 +111,6 @@ export function getAuditStats(): { total: number; byField: Record<string, number
     return stats;
 }
 
-export function exportAuditLogAsJSON(): string {
-    const entries = readState().entries;
-    const payload = {
-        exportedAt: new Date().toISOString(),
-        count: entries.length,
-        stats: getAuditStats(),
-        entries,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    return URL.createObjectURL(blob);
-}
-
 /**
  * Helper pour wrapper `setAppState` du store avec audit automatique.
  *

@@ -8,7 +8,7 @@ import { renderHook, act } from '@testing-library/react';
 import { useSimulationParams } from '../../hooks/useSimulationParams';
 import { buildSimulationParamsFromState } from '../../services/projection/buildSimulationParams';
 import { useDerivedFinancials } from '../../utils/useDerivedFinancials';
-import { TEST_PERSONAS } from '../../services/testPersonas';
+import { TEST_PERSONAS } from '../fixtures/testPersonas';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import type { AppState } from '../../types';
 
@@ -20,7 +20,10 @@ describe('[PH2-c-4] useSimulationParams — parité directe hook vs fonction ét
     for (const persona of TEST_PERSONAS) {
         it(`persona « ${persona.id} » : params du hook === buildSimulationParamsFromState`, () => {
             const fixtures = persona.build();
-            act(() => { useFinanceStore.getState().enableTestMode(fixtures, persona.id); });
+            act(() => {
+                useFinanceStore.getState().resetState();
+                useFinanceStore.setState(fixtures as Record<string, unknown>);
+            });
 
             const state = useFinanceStore.getState() as unknown as AppState;
             // Revue #246 — `savings` vient du VRAI chemin prod (useDerivedFinancials, comme App.tsx),

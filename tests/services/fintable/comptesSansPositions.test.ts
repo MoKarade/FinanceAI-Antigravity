@@ -82,11 +82,10 @@ describe('[FINTABLE-INVESTMENTS-MUET] les DEUX chemins de sync le remplissent', 
     // (`UN-SEUIL-D-ANTI-VACUITE-APPARTIENT-A-LA-PORTEE-QU-IL-MESURE`).
     const PART_CODE_MIN: Readonly<Record<string, number>> = {
         'services/fintable/browserSync.ts': 0.30,
-        'mcp/runFintableSync.ts': 0.40,
         'components/settings/FintableSyncCard.tsx': 0.55,
     };
 
-    for (const chemin of ['services/fintable/browserSync.ts', 'mcp/runFintableSync.ts']) {
+    for (const chemin of ['services/fintable/browserSync.ts']) {
         it(`${chemin} verse le champ dans son rapport`, () => {
             const code = lit(chemin);
             expect(partDeCodeRestante(readFileSync(chemin, 'utf8'), code)).toBeGreaterThan(PART_CODE_MIN[chemin]);
@@ -96,10 +95,8 @@ describe('[FINTABLE-INVESTMENTS-MUET] les DEUX chemins de sync le remplissent', 
         });
     }
 
-    it('les deux chemins partagent la MÊME source, ils ne la recopient pas', () => {
-        // Deux recopies auraient rendu le prochain oubli certain — c'est exactement ce qui vient
-        // d'arriver avec `holdingsSkipped`.
-        for (const chemin of ['services/fintable/browserSync.ts', 'mcp/runFintableSync.ts']) {
+    it('browserSync utilise la source unique comptesSansPositionsDuSnapshot', () => {
+        for (const chemin of ['services/fintable/browserSync.ts']) {
             expect(lit(chemin)).toContain('comptesSansPositions');
             expect(lit(chemin)).toMatch(/import \{ comptesSansPositionsDuSnapshot \}/);
         }

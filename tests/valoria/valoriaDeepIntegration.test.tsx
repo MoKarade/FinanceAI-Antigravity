@@ -15,7 +15,7 @@ import { axe } from 'vitest-axe';
 import type * as AxeCore from 'axe-core';
 import { Tab } from '../../types';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { TEST_ASSETS } from '../../services/testAssets';
+import { TEST_ASSETS } from '../fixtures/testAssets';
 import { INITIAL_CONFIG } from '../../constants';
 import {
   applyValoriaOrdersToRealPortfolio,

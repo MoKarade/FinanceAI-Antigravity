@@ -63,9 +63,8 @@ const migrateUserConfig = (config: LegacyBudgetConfig): LegacyBudgetConfig => {
     return { ...config, users: newUsers };
 };
 
-// Défauts purs de l'app (toutes les tranches vides/par défaut). SOURCE UNIQUE réutilisée par
-// l'init ET par le chargement d'un persona de test (base propre anti-fuite — cf personaResetBase).
-const DEFAULT_APP_STATE: AppState = {
+// Défauts purs de l'app (toutes les tranches vides/par défaut). SOURCE UNIQUE de l'init.
+export const DEFAULT_APP_STATE: AppState = {
     transactions: [],
     assets: [],
     investmentTransactions: [],
@@ -107,6 +106,7 @@ const DEFAULT_APP_STATE: AppState = {
     // [B3+B4] Modèle par conversation + coût API cumulé à vie (additifs, persistés/synchronisés).
     aiChatModel: DEFAULT_AI_CHAT_MODEL,
     aiChatCostUsdTotal: 0,
+    aiChatCostUsdByDay: {},
     // W5.x — Nouveaux containers (vide par défaut)
     insurancePolicies: [],
     rentalProperties: [],
@@ -143,19 +143,6 @@ const DEFAULT_APP_STATE: AppState = {
     instruments: undefined,
     // [PTF-L1E-PASSERELLE] Même contrat, même raisons : `undefined` = aucun régime déclaré.
     brokerAccountRegimes: undefined,
-};
-
-// Base PROPRE pour charger un persona de test : toutes les tranches de DONNÉES remises aux défauts
-// vides, SAUF apiKeys (credentials), fxRates (données de marché) et lastUpdate — gardées telles
-// quelles. Garantit qu'AUCUNE donnée du persona précédent (ni des vraies données) ne subsiste quand
-// le nouveau persona ne définit pas une tranche (fix « des données qui restent au switch de profil »).
-export const personaResetBase = (): Partial<AppState> => {
-    const { apiKeys: _ak, fxRates: _fx, lastUpdate: _lu, ...data } = DEFAULT_APP_STATE;
-    void _ak; void _fx; void _lu;
-    // structuredClone : copies FRAÎCHES des tranches (arrays/objets) à chaque chargement de persona.
-    // Sinon le state pointerait sur les mêmes références que DEFAULT_APP_STATE/initialState, et une
-    // mutation en place en aval corromprait silencieusement les défauts globaux partagés.
-    return structuredClone(data);
 };
 
 /** [PTF-L1A] Relit un tableau optionnel écrit par la restauration d'un backup. Absent → `undefined`
@@ -303,6 +290,7 @@ export const getInitialStateWithMigration = (): AppState => {
             activeAiConversationId: null,
             aiChatModel: DEFAULT_AI_CHAT_MODEL,
             aiChatCostUsdTotal: 0,
+            aiChatCostUsdByDay: {},
             // FIX agents (HIGH code-reviewer): defaults manquants dans le retour de migration
             insurancePolicies: (() => { try { const r = localStorage.getItem('app_insurance_policies'); return r ? JSON.parse(r) : []; } catch (e) { logError({ source: 'storage', severity: 'warning', message: 'Migration store : parse localStorage échoué (champ ignoré, défaut appliqué)', error: e }); return []; } })(),
             rentalProperties: (() => { try { const r = localStorage.getItem('app_rental_properties'); return r ? JSON.parse(r) : []; } catch (e) { logError({ source: 'storage', severity: 'warning', message: 'Migration store : parse localStorage échoué (champ ignoré, défaut appliqué)', error: e }); return []; } })(),

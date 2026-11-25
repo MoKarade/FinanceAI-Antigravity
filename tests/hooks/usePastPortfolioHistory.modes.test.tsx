@@ -10,7 +10,7 @@ vi.mock('../../services/marketData', () => ({
     getHistory: vi.fn().mockResolvedValue([{ date: '2025-01-02', close: 100 }]),
     configureMarketDataProvider: vi.fn(),
 }));
-vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn() }));
+vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(), }));
 
 import { usePastPortfolioHistory, _resetPastHistoryFetchCache } from '../../hooks/usePastPortfolioHistory';
 import { getHistory } from '../../services/marketData';
@@ -23,69 +23,17 @@ const celiAsset = (priceHistory?: Array<{ date: string; price: number }>) => ({
     accountType: 'CELI', dateBought: '2025-01-01', priceHistory,
 } as unknown as Asset);
 
-describe('[CA-10] usePastPortfolioHistory — modes & anti-fuite', () => {
+describe('[CA-10] usePastPortfolioHistory — gardes sans fetch', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         _resetPastHistoryFetchCache();
         act(() => {
-            useFinanceStore.setState({ assets: [], fxRates: { USD: 1.35, EUR: 1.5, CAD: 1 }, isTestMode: false, apiKeys: { gemini: '', anthropic: '', finnhub: '' } });
+            useFinanceStore.setState({ assets: [], fxRates: { USD: 1.35, EUR: 1.5, CAD: 1 }, apiKeys: { gemini: '', anthropic: '', finnhub: '' } });
         });
-    });
-
-    it('mode TEST : reconstruit depuis la fixture priceHistory, AUCUN fetch réseau', async () => {
-        act(() => {
-            useFinanceStore.setState({
-                isTestMode: true,
-                // clé présente : prouve que c'est bien le MODE TEST (et non l'absence de clé) qui coupe le fetch.
-                apiKeys: { gemini: '', anthropic: '', finnhub: 'k-test' },
-                assets: [celiAsset([{ date: '2025-01-01', price: 10 }, { date: '2025-06-01', price: 12 }])],
-            });
-        });
-        const { result } = renderHook(() => usePastPortfolioHistory());
-
-        await waitFor(() => expect(result.current.points.length).toBeGreaterThan(0));
-        expect(getHistory).not.toHaveBeenCalled();          // mode test → jamais de réseau
-        expect(result.current.isLoading).toBe(false);
-        // La valeur CELI reflète la fixture (quantité 10 × prix ~10-12 = ~100-120), pas le prix courant.
-        const last = result.current.points.at(-1)!;
-        expect(last.CELI).toBeGreaterThan(0);
-        expect(last.CELI).toBeLessThan(1000);
-    });
-
-    it('mode TEST IGNORE le cache Finnhub module (anti-fuite réel→test, M3)', async () => {
-        // Phase 1 (réel) : peuple le cache module pour XEQT avec un prix RECONNAISSABLE (999).
-        vi.mocked(getHistory).mockResolvedValue([
-            { date: '2025-01-02', close: 999 }, { date: '2025-06-02', close: 999 },
-        ]);
-        act(() => {
-            useFinanceStore.setState({
-                isTestMode: false, apiKeys: { gemini: '', anthropic: '', finnhub: 'k-real' },
-                assets: [celiAsset(undefined)], // pas de priceHistory → déclenche le fetch
-            });
-        });
-        const real = renderHook(() => usePastPortfolioHistory());
-        await waitFor(() => expect(real.result.current.isLoading).toBe(false));
-        await waitFor(() => expect(getHistory).toHaveBeenCalledTimes(1));
-        real.unmount();
-
-        // Phase 2 (test) : MÊME symbole partagé, mais fixture à 10. Le cache (999) ne doit PAS fuiter.
-        vi.mocked(getHistory).mockClear();
-        act(() => {
-            useFinanceStore.setState({
-                isTestMode: true,
-                assets: [celiAsset([{ date: '2025-01-01', price: 10 }, { date: '2025-06-01', price: 10 }])],
-            });
-        });
-        const testH = renderHook(() => usePastPortfolioHistory());
-
-        await waitFor(() => expect(testH.result.current.points.length).toBeGreaterThan(0));
-        expect(getHistory).not.toHaveBeenCalled();          // mode test → aucun nouveau fetch
-        // ≈ 10×10 = 100 (fixture). Si le cache 999 avait fui → ~9990. Le seuil 1000 discrimine.
-        expect(testH.result.current.points.at(-1)!.CELI).toBeLessThan(1000);
     });
 
     it('garde : aucun actif → résultat vide, isLoading faux, aucun fetch', async () => {
-        act(() => { useFinanceStore.setState({ assets: [], isTestMode: false, apiKeys: { gemini: '', anthropic: '', finnhub: 'k' } }); });
+        act(() => { useFinanceStore.setState({ assets: [], apiKeys: { gemini: '', anthropic: '', finnhub: 'k' } }); });
         const { result } = renderHook(() => usePastPortfolioHistory());
 
         // Laisse passer un tick : aucun effet de fetch ne doit partir.
@@ -99,7 +47,7 @@ describe('[CA-10] usePastPortfolioHistory — modes & anti-fuite', () => {
     it('mode réel SANS clé finnhub → pas de fetch, reconstruction de ce qu\'on a (no-fake)', async () => {
         act(() => {
             useFinanceStore.setState({
-                isTestMode: false, apiKeys: { gemini: '', anthropic: '', finnhub: '' }, // pas de clé
+                apiKeys: { gemini: '', anthropic: '', finnhub: '' }, // pas de clé
                 assets: [celiAsset([{ date: '2025-01-01', price: 20 }, { date: '2025-06-01', price: 20 }])],
             });
         });

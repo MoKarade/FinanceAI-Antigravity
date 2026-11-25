@@ -26,7 +26,7 @@
 // (mesuré 2026-07-29, annuaire public), donc aucune position ne remonte. Les comptes de placement
 // ont le rôle `investment` : leur solde sert de valeur de RÉFÉRENCE du courtier, pas de source.
 
-import type { BankStatementPayload, CashBalancePayload, DebtPayload, DocumentPayload } from '../../mcp/ingest/applyDocument';
+import type { BankStatementPayload, CashBalancePayload, DebtPayload, DocumentPayload } from '../ingest/applyDocument';
 import { cleCompte } from './deriveCutoverDate';
 import { MAX_CLES_CITEES } from './decode';
 import {

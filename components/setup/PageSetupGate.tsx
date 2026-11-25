@@ -18,7 +18,7 @@ import { REQUIREMENTS, type Requirement, type RequirementId, type RequirementFie
  * Chaque page déclare ses PRÉREQUIS (IDs → registre central `REQUIREMENTS`).
  * Tant qu'ils ne sont pas remplis :
  *  - mode `hard` → RIEN du contenu réel ; on rend l'écran de setup (saisie +
- *    import + données de test). Trois façons de débloquer :
+ *    import). Trois façons de débloquer :
  *      • remplir / importer la donnée,
  *      • « Créer via la page » (forceShow) pour les prérequis non-saisissables
  *        inline (listes : projets immo, objectifs enfant…),
@@ -52,7 +52,7 @@ export const PAGE_SETUP: Partial<Record<Tab, PageSetup>> = {
         title: 'Retraite',
         intro:
             "Pour projeter ta retraite, il me faut ton salaire et ton profil retraite (âge cible, revenu visé). " +
-            "Saisis-les, importe un talon, ou explore avec des données de test.",
+            "Saisis-les ou importe un talon de paie.",
         requirementIds: ['salary', 'retirementProfile'],
     },
     // [REFONTE-NAV-L3] Split immo : REAL_ESTATE (Config) = biens détenus, REAL_ESTATE_PROJECTS
@@ -99,9 +99,7 @@ export const PAGE_SETUP: Partial<Record<Tab, PageSetup>> = {
     [Tab.TRANSACTIONS]: {
         mode: 'hard',
         title: 'Transactions',
-        intro:
-            'Importe un relevé bancaire (CSV) ou ajoute une transaction pour démarrer. ' +
-            'Tu peux aussi explorer avec des données de test.',
+        intro: 'Importe un relevé bancaire (CSV) ou ajoute une transaction pour démarrer.',
         requirementIds: ['transactions'],
         allowCreateInPage: true,
     },
@@ -110,7 +108,7 @@ export const PAGE_SETUP: Partial<Record<Tab, PageSetup>> = {
         title: 'Budget',
         intro:
             'Pour bâtir ton budget, il me faut ton salaire (la base de la répartition). ' +
-            'Saisis-le, importe un talon, ou explore avec des données de test.',
+            'Saisis-le ou importe un talon de paie.',
         requirementIds: ['salary'],
     },
     [Tab.INVESTMENTS]: {
@@ -143,7 +141,7 @@ export const PAGE_SETUP: Partial<Record<Tab, PageSetup>> = {
         allowCreateInPage: true,
     },
     // [REFONTE-NAV-L2b] Tab.DASHBOARD retiré : l'Accueil est supprimé (deep-link #DASHBOARD → #FUTURE),
-    // plus aucune page à gater ni carte SetupHub à afficher pour cet onglet.
+    // plus aucune page à gater.
 };
 
 const EMPTY_FIELDS: RequirementField[] = [];
@@ -160,8 +158,8 @@ const IMPORT_COMPONENTS: Partial<Record<ImportKind, React.FC>> = {
 };
 
 // ───────────────────────────────────────────────────── Requirement card ────
-// Exportée pour le SetupHub (Configuration) — fill inline réutilisé.
-export const RequirementCard: React.FC<{ req: Requirement; currentTab?: Tab }> = ({ req, currentTab }) => {
+// Fill inline réutilisé pour les prérequis.
+const RequirementCard: React.FC<{ req: Requirement; currentTab?: Tab }> = ({ req, currentTab }) => {
     const fields = req.fields ?? EMPTY_FIELDS;
     // Souscriptions ÉTROITES : `met` + signature des valeurs (resync), pas l'état entier.
     const met = useFinanceStore((s) => req.isMet(s));
@@ -173,7 +171,7 @@ export const RequirementCard: React.FC<{ req: Requirement; currentTab?: Tab }> =
         Object.fromEntries(fields.map((f) => [f.id, String(f.get(useFinanceStore.getState()) || '')])),
     );
 
-    // Resync quand le store change SOUS la carte (import, données de test).
+    // Resync quand le store change SOUS la carte (import, mise à jour profil).
     React.useEffect(() => {
         const s = useFinanceStore.getState();
         setVals(Object.fromEntries(fields.map((f) => [f.id, String(f.get(s) || '')])));
@@ -292,17 +290,9 @@ const FullSetupScreen: React.FC<{
     currentTab: Tab;
     onCreateInPage?: () => void;
 }> = ({ config, requirements, currentTab, onCreateInPage }) => {
-    const enableTestMode = useFinanceStore((s) => s.enableTestMode);
     const setAppState = useFinanceStore((s) => s.setAppState);
     const total = requirements.length;
     const done = useFinanceStore((s) => requirements.filter((r) => r.isMet(s)).length);
-
-    // [S5-REFONTE-PERF] Personas chargés au clic : ~25 Ko de données fictives hors du démarrage.
-    const loadTestData = async () => {
-        const { getPersonaOrDefault, DEFAULT_PERSONA_ID } = await import('../../services/testFixtures');
-        const persona = getPersonaOrDefault(DEFAULT_PERSONA_ID);
-        enableTestMode(persona.build(), persona.id);
-    };
 
     const optOut = () => {
         if (!config.optOut) return;
@@ -356,13 +346,6 @@ const FullSetupScreen: React.FC<{
                             <Icon name="plus" size={14} /> Créer via la page
                         </button>
                     )}
-                    <button
-                        type="button"
-                        onClick={() => { void loadTestData(); }}
-                        className="inline-flex items-center gap-2 min-h-[44px] px-3 py-1.5 rounded-card border border-bordure-champ bg-surface-douce text-meta font-medium text-ink-200 hover:bg-bordure hover:text-ink-50 transition-colors focus-ring"
-                    >
-                        <Icon name="flask" size={14} /> Données de test
-                    </button>
                     {config.optOut && (
                         <button
                             type="button"

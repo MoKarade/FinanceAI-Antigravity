@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, act } from '@testing-library/react';
 
-vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn() }));
+vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(), }));
 vi.mock('../../services/projection/runAsync', async (importOriginal) => {
     const reel = await importOriginal<typeof import('../../services/projection/runAsync')>();
     return { ...reel, runProjectionAsync: vi.fn(reel.runProjectionAsync) };
@@ -20,15 +20,20 @@ vi.mock('../../services/projection/runAsync', async (importOriginal) => {
 import { ProjectionEngine } from '../../components/ProjectionEngine';
 import { runProjectionAsync } from '../../services/projection/runAsync';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../../services/testFixtures';
+import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../fixtures/testFixtures';
 
 const monter = (corrompre?: (etat: Record<string, unknown>) => void) => {
     const persona = getPersonaOrDefault(DEFAULT_PERSONA_ID);
     const etat = persona.build() as Record<string, unknown>;
     corrompre?.(etat);
     act(() => {
-        useFinanceStore.getState().enableTestMode(etat as never, persona.id);
-        useFinanceStore.setState({ projectionRunMC: false, lastProjection: null, projectionStatus: 'idle' });
+        useFinanceStore.getState().resetState();
+        useFinanceStore.setState({
+            ...(etat as Record<string, unknown>),
+            projectionRunMC: false,
+            lastProjection: null,
+            projectionStatus: 'idle',
+        });
     });
     return render(<ProjectionEngine calculatedMonthlySavings={2000} />);
 };

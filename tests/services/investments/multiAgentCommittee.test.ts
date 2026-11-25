@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { buildDefaultAppState } from '../../../mcp/state/appStateDefaults';
+import { buildDefaultAppState } from '../../../services/aiTools/appStateDefaults';
 import { MESSAGE_IA_MODE_DISCRET } from '../../../services/messageErreurIa';
 import {
     runMultiAgentCommittee,

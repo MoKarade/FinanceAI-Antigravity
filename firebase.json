@@ -28,7 +28,7 @@
         "headers": [
           {
             "key": "Content-Security-Policy",
-            "value": "default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://fintable.io https://generativelanguage.googleapis.com https://finnhub.io https://api.coingecko.com https://www.bankofcanada.ca https://www.googleapis.com https://accounts.google.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; worker-src 'self' blob:; frame-src https://accounts.google.com https://*.firebaseapp.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none';"
+            "value": "default-src 'self'; script-src 'self' https://apis.google.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://fintable.io https://generativelanguage.googleapis.com https://finnhub.io https://api.coingecko.com https://www.bankofcanada.ca https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; worker-src 'self' blob:; frame-src https://accounts.google.com https://*.firebaseapp.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none';"
           },
           {
             "key": "X-Frame-Options",
@@ -48,7 +48,7 @@
           },
           {
             "key": "Permissions-Policy",
-            "value": "camera=(), microphone=(), geolocation=()"
+            "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
           }
         ]
       },

@@ -84,12 +84,6 @@ describe('Layout', () => {
         expect(screen.queryByLabelText('Guide du Pilote')).toBeNull();
     });
 
-    it('§B.4 — bouton Rapport PDF retiré de la sidebar', () => {
-        render(<Layout {...baseProps} onGeneratePDF={vi.fn()} />);
-        // Le bouton n'apparaît plus dans la sidebar (sera repensé dans une phase ultérieure).
-        expect(screen.queryByText(/Rapport PDF/i)).toBeNull();
-    });
-
     it('bouton privacy mode toggle expose aria-pressed (desktop + mobile)', () => {
         const toggle = vi.fn();
         const { rerender } = render(<Layout {...baseProps} togglePrivacyMode={toggle} isPrivacyMode={false} />);
@@ -144,7 +138,8 @@ describe('Layout', () => {
     it('[S5-REFONTE-R1] la carte Profil (pied de barre) ouvre le Profil', () => {
         const setActiveTab = vi.fn();
         const { container } = render(<Layout {...baseProps} setActiveTab={setActiveTab} />);
-        fireEvent.click(container.querySelector(`aside [data-tour-id="nav-${Tab.PROFILE}"]`)!);
+        const aside = container.querySelector('aside')!;
+        fireEvent.click(within(aside).getByRole('button', { name: /Profil/ }));
         expect(setActiveTab).toHaveBeenCalledWith(Tab.PROFILE);
     });
 
@@ -187,7 +182,8 @@ describe('Layout', () => {
 
     it('l\'Accueil apparaît en tête de la navigation latérale et mobile', () => {
         const { container } = render(<Layout {...baseProps} />);
-        expect(container.querySelector(`[data-tour-id="nav-${Tab.DASHBOARD}"]`)).not.toBeNull();
+        const aside = container.querySelector('aside')!;
+        expect(within(aside).getByRole('button', { name: 'Accueil' })).toBeInTheDocument();
         expect(screen.getAllByText('Accueil').length).toBeGreaterThanOrEqual(1);
     });
 });

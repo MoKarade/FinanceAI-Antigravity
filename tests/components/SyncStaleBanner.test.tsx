@@ -29,7 +29,7 @@ const report = (over: Partial<FintableSyncReport> = {}): FintableSyncReport => (
 });
 
 beforeEach(() => {
-    useFinanceStore.setState({ isTestMode: false, transactions: [], fintableSyncReport: undefined });
+    useFinanceStore.setState({ transactions: [], fintableSyncReport: undefined });
 });
 
 describe('SyncStaleBanner', () => {
@@ -60,16 +60,6 @@ describe('SyncStaleBanner', () => {
         const alert = screen.getByRole('alert', { name: /Fraîcheur de l'import bancaire/i });
         expect(alert).toHaveTextContent(/Synchronisation bancaire en échec/i);
         expect(alert).toHaveTextContent(/\[AUTH\]/);
-    });
-
-    it('MODE DÉMO → silence (des données de persona sont figées par nature)', () => {
-        useFinanceStore.setState({
-            isTestMode: true, transactions: dailyHistory(5, 40), fintableSyncReport: report(),
-        });
-        render(<SyncStaleBanner />);
-        // ⚠️ La région live reste MONTÉE (WCAG 4.1.3, CONVENTIONS #245) — elle est simplement VIDE.
-        const region = screen.getByRole('alert', { name: /Fraîcheur de l'import bancaire/i });
-        expect(region).toBeEmptyDOMElement();
     });
 
     it('import JAMAIS configuré → silence (on alerte sur une chute, pas sur une absence)', () => {

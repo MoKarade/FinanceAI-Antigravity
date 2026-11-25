@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, renderHook, screen, act, cleanup, waitFor } from '@testing-library/react';
 import { FutureProjection } from '../../components/FutureProjection';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../../services/testFixtures';
+import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../fixtures/testFixtures';
 import { computeDeepForecastInputsSig } from '../../services/projection/runDeepForecastAsync';
 import { useSimulationParams } from '../../hooks/useSimulationParams';
 import {
@@ -29,7 +29,7 @@ vi.mock('recharts', async () => {
         XAxis: () => null, YAxis: () => null, Tooltip: () => null, CartesianGrid: () => null,
     };
 });
-vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn() }));
+vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(), }));
 
 const idbMocks = vi.hoisted(() => ({
     loadApplied: vi.fn(),
@@ -158,9 +158,6 @@ describe('FutureProjection — affichage immédiat, mémoire chiffrée IDB et is
         act(() => {
             useFinanceStore.setState({
                 ...data,
-                isTestMode: false,
-                activeTestPersonaId: null,
-                realDataSnapshot: null,
                 projectionRunMC: false,
                 lastProjection: RESULT_A,
                 projectionStatus: 'idle',
@@ -228,35 +225,6 @@ describe('FutureProjection — affichage immédiat, mémoire chiffrée IDB et is
             expect(screen.getByText(/Données modifiées — tu peux relancer quand tu veux/i)).toBeInTheDocument(),
         );
         expect(screen.getByText(/Analyse profonde en mémoire/i)).toBeInTheDocument();
-    });
-
-    it('[mode test] isole strictement le slot IndexedDB entre dossier réel et persona (zéro fuite sur clear/load)', async () => {
-        idbMocks.loadApplied.mockImplementation(async (scope: { isTestMode?: boolean; personaId?: string | null }) => {
-            if (!scope?.isTestMode) {
-                return { status: 'ok', report: makeSavedDeepReport('sig-real', 100_000) };
-            }
-            return { status: 'empty' };
-        });
-
-        render(<Harness />);
-        await waitFor(() => expect(idbMocks.loadApplied).toHaveBeenCalledWith({ isTestMode: false, personaId: null }));
-        await waitFor(() => expect(screen.getByText(/Analyse profonde en mémoire/i)).toBeInTheDocument());
-
-        const persona = getPersonaOrDefault(DEFAULT_PERSONA_ID);
-        act(() => {
-            useFinanceStore.getState().enableTestMode(persona.build(), persona.id);
-        });
-
-        await waitFor(() =>
-            expect(idbMocks.loadApplied).toHaveBeenCalledWith({ isTestMode: true, personaId: persona.id }),
-        );
-        // Le persona a un slot vide : la mémoire du dossier réel ne fuit pas en mode test
-        await waitFor(() => expect(screen.queryByText(/Analyse profonde en mémoire/i)).not.toBeInTheDocument());
-        expect(idbMocks.clearApplied).not.toHaveBeenCalled();
-
-        act(() => {
-            useFinanceStore.getState().disableTestMode();
-        });
     });
 
     it('[a11y] montage déjà-visible → le focus n’est PAS volé ; transition rechargement → visible place le focus sur la courbe', async () => {

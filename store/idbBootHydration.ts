@@ -66,7 +66,6 @@ export function needsBlockingIdbHydration(): boolean {
  */
 export function applyCachedFxRatesSyncIfNeeded(): void {
     const current = useFinanceStore.getState();
-    if (current.isTestMode) return;
     if (fxFaitAutorite(fxSourceEffective(current))) return;
 
     const cached = readCachedFxRatesSync();
@@ -163,7 +162,7 @@ async function runIdbBootHydration(): Promise<void> {
         const fullJson = await readFullStateFromIdb(STORAGE_KEYS.persistStore);
         markIdbBootHydrationComplete();
 
-        if (!fullJson || useFinanceStore.getState().isTestMode) return;
+        if (!fullJson) return;
 
         const parsed = JSON.parse(fullJson) as { state?: Record<string, unknown> } | null;
         const idbState = parsed?.state;

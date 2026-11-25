@@ -92,8 +92,7 @@ export const Profile: React.FC = () => {
                 }
             />
 
-            {/* [IA-DEDUP-COMPLETUDE] La complétude (SetupHub) vit UNIQUEMENT dans Configuration
-                (audit UX 2026-06-17 : doublon Profil+Config). Ici = uniquement les champs à remplir. */}
+            {/* Champs à remplir du profil. */}
             <TabPanel idPrefix="profil" tab="identite" when={subTab === 'identite'}>
                 <div className="gf-terminal-card p-3 sm:p-4 bg-surface border border-bordure">
                     <UsersCard config={config} setConfig={setConfig} />

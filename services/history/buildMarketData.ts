@@ -129,7 +129,7 @@ interface BuildMarketDataResult {
  * ⚠️ `syntheticTailKeys` garde SON propre `JSON.stringify` : c'est un autre inventaire, avec
  * d'autres consommateurs — les fusionner ferait dépendre deux contrats l'un de l'autre.
  */
-export const encodeOmittedKey = (date: string, symbol: string): string => JSON.stringify([date, symbol]);
+const encodeOmittedKey = (date: string, symbol: string): string => JSON.stringify([date, symbol]);
 
 /**
  * Dates dont le `TOTAL` est AMPUTÉ d'au moins un titre détenu.

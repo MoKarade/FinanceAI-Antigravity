@@ -13,8 +13,8 @@
 // produire des montants différents, sinon l'égalité serait satisfaite par un générateur constant.
 
 import { describe, it, expect } from 'vitest';
-import { generateTestTransactions } from '../../services/testTransactions';
-import { buildCoupleConfort } from '../../services/testPersonas/coupleConfort';
+import { generateTestTransactions } from '../fixtures/testTransactions';
+import { buildCoupleConfort } from '../fixtures/testPersonas/coupleConfort';
 import type { Transaction } from '../../types';
 
 /** Somme des montants NON-transfert / NON-doublon — la grandeur qui variait (cash de départ). */

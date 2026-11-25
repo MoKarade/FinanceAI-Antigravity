@@ -9,7 +9,6 @@ export default {
     './services/**/*.{ts,tsx}',
     './utils/**/*.{ts,tsx}',
     './store/**/*.{ts,tsx}',
-    './mcp/**/*.{ts,tsx}',
   ],
   darkMode: 'class',
   theme: {

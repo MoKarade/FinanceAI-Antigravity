@@ -248,7 +248,6 @@ export const TabRouter: React.FC<TabRouterProps> = ({
                         onImportData={onManualImport}
                         initialBalances={state.initialBalances} setInitialBalances={(b) => setAppState({ initialBalances: b })}
                         transactions={state.transactions}
-                        appState={state}
                     />
                 )}
 

@@ -51,6 +51,18 @@ export const fusionnerEtatPersiste = (persistedState: unknown, currentState: Fin
         for (const cle of CLES_RUNTIME_GRAND_CALCUL) {
             delete copie[cle];
         }
+        // Nettoyage défensif d'un blob v7 legacy resté en mode test avant le retrait de la fonctionnalité.
+        if (
+            copie.isTestMode === true &&
+            copie.realDataSnapshot &&
+            typeof copie.realDataSnapshot === 'object' &&
+            !Array.isArray(copie.realDataSnapshot)
+        ) {
+            Object.assign(copie, copie.realDataSnapshot as Record<string, unknown>);
+        }
+        delete copie.isTestMode;
+        delete copie.realDataSnapshot;
+        delete copie.activeTestPersonaId;
         sanitizedPersisted = copie;
     }
     const fautifs = verifierTypesRestaures(sanitizedPersisted);
@@ -115,10 +127,6 @@ export const surRehydratation = () => (_state: FinanceState | undefined, error?:
 export const extrairePersistable = (state: FinanceState) => {
     // Exclut de la persistance : les clés API (chiffrées ailleurs) et les états UI
     // transitoires (onglet, mode privé, projection calculée, focus en attente).
-    // Le MODE TEST (isTestMode/realDataSnapshot/activeTestPersonaId) EST désormais persisté
-    // pour que la bannière + le persona survivent au reload (cohérence demandée par Marc).
-    // Sûr côté Drive : `shouldPush` lit isTestMode → le push reste DÉSACTIVÉ tant qu'on est
-    // en mode test, donc aucune donnée fictive ne part en ligne (le bug 2026-05-29 reste couvert).
     const {
         apiKeys: _apiKeys,
         activeTab: _activeTab,

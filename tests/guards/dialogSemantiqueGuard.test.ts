@@ -69,10 +69,7 @@ describe('[A11Y-MODAL-GUIDE-NODIALOG] toute surface qui recouvre l\'app se décl
     it('le scan voit les surfaces réelles — témoins nommés', () => {
         const vus = surfacesRecouvrantes().map((s) => s.chemin);
         expect(vus).toContain(PRIMITIVE);
-        // ⚠️ Témoin choisi pour ce qu'il est : `PassphraseGate` est un dialogue SANS fermeture (pas
-        // de ✕, pas d'Échap — la seule sortie est de déverrouiller). Il ne peut donc PAS passer par
-        // la primitive, et c'est le seul cas où la garde doit accepter une déclaration à la main.
-        expect(vus).toContain('components/auth/PassphraseGate.tsx');
+        expect(vus).toContain('components/Transactions.tsx');
         // Et les deux exemptions, sinon le test qui les vérifie serait le seul à les voir.
         expect(vus).toContain('components/Onboarding.tsx');
         expect(vus).toContain('components/Layout.tsx');

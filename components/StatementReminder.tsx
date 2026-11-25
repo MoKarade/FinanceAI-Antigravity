@@ -42,11 +42,8 @@ const monthLabel = (monthKey: string): string => {
 
 export const StatementReminder: React.FC = () => {
     const transactions = useFinanceStore(s => s.transactions);
-    const isTestMode = useFinanceStore(s => s.isTestMode);
     const setActiveTab = useFinanceStore(s => s.setActiveTab);
     const [dismissedFor, setDismissedFor] = useState<string | null>(() => dismissedMonth());
-
-    if (isTestMode) return null;
 
     const status = computeStatementReminderStatus(transactions, new Date());
     if (!status.shouldShow) return null;

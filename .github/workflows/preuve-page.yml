@@ -35,5 +35,6 @@ jobs:
         pointeur 1270 450
         cliquer-bouton Activer le mode test
         attendre-texte MODE TEST
+      # Valeur 'vercel' conservée par convention MoKarade/.github pour activer le contrôle de déploiement
       deploiement: vercel
-      workflows-deploiement: deploy-mcp.yml
+      workflows-deploiement: deploy-hosting.yml

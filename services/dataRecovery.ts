@@ -1,5 +1,5 @@
 // services/dataRecovery.ts
-// Bouclier anti-mode test, recherche multi-sources (IndexedDB, localStorage, Google Drive)
+// Bouclier anti-mode test, recherche multi-sources (IndexedDB, localStorage)
 // et restauration fidèle du dossier réel de l'utilisateur.
 
 import type { AppState } from '../types';
@@ -13,45 +13,15 @@ import { buildStarterState, isStarterTemplateState } from '../utils/starterData'
 import { computePresentTermes } from './portfolio';
 import { presentTermesOfGoal, monthsSince } from './projection/pastPurchaseInit';
 import { isSyntheticPriceHistory } from './history/hydrateAssetHistories';
-import { initSync, pullNow } from './sync/syncOrchestrator';
-import { isGoogleAuthConfigured, getCachedToken } from './googleDrive/gisAuth';
-import {
-    findSyncFile,
-    readSyncFile,
-    listAppDataFiles,
-    readAppDataFile,
-    listSyncFileRevisions,
-    readSyncFileRevision,
-} from './googleDrive/driveAppData';
 import { STORAGE_KEYS } from '../utils/storageKeys';
 import {
     PROTECTED_DOSSIER_IDB_KEY,
     readIdbEntry,
     writeIdbEntry,
 } from './unlimitedStateStorage';
-import firebaseAppletConfig from '../firebase-applet-config.json';
 
 const PROTECTED_DOSSIER_STORAGE_KEY = PROTECTED_DOSSIER_IDB_KEY;
-const GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY = 'financeai:google_drive_client_id:v1';
 let _protectedDossierCache: { timestamp: number; state: Partial<AppState> } | null = null;
-
-/**
- * Configure le Client ID OAuth Google Drive si présent, sans activer de sondage en arrière-plan
- * lorsque la synchronisation principale est assurée par Cloud Firestore.
- */
-export function ensureDefaultGoogleAuthConfigured(activateFullSync = false): void {
-    const isTestEnv = typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test';
-    if (isTestEnv) return;
-    if (isGoogleAuthConfigured()) return;
-    const envClientId =
-        typeof import.meta !== 'undefined'
-            ? (import.meta.env?.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim()
-            : undefined;
-    const clientId = envClientId || (activateFullSync ? firebaseAppletConfig.oAuthClientId?.trim() : '') || '';
-    if (clientId) {
-        initSync(clientId);
-    }
-}
 
 /**
  * Calcule un score de richesse objectif d'un dossier candidat (nombre d'actifs, transactions, postes budgétaires,
@@ -375,16 +345,6 @@ export async function listRecoverableSnapshots(): Promise<RecoverableSnapshotInf
         });
     };
 
-    const current = useFinanceStore.getState();
-    if (current.realDataSnapshot) {
-        addCandidate(
-            current.realDataSnapshot,
-            'store-real-snapshot',
-            'Dossier verrouillé avant le mode test',
-            Date.now(),
-        );
-    }
-
     await hydrateProtectedDossierCacheFromIdb();
     const protectedSnap = loadProtectedDossierSnapshot();
     if (protectedSnap) {
@@ -477,9 +437,6 @@ function applyRecoveredState(candidate: Partial<AppState>): void {
         ...prev,
         ...cleaned,
         apiKeys: prev.apiKeys,
-        isTestMode: false,
-        activeTestPersonaId: null,
-        realDataSnapshot: null,
         lastUpdate: preservedLastUpdate,
     }));
     if (!isStarterTemplateState(cleaned)) {
@@ -493,125 +450,8 @@ export function restoreSpecificSnapshot(snapshot: RecoverableSnapshotInfo): void
 }
 
 /**
- * Fouille Google Drive (`appDataFolder` + historique des révisions Drive `revisions`) avec le jeton Google actif
- * pour retrouver et restaurer la version la plus riche du dossier de l'utilisateur (même après un push accidentel).
- */
-export async function chercherEtRestaurerDepuisGoogleDrive(): Promise<{
-    restored: boolean;
-    netWorth: number;
-    sourceLabel: string;
-} | null> {
-    const token = getCachedToken();
-    if (!token) return null;
-
-    const currentLocal = useFinanceStore.getState();
-    const localRichness = computeDossierRichness(currentLocal);
-
-    let bestCandidate: Partial<AppState> | null = null;
-    let bestRichness = localRichness;
-    let bestLabel = '';
-
-    const considerCandidate = (raw: unknown, label: string) => {
-        const candidate = extractStateFromAnyEnvelope(raw);
-        if (!candidate) return;
-        if (isTestPersonaState(candidate as Record<string, unknown>)) return;
-        if (isStarterTemplateState(candidate)) return;
-        if (!hasMeaningfulData(candidate)) return;
-        const richness = computeDossierRichness(candidate);
-        if (richness > bestRichness || (bestCandidate === null && localRichness === 0 && richness > 0)) {
-            bestCandidate = candidate;
-            bestRichness = richness;
-            bestLabel = label;
-        }
-    };
-
-    // 1. Fichier principal `financeai-sync.json` + son historique de révisions Google Drive (`revisions`)
-    try {
-        const syncRef = await findSyncFile(token);
-        if (syncRef) {
-            const envelope = await readSyncFile(token, syncRef.id);
-            if (envelope.enc && localRichness === 0) {
-                await pullNow();
-                const afterPull = useFinanceStore.getState();
-                if (!isStarterTemplateState(afterPull) && hasMeaningfulData(afterPull)) {
-                    return {
-                        restored: true,
-                        netWorth: computeCandidateNetWorth(afterPull),
-                        sourceLabel: 'Google Drive (sauvegarde chiffrée)',
-                    };
-                }
-            } else if (envelope.payload) {
-                considerCandidate(envelope.payload, 'Google Drive (synchronisation principale)');
-            }
-
-            // Inspection de l'historique des révisions Google Drive pour récupérer les données avant un push accidentel
-            try {
-                const revisions = await listSyncFileRevisions(token, syncRef.id);
-                // Trier par taille décroissante puis date décroissante pour inspecter en priorité les révisions les plus riches
-                const sortedRevs = [...revisions]
-                    .sort((a, b) => {
-                        const sizeDiff = Number(b.size ?? 0) - Number(a.size ?? 0);
-                        if (sizeDiff !== 0) return sizeDiff;
-                        return (b.modifiedTime || '').localeCompare(a.modifiedTime || '');
-                    })
-                    .slice(0, 8);
-                for (const rev of sortedRevs) {
-                    try {
-                        const revEnv = await readSyncFileRevision(token, syncRef.id, rev.id);
-                        if (!revEnv.enc && revEnv.payload) {
-                            const dateStr = rev.modifiedTime
-                                ? new Date(rev.modifiedTime).toLocaleString('fr-CA')
-                                : rev.id;
-                            considerCandidate(
-                                revEnv.payload,
-                                `Historique Google Drive (révision du ${dateStr})`,
-                            );
-                        }
-                    } catch {
-                        // Révision suivante
-                    }
-                }
-            } catch {
-                // API révisions non disponible ou hors-ligne
-            }
-        }
-    } catch {
-        // Continuer vers les fichiers de secours Drive
-    }
-
-    // 2. Autres fichiers `.json` / `.bak.json` dans `appDataFolder`
-    try {
-        const appDataFiles = await listAppDataFiles(token, '.json');
-        const sortedFiles = [...appDataFiles].sort((a, b) =>
-            (b.modifiedTime || '').localeCompare(a.modifiedTime || ''),
-        );
-        for (const file of sortedFiles.slice(0, 10)) {
-            try {
-                const rawContent = await readAppDataFile<unknown>(token, file.id);
-                considerCandidate(rawContent, `Google Drive (${file.name})`);
-            } catch {
-                // Fichier suivant
-            }
-        }
-    } catch {
-        // appDataFolder inaccessible ou hors-ligne
-    }
-
-    if (bestCandidate) {
-        applyRecoveredState(bestCandidate);
-        return {
-            restored: true,
-            netWorth: computeCandidateNetWorth(useFinanceStore.getState()),
-            sourceLabel: bestLabel,
-        };
-    }
-
-    return null;
-}
-
-/**
  * Restaure automatiquement le vrai dossier de l'utilisateur depuis `realDataSnapshot`,
- * IndexedDB, l'empreinte protégée ou Google Drive, en remplaçant systématiquement
+ * IndexedDB ou l'empreinte protégée, en remplaçant systématiquement
  * le gabarit synthétique (`Alex`) dès qu'une vraie sauvegarde existe.
  */
 export async function recoverUser230kData(force = false): Promise<{
@@ -619,33 +459,9 @@ export async function recoverUser230kData(force = false): Promise<{
     netWorth: number;
     sourceLabel: string;
 }> {
-    ensureDefaultGoogleAuthConfigured();
-    try {
-        const savedClientId = localStorage.getItem(GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY)?.trim();
-        if (savedClientId) {
-            initSync(savedClientId);
-        }
-    } catch {
-        // localStorage indisponible
-    }
-
     const current = useFinanceStore.getState();
     const currentHas430kBug = hasInflatedStarterProperty(current);
     const currentIsStarter = isStarterTemplateState(current);
-
-    if (
-        current.realDataSnapshot &&
-        hasMeaningfulData(current.realDataSnapshot) &&
-        !isStarterTemplateState(current.realDataSnapshot)
-    ) {
-        const cleanedSnap = cleanCandidateState(current.realDataSnapshot);
-        applyRecoveredState(cleanedSnap);
-        return {
-            restored: true,
-            netWorth: computeCandidateNetWorth(cleanedSnap),
-            sourceLabel: 'Bouclier anti-mode test',
-        };
-    }
 
     if (currentHas430kBug) {
         const cleanedCurrent = cleanCandidateState(current);
@@ -657,7 +473,7 @@ export async function recoverUser230kData(force = false): Promise<{
     const customCandidate = candidates.find((c) => c.isCustomUserDossier);
     if (
         customCandidate &&
-        (force || currentIsStarter || currentHas430kBug || current.isTestMode || !hasMeaningfulData(current))
+        (force || currentIsStarter || currentHas430kBug || !hasMeaningfulData(current))
     ) {
         applyRecoveredState(customCandidate.state);
         return {
@@ -665,14 +481,6 @@ export async function recoverUser230kData(force = false): Promise<{
             netWorth: customCandidate.netWorth,
             sourceLabel: customCandidate.label,
         };
-    }
-
-    // 2. Recherche dans Google Drive si le dossier courant est encore le gabarit de départ ou sur demande explicite
-    if (force || currentIsStarter || !hasMeaningfulData(current)) {
-        const driveRecovered = await chercherEtRestaurerDepuisGoogleDrive();
-        if (driveRecovered) {
-            return driveRecovered;
-        }
     }
 
     if (force && candidates.length > 0) {

@@ -10,9 +10,10 @@
 // snapshot avant/après exécution de tous les handlers).
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { TEST_PERSONAS } from '../../services/testPersonas';
-import { normalizeAppState, buildDefaultAppState } from '../../mcp/state/appStateDefaults';
-import { useFinanceStore, personaResetBase } from '../../store/useFinanceStore';
+import { TEST_PERSONAS } from '../fixtures/testPersonas';
+import { normalizeAppState, buildDefaultAppState } from '../../services/aiTools/appStateDefaults';
+import { useFinanceStore } from '../../store/useFinanceStore';
+import { DEFAULT_APP_STATE } from '../../store/etatParDefaut';
 import { READ_SPECS } from '../../services/aiTools/registry';
 import { appStateProvider } from '../../services/aiTools/appStateProvider';
 
@@ -120,9 +121,9 @@ describe('[AITOOLS-B] parité de payloads MCP ↔ app (même état → même JSO
         // fintableSyncReport, fintableBrokerBalances, fintableRoles) passait inaperçu, et
         // `snapshotAppState` (qui pick ses clés depuis buildDefaultAppState) le rendait
         // structurellement INVISIBLE au chat in-app. Ici on itère dans l'AUTRE sens : l'univers
-        // des clés de données du store = personaResetBase() + les 3 clés qu'il retire.
+        // des clés de données du store = `DEFAULT_APP_STATE`.
         const mcpDefaults = buildDefaultAppState();
-        const storeKeys = [...Object.keys(personaResetBase()), 'apiKeys', 'fxRates', 'lastUpdate'];
+        const storeKeys = Object.keys(DEFAULT_APP_STATE);
         expect(storeKeys.length).toBeGreaterThan(20); // non-vacuité : l'univers est bien peuplé
         for (const key of storeKeys) {
             expect(

@@ -45,6 +45,7 @@ const rulesSource = readFileSync(rulesPath, 'utf8');
 
 interface EvalContext {
     authUid: string | null;
+    authEmail?: string | null;
     emailVerified: boolean;
     pathUserId: string;
     requestTimeMs: number;
@@ -121,10 +122,21 @@ function evaluateUserProfileWrite(
     if (typeof incoming.email !== 'string' || incoming.email.length < 3 || incoming.email.length > MAX_EMAIL_LENGTH) {
         return false;
     }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(incoming.email)) {
+        return false;
+    }
+    if (typeof ctx.authEmail !== 'string' || incoming.email !== ctx.authEmail) {
+        return false;
+    }
     if ('displayName' in incoming && (typeof incoming.displayName !== 'string' || incoming.displayName.length > MAX_DISPLAY_NAME_LENGTH)) {
         return false;
     }
-    if ('photoURL' in incoming && (typeof incoming.photoURL !== 'string' || incoming.photoURL.length > 500)) {
+    if (
+        'photoURL' in incoming &&
+        (typeof incoming.photoURL !== 'string' ||
+            incoming.photoURL.length > 500 ||
+            (incoming.photoURL !== '' && !/^https:\/\/[^\s/]+(\/.*)?$/.test(incoming.photoURL)))
+    ) {
         return false;
     }
 
@@ -132,11 +144,16 @@ function evaluateUserProfileWrite(
         return incoming.createdAt === ctx.requestTimeMs && incoming.updatedAt === ctx.requestTimeMs;
     }
     if (!ctx.existingDoc) return false;
-    return (
-        incoming.uid === ctx.existingDoc.uid &&
-        incoming.createdAt === ctx.existingDoc.createdAt &&
-        incoming.updatedAt === ctx.requestTimeMs
-    );
+    if (
+        incoming.uid !== ctx.existingDoc.uid ||
+        incoming.createdAt !== ctx.existingDoc.createdAt ||
+        incoming.updatedAt !== ctx.requestTimeMs
+    ) {
+        return false;
+    }
+    const allowedUpdateKeys = new Set(['displayName', 'email', 'photoURL', 'updatedAt']);
+    const changedKeys = keys.filter((k) => incoming[k] !== ctx.existingDoc![k]);
+    return changedKeys.every((k) => allowedUpdateKeys.has(k));
 }
 
 const MONTH_ID_REGEX = /^[0-9]{4}-(0[1-9]|1[0-2])$/;
@@ -178,7 +195,11 @@ function evaluateTransactionMonthWrite(
     if (incoming.updatedAt !== ctx.requestTimeMs) return false;
     if (op === 'create') return true;
     if (!ctx.existingDoc) return false;
-    return incoming.ownerId === ctx.existingDoc.ownerId && incoming.month === ctx.existingDoc.month;
+    if (incoming.ownerId !== ctx.existingDoc.ownerId || incoming.month !== ctx.existingDoc.month) return false;
+    const allowedUpdateKeys = new Set(['count', 'jsonChunks', 'revisionId', 'updatedAt']);
+    return Object.keys(incoming)
+        .filter((k) => incoming[k] !== ctx.existingDoc![k])
+        .every((k) => allowedUpdateKeys.has(k));
 }
 
 /** Miroir de `isValidConversation` (workspaces/{userId}/conversations/{conversationId}). */
@@ -198,13 +219,18 @@ function evaluateConversationWrite(
     if (incoming.updatedAt !== ctx.requestTimeMs) return false;
     if (op === 'create') return incoming.createdAt === ctx.requestTimeMs;
     if (!ctx.existingDoc) return false;
-    return incoming.ownerId === ctx.existingDoc.ownerId && incoming.createdAt === ctx.existingDoc.createdAt;
+    if (incoming.ownerId !== ctx.existingDoc.ownerId || incoming.createdAt !== ctx.existingDoc.createdAt) return false;
+    const allowedUpdateKeys = new Set(['title', 'messagesJson', 'messageCount', 'updatedAt']);
+    return Object.keys(incoming)
+        .filter((k) => incoming[k] !== ctx.existingDoc![k])
+        .every((k) => allowedUpdateKeys.has(k));
 }
 
 describe('Firestore Security Rules & Dirty Dozen Red Team Audit', () => {
     const SERVER_TIME = 1_762_000_000_000;
     const validCtx: EvalContext = {
         authUid: 'user_alpha_01',
+        authEmail: 'test@example.com',
         emailVerified: true,
         pathUserId: 'user_alpha_01',
         requestTimeMs: SERVER_TIME,
@@ -226,6 +252,15 @@ describe('Firestore Security Rules & Dirty Dozen Red Team Audit', () => {
         expect(rulesSource).toContain('match /users/{userId}');
         expect(rulesSource).toContain('match /workspaces/{userId}');
         expect(rulesSource).toContain("!('apiKeys' in data.statePayload)");
+        expect(rulesSource).toContain('data.email == request.auth.token.email');
+        expect(rulesSource).toContain('request.auth.token.email is string');
+        expect(rulesSource).toContain("data.photoURL == '' || data.photoURL.matches('^https://[^\\\\s/]+(/.*)?$')");
+        expect(rulesSource).toContain(
+            "incoming().diff(existing()).affectedKeys().hasOnly(['count', 'jsonChunks', 'revisionId', 'updatedAt'])",
+        );
+        expect(rulesSource).toContain(
+            "incoming().diff(existing()).affectedKeys().hasOnly(['title', 'messagesJson', 'messageCount', 'updatedAt'])",
+        );
         expect(blueprint.firestore['/users/{userId}']).toBeDefined();
         expect(blueprint.firestore['/workspaces/{userId}']).toBeDefined();
     });
@@ -819,6 +854,112 @@ describe('Firestore Security Rules & Dirty Dozen Red Team Audit', () => {
         // updatedAt forgé
         expect(
             evaluateConversationWrite('update', 'conv_01', { ...validUpdate, updatedAt: SERVER_TIME + 1 }, convCtx),
+        ).toBe(false);
+    });
+
+    it('UserProfile : autorise photoURL vide ou HTTPS et rejette usurpation d’email, URI dangereuses et champs immuables', () => {
+        const existingProfile = {
+            uid: 'user_alpha_01',
+            displayName: 'Alex',
+            email: 'test@example.com',
+            photoURL: '',
+            createdAt: SERVER_TIME - 5000,
+            updatedAt: SERVER_TIME - 5000,
+        };
+        const profileCtx: EvalContext = {
+            ...validCtx,
+            existingDoc: existingProfile,
+        };
+        const validProfileCreate = {
+            uid: 'user_alpha_01',
+            displayName: 'Alex',
+            email: 'test@example.com',
+            photoURL: '',
+            createdAt: SERVER_TIME,
+            updatedAt: SERVER_TIME,
+        };
+
+        // Création / mise à jour légitimes : photoURL vide, HTTPS ou omise
+        expect(evaluateUserProfileWrite('create', validProfileCreate, profileCtx)).toBe(true);
+        expect(
+            evaluateUserProfileWrite(
+                'create',
+                { ...validProfileCreate, photoURL: 'https://lh3.googleusercontent.com/a/avatar' },
+                profileCtx,
+            ),
+        ).toBe(true);
+        const withoutPhoto = { ...validProfileCreate };
+        delete (withoutPhoto as { photoURL?: string }).photoURL;
+        expect(evaluateUserProfileWrite('create', withoutPhoto, profileCtx)).toBe(true);
+        expect(
+            evaluateUserProfileWrite(
+                'update',
+                {
+                    ...validProfileCreate,
+                    displayName: 'Alex M.',
+                    photoURL: 'https://lh3.googleusercontent.com/a/avatar',
+                    createdAt: SERVER_TIME - 5000,
+                    updatedAt: SERVER_TIME,
+                },
+                profileCtx,
+            ),
+        ).toBe(true);
+
+        // Usurpation d'email ou claim email absent du jeton
+        expect(
+            evaluateUserProfileWrite('create', { ...validProfileCreate, email: 'victime@example.com' }, profileCtx),
+        ).toBe(false);
+        expect(evaluateUserProfileWrite('create', validProfileCreate, { ...profileCtx, authEmail: null })).toBe(false);
+
+        // Email mal formé (même si le jeton contenait une chaîne invalide)
+        expect(
+            evaluateUserProfileWrite(
+                'create',
+                { ...validProfileCreate, email: 'pas-un-courriel' },
+                { ...profileCtx, authEmail: 'pas-un-courriel' },
+            ),
+        ).toBe(false);
+        expect(
+            evaluateUserProfileWrite(
+                'create',
+                { ...validProfileCreate, email: 'a@b' },
+                { ...profileCtx, authEmail: 'a@b' },
+            ),
+        ).toBe(false);
+
+        // URI photoURL dangereuses ou non-HTTPS ou sans hôte ou type invalide
+        for (const badPhoto of [
+            'javascript:alert(1)',
+            'data:text/html,<script>',
+            'http://exemple.com/a.png',
+            'https://',
+            'https:// foo',
+            'https:///chemin',
+            null,
+            123,
+        ]) {
+            expect(
+                evaluateUserProfileWrite('create', { ...validProfileCreate, photoURL: badPhoto }, profileCtx),
+            ).toBe(false);
+        }
+
+        // Champs immuables ou pollution en mise à jour
+        expect(
+            evaluateUserProfileWrite(
+                'update',
+                { ...validProfileCreate, uid: 'user_other_02', createdAt: SERVER_TIME - 5000 },
+                profileCtx,
+            ),
+        ).toBe(false);
+        expect(
+            evaluateUserProfileWrite('update', { ...validProfileCreate, createdAt: SERVER_TIME }, profileCtx),
+        ).toBe(false);
+        expect(
+            evaluateUserProfileWrite(
+                'update',
+                { ...validProfileCreate, createdAt: SERVER_TIME - 5000, isAdmin: true },
+                profileCtx,
+            ),
         ).toBe(false);
     });
 });

@@ -19,13 +19,11 @@ import {
   boutonAppliquerAnalyseProfonde,
   boutonIgnorerAnalyseProfonde,
   boutonLancerAnalyseProfonde,
-  chargerPersonaDansModeTest,
   corrompreEnregistrementDeepForecastIDB,
   executerEtAppliquerAnalyseProfonde,
   inspecterPayloadIDBDeepForecast,
   naviguerVersFutur,
   preparerFuturAvecPersona,
-  quitterModeTest,
   supprimerClesAppareilIDB,
   zoneReperesCles,
   zoneScenarios,
@@ -116,7 +114,7 @@ test.describe('Futur 4.0 Tier 2 — Limites, intégrité IDB & isolation', () =>
     errors.assertClean();
   });
 
-  test('T2-04 : Isolation stricte des rapports mémorisés entre personas et dossier réel + badge Données modifiées', async ({
+  test('T2-04 : Persistance IDB (clé real) + badge Données modifiées après édition profil et reload', async ({
     page,
   }) => {
     test.setTimeout(240_000);
@@ -125,7 +123,7 @@ test.describe('Futur 4.0 Tier 2 — Limites, intégrité IDB & isolation', () =>
 
     await executerEtAppliquerAnalyseProfonde(page);
     const idbPreRetraite = await inspecterPayloadIDBDeepForecast(page);
-    expect(idbPreRetraite.keys).toContain('test:pre-retraite-riche');
+    expect(idbPreRetraite.keys).toContain('real');
 
     // Modifier l'âge de retraite dans Profil -> Retraite et enfants déclenche « Données modifiées »
     await page.goto('/#PROFILE');
@@ -149,24 +147,6 @@ test.describe('Futur 4.0 Tier 2 — Limites, intégrité IDB & isolation', () =>
     await page.waitForLoadState('domcontentloaded');
     await expect(zoneScenarios(page).getByText(/Données modifiées/i)).toBeVisible({ timeout: 15_000 });
     await expect(zoneScenarios(page).getByText(/Analyse profonde en mémoire/i)).toBeVisible();
-
-    // Basculer sur lea-fauchee : aucune fuite du rapport ou de l'objectif « Léguer 500 k$ »
-    await chargerPersonaDansModeTest(page, 'lea-fauchee');
-    await naviguerVersFutur(page);
-    await expect(zoneScenarios(page).getByText(/Analyse profonde en mémoire/i)).toHaveCount(0);
-    await expect(page.locator('main').getByText(/Léguer\s*500/i)).toHaveCount(0);
-
-    // Revenir sur pre-retraite-riche : son rapport mémorisé est restauré
-    await chargerPersonaDansModeTest(page, 'pre-retraite-riche');
-    await naviguerVersFutur(page);
-    await expect(zoneScenarios(page).getByText(/Analyse profonde en mémoire/i)).toBeVisible({ timeout: 10_000 });
-
-    // Quitter le mode test -> dossier réel isolé du scope `test:*`
-    await quitterModeTest(page);
-    await page.goto('/#FUTURE');
-    await page.waitForLoadState('domcontentloaded');
-    await expect(page.locator('main').getByText(/Léguer\s*500/i)).toHaveCount(0);
-    await expect(zoneScenarios(page).getByText(/Analyse profonde en mémoire/i)).toHaveCount(0);
 
     errors.assertClean();
   });

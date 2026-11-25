@@ -13,7 +13,6 @@
 //
 // Couverture P2.1 :
 //   - Onboarding (entrée, props-driven)
-//   - SystemView (admin, props-driven)
 //   - FutureHistorySection avec empty state (ex-Accueil, [REFONTE-NAV-L2b])
 //   - TaxBracketViz (display)
 //   - PageHeader / EmptyState / Modal (déjà via primitives, redondant)
@@ -25,7 +24,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import type * as AxeCore from 'axe-core';
-import type { AppState, BudgetConfig } from '../../types';
 
 // Mocks globaux : i18n et services réseau
 vi.mock('react-i18next', () => ({
@@ -60,48 +58,10 @@ async function expectNoSeriousViolations(container: HTMLElement) {
     expect(serious).toHaveLength(0);
 }
 
-// État minimal pour les pages qui consomment AppState
-const emptyConfig: BudgetConfig = {
-    users: [
-        { name: '', grossSalary: 0, netSalary: 0, color: '#10b981' },
-        { name: '', grossSalary: 0, netSalary: 0, color: '#3b82f6' },
-    ],
-    splitMode: '50/50',
-};
-
-const emptyState: AppState = {
-    transactions: [],
-    assets: [],
-    investmentTransactions: [],
-    investmentAccounts: [],
-    budgetItems: [],
-    config: emptyConfig,
-    projection: { years: 30, returnRate: 0.06, inflationRate: 0.02, savingsMode: 'manual', manualContribution: 0, usePortfolioRate: false },
-    realEstateGoals: [],
-    childGoals: [],
-    debts: [],
-    travelGoals: [],
-    lifeEvents: [],
-    retirementGoal: { targetAge: 65, targetMonthlyIncome: 4000, governmentPension: 1200 },
-    financialGoals: [],
-    initialBalances: {},
-    apiKeys: { gemini: '', anthropic: '', finnhub: '' },
-    fxRates: { USD: 1.35, EUR: 1.45, CAD: 1 },
-    lastUpdate: Date.now(),
-    categorizationRules: [],
-    aiConversation: [],
-};
-
 describe('a11y pages (vitest-axe)', () => {
     it('Onboarding — aucune violation serious/critical', async () => {
         const { Onboarding } = await import('../../components/Onboarding');
         const { container } = render(<Onboarding onComplete={() => {}} />);
-        await expectNoSeriousViolations(container);
-    });
-
-    it('SystemView — aucune violation serious/critical', async () => {
-        const { SystemView } = await import('../../components/SystemView');
-        const { container } = render(<SystemView state={emptyState} />);
         await expectNoSeriousViolations(container);
     });
 
@@ -119,7 +79,7 @@ describe('a11y pages (vitest-axe)', () => {
         const { useFinanceStore } = await import('../../store/useFinanceStore');
         useFinanceStore.setState({
             transactions: [], assets: [], initialBalances: {}, debts: [],
-            realEstateGoals: [], isPrivacyMode: false, isTestMode: false,
+            realEstateGoals: [], isPrivacyMode: false,
         } as never);
         const { default: FutureHistorySection } = await import('../../components/future/FutureHistorySection');
         const { container } = render(<FutureHistorySection />);

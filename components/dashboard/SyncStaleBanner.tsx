@@ -22,7 +22,6 @@ import { Tab } from '../../types';
 export const SyncStaleBanner: React.FC = () => {
     const transactions = useFinanceStore((s) => s.transactions);
     const report = useFinanceStore((s) => s.fintableSyncReport);
-    const isTestMode = useFinanceStore((s) => s.isTestMode);
     const navigateWithFocus = useFinanceStore((s) => s.navigateWithFocus);
 
     // `Date.now()` capturé au rendu : la fraîcheur n'a pas besoin d'être réactive à la seconde,
@@ -35,7 +34,7 @@ export const SyncStaleBanner: React.FC = () => {
     // `never` est SILENCIEUX : un utilisateur qui n'a jamais branché l'import n'a pas de problème
     // à signaler — l'onboarding s'en charge. On alerte sur une CHUTE, pas sur une absence.
     const isProdEnv = typeof import.meta !== 'undefined' && import.meta.env?.MODE !== 'test';
-    const silent = isProdEnv || isTestMode || health.status === 'ok' || health.status === 'never';
+    const silent = isProdEnv || health.status === 'ok' || health.status === 'never';
     const isError = health.status === 'error';
 
     // ⚠️ Région live montée en PERMANENCE, seul le CONTENU change (CONVENTIONS.md, revue #245,

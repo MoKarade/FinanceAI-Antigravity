@@ -12,7 +12,7 @@ import type { CommitteeAnalysisReport } from '../../../services/investments/mult
 
 vi.mock('../../../services/errorLogger', () => ({
     logError: vi.fn(),
-    logErrorThrottled: vi.fn(),
+    logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(),
 }));
 
 beforeAll(() => {

@@ -14,8 +14,8 @@
       "hooks",
       "store",
       "utils",
-      "api",
-      "mcp",
+      "server",
+      "server.ts",
       "App.tsx",
       "index.tsx"
     ],

@@ -11,11 +11,11 @@
 // Un verdict d'adéquation doit s'appuyer sur les signaux du moteur (`minNetWorth > 0` sur
 // l'horizon, `successRate`), JAMAIS sur une addition de flux.
 //
-// ⚠️ Le garde est PRÉVENTIF : au 2026-08-05, `mcp/` ne contient AUCUNE occurrence (vérifié). Il
+// ⚠️ Le garde est PRÉVENTIF : `services/{aiTools,assistant,ingest}/` ne contient AUCUNE occurrence (vérifié). Il
 // existe pour que la correction de MCP-RETIREMENT-VERDICT ne soit pas refaite à l'envers dans six
 // mois par quelqu'un qui trouvera « logique » d'additionner ce que le moteur expose.
 //
-// Module PUR (aucun accès disque) : le scan LIVE vit dans `tests/mcp/chartDataSumGuard.test.ts`.
+// Module PUR (aucun accès disque) : le scan LIVE vit dans `tests/guards/chartDataSumGuard.test.ts`.
 
 import { stripComments } from './stripComments';
 

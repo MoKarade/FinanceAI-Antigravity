@@ -65,8 +65,8 @@ function markReloadAttempt(): boolean {
  * (ni succès ni échec — connexion qui pend, proxy muet). Sans lui, le premier usage d'un chunk
  * (SDK chat au 1er message, recharts à l'ouverture de Futur) pendait indéfiniment.
  *
- * Dimensionné pour le PIRE chunk sur connexion lente (mesuré au build du 2026-09-04 : recharts
- * 404 Ko, jspdf 399 Ko → ~16 s à ~25 Ko/s). Le budget TOTAL est ~2× ce délai : la 2e tentative
+ * Dimensionné pour le PIRE chunk sur connexion lente (recharts
+ * ~404 Ko → ~16 s à ~25 Ko/s). Le budget TOTAL est ~2× ce délai : la 2e tentative
  * re-attend la MÊME promesse d'import en vol (le module map du navigateur dédoublonne), donc un
  * chargement lent mais VIVANT qui rate la 1re fenêtre aboutit dans la 2e — seul un vrai blocage
  * finit en erreur (~20,5 s), remontée à l'appelant/ErrorBoundary, JAMAIS en reload (un blocage

@@ -28,7 +28,7 @@
  * pas seulement sur le dépôt (§ « l'extracteur, sur des cas construits » ci-dessous).
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 
@@ -38,7 +38,7 @@ const RACINE = resolve(__dirname, '../..');
 const fichiers = (): string[] =>
     execSync('git ls-files "*.tsx"', { cwd: RACINE, encoding: 'utf8' })
         .split('\n')
-        .filter((f) => f && !f.startsWith('tests/'));
+        .filter((f) => f && !f.startsWith('tests/') && existsSync(resolve(RACINE, f)));
 
 /**
  * Balises `<PrivateAmount …>` / `<PrivateText …>` COMPLÈTES, bornées par PROFONDEUR d'accolades.

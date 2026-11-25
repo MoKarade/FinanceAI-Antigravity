@@ -36,7 +36,7 @@ import {
  * manuelle sert le plus. On ne garde donc que ce qui est FAUX par construction : un non-nombre,
  * zéro, un négatif, ou une valeur qui ne peut pas être un taux.
  */
-export const TAUX_MIN = 0;
+const TAUX_MIN = 0;
 export const TAUX_MAX = 100;
 
 /** `null` si la saisie ne peut pas être un taux. Le message dit LEQUEL des cas, jamais « invalide ». */

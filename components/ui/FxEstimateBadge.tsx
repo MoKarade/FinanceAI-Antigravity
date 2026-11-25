@@ -21,10 +21,10 @@ import { fxSourceEffective, libelleSourceFx, type FxSource } from '../../service
 const EXPLICATION: Readonly<Record<Exclude<FxSource, 'api'>, string>> = {
     repli: 'Le taux de change USD/EUR n\'a pas pu être récupéré auprès de la Banque du Canada — '
         + 'un repli approximatif écrit dans le code est utilisé pour convertir tes avoirs étrangers '
-        + 'en dollars canadiens. Réglages → Système & diagnostics permet de réessayer ou de saisir '
+        + 'en dollars canadiens. Réglages → Clés API permet de réessayer ou de saisir '
         + 'le taux à la main.',
     manuel: 'Le taux de change appliqué est celui que tu as saisi toi-même, pas une lecture de la '
-        + 'Banque du Canada. Réglages → Système & diagnostics permet de relancer la lecture '
+        + 'Banque du Canada. Réglages → Clés API permet de relancer la lecture '
         + 'automatique.',
 };
 

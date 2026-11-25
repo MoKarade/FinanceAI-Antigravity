@@ -17,7 +17,7 @@ import type { Debt } from '../../types';
 import { soldeDetteAujourdhui, dettesAuSoldeDuJour, amortirDettePassee, prepareSupplementAmortiParJour } from '../../services/projection/debtAmortization';
 import { computeTotalDebt } from '../../services/portfolio';
 import { CHAMPS_TEXTE } from '../../services/verifierTypesRestaures';
-import { applyDocument } from '../../mcp/ingest/applyDocument';
+import { applyDocument } from '../../services/ingest/applyDocument';
 import { todayIsoLocal } from '../../services/projection/dailyRefine';
 import type { AppState } from '../../types';
 

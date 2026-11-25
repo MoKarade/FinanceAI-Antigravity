@@ -98,11 +98,10 @@ describe('[A11Y-FUTUR-DETAIL-FOCUS-TRAP] une seule liste d’éléments focusabl
     const lire = (p: string): string => readFileSync(resolve(__dirname, '../..', p), 'utf8');
     const DIALOGUES = [
         'components/ui/Modal.tsx',
-        'components/sync/SyncConflictModal.tsx',
         'components/projection/FutureDetailModal.tsx',
     ];
 
-    it('les trois dialogues appellent le hook partagé', () => {
+    it('les deux dialogues appellent le hook partagé', () => {
         for (const f of DIALOGUES) {
             expect(lire(f), `${f} n’utilise pas useFocusTrap`).toMatch(/useFocusTrap\(/);
         }

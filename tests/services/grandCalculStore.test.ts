@@ -7,7 +7,7 @@ import type { BudgetConfig, ProjectionConfig, RetirementGoal } from '../../types
 // Garde mockErrorLoggerComplet : inclure logError ET logErrorThrottled.
 vi.mock('../../services/errorLogger', () => ({
     logError: vi.fn(),
-    logErrorThrottled: vi.fn(),
+    logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(),
 }));
 
 beforeAll(() => {

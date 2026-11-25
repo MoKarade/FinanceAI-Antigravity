@@ -24,18 +24,16 @@ const FORBIDDEN = [
 ];
 
 describe('[ARCH-AITOOLS-SPLIT] frontière browser-safe des specs de tools', () => {
-    it('aucun *.spec.ts (mcp/tools) ni fichier de services/aiTools n\'importe le SDK MCP / du Node-only', () => {
-        const specDir = resolve(process.cwd(), 'mcp/tools');
+    it('aucun *.spec.ts (services/aiTools/specs) ni fichier de services/aiTools n\'importe le SDK MCP / du Node-only', () => {
+        const specDir = resolve(process.cwd(), 'services/aiTools/specs');
         const specNames = readdirSync(specDir).filter((f) => f.endsWith('.spec.ts'));
-        // Volume : 16 specs attendus (11 lecture/calcul + 5 écriture). Un fan-out incomplet = rouge.
-        expect(specNames.length).toBeGreaterThanOrEqual(16);
+        // Volume : 19 specs attendus. Un fan-out incomplet = rouge.
+        expect(specNames.length).toBeGreaterThanOrEqual(19);
 
         const files = specNames.map((f) => resolve(specDir, f));
         // Les fondations partagées par les specs doivent AUSSI rester browser-safe.
-        files.push(resolve(specDir, '_toolSpec.ts'), resolve(specDir, '_dataAware.ts'), resolve(specDir, '_writeHelper.ts'));
-        // [AITOOLS-B] + les défauts/normalisation d'AppState (extraits de loadAppState qui, LUI,
-        // importe node:fs — c'est précisément pour ça qu'ils ont leur propre module).
-        files.push(resolve(process.cwd(), 'mcp/state/appStateDefaults.ts'));
+        files.push(resolve(specDir, '_toolSpec.ts'), resolve(specDir, '_dataAware.ts'), resolve(specDir, 'scrubWriteResult.ts'));
+        files.push(resolve(process.cwd(), 'services/aiTools/appStateDefaults.ts'));
         const aiToolsDir = resolve(process.cwd(), 'services/aiTools');
         if (existsSync(aiToolsDir)) {
             for (const f of readdirSync(aiToolsDir)) {
@@ -43,7 +41,7 @@ describe('[ARCH-AITOOLS-SPLIT] frontière browser-safe des specs de tools', () =
             }
         }
 
-        expect(files.length).toBeGreaterThanOrEqual(19); // 16 specs + 3 fondations
+        expect(files.length).toBeGreaterThanOrEqual(22); // 19 specs + 3 fondations
         for (const file of files) {
             const src = readFileSync(file, 'utf-8');
             for (const bad of FORBIDDEN) {
@@ -53,13 +51,9 @@ describe('[ARCH-AITOOLS-SPLIT] frontière browser-safe des specs de tools', () =
     });
 
     it('[AITOOLS-ENGINE-WORKER] aucun spec n\'appelle le moteur en DIRECT (calculateFutureProjection) — toujours runProjectionAsync', () => {
-        // Un appel direct exécute le moteur SYNCHRONE sur le thread principal du navigateur →
-        // l'UI (y compris Annuler) gèle pendant le Monte Carlo. runProjectionAsync = Worker côté
-        // navigateur, repli synchrone identique côté Node/MCP (même moteur, mêmes résultats —
-        // parité re-prouvée par registryParity).
-        const specDir = resolve(process.cwd(), 'mcp/tools');
+        const specDir = resolve(process.cwd(), 'services/aiTools/specs');
         const specNames = readdirSync(specDir).filter((f) => f.endsWith('.spec.ts'));
-        expect(specNames.length).toBeGreaterThanOrEqual(16);
+        expect(specNames.length).toBeGreaterThanOrEqual(19);
         for (const f of specNames) {
             const src = readFileSync(resolve(specDir, f), 'utf-8');
             expect(src.includes('calculateFutureProjection('), `${f} : appel moteur DIRECT (gèle l'UI)`).toBe(false);
@@ -67,29 +61,12 @@ describe('[ARCH-AITOOLS-SPLIT] frontière browser-safe des specs de tools', () =
     });
 
     it('[chokepoint jsonContent] aucun spec ne construit sa sortie JSON à la main (text: JSON.stringify)', () => {
-        // [Finding panel ai-reviewer 2026-07-21] jsonContent (_dataAware) est LE chokepoint de sortie
-        // (scrub anti-injection USER_TEXT_KEYS). Un `text: JSON.stringify(...)` à la main crée un 2e
-        // chemin de sortie NON gardé — inoffensif pour un payload numérique aujourd'hui, un trou dès
-        // qu'un futur tool y met du texte libre utilisateur.
-        const specDir = resolve(process.cwd(), 'mcp/tools');
+        const specDir = resolve(process.cwd(), 'services/aiTools/specs');
         const specNames = readdirSync(specDir).filter((f) => f.endsWith('.spec.ts'));
-        expect(specNames.length).toBeGreaterThanOrEqual(16);
+        expect(specNames.length).toBeGreaterThanOrEqual(19);
         for (const f of specNames) {
             const src = readFileSync(resolve(specDir, f), 'utf-8');
             expect(src.includes('text: JSON.stringify'), `${f} : sortie JSON hors chokepoint jsonContent`).toBe(false);
-        }
-    });
-
-    it('les *.tool.ts (enregistrement serveur) restent MINCES : leur logique vit dans le .spec', () => {
-        // Un .tool.ts qui regrossit = du code métier ré-écrit du mauvais côté de la frontière.
-        // ping (health-check trivial) et connectDrive (OAuth loopback Node, exclu de la parité) sont exemptés.
-        const specDir = resolve(process.cwd(), 'mcp/tools');
-        const toolFiles = readdirSync(specDir)
-            .filter((f) => f.endsWith('.tool.ts') && !['ping.tool.ts', 'connectDrive.tool.ts'].includes(f));
-        expect(toolFiles.length).toBeGreaterThanOrEqual(16);
-        for (const f of toolFiles) {
-            const lines = readFileSync(resolve(specDir, f), 'utf-8').split('\n').length;
-            expect(lines, `${f} fait ${lines} lignes (> 25 : la logique doit vivre dans le .spec)`).toBeLessThanOrEqual(25);
         }
     });
 });

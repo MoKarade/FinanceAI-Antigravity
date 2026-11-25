@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as dotenv from 'dotenv';
-import { proxyFintable, proxyYahooHistorique, proxyYahooRecherche } from './api/_lib/proxies';
+import { proxyFintable, proxyYahooHistorique, proxyYahooRecherche } from './server/proxies';
 import { registerValoriaRoutes } from './services/valoria/serverRoutes';
 
 dotenv.config();
@@ -60,7 +60,7 @@ async function startServer() {
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
     next();
   });
-  app.use('/api/financeai', express.json({ limit: '50mb' }));
+  app.use('/api/financeai', express.json({ limit: '6mb' }));
   app.use(express.json({ limit: '5mb' }));
 
   app.get('/api/sante', (_req, res) => {

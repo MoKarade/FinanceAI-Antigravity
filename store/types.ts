@@ -1,6 +1,6 @@
 // store/types.ts
 // Types partagés du store Zustand pour éviter les imports circulaires
-// entre useFinanceStore.ts et ses sous-modules (actionsModeTest, migrationsPersistees, optionsPersistance).
+// entre useFinanceStore.ts et ses sous-modules (migrationsPersistees, optionsPersistance).
 
 import type { AppState, Tab } from '../types';
 import type { GrandCalculResult, ProjectionResult } from '../services/projection/types';
@@ -32,9 +32,6 @@ export interface FinanceState extends AppState {
     grandCalculProgress: GrandCalculProgress | null;
     grandCalculError: string | null;
     pendingFocus: PendingFocus | null;
-    isTestMode: boolean;
-    realDataSnapshot: Partial<Omit<AppState, 'apiKeys'>> | null;
-    activeTestPersonaId: string | null;
     setActiveTab: (tab: Tab) => void;
     setPrivacyMode: (v: boolean) => void;
     togglePrivacyMode: () => void;
@@ -58,7 +55,5 @@ export interface FinanceState extends AppState {
     updateApiKeys: (keys: { gemini?: string; anthropic?: string; finnhub?: string; fintable?: string }) => void;
     updateLastUpdate: () => void;
     resetState: () => void;
-    enableTestMode: (fixtures: Partial<AppState>, personaId?: string | null) => void;
-    disableTestMode: () => void;
     purgePersonaArtifacts: () => number;
 }

@@ -5,7 +5,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
 import { FutureProjection } from '../../components/FutureProjection';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../../services/testFixtures';
+import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../fixtures/testFixtures';
 import { formatCAD } from '../../utils/format';
 import type { ProjectionResult } from '../../services/projection/types';
 
@@ -19,7 +19,7 @@ vi.mock('recharts', async () => {
         XAxis: () => null, YAxis: () => null, Tooltip: () => null, CartesianGrid: () => null,
     };
 });
-vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn() }));
+vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(), }));
 vi.mock('../../services/deepForecastStore', () => ({
     loadAppliedDeepForecast: vi.fn(async () => ({ status: 'empty' as const })),
     saveAppliedDeepForecast: vi.fn(async () => true),
@@ -54,8 +54,9 @@ const scenarioAvec = (goalShortfalls: { count: number; total: number } | undefin
 const monterDirect = async (goalShortfalls: { count: number; total: number } | undefined) => {
     const persona = getPersonaOrDefault(DEFAULT_PERSONA_ID);
     act(() => {
-        useFinanceStore.getState().enableTestMode(persona.build(), persona.id);
+        useFinanceStore.getState().resetState();
         useFinanceStore.setState({
+            ...(persona.build() as Record<string, unknown>),
             projectionRunMC: false, projectionStatus: 'idle',
             lastProjection: { chartData: [], fireNumber: 400_000, allResults: [scenarioAvec(goalShortfalls)] },
             isProjectionLocked: false, lockedProjection: null,

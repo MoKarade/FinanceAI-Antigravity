@@ -12,7 +12,7 @@
 // `facadeStoreAssistant` (inventaire fermé des services qui lisent le store).
 
 import type { AppState } from '../../types';
-import { buildDefaultAppState } from '../../mcp/state/appStateDefaults';
+import { buildDefaultAppState } from '../aiTools/appStateDefaults';
 import { facadeStoreAssistant } from '../aiTools/appStateProvider';
 import { TRANCHES } from './tranches';
 

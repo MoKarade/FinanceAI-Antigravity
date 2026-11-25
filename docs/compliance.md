@@ -7,7 +7,7 @@
 ## Vie privée — Loi 25 (Québec) + RGPD
 - [ ] **Minimisation** : on ne collecte que le strict nécessaire au calcul financier.
 - [ ] **Consentement** : `services/consent.ts` couvre toute nouvelle collecte/usage.
-- [ ] **Local-first & Cloud isolé** : les données ne quittent pas l'appareil sauf synchronisation authentifiée de l'utilisateur (**Cloud Firestore** `users/{uid}/workspaces/main` protégé par `firestore.rules` et sauvegarde chiffrée **Google Drive** `appDataFolder`).
+- [ ] **Local-first & Cloud isolé** : les données ne quittent pas l'appareil sauf synchronisation authentifiée de l'utilisateur (**Cloud Firestore** `users/{uid}/workspaces/main` protégé par `firestore.rules`).
 - [ ] **Chiffrement au repos** : AES-256-GCM, IndexedDB non-extractible, PBKDF2 600k. Clés API (`apiKeys.gemini`, `apiKeys.finnhub`) exclues de `localStorage`, des exports et des synchronisations.
 - [ ] **Droits** : effacement et export des données utilisateur possibles.
 - [ ] **Pas de fuite PII** : `errorLogger` scrub montants + secrets ; aucun montant/clé en clair dans un log ou une URL.
@@ -22,5 +22,5 @@
 - [ ] **Source unique** : tout calcul long-terme dérive de `lastProjection.chartData` ; patrimoine net via `computeRawNetWorth` et `computePresentTermes`.
 
 ## Sécurité applicative
-- [ ] Aucun secret versionné ; CSP stricte (`vercel.json` + `index.html`) ; injection de prompt Gemini neutralisée (`utils/promptSafety.ts`).
+- [ ] Aucun secret versionné ; CSP stricte (`firebase.json` + `index.html`) ; injection de prompt Gemini neutralisée (`utils/promptSafety.ts`).
 - [ ] `npm audit` = 0 vulnérabilité critique/haute.

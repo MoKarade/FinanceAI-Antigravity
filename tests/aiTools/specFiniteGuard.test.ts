@@ -12,7 +12,7 @@ import { readFileSync, readdirSync } from 'fs';
 import { resolve } from 'path';
 import { stripComments } from '../../utils/stripComments';
 
-const SPEC_DIR = resolve(process.cwd(), 'mcp/tools');
+const SPEC_DIR = resolve(process.cwd(), 'services/aiTools/specs');
 
 // Champs qui ne sont PAS des montants $ (années, âges, taux %, durées, compteurs bornés) : exemptés
 // du `.finite()` car soit `.int()`, soit bornés par `.max(N)` fini. On liste les NOMS non-$ connus

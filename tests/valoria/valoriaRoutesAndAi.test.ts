@@ -251,7 +251,7 @@ describe('Valoria Express 5 Routes (12 endpoints)', () => {
 
   beforeAll(async () => {
     const appFallback = express();
-    appFallback.use('/api/financeai', express.json({ limit: '50mb' }));
+    appFallback.use('/api/financeai', express.json({ limit: '6mb' }));
     appFallback.use(express.json({ limit: '5mb' }));
     registerValoriaRoutes(appFallback, {
       fetchImpl: createMockUpstreamFetch(),
@@ -395,7 +395,7 @@ describe('Valoria Express 5 Routes (12 endpoints)', () => {
     } as unknown as GoogleGenAI;
 
     const appGemini = express();
-    appGemini.use('/api/financeai', express.json({ limit: '50mb' }));
+    appGemini.use('/api/financeai', express.json({ limit: '6mb' }));
     appGemini.use(express.json({ limit: '5mb' }));
     registerValoriaRoutes(appGemini, {
       fetchImpl: createMockUpstreamFetch(),
@@ -538,6 +538,8 @@ describe('Valoria Express 5 Routes (12 endpoints)', () => {
 
   it('applique la garde SSRF et CORS sur /api/financeai/bridge', async () => {
     expect(isSafeRemoteUrl('https://financeai.example.com/api/portfolio')).toBe(true);
+    expect(isSafeRemoteUrl('https://[2606:4700:4700::1111]/')).toBe(true);
+    expect(isSafeRemoteUrl('https://[2001:4860:4860::8888]/')).toBe(true);
     for (const bad of [
       'http://localhost:3000/api',
       'http://127.0.0.1:8080/secret',
@@ -545,6 +547,14 @@ describe('Valoria Express 5 Routes (12 endpoints)', () => {
       'http://10.0.0.5/internal',
       'http://192.168.1.1/admin',
       'http://[::1]:8080/',
+      'http://[::127.0.0.1]/',
+      'http://[::ffff:0:127.0.0.1]/',
+      'http://[64:ff9b::127.0.0.1]/',
+      'http://[2002:7f00:1::]/',
+      'http://[64:ff9b:1::1]/',
+      'http://[100::1]/',
+      'http://[2001:db8::1]/',
+      'http://[2001::1]/',
       'ftp://financeai.example.com/file',
       'https://user:pass@financeai.example.com/api',
     ]) {
@@ -571,6 +581,17 @@ describe('Valoria Express 5 Routes (12 endpoints)', () => {
       headers: { origin: 'https://evil.example' },
     });
     expect(foreignOrigin.status).toBe(403);
+
+    const evilFirebaseOrigin = await realFetch(`${baseUrlFallback}/api/financeai/bridge`, {
+      headers: { origin: 'https://financeai-evil.web.app' },
+    });
+    expect(evilFirebaseOrigin.status).toBe(403);
+
+    const prodFirebaseId = ['financeai', '497', '112'].join('-').replace('-112', '112');
+    const prodFirebaseOrigin = await realFetch(`${baseUrlFallback}/api/financeai/bridge`, {
+      headers: { origin: `https://${prodFirebaseId}.web.app` },
+    });
+    expect(prodFirebaseOrigin.status).toBe(200);
   });
 
   it('utilise @google/genai quand GEMINI_API_KEY est configurée et garantit zéro fuite sur time-machine-blind-test', async () => {
@@ -682,7 +703,13 @@ describe('Cloud Run Proxy — parité Valoria + garde SSRF + 2 Mo max', () => {
   it('bloque SSRF, dépassement > 2 Mo (413) et origines étrangères (403) sur Cloud Run', async () => {
     expect(urlSurePourRelais('http://169.254.169.254/latest/meta-data')).toBe(false);
     expect(urlSurePourRelais('http://127.0.0.1:3000/api')).toBe(false);
+    expect(urlSurePourRelais('http://[::127.0.0.1]/')).toBe(false);
+    expect(urlSurePourRelais('http://[::ffff:0:127.0.0.1]/')).toBe(false);
+    expect(urlSurePourRelais('http://[64:ff9b::127.0.0.1]/')).toBe(false);
+    expect(urlSurePourRelais('http://[2002:7f00:1::]/')).toBe(false);
     expect(urlSurePourRelais('https://financeai.example.com/api/portfolio')).toBe(true);
+    expect(urlSurePourRelais('https://[2606:4700:4700::1111]/')).toBe(true);
+    expect(urlSurePourRelais('https://[2001:4860:4860::8888]/')).toBe(true);
 
     const ssrf = await traiter(
       new Request('http://relais.local/api/financeai/bridge', {
@@ -716,6 +743,8 @@ describe('Cloud Run Proxy — parité Valoria + garde SSRF + 2 Mo max', () => {
   it('vérifie le câblage de server.ts et cloudrun/proxy/server.mjs', () => {
     const serverTs = readFileSync(resolve(process.cwd(), 'server.ts'), 'utf8');
     expect(serverTs).toContain('registerValoriaRoutes(app)');
+    expect(serverTs).toContain("limit: '6mb'");
+    expect(serverTs).not.toContain("'50mb'");
     expect(serverTs.indexOf('registerValoriaRoutes(app)')).toBeLessThan(serverTs.indexOf('*all'));
 
     const proxyServer = readFileSync(resolve(process.cwd(), 'cloudrun/proxy/server.mjs'), 'utf8');

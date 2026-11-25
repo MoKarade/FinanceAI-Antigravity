@@ -7,8 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import { verifierEntreesMoteur, messageDeRefus } from '../../services/projection/verifierEntreesMoteur';
 import { buildSimulationParamsFromState } from '../../services/projection/buildSimulationParams';
-import { buildCoupleConfort } from '../../services/testPersonas/coupleConfort';
-import { TEST_PERSONAS } from '../../services/testPersonas';
+import { buildCoupleConfort } from '../fixtures/testPersonas/coupleConfort';
+import { TEST_PERSONAS } from '../fixtures/testPersonas';
 import { INITIAL_PROJECTION } from '../../constants';
 import type { AppState } from '../../types';
 

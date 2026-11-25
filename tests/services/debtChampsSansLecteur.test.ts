@@ -21,7 +21,7 @@ import { describe, it, expect } from 'vitest';
 import { toPosix } from '../helpers/toPosix';
 import { stripCommentsJsx } from '../../utils/stripComments';
 
-const RACINES = ['components', 'services', 'mcp', 'hooks', 'store', 'utils'];
+const RACINES = ['components', 'services', 'hooks', 'store', 'utils'];
 
 const fichiersProd = (): string[] => {
     const out: string[] = [];
@@ -56,7 +56,7 @@ const TOLERES: ReadonlyArray<{ champ: string; fichier: string; recepteur: string
         raison: "Contexte de prompt IA : l'amortissement de l'HYPOTHÈQUE du ménage, pas d'une dette.",
     },
     {
-        champ: 'amortizationYears', fichier: 'mcp/ingest/applyDocument/debt.ts', recepteur: 'doc',
+        champ: 'amortizationYears', fichier: 'services/ingest/applyDocument/debt.ts', recepteur: 'doc',
         raison: "`DebtPayload.amortizationYears` — c'est une ÉCRITURE vers la dette, pas une lecture.",
     },
 ];

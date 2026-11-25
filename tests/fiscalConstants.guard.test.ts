@@ -23,23 +23,16 @@ const root = process.cwd();
 // Source unique des constantes fiscales — EXCLUE du scan (elle DOIT les contenir).
 const TAX_SOURCE_FILES = ['utils/tax.ts', 'services/realEstate.ts'] as const;
 
-// Fichiers/dossiers de DONNÉES DÉMO (fixtures du mode test) exclus : leurs montants fictifs peuvent
-// coïncider fortuitement avec un seuil fiscal (ex. solde de prêt 18500 = FSS_THRESHOLD_ZERO).
-const DEMO_DATA_FILES = ['services/testBudget.ts'] as const;
-const DEMO_DATA_DIRS = ['services/testPersonas'] as const;
-
 // Surfaces applicatives scannées : tout littéral fiscal distinctif ici = recopie suspecte.
 // `mcp/` inclus (les outils MCP exposent des données financières). `scripts/` EXCLU volontairement
 // (outillage build/hooks, pas du calcul fiscal ; surtout du `.mjs`/`.cjs` non couvert par le filtre).
-const SCAN_DIRS = ['components', 'services', 'hooks', 'store', 'utils', 'mcp'] as const;
+const SCAN_DIRS = ['components', 'services', 'hooks', 'store', 'utils'] as const;
 const SCAN_ROOT_FILES = ['App.tsx', 'constants.ts', 'i18n.ts'] as const;
 
 const isSource = (full: string): boolean => /\.(ts|tsx)$/.test(full) && !/\.test\.(ts|tsx)$/.test(full);
 
-const EXCLUDED_FILES = new Set([...TAX_SOURCE_FILES, ...DEMO_DATA_FILES].map(p => resolve(root, p)));
-const EXCLUDED_DIRS = DEMO_DATA_DIRS.map(p => resolve(root, p));
-const isExcluded = (full: string): boolean =>
-    EXCLUDED_FILES.has(full) || EXCLUDED_DIRS.some(d => full.startsWith(d));
+const EXCLUDED_FILES = new Set(TAX_SOURCE_FILES.map(p => resolve(root, p)));
+const isExcluded = (full: string): boolean => EXCLUDED_FILES.has(full);
 
 function listScannedFiles(): string[] {
     const files: string[] = [];

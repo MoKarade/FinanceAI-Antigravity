@@ -38,7 +38,6 @@ export function useAssetDataHydration(
         // Sauté en mode test (les fixtures persona portent leur propre priceHistory).
         const hydrateAssets = async () => {
             const s = useFinanceStore.getState();
-            if (s.isTestMode === true) return;
             const current = s.assets ?? [];
             if (current.length === 0) return;
             try {
@@ -92,7 +91,6 @@ export function useAssetDataHydration(
         // (ne pas réécrire les prix des fixtures persona).
         const refreshPricesAtBoot = async (): Promise<void> => {
             const s = useFinanceStore.getState();
-            if (s.isTestMode === true) return;
             const current = s.assets ?? [];
             if (current.filter(a => a?.symbol && (a.quantity || 0) > 0).length === 0) return;
             try {
@@ -130,7 +128,6 @@ export function useAssetDataHydration(
         // mode test + patches sur l'état FRAIS (anti-course).
         const hydrateProfilesAtBoot = async (): Promise<void> => {
             const s = useFinanceStore.getState();
-            if (s.isTestMode === true) return;
             const current = s.assets ?? [];
             if (current.length === 0) return;
             try {

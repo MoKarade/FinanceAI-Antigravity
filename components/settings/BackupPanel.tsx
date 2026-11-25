@@ -4,18 +4,15 @@ import { Card } from '../ui/Card';
 import { Modal } from '../ui/Modal';
 import { Icon } from '../ui/Icon';
 import { showToast } from '../ui/Toast';
-import { downloadBackup, readBackupFile, defaultBackupFilename, CloudBackupError } from '../../services/cloudBackup';
+import { downloadBackup, readBackupFile, defaultBackupFilename, CloudBackupError, MIN_PASSPHRASE_LENGTH } from '../../services/cloudBackup';
 import { markBackupDone } from '../../services/backupReminder';
 import { logAudit } from '../../services/auditLog';
 import { logError } from '../../services/errorLogger';
 import { SAUVEGARDE_INVALIDE } from '../../services/backupMessages';
-import { MIN_PASSPHRASE_LENGTH } from '../../services/sync/syncOrchestrator';
 import { verifierTypesRestaures, messageDeRefusTypes } from '../../services/verifierTypesRestaures';
-import { getLocalPayload } from '../../services/sync/syncSnapshot';
-import { modeDonneesFictives } from '../../store/modeTestActif';
 import { STORAGE_KEYS } from '../../utils/storageKeys';
 import {
-  construireSauvegardeEtat, enveloppeARestaurer, messageRefusSauvegarde, remplacerLeStockage, resumeSauvegarde,
+  construireSauvegardeEtat, enveloppeARestaurer, getLocalPayload, messageRefusSauvegarde, remplacerLeStockage, resumeSauvegarde,
   type ResultatSauvegarde,
 } from '../../services/sauvegardeJson';
 import { createBackupNow } from '../../services/backupAuto';
@@ -86,6 +83,7 @@ export const BackupSchema = z.object({
   // [B3+B4] même symétrie : modèle du chat + coût cumulé (finite : jamais d'Infinity dans un $).
   aiChatModel: z.string().optional(),
   aiChatCostUsdTotal: z.number().finite().optional(),
+  aiChatCostUsdByDay: z.record(z.string(), z.number().finite()).optional(),
   // S-E : pas de .passthrough() — les clés inconnues sont écartées (strip) au lieu
   // d'être propagées. doRestore ne lit que des clés connues → aucun impact
   // fonctionnel ; on évite de conserver du contenu non validé en mémoire.
@@ -146,7 +144,7 @@ const sauvegardeDuMoment = (): ResultatSauvegarde => {
     // Stockage inaccessible : `getLocalPayload` rendra `null` → « rien à sauvegarder », seul constat
     // honnête quand on ne peut même pas savoir s'il existe quelque chose.
   }
-  const r = construireSauvegardeEtat(getLocalPayload().payload, modeDonneesFictives(), Date.now(), blobPresent);
+  const r = construireSauvegardeEtat(getLocalPayload().payload, false, Date.now(), blobPresent);
   if (!r.ok && r.cause === 'illisible') {
     logError({ source: 'storage', severity: 'error', message: 'Export JSON : financeai-storage présent mais illisible — export refusé' });
   }
@@ -296,7 +294,7 @@ export const BackupPanel: React.FC = () => {
     // la restauration remplace TOUT, l'annuler passe par ce backup. Un échec ne bloque pas, mais ne
     // s'avale pas non plus — « restauration SANS filet » doit rester visible dans les diagnostics.
     try {
-      const filet = await createBackupNow('manual', { intent: 'filet', donneesFictives: modeDonneesFictives() });
+      const filet = await createBackupNow('manual', { intent: 'filet', donneesFictives: false });
       if (!filet.ok) {
         logError({ source: 'storage', severity: 'warning', message: `Restauration JSON : backup pré-restauration non créé (${filet.cause}) — restauration SANS filet` });
       }
@@ -371,13 +369,13 @@ export const BackupPanel: React.FC = () => {
         source: 'storage', severity: 'critical',
         message: ecriture.retabli
           ? 'Restauration JSON : écriture impossible (stockage plein ?) — le contenu d\'avant a été remis en place'
-          : 'Restauration JSON : écriture impossible ET contenu d\'avant non rétabli — restaurer depuis Drive ou un backup automatique',
+          : 'Restauration JSON : écriture impossible ET contenu d\'avant non rétabli — restaurer depuis Cloud Firestore ou un backup automatique',
         error: ecriture.erreur,
       });
       showToast(
         ecriture.retabli
           ? 'Restauration impossible : le navigateur a refusé d\'écrire la sauvegarde (stockage plein ?). Ton dossier actuel est intact.'
-          : 'Restauration impossible, et le dossier actuel n\'a pas pu être remis en place. Restaure depuis Google Drive ou un backup automatique (Sauvegarde → Backups automatiques).',
+          : 'Restauration impossible, et le dossier actuel n\'a pas pu être remis en place. Restaure depuis Cloud Firestore ou un backup automatique (Sauvegarde → Backups automatiques).',
         'error',
       );
       return;

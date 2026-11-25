@@ -98,10 +98,10 @@ describe('signalerUsageIa — coût signalé à l\'abonné', () => {
 describe('chat — le cumul du store grossit du coût réel', () => {
     beforeEach(() => {
         sdk.create.mockReset();
-        useFinanceStore.getState().setAppState({ aiChatCostUsdTotal: 1 });
+        useFinanceStore.getState().setAppState({ aiChatCostUsdTotal: 1, aiChatCostUsdByDay: {} });
     });
 
-    it('Haiku 5.5, 100 000 tokens d\'entrée + 10 000 de sortie : +0,015 $ ajoutés au cumul existant', async () => {
+    it('Haiku 5.5, 100 000 tokens d\'entrée + 10 000 de sortie : +0,015 $ ajoutés au cumul existant et au jour', async () => {
         sdk.create.mockResolvedValue({
             content: [{ type: 'text', text: 'ok' }],
             usage: { input_tokens: 100_000, output_tokens: 10_000 },
@@ -110,6 +110,10 @@ describe('chat — le cumul du store grossit du coût réel', () => {
         expect(texte).toBe('ok');
         // 100 000 × 0,10 $/M + 10 000 × 0,50 $/M = 0,01 + 0,005
         expect(useFinanceStore.getState().aiChatCostUsdTotal).toBeCloseTo(1.015, 10);
+        const byDay = useFinanceStore.getState().aiChatCostUsdByDay ?? {};
+        const dayValues = Object.values(byDay);
+        expect(dayValues).toHaveLength(1);
+        expect(dayValues[0]).toBeCloseTo(0.015, 6);
     });
 
     it('réponse sans usage : le cumul ne bouge pas (pas de coût fabriqué)', async () => {

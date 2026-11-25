@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act, cleanup, waitFor, within } from '@testing-library/react';
 import { FutureProjection } from '../../components/FutureProjection';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../../services/testFixtures';
+import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../fixtures/testFixtures';
 import type { ProjectionResult, ProjectionChartPoint } from '../../services/projection/types';
 import type { Transaction } from '../../types';
 
@@ -21,7 +21,7 @@ vi.mock('recharts', async () => {
     };
 });
 const logErrorMock = vi.hoisted(() => vi.fn());
-vi.mock('../../services/errorLogger', () => ({ logError: logErrorMock, logErrorThrottled: vi.fn() }));
+vi.mock('../../services/errorLogger', () => ({ logError: logErrorMock, logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(), }));
 vi.mock('../../services/deepForecastStore', () => ({
     loadAppliedDeepForecast: vi.fn(async () => ({ status: 'empty' as const })),
     saveAppliedDeepForecast: vi.fn(async () => true),
@@ -82,7 +82,6 @@ describe('FutureProjection — segment PASSÉ reste réel et suit DettesNonImmo 
             useFinanceStore.setState({
                 ...data,
                 assets: [], realEstateGoals: [], transactions: [pastTransaction()], debts: [],
-                isTestMode: false, activeTestPersonaId: null, realDataSnapshot: null,
                 projectionRunMC: false, lastProjection: resultWithDebt('STRAT-A', 0), projectionStatus: 'idle',
                 isProjectionLocked: false, lockedProjection: null,
             });

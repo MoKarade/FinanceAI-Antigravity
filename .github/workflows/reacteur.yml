@@ -46,8 +46,9 @@ jobs:
     with:
       numero: ${{ github.event.issue.number }}
       runner: ${{ github.event.repository.visibility == 'public' && '"ubuntu-latest"' || '["self-hosted","pc-marc"]' }}
+      # Valeur 'vercel' conservée par convention MoKarade/.github pour activer le contrôle de déploiement
       deploiement: vercel
-      workflows-deploiement: deploy-mcp.yml
+      workflows-deploiement: deploy-hosting.yml
 
   reveiller:
     name: Réveiller le Coordinateur
@@ -75,8 +76,9 @@ jobs:
     secrets: inherit
     with:
       runner: ${{ github.event.repository.visibility == 'public' && '"ubuntu-latest"' || '["self-hosted","pc-marc"]' }}
+      # Valeur 'vercel' conservée par convention MoKarade/.github pour activer le contrôle de déploiement
       deploiement: vercel
-      workflows-deploiement: deploy-mcp.yml
+      workflows-deploiement: deploy-hosting.yml
       type: ${{ github.event_name == 'pull_request' && (github.event.action == 'closed' && 'pr_fusionnee' || 'pr_ouverte') || github.event_name == 'issues' && 'tache_fermee' || github.event_name == 'workflow_run' && (github.event.workflow_run.name == 'Garde-fou' && 'garde_fou_rouge' || 'ci_rouge') || 'filet' }}
       depot: ${{ github.repository }}
       pr: ${{ format('{0}', github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number) }}

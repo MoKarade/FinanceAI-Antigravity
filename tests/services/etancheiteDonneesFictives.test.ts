@@ -29,7 +29,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../services/errorLogger', () => ({
     logError: vi.fn(),
-    logErrorThrottled: vi.fn(),
+    logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(),
 }));
 
 import { createBackupNow, type BackupResultat } from '../../services/backupAuto';
@@ -98,85 +98,5 @@ describe('[SANDBOX-ETANCHEITE] backup : on n’ARCHIVE pas du fictif, mais on ga
         const fictif = await createBackupNow('manual', { intent: 'archive', donneesFictives: true });
         expect(cause(fictif)).toBe('donnees-fictives');
         expect(cause(vide)).not.toBe(cause(fictif));
-    });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Les deux sorties qui produisent un FICHIER. Même règle, deux endroits différents, et la
-// différence est délibérée (elle est expliquée dans `utils/csvExport.ts`) : le PDF refuse dans
-// le service qui CONSTRUIT le document, le CSV dans la fonction qui le fait SORTIR.
-// ─────────────────────────────────────────────────────────────────────────────
-
-import { generateFinancialReport, PdfRefusedTestModeError } from '../../services/pdfReport';
-import { downloadCSV, CsvRefusedTestModeError } from '../../utils/csvExport';
-import { useFinanceStore } from '../../store/useFinanceStore';
-
-// jspdf est lourd et écrit un fichier : neutralisé pour que le test porte UNIQUEMENT sur le
-// contrat de refus. ⚠️ Le compteur du constructeur est ce qui prouve qu'AUCUN travail n'est fait
-// — un refus tardif laisserait un document entier construit en mémoire. Patron repris de
-// `tests/services/pdfPrivacyRefus.test.ts`, qui porte sa justification écrite (dont le piège :
-// `pdfReport` lit `mod.jsPDF ?? mod.default`, donc le mock doit exposer LES DEUX).
-const jsPDFCtor = vi.fn();
-vi.mock('jspdf', () => {
-    class FauxPdf {
-        constructor() { jsPDFCtor(); }
-        setFont() {} setFontSize() {} setTextColor() {} setFillColor() {} setDrawColor() {}
-        rect() {} text() {} addPage() {} line() {} save() {} splitTextToSize() { return ['']; }
-        internal = { pageSize: { getWidth: () => 210, getHeight: () => 297 }, getNumberOfPages: () => 1 };
-        setPage() {}
-    }
-    return { __esModule: true, jsPDF: FauxPdf, default: FauxPdf };
-});
-
-const donneesPdf = {
-    netWorth: 100_000, monthlySavings: 1_000, monthlyIncome: 5_000, totalDebts: 0,
-    celiBalance: 0, reerBalance: 0, investmentsTotal: 0, liquidityBalance: 0,
-    budgetItems: [], fiscal: undefined, holdings: [], debtsDetail: [], goalsDetail: [],
-    scenarios: [],
-} as unknown as Parameters<typeof generateFinancialReport>[0];
-
-describe('[SANDBOX-ETANCHEITE] aucun FICHIER ne sort pendant que les données sont fictives', () => {
-    beforeEach(() => {
-        jsPDFCtor.mockClear();
-        useFinanceStore.setState({ isTestMode: false, isPrivacyMode: false });
-    });
-    afterEach(() => {
-        useFinanceStore.setState({ isTestMode: false, isPrivacyMode: false });
-    });
-
-    it('PDF — données fictives → refus TYPÉ, et rien n’est même commencé', async () => {
-        useFinanceStore.setState({ isTestMode: true });
-        await expect(generateFinancialReport(donneesPdf)).rejects.toBeInstanceOf(PdfRefusedTestModeError);
-        expect(jsPDFCtor, 'refuser APRÈS avoir tout construit laisserait un document en mémoire').not.toHaveBeenCalled();
-    });
-
-    it('PDF — CONTRÔLE NÉGATIF : données réelles → génère normalement', async () => {
-        // Sans cette assertion, « refuse toujours » passerait le test précédent.
-        await expect(generateFinancialReport(donneesPdf)).resolves.toBeUndefined();
-        expect(jsPDFCtor).toHaveBeenCalled();
-    });
-
-    it('PDF — le refus est lu à l’APPEL, pas capturé au chargement du module', async () => {
-        // Le mode peut basculer entre le rendu du bouton et le clic.
-        await expect(generateFinancialReport(donneesPdf)).resolves.toBeUndefined();
-        useFinanceStore.setState({ isTestMode: true });
-        await expect(generateFinancialReport(donneesPdf)).rejects.toBeInstanceOf(PdfRefusedTestModeError);
-    });
-
-    it('CSV — données fictives → refus TYPÉ au moment de FAIRE SORTIR le fichier', () => {
-        useFinanceStore.setState({ isTestMode: true });
-        expect(() => downloadCSV('x', 'Date,Payee\n2026-01-01,TEST')).toThrow(CsvRefusedTestModeError);
-    });
-
-    it('CSV — CONTRÔLE NÉGATIF : données réelles → aucun refus', () => {
-        expect(() => downloadCSV('x', 'Date,Payee\n2026-01-01,TEST')).not.toThrow();
-    });
-
-    it('les deux erreurs portent un `name` STABLE, sur lequel l’appelant discrimine', () => {
-        // Les appelants testent `e.name`. Renommer les classes sans garder ce `name` ferait
-        // retomber le refus dans la branche « ça a planté » — on enverrait Marc chercher un bug
-        // là où il n'y a qu'une règle.
-        expect(new PdfRefusedTestModeError().name).toBe('PdfRefusedTestModeError');
-        expect(new CsvRefusedTestModeError().name).toBe('CsvRefusedTestModeError');
     });
 });

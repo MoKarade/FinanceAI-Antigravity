@@ -14,7 +14,7 @@
 // les constantes de module `TEST_CONFIG`/`TEST_ASSETS`/…
 
 import { describe, it, expect } from 'vitest';
-import { TEST_PERSONAS } from '../../services/testPersonas';
+import { TEST_PERSONAS } from '../fixtures/testPersonas';
 import type { AppState } from '../../types';
 
 /** Champs de premier niveau qu'un persona peut réutiliser depuis une constante de module. */

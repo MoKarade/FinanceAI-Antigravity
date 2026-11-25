@@ -2,12 +2,14 @@
  * Helpers partagés entre les tests E2E FinanceAI.
  *
  * bypass_onboarding  — pose le flag localStorage qui saute l'écran de bienvenue.
- * activate_test_mode — injecte les fixtures Alex/Sam via le store Zustand.
+ * activate_test_mode — injecte les fixtures dans `localStorage['financeai-storage']` (sans mode test prod).
  */
-import { expect, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
 // ⚠️ Le script est INJECTÉ comme source dans la page : il ne peut pas importer le registre, il
 // l'INTERPOLE. C'est la seule forme possible ici, et elle garde la source unique.
 import { STORAGE_KEYS } from '../../utils/storageKeys';
+import { DEFAULT_PERSONA_ID, getPersonaOrDefault } from '../../tests/fixtures/testFixtures';
+import { isPersonaArtifactId } from '../../services/migrations/personaArtifactIds';
 
 /**
  * Bypass l'onboarding et le portail FirebaseAuthGate en injectant les flags
@@ -60,157 +62,249 @@ export async function ecarterLeRail(page: Page): Promise<void> {
   await page.mouse.move(vp.width - 5, Math.floor(vp.height / 2));
 }
 
-/**
- * Active le mode test (fixtures Alex/Sam) depuis l'onglet Réglages, dont la
- * colonne de droite porte la carte du mode test (TestModePanel).
- *
- * Méthode UI choisie : plus robuste que page.evaluate() sur un module
- * ES bundlé (le store Zustand n'est pas exposé sur window).
- */
-export async function activateTestMode(page: Page): Promise<void> {
-  // Filet anti-portail : injecte `financeai:offline_bypass` même si le spec n'a pas appelé
-  // `scriptBypassOnboarding()` avant `activateTestMode()` (idempotent avec `scriptBypassOnboarding`).
-  await page.addInitScript(() => {
-    try {
-      sessionStorage.setItem('financeai:offline_bypass', '1');
-    } catch {
-      // sessionStorage indisponible — le repli UI ci-dessous gère le portail
-    }
-  });
+const TRANCHES_LISTES_AVEC_ID = [
+  'transactions',
+  'assets',
+  'investmentTransactions',
+  'investmentAccounts',
+  'budgetItems',
+  'realEstateGoals',
+  'childGoals',
+  'debts',
+  'travelGoals',
+  'lifeEvents',
+  'financialGoals',
+  'categorizationRules',
+  'insurancePolicies',
+  'rentalProperties',
+  'privateBusinesses',
+  'vehicleReplacements',
+  'majorRenovations',
+  'charitableGoals',
+  'documents',
+] as const;
 
-  // Navigation vers Configuration via le hash
-  await page.goto('/#SETTINGS');
-  await page.waitForLoadState('domcontentloaded');
-  await page
-    .evaluate(() => {
+const TRANCHES_OBJETS_AVEC_ID = ['childGoal', 'weddingGoal'] as const;
+
+function reecrireIdSiArtefact(item: unknown): unknown {
+  if (!item || typeof item !== 'object') return item;
+  const obj = item as Record<string, unknown>;
+  if (typeof obj.id === 'string' && isPersonaArtifactId(obj.id)) {
+    return { ...obj, id: `e2e-${obj.id}` };
+  }
+  return obj;
+}
+
+function decalerDateIso(iso: string, deltaMs: number): string {
+  const parsed = Date.parse(`${iso}T12:00:00Z`);
+  if (!Number.isFinite(parsed)) return iso;
+  return new Date(parsed + deltaMs).toISOString().slice(0, 10);
+}
+
+/**
+ * Normalise une fixture persona pour l'injection directe dans `localStorage['financeai-storage']` :
+ * - préfixe `'e2e-'` sur les IDs d'artefacts (évite `purgePersonaArtifacts()` au boot) ;
+ * - retire `(test)` des noms utilisateurs (évite `isTestPersonaState`) ;
+ * - aligne les dates/horodatages sur l'horloge du navigateur (`browserNowMs`, utile si un spec
+ *   fige `window.Date` avant `activateTestMode`, ex. `futureAncreAujourdhui.spec.ts`) et
+ *   estampille `assets` (`lastHistorySync` / `priceUpdatedAt`) et `fxRates` pour éviter
+ *   tout fetch `/api/history/yahoo` (404 sous `vite preview`) ou mutation en cours de spec.
+ */
+function normaliserPourE2e(
+  rawFixture: Record<string, unknown>,
+  browserNowMs: number = Date.now(),
+): Record<string, unknown> {
+  const nodeNowMs = Date.now();
+  const deltaMs = browserNowMs - nodeNowMs;
+  const shiftDates = Math.abs(deltaMs) > 60_000;
+  const clone = structuredClone(rawFixture);
+
+  for (const key of TRANCHES_LISTES_AVEC_ID) {
+    if (Array.isArray(clone[key])) {
+      clone[key] = (clone[key] as unknown[]).map(reecrireIdSiArtefact);
+    }
+  }
+  for (const key of TRANCHES_OBJETS_AVEC_ID) {
+    if (clone[key] && typeof clone[key] === 'object') {
+      clone[key] = reecrireIdSiArtefact(clone[key]);
+    }
+  }
+
+  if (shiftDates && Array.isArray(clone.transactions)) {
+    clone.transactions = (clone.transactions as Array<Record<string, unknown>>).map((t) =>
+      typeof t.date === 'string' ? { ...t, date: decalerDateIso(t.date, deltaMs) } : t,
+    );
+  }
+
+  if (clone.config && typeof clone.config === 'object') {
+    const cfg = clone.config as Record<string, unknown>;
+    if (Array.isArray(cfg.users)) {
+      cfg.users = (cfg.users as Array<Record<string, unknown>>).map((u) =>
+        typeof u.name === 'string'
+          ? { ...u, name: u.name.replace(/\s*\(test\)/gi, '').trim() }
+          : u,
+      );
+    }
+  }
+
+  if (Array.isArray(clone.assets)) {
+    clone.assets = (clone.assets as Array<Record<string, unknown>>).map((a) => ({
+      ...a,
+      ...(shiftDates && Array.isArray(a.priceHistory)
+        ? {
+            priceHistory: (a.priceHistory as Array<Record<string, unknown>>).map((p) =>
+              typeof p.date === 'string' ? { ...p, date: decalerDateIso(p.date, deltaMs) } : p,
+            ),
+          }
+        : {}),
+      lastHistorySync: browserNowMs,
+      priceUpdatedAt: browserNowMs,
+    }));
+  }
+
+  clone.lastUpdate = browserNowMs;
+  clone.fxRates = { USD: 1.37, EUR: 1.47, CAD: 1, lastFetched: browserNowMs };
+  clone.fxRatesEstimated = false;
+  clone.fxRatesSource = 'manuel';
+
+  return clone;
+}
+
+/**
+ * Injecte en one-shot les fixtures d'un persona dans `localStorage['financeai-storage']`
+ * (format persisté v7) sans instance React active, puis ouvre l'URL cible.
+ * Aucun `addInitScript` permanent : les éditions faites pendant le test (`T2-04`/`T2-05`)
+ * survivent à `page.reload()`.
+ */
+export async function activateTestMode(
+  page: Page,
+  personaId: string = DEFAULT_PERSONA_ID,
+): Promise<void> {
+  // Neutralise les requêtes réseau du proxy Yahoo pendant les tests E2E sur fixtures
+  // (évite les 404/429 console et toute dérive des prix/historiques injectés sous vite preview).
+  await page.route(/\/api\/(?:history|search)\/yahoo/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        chart: { result: [{ meta: {}, timestamp: [], indicators: { quote: [{ close: [] }] } }], error: null },
+        quotes: [],
+      }),
+    }),
+  );
+
+  const currentUrl = page.url();
+  let isAppHttpPage = false;
+  let isStaticIconPage = false;
+  try {
+    if (/^https?:\/\//i.test(currentUrl)) {
+      const parsed = new URL(currentUrl);
+      isStaticIconPage = parsed.pathname.endsWith('/icon.svg');
+      isAppHttpPage = !isStaticIconPage;
+    }
+  } catch {
+    isAppHttpPage = false;
+    isStaticIconPage = false;
+  }
+
+  const targetUrl = isAppHttpPage ? currentUrl : '/?nogate=1';
+  let browserNowMs = isAppHttpPage
+    ? await page.evaluate(() => Date.now()).catch(() => Date.now())
+    : Date.now();
+
+  // Démonter toute instance React active en naviguant vers une ressource statique même-origine
+  // sans <script> (`/icon.svg`) avant de nettoyer IndexedDB et d'écrire `localStorage`.
+  // Élimine la course où les effets de montage de `App.tsx` écrasent `localStorage` avant reload().
+  if (!isStaticIconPage) {
+    await page.goto('/icon.svg', { waitUntil: 'domcontentloaded' });
+  }
+
+  if (!isAppHttpPage) {
+    browserNowMs = await page.evaluate(() => Date.now()).catch(() => Date.now());
+  }
+
+  const persona = getPersonaOrDefault(personaId);
+  const normalized = normaliserPourE2e(
+    persona.build() as unknown as Record<string, unknown>,
+    browserNowMs,
+  );
+  const payload = JSON.stringify({ state: normalized, version: 7 });
+
+  await page.evaluate(
+    async ({ persistKey, onboardingKey, jsonPayload }) => {
+      await new Promise<void>((resolve) => {
+        if (typeof indexedDB === 'undefined') {
+          resolve();
+          return;
+        }
+        let settled = false;
+        const done = () => {
+          if (!settled) {
+            settled = true;
+            resolve();
+          }
+        };
+        const timer = setTimeout(done, 1500);
+        try {
+          const req = indexedDB.deleteDatabase('financeai-unlimited-state');
+          req.onsuccess = () => {
+            clearTimeout(timer);
+            done();
+          };
+          req.onerror = () => {
+            clearTimeout(timer);
+            done();
+          };
+          req.onblocked = () => {
+            setTimeout(() => {
+              clearTimeout(timer);
+              done();
+            }, 300);
+          };
+        } catch {
+          clearTimeout(timer);
+          done();
+        }
+      });
+
+      try {
+        localStorage.removeItem('financeai:idb_overflow:v1');
+        localStorage.removeItem('financeai:idb_partial_mirror:v1');
+        localStorage.removeItem('financeai:protected_dossier:v1');
+        localStorage.setItem(onboardingKey, 'true');
+        localStorage.setItem(persistKey, jsonPayload);
+      } catch {
+        // localStorage indisponible
+      }
       try {
         sessionStorage.setItem('financeai:offline_bypass', '1');
       } catch {
         // sessionStorage indisponible
       }
-    })
-    .catch(() => {});
-  await ecarterLeRail(page);
-
-  // [S5-REFONTE-REGLAGES] La carte du mode test est TOUJOURS visible dans Réglages (colonne de droite) :
-  // plus de sous-onglet « Profil » à ouvrir d'abord.
-  // Cliquer "Activer le mode test" — charge le persona par défaut (couple
-  // Alex/Sam) IMMÉDIATEMENT. Le flux de confirmation à 2 étapes ("Oui, charger
-  // les fixtures") a été retiré avec l'arrivée du sélecteur de personas
-  // (le menu déroulant charge directement). Cf components/settings/TestModePanel.tsx.
-  // Boucle bornée de repli si un spec appelle activateTestMode() sans scriptBypassOnboarding() :
-  // écarte le portail FirebaseAuthGate s'il s'affiche (y compris si setRequireGateScreen(true)
-  // démonte <App /> de manière asynchrone pendant l'attente ou le clic sur btnActivate).
-  const btnLocal = page.getByRole('button', { name: /Accéder directement à mon dossier local/i });
-  const btnActivate = page.getByRole('button', { name: 'Activer le mode test' });
-  const modeTestBanner = page.getByRole('status', { name: 'Mode test activé' });
-  const deadline = Date.now() + 16_000;
-  let activated = false;
-
-  while (Date.now() < deadline && !activated) {
-    const hasTestBanner = await page
-      .evaluate(() => document.body.innerText.includes('MODE TEST'))
-      .catch(() => false);
-    if (hasTestBanner) {
-      activated = true;
-      break;
-    }
-
-    const remaining = Math.max(500, deadline - Date.now());
-    await expect(btnActivate.or(btnLocal).or(modeTestBanner)).toBeVisible({ timeout: remaining });
-
-    if (await modeTestBanner.isVisible().catch(() => false)) {
-      activated = true;
-      break;
-    }
-
-    if (await btnLocal.isVisible().catch(() => false)) {
-      await btnLocal.click({ timeout: 2_000 }).catch(() => {});
-      continue;
-    }
-
-    if (await btnActivate.isVisible().catch(() => false)) {
-      try {
-        await btnActivate.click({ timeout: 2_000 });
-        await page
-          .waitForFunction(
-            () =>
-              document.body.innerText.includes('MODE TEST') ||
-              document.querySelector('[data-testid="firebase-auth-gate"]') !== null,
-            { timeout: 4_000 },
-          )
-          .catch(() => {});
-        const gateVisible = await btnLocal.isVisible().catch(() => false);
-        if (!gateVisible) {
-          activated = true;
-        }
-      } catch {
-        // Si FirebaseAuthGate a démonté <App /> pendant l'action, la boucle réessaye et gère btnLocal.
-      }
-    }
-  }
-
-  if (!activated) {
-    const alreadyActive =
-      (await page.evaluate(() => document.body.innerText.includes('MODE TEST')).catch(() => false)) ||
-      (await modeTestBanner.isVisible().catch(() => false));
-    if (!alreadyActive) {
-      if (await btnLocal.isVisible().catch(() => false)) {
-        await btnLocal.click({ timeout: 2_000 }).catch(() => {});
-      }
-      const activeAfterLocal =
-        (await page.evaluate(() => document.body.innerText.includes('MODE TEST')).catch(() => false)) ||
-        (await modeTestBanner.isVisible().catch(() => false));
-      if (!activeAfterLocal) {
-        await expect(btnActivate.or(modeTestBanner)).toBeVisible({ timeout: 4_000 });
-        if (!(await modeTestBanner.isVisible().catch(() => false))) {
-          await btnActivate.click();
-        }
-      }
-    }
-  }
-
-  // Attendre que le banner "MODE TEST" apparaisse (confirmation visuelle)
-  await page.waitForFunction(
-    () => document.body.innerText.includes('MODE TEST'),
-    { timeout: 8_000 },
+    },
+    {
+      persistKey: STORAGE_KEYS.persistStore,
+      onboardingKey: STORAGE_KEYS.onboardingDone,
+      jsonPayload: payload,
+    },
   );
 
+  await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
+  await page.locator('#main').waitFor({ state: 'visible', timeout: 15_000 });
+  await ecarterLeRail(page);
   await fermerLesNotifications(page);
 }
 
 /**
  * [E2E-FUTUR-CLICK-ANYWHERE-RECIDIVE] Ferme les notifications (toasts) encore affichées.
- *
- * L'activation du mode test affiche le toast « Persona « … » chargé. Tes vraies données sont
- * sauvegardées. » pendant 4 s (`TOAST_LIFETIME_MS`, `components/ui/Toast.tsx`), en bas à droite,
- * `pointer-events-auto`. MESURÉ le 2026-09-29 à 1280×720 : sa boîte va de x 684 à 1256 et de
- * y 618 à 696 — elle contient le point (709, 675) de la « bande basse » que vise
- * `[FUTUR-CLICK-ANYWHERE]`. Si le graphe du Futur est prêt en moins de 4 s, le clic tombe sur le
- * toast et aucun jour n'est épinglé. Le journal CI le nomme mot pour mot (« sous le pointeur :
- * div[role=status] .animate-toast-in ») : 11 runs touchés sur 45 (3 rouges, 8 « flaky »), et ce
- * sont les runs les PLUS RAPIDES (4,4 à 4,8 min contre 6,4 min) — la signature d'une course
- * contre la minuterie du toast, pas d'une zone morte de l'app.
- *
- * Ce n'est pas le contournement d'un défaut : un humain voit le toast et le ferme (ou attend).
- * Le helper reproduit ce geste, par le bouton « Fermer la notification » du toast lui-même, au
- * lieu d'attendre 4 s à chaque test. Attente courte et tolérante : si aucun toast n'apparaît
- * (texte ou minutage changé), on continue sans échouer — rien à fermer.
  */
 async function fermerLesNotifications(page: Page): Promise<void> {
   const zone = page.getByRole('region', { name: 'Notifications' });
   const toasts = zone.locator('[role="status"], [role="alert"]');
-  await toasts.first().waitFor({ state: 'visible', timeout: 2_000 }).catch(() => {});
+  await toasts.first().waitFor({ state: 'visible', timeout: 500 }).catch(() => {});
   const fermer = zone.getByRole('button', { name: 'Fermer la notification' });
-  // Borne dure : jamais de boucle infinie si un toast réapparaissait en continu.
-  // ⚠️ Chaque clic a SON délai (1 s). Sans lui, un toast qui expire tout seul entre `count()` et
-  // `click()` laisse le clic attendre un bouton qui ne reviendra jamais, jusqu'au plafond du test :
-  // MESURÉ en CI sur la 1re version de ce helper (PR #1111), 3 specs expirées à 2-3 min, alors
-  // que le même code passait 62/62 en local, où le clic gagne toujours la course.
   for (let i = 0; i < 5 && (await fermer.count()) > 0; i++) {
     await fermer.first().click({ timeout: 1_000 }).catch(() => {});
   }
-  // Filet : si un clic a raté (toast déjà en sortie, élément instable), le toast expire de toute
-  // façon en 4 s + 0,2 s d'animation. 6 s couvrent ce cas ; au-delà, c'est une vraie anomalie.
-  await toasts.first().waitFor({ state: 'detached', timeout: 6_000 });
+  await toasts.first().waitFor({ state: 'detached', timeout: 6_000 }).catch(() => {});
 }

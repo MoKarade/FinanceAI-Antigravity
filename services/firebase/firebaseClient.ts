@@ -17,7 +17,7 @@ const resolvedProjectId = isTestEnv
       (firebaseConfigRaw.projectId === 'financeai-demo-public'
           ? ['financeai', '497', '112'].join('-').replace('-112', '112')
           : firebaseConfigRaw.projectId);
-export const firebaseConfig =
+const firebaseConfig =
     resolvedProjectId && resolvedProjectId !== firebaseConfigRaw.projectId
         ? {
               ...firebaseConfigRaw,
@@ -49,7 +49,6 @@ if (typeof setPersistence === 'function' && browserLocalPersistence) {
     });
 }
 export const googleProvider = new GoogleAuthProvider();
-googleProvider.addScope('https://www.googleapis.com/auth/drive.appdata');
 googleProvider.addScope('https://www.googleapis.com/auth/userinfo.email');
 
 export enum OperationType {

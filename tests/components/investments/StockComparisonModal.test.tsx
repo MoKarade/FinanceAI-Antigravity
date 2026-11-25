@@ -19,7 +19,7 @@ const mkAsset = (symbol: string, price: number): Asset => ({
 
 beforeEach(() => {
     useFinanceStore.getState().resetState();
-    useFinanceStore.setState({ isTestMode: false, assets: [mkAsset('AAPL', 150), mkAsset('TSLA', 200)] } as never);
+    useFinanceStore.setState({ assets: [mkAsset('AAPL', 150), mkAsset('TSLA', 200)] } as never);
 });
 
 describe('StockComparisonModal (dérivé du store)', () => {

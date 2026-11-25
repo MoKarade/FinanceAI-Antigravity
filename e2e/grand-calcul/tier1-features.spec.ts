@@ -204,7 +204,7 @@ test.describe('Futur 4.0 Tier 1 — Fonctionnalités principales Desktop', () =>
     const idbBeforeReload = await inspecterPayloadIDBDeepForecast(page);
     expect(idbBeforeReload.dbFound).toBe(true);
     expect(idbBeforeReload.recordCount).toBeGreaterThanOrEqual(1);
-    expect(idbBeforeReload.keys).toContain('test:couple-confort');
+    expect(idbBeforeReload.keys).toContain('real');
     expect(idbBeforeReload.allEncryptedAndCiphertextOnly).toBe(true);
     expect(idbBeforeReload.localStorageHasReportLeak).toBe(false);
 

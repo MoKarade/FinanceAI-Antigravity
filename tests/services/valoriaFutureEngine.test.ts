@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeAppState } from '../../mcp/state/loadAppState';
+import { normalizeAppState } from '../../services/aiTools/appStateDefaults';
 import { calculateFutureProjection } from '../../services/projection';
 import { buildSimulationParamsFromState } from '../../services/projection/buildSimulationParams';
 import { computeGlidepathRates } from '../../services/projection/glidepathRates';
 import { computeValoriaFutureForecast } from '../../services/projection/valoriaFutureEngine';
-import { TEST_PERSONAS } from '../../services/testPersonas';
+import { TEST_PERSONAS } from '../fixtures/testPersonas';
 import type { Asset } from '../../types';
 
 const FX_TEST: Record<string, number> = { CAD: 1, USD: 1.4181, EUR: 1.5839 };

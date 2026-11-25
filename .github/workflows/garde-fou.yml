@@ -44,5 +44,5 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           # Mêmes chemins que la règle de .mergify.yml de ce dépôt.
-          CHEMINS_PROTEGES: '^(\.github/|scripts/hooks/|qualite/|vercel\.json|drizzle/|\.env|\.mergify\.yml|\.claude/|api/|mcp/|vite\.config\.ts|index\.html)|(^|/)(settings|commit-gate)[^/]*$'
+          CHEMINS_PROTEGES: '^(\.github/|scripts/hooks/|qualite/|drizzle/|\.env|\.mergify\.yml|\.claude/|vite\.config\.ts|index\.html)|(^|/)(settings|commit-gate)[^/]*$'
         run: node .garde-fou/scripts/garde-fou.mjs

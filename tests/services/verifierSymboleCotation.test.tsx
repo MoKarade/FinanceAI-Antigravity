@@ -120,8 +120,7 @@ describe('Investments — un symbole collé est vérifié AVANT la purge', () =>
     beforeEach(() => {
         quoteMock.mockReset();
         vi.mocked(showToast).mockClear();
-        // Mode test : le rafraîchissement qui SUIT l'application s'arrête net (aucun réseau).
-        useFinanceStore.setState({ assets: [ISF], isTestMode: true } as never);
+        useFinanceStore.setState({ assets: [ISF] } as never);
     });
 
     it('cours dans une autre devise → AUCUNE écriture (l\'historique survit), refus affiché', async () => {

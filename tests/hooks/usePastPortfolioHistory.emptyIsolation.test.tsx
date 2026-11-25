@@ -16,7 +16,7 @@ vi.mock('../../services/marketData', () => ({
     getHistory: vi.fn().mockResolvedValue([]),
     configureMarketDataProvider: vi.fn(),
 }));
-vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn() }));
+vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(), }));
 
 import { usePastPortfolioHistory, _resetPastHistoryFetchCache } from '../../hooks/usePastPortfolioHistory';
 import { useFinanceStore } from '../../store/useFinanceStore';
@@ -29,7 +29,7 @@ describe('[HISTORY-OBJET-VIDE-PARTAGE] usePastPortfolioHistory — le résultat 
         vi.clearAllMocks();
         _resetPastHistoryFetchCache();
         act(() => {
-            useFinanceStore.setState({ assets: [], fxRates: { USD: 1.35, EUR: 1.5, CAD: 1 }, isTestMode: false, apiKeys: { gemini: '', anthropic: '', finnhub: '' } });
+            useFinanceStore.setState({ assets: [], fxRates: { USD: 1.35, EUR: 1.5, CAD: 1 }, apiKeys: { gemini: '', anthropic: '', finnhub: '' } });
         });
     });
 

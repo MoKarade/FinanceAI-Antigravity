@@ -18,14 +18,10 @@ import { useAppBootEffects } from './hooks/useAppBootEffects';
 import { useTabNavigation } from './hooks/useTabNavigation';
 import { useAssetDataHydration } from './hooks/useAssetDataHydration';
 import { lazyWithRetry } from './utils/lazyWithRetry';
-import { pushNow, subscribeSyncStatus, getSyncStatus, type SyncStatus } from './services/sync/syncOrchestrator';
-import { PassphraseGate } from './components/auth/PassphraseGate';
 import { useFirebaseAuth } from './components/auth/FirebaseAuthGate';
-import { SyncStatusBanner } from './components/sync/SyncStatusBanner';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
 const CommandPalette = lazyWithRetry(() => import('./components/ui/CommandPalette').then(m => ({ default: m.CommandPalette })), 'CommandPalette');
-const SyncConflictModal = lazyWithRetry(() => import('./components/sync/SyncConflictModal').then(m => ({ default: m.SyncConflictModal })), 'SyncConflictModal');
 const ProjectionEngine = lazyWithRetry(() => import('./components/ProjectionEngine').then(m => ({ default: m.ProjectionEngine })), 'ProjectionEngine');
 
 export const App: React.FC = () => {
@@ -52,6 +48,7 @@ export const App: React.FC = () => {
     }, [setActiveTab]);
 
     const cmdK = useCommandPalette();
+    const { authReady, user: firebaseUser, syncWorkspaceNow } = useFirebaseAuth();
 
     // Préchargement progressif de tous les onglets en tâche de fond après le premier rendu
     useEffect(() => scheduleIdleTabPrefetch(), []);
@@ -74,28 +71,23 @@ export const App: React.FC = () => {
             label: 'Synchroniser les données',
             group: 'Actions',
             icon: '🔄',
-            keywords: ['sync', 'refresh', 'reload', 'sauvegarder', 'drive'],
+            keywords: ['sync', 'refresh', 'reload', 'sauvegarder', 'cloud', 'firestore'],
             onSelect: async () => {
-                const result = await pushNow();
-                if (result === 'pushed') showToast('Données synchronisées vers Google Drive.', 'success');
-                else if (result === 'not-configured') showToast("Connecte d'abord Google Drive (Réglages → Sauvegarde).", 'info');
-                else if (result === 'skipped-empty') showToast('Rien à synchroniser : aucune donnée sur cet appareil.', 'info');
-                else if (result === 'skipped-testmode') showToast('Mode test actif — synchronisation désactivée.', 'info');
-                else if (result === 'error') showToast('Échec de la synchronisation (voir Réglages → Système).', 'error');
+                if (!firebaseUser) {
+                    showToast("Connecte d'abord ton compte Google pour synchroniser sur Cloud Firestore.", 'info');
+                    return;
+                }
+                await syncWorkspaceNow();
             },
         },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    ], [isPrivacyMode, handleSetTab, navigateWithFocus, state.assets, state.valoriaWatchlist]);
-
-    const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus);
-    useEffect(() => subscribeSyncStatus(setSyncStatus), []);
+    ], [isPrivacyMode, handleSetTab, navigateWithFocus, state.assets, state.valoriaWatchlist, firebaseUser, syncWorkspaceNow]);
 
     useEffect(() => { isHydrated.current = true; }, []);
 
     const bootRecoveryRan = useRef(false);
-    const { authReady, user: firebaseUser } = useFirebaseAuth();
 
-    // Récupération automatique au démarrage si une sauvegarde locale ou un bouclier anti-mode test existe,
+    // Récupération automatique au démarrage si une sauvegarde locale existe,
     // sans injecter de données simulées en production (conformément à la règle No-fake-data).
     useEffect(() => {
         if (!authReady) return;
@@ -105,7 +97,7 @@ export const App: React.FC = () => {
                 bootRecoveryRan.current = true;
                 return;
             }
-            if (hasInflatedStarterProperty(current) || current.realDataSnapshot) {
+            if (hasInflatedStarterProperty(current)) {
                 bootRecoveryRan.current = true;
                 void recoverUser230kData(false);
                 return;
@@ -117,11 +109,10 @@ export const App: React.FC = () => {
         }
     }, [authReady, firebaseUser]);
 
-    // Bouclier zéro perte : chaque modification du dossier réel (hors mode test) met à jour l'empreinte protégée.
+    // Bouclier zéro perte : chaque modification du dossier met à jour l'empreinte protégée.
     useEffect(() => {
-        if (state.isTestMode) return;
         saveProtectedDossierSnapshot(state);
-    }, [state, state.isTestMode, state.lastUpdate]);
+    }, [state, state.lastUpdate]);
 
     useEffect(() => {
         if (!state.childGoals || state.childGoals.length === 0) {
@@ -165,16 +156,11 @@ export const App: React.FC = () => {
         });
     };
 
-    const { globalNetWorth, avoirsHorsImmo, dettesHorsImmo, ecartCourtier, calculatedMonthlySavings, assetBreakdown, currentLiquidity } = useDerivedFinancials(state);
-
-    if (syncStatus.needsPassphrase) {
-        return <PassphraseGate status={syncStatus} />;
-    }
+    const { globalNetWorth, avoirsHorsImmo, dettesHorsImmo, calculatedMonthlySavings, assetBreakdown, currentLiquidity } = useDerivedFinancials(state);
 
     return (
         <ErrorBoundary label="FinanceAI">
         <div>
-            <SyncStatusBanner />
             <Suspense fallback={null}>
                 <ProjectionEngine calculatedMonthlySavings={calculatedMonthlySavings} />
             </Suspense>
@@ -186,9 +172,6 @@ export const App: React.FC = () => {
                 isPrivacyMode={isPrivacyMode}
                 togglePrivacyMode={togglePrivacyMode}
                 netWorth={globalNetWorth}
-                onGeneratePDF={() => void import('./components/app/exportPdfEcran').then(({ genererRapportPdfEcran }) => genererRapportPdfEcran({
-                    state, globalNetWorth, dettesHorsImmo, ecartCourtier, calculatedMonthlySavings, assetBreakdown, currentLiquidity,
-                }))}
                 monthlySavings={calculatedMonthlySavings}
                 financialGoals={state.financialGoals}
                 currentValues={{ celi: assetBreakdown.celi, reer: assetBreakdown.reer, liquidity: currentLiquidity }}
@@ -211,11 +194,6 @@ export const App: React.FC = () => {
                 />
             </Layout>
             <ToastContainer />
-            {syncStatus.conflict && import.meta.env?.MODE === 'test' && (
-                <Suspense fallback={null}>
-                    <SyncConflictModal />
-                </Suspense>
-            )}
             <PwaInstallBanner />
             {cmdK.isOpen && (
                 <Suspense fallback={null}>

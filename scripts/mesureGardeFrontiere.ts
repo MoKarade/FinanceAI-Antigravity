@@ -24,7 +24,7 @@
 // Run : `npx tsx scripts/mesureGardeFrontiere.ts`
 import { buildSimulationParamsFromState } from '../services/projection/buildSimulationParams.ts';
 import { verifierEntreesMoteur } from '../services/projection/verifierEntreesMoteur.ts';
-import { TEST_PERSONAS, getPersonaOrDefault } from '../services/testPersonas/index.ts';
+import { TEST_PERSONAS, getPersonaOrDefault } from '../tests/fixtures/testPersonas/index.ts';
 import { INITIAL_PROJECTION } from '../constants.ts';
 import { useFinanceStore } from '../store/useFinanceStore.ts';
 import type { AppState } from '../types.ts';

@@ -6,6 +6,14 @@ import { traiter } from './relais.mjs';
 
 const port = Number(process.env.PORT) || 8080;
 const CORPS_MAX_OCTETS = 2 * 1024 * 1024;
+const HUB_OPTS = {
+    hubProjectId: process.env.HUBPERSO_PROJECT_ID,
+    hubOwnerEmail: process.env.HUBPERSO_OWNER_EMAIL,
+    firestoreBase: process.env.FINANCEAI_FIRESTORE_BASE,
+    financeaiProjectId: process.env.FINANCEAI_PROJECT_ID ?? process.env.GOOGLE_CLOUD_PROJECT,
+    firestoreDatabaseId: process.env.FINANCEAI_FIRESTORE_DB_ID,
+    fintableToken: process.env.FINTABLE_TOKEN,
+};
 
 function lireCorpsHttp(req, maxOctets) {
     return new Promise((resolve, reject) => {
@@ -75,7 +83,7 @@ createServer(async (req, res) => {
         body,
         signal: controleur.signal,
     });
-    const reponse = await traiter(request);
+    const reponse = await traiter(request, HUB_OPTS);
     const sortie = {};
     reponse.headers.forEach((v, k) => { sortie[k] = v; });
     res.writeHead(reponse.status, sortie);

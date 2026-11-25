@@ -27,7 +27,7 @@ vi.mock('../../services/geminiClientAdapter', () => ({
     })),
 }));
 
-vi.mock('../../services/errorLogger', () => ({ logError: mocks.logError, logErrorThrottled: vi.fn(), }));
+vi.mock('../../services/errorLogger', () => ({ logError: mocks.logError, logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(), }));
 
 import { categorizeBatch } from '../../services/gemini';
 

@@ -13,7 +13,6 @@ import { isCoupleMode } from '../services/couple/netWorthByOwner';
 import { HubConnexionsModal } from './future/HubConnexionsModal';
 import { prefetchTab, getAdjacentTabs } from '../utils/tabPrefetch';
 
-const BandeauModeTest = lazyWithRetry(() => import('./test/BandeauModeTest').then(m => ({ default: m.BandeauModeTest })), 'BandeauModeTest');
 const GeminiAssistantModal = lazyWithRetry(() => import('./aiChat/GeminiAssistantModal').then(m => ({ default: m.GeminiAssistantModal })), 'GeminiAssistantModal');
 
 interface LayoutProps {
@@ -28,8 +27,6 @@ interface LayoutProps {
   monthlySavings?: number;
   financialGoals?: FinancialGoal[];
   currentValues?: { celi: number, reer: number, liquidity: number };
-  onOpenGuide?: () => void;
-  onGeneratePDF?: () => void;
 }
 
 export const Layout: React.FC<LayoutProps> = ({
@@ -43,9 +40,7 @@ export const Layout: React.FC<LayoutProps> = ({
   netWorth: _netWorth,
   monthlySavings: _monthlySavings = 0,
   financialGoals: _financialGoals = [],
-  currentValues: _currentValues = { celi: 0, reer: 0, liquidity: 0 },
-  onOpenGuide: _onOpenGuide,
-  onGeneratePDF: _onGeneratePDF
+  currentValues: _currentValues = { celi: 0, reer: 0, liquidity: 0 }
 }) => {
   useTranslation();
   const [showMobileDrawer, setShowMobileDrawer] = React.useState(false);
@@ -114,7 +109,6 @@ export const Layout: React.FC<LayoutProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [showMobileDrawer]);
 
-  const isTestMode = useFinanceStore(s => s.isTestMode);
   const coupleConfig = useFinanceStore(s => s.config);
   const assets = useFinanceStore(s => s.assets);
   const setAppState = useFinanceStore(s => s.setAppState);
@@ -157,7 +151,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const margeMain = isSidebarCollapsed ? 'lg:ml-[72px]' : 'lg:ml-[232px]';
 
   return (
-    <div className={`min-h-screen flex flex-col md:flex-row text-ink-100 font-sans ${isPrivacyMode ? 'privacy-active' : ''} ${isTestMode ? 'test-mode-active' : ''}`}>
+    <div className={`min-h-screen flex flex-col md:flex-row text-ink-100 font-sans ${isPrivacyMode ? 'privacy-active' : ''}`}>
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-200 focus:px-4 focus:py-2 focus:rounded-card focus:bg-primary focus:text-dark focus:font-bold"
@@ -167,11 +161,6 @@ export const Layout: React.FC<LayoutProps> = ({
 
       <div role="status" aria-live="polite" className="sr-only">{annonceRoute}</div>
 
-      {isTestMode && (
-        <Suspense fallback={<div className="fixed top-0 left-0 right-0 z-150 h-10 bg-warning-600" aria-hidden="true" />}>
-          <BandeauModeTest />
-        </Suspense>
-      )}
       <style>{`
         .privacy-active .privacy-blur {
             filter: blur(8px) !important;
@@ -200,7 +189,7 @@ export const Layout: React.FC<LayoutProps> = ({
       `}</style>
 
       {/* Barre latérale bureau (≥ lg) : repliable, icônes + indicateurs animés + préchargement au survol */}
-      <aside className={`hidden lg:flex fixed top-0 left-0 bottom-0 z-40 ${largeurSidebar} flex-col gap-2.5 bg-fond border-r border-bordure px-3 pb-3 transition-all duration-200 ${isTestMode ? 'pt-14' : 'pt-3.5'}`}>
+      <aside className={`hidden lg:flex fixed top-0 left-0 bottom-0 z-40 ${largeurSidebar} flex-col gap-2.5 bg-fond border-r border-bordure px-3 pb-3 transition-all duration-200 pt-3.5`}>
         <div className="flex items-center justify-between px-1.5" title={`v${__APP_VERSION__} • ${__GIT_SHA__} — build ${__BUILD_DATE__}`}>
           <div className="flex items-center gap-2 min-w-0">
             <img src="/icon.svg" alt="" width={32} height={32} className="w-[32px] h-[32px] rounded-[9px] shrink-0" aria-hidden="true" />
@@ -229,7 +218,6 @@ export const Layout: React.FC<LayoutProps> = ({
                   <button
                     key={item.tab}
                     type="button"
-                    data-tour-id={`nav-${item.tab}`}
                     onClick={() => setActiveTab(item.tab)}
                     onMouseEnter={() => prefetchTab(item.tab)}
                     onFocus={() => prefetchTab(item.tab)}
@@ -279,7 +267,6 @@ export const Layout: React.FC<LayoutProps> = ({
           </button>
           <button
             type="button"
-            data-tour-id={`nav-${PROFILE_TAB}`}
             onClick={() => setActiveTab(PROFILE_TAB)}
             onMouseEnter={() => prefetchTab(PROFILE_TAB)}
             onFocus={() => prefetchTab(PROFILE_TAB)}
@@ -323,7 +310,7 @@ export const Layout: React.FC<LayoutProps> = ({
       <main
         id="main"
         tabIndex={-1}
-        className={`flex-1 min-w-0 ${margeMain} px-2.5 sm:px-4 lg:px-6 pb-20 lg:pb-6 ${isTestMode ? 'pt-12 sm:pt-14' : 'pt-2 sm:pt-3 lg:pt-4'} min-h-dvh relative z-0 focus:outline-hidden`}
+        className={`flex-1 min-w-0 ${margeMain} px-2.5 sm:px-4 lg:px-6 pb-20 lg:pb-6 pt-2 sm:pt-3 lg:pt-4 min-h-dvh relative z-0 focus:outline-hidden`}
       >
         <div className="w-full min-w-0 max-w-[1600px] mx-auto space-y-2.5 sm:space-y-3.5 lg:space-y-4">
           {/* Barre supérieure unique : fil d'Ariane + barre de recherche directe (masquée sur Accueil qui possède déjà son Omnibox) */}
@@ -443,7 +430,6 @@ export const Layout: React.FC<LayoutProps> = ({
             <button
               key={tab}
               type="button"
-              data-tour-id={`nav-${tab}`}
               onClick={() => { setActiveTab(tab); setShowMobileDrawer(false); }}
               onMouseEnter={() => prefetchTab(tab)}
               onTouchStart={() => prefetchTab(tab)}
@@ -469,7 +455,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
       {/* Menu « Plus » (mobile) : un écran à part entière, au-dessus du contenu, sous la barre du bas. */}
       {showMobileDrawer && (
-        <div ref={panneauPlusRef} className={`lg:hidden fixed inset-x-0 bottom-[64px] ${isTestMode ? 'top-10' : 'top-0'} z-90 bg-fond overflow-y-auto px-4 pt-4 pb-6 flex flex-col gap-3.5 animate-fade-in`}>
+        <div ref={panneauPlusRef} className="lg:hidden fixed inset-x-0 bottom-[64px] top-0 z-90 bg-fond overflow-y-auto px-4 pt-4 pb-6 flex flex-col gap-3.5 animate-fade-in">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-ink-50">Plus</h2>
           </div>

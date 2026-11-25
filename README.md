@@ -4,7 +4,7 @@
 
 # FinanceAI
 
-Application personnelle de planification financière complète (architecture 100 % Google) : suivi en temps réel, projections fiscales canadiennes et québécoises (ARC + Revenu Québec), simulation Monte Carlo de la retraite, plan d'action opérationnel en 5 horizons (jour, semaine, mois, année, décennie), assistant IA **Google Gemini** (`gemini-3.8-flash` & `gemini-4-argon`), synchronisation **Cloud Firestore** & **Google Drive**, authentification **Firebase Auth / Google Sign-In**, interface **Google Finance Beta** (3 colonnes équilibrées : Listes & Portefeuilles, Courbe & Avoirs, Recherche Gemini).
+Application personnelle de planification financière complète (architecture 100 % Google) : suivi en temps réel, projections fiscales canadiennes et québécoises (ARC + Revenu Québec), simulation Monte Carlo de la retraite, plan d'action opérationnel en 5 horizons (jour, semaine, mois, année, décennie), assistant IA **Google Gemini** (`gemini-3.8-flash` & `gemini-4-argon`), synchronisation **Cloud Firestore**, authentification **Firebase Auth / Google Sign-In**, interface **Google Finance Beta** (3 colonnes équilibrées : Listes & Portefeuilles, Courbe & Avoirs, Recherche Gemini).
 
 ## 🚀 Lancer localement
 
@@ -78,14 +78,13 @@ relu ment en silence. Un compteur se lit dans la CI.)*
 | [`docs/FISCAL_REFERENCE.md`](docs/FISCAL_REFERENCE.md) | Valeurs fiscales sourcées — RRQ, PSV, SRG, paliers, crédits |
 | [`CHANGELOG.md`](CHANGELOG.md) | Historique des changements |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Stack détaillée, topologie, store, pipeline IA |
-| [`mcp/README.md`](mcp/README.md) | Documentation du serveur MCP (intégration agents IA) |
 
 ## Architecture (vue rapide)
 
 L'architecture détaillée est maintenue dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Résumé :
 
-- L'app adopte une architecture **100 % Google** côté navigateur et persiste localement (`localStorage` + IndexedDB chiffré `AES-256-GCM`), avec synchronisation infonuagique via **Cloud Firestore** (`services/firebase/workspaceSync.ts`, isolée par `users/{uid}/workspaces/main`) et **Google Drive** (`appDataFolder` chiffré). L'authentification repose sur **Firebase Auth** (Google Sign-In) et Google Identity Services (OAuth 2.0 PKCE).
-- Les fonctions d'intelligence artificielle passent par **Google Gemini** (`services/gemini.ts` et `services/geminiAssistant.ts` via le SDK officiel `@google/genai`, clé utilisateur `apiKeys.gemini` chiffrée en IndexedDB). Le serveur MCP (`mcp/`) expose les outils financiers typés.
+- L'app adopte une architecture **100 % Google** côté navigateur et persiste localement (`localStorage` + IndexedDB chiffré `AES-256-GCM`), avec synchronisation infonuagique via **Cloud Firestore** (`services/firebase/workspaceSync.ts`, isolée par `users/{uid}/workspaces/main`). L'authentification repose sur **Firebase Auth** (Google Sign-In).
+- Les fonctions d'intelligence artificielle passent par **Google Gemini** (`services/gemini.ts` et `services/geminiAssistant.ts` via le SDK officiel `@google/genai`, clé utilisateur `apiKeys.gemini` chiffrée en IndexedDB) et les outils typés (`services/aiTools/`).
 - Le moteur de projection (`services/projection.ts` + `services/projection/` — une soixantaine de fichiers) est le coeur de l'app. Voir [`docs/PROJECTION.md`](docs/PROJECTION.md) pour les détails.
 - Le state global est Zustand v5 + persist (schema v7 avec migrations v1→v7).
 - L'interface applique le **Design System Google Finance** (thèmes clair et sombre Material 3, typographie Google Sans / Roboto Mono, variables CSS sémantiques).
@@ -95,7 +94,7 @@ L'architecture détaillée est maintenue dans [`docs/ARCHITECTURE.md`](docs/ARCH
 - ✅ **Pas de secret hardcodé**. Clés via UI seulement (jamais dans `.env` versionné).
 - ✅ **apiKeys excluses du localStorage** et des deux formats de backup (JSON clair + chiffré).
 - ✅ **Backup chiffré** AES-256-GCM avec PBKDF2 600 000 itérations.
-- ✅ **CSP stricte** (`vercel.json` headers + `<meta>` défense-en-profondeur) — aucun domaine LLM tiers résiduel.
+- ✅ **CSP stricte** (`firebase.json` headers + `<meta>` défense-en-profondeur) — aucun domaine LLM tiers résiduel.
 - ✅ **Validation Zod** des réponses LLM (anti-prompt injection).
 - ✅ **Pas de Google Sheet** — le proxy Sheet legacy a été supprimé (cycle 14). `services/finance.ts` ne fait plus de fetch CSV vers docs.google.com.
 - ✅ **No-fake-data** : refus catégorique de mockups en prod.
@@ -107,12 +106,11 @@ L'architecture détaillée est maintenue dans [`docs/ARCHITECTURE.md`](docs/ARCH
 - **Tests** : Vitest + @testing-library/react + axe-core (compte : voir `GEMINI.md`, source unique)
 - **Validation** : Zod 3
 - **Charts** : Recharts 3 (lazy-loaded)
-- **Auth & Cloud** : **Firebase Auth** (Google Sign-In) + **Cloud Firestore** (`users/{uid}/workspaces/main`) + déploiement **Vercel** (`vercel.json`)
+- **Auth & Cloud** : **Firebase Auth** (Google Sign-In) + **Cloud Firestore** (`users/{uid}/workspaces/main`) + déploiement **Firebase Hosting** (`firebase.json`) & **Cloud Run** (`cloudrun/proxy/`)
 - **LLM** : **Google Gemini** (`gemini-2.5-flash` + `gemini-2.5-pro` via `@google/genai` — `services/gemini.ts`, réglages dans `services/aiChat/reglages.ts`)
 - **Vision** : **Gemini Vision** (`gemini-2.5-flash`) pour OCR relevés bancaires et talons de paie PDF/images
 - **Data marché** : Finnhub REST API (cours actions + ETF, cache 1h) ; CoinGecko (crypto)
-- **Sync** : **Cloud Firestore** (temps réel multi-appareils) + **Google Drive** (`appDataFolder`, chiffrement optionnel par passphrase, AES-256-GCM)
-- **MCP** : Model Context Protocol server (Node.js)
+- **Sync** : **Cloud Firestore** (temps réel multi-appareils) + sauvegarde JSON/chiffrée locale (`.bak` AES-256-GCM)
 
 ## 📈 Fonctionnalités clés
 
@@ -121,7 +119,7 @@ L'architecture détaillée est maintenue dans [`docs/ARCHITECTURE.md`](docs/ARCH
 - Import OCR relevés/paies PDF (**Gemini Vision**) — extraction montants, dates, catégories
 - Reconnaissance auto des catégories (règles locales + **Google Gemini**)
 - Détection d'abonnements récurrents
-- Sync **Cloud Firestore** et **Google Drive** bidirectionnelle (données chiffrées optionnellement)
+- Sync **Cloud Firestore** temps réel multi-appareils
 
 ### Budget et goals
 - Budget v2 : règle 50/30/20 (Besoins/Envies/Épargne) réel vs théorique
@@ -162,8 +160,7 @@ L'architecture détaillée est maintenue dans [`docs/ARCHITECTURE.md`](docs/ARCH
 
 ### Assistant IA (Google Gemini)
 - **Google Gemini** (`services/gemini.ts` et `services/geminiAssistant.ts` via `@google/genai`) propulse toutes les fonctions d'intelligence artificielle de l'application avec la clé utilisateur `apiKeys.gemini` chiffrée en IndexedDB
-- Connecteur MCP `financeAImcp` : lecture des indicateurs financiers et écriture avec confirmation à deux temps (aperçu puis jeton, rien n'est écrit sans accord)
-- Dans l'app : diagnostic budget (streamé, annulable), suggestions Planning, catégorisation par lot (`gemini-2.5-flash`), lecture de talon de paie et de relevés bancaires (**Gemini Vision**) ; les écritures d'Impôts et du talon de paie passent par le modal « Appliquer » (diff avant → après)
+- Dans l'app : diagnostic budget (streamé, annulable), suggestions Planning, catégorisation par lot (`gemini-2.5-flash`), lecture de talon de paie et de relevés bancaires (**Gemini Vision**) ; les écritures passent par le modal « Appliquer » (diff avant → après)
 - Modèles : `gemini-2.5-flash` (défaut rapide, catégorisation, vision) et `gemini-2.5-pro` (analyses approfondies et stratégies complexes)
 - Mode discret : aucun montant n'est envoyé à Gemini ; aucune PII envoyée ; contexte fictif explicitement marqué en mode test (`[SANDBOX-PROMPTS-MARQUER-CONTEXTE]`)
 

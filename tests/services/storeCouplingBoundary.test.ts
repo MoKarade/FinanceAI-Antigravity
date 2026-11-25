@@ -30,16 +30,9 @@ import { stripComments } from '../../utils/stripComments';
 const SERVICES_STORE_AUTORISES = [
     'services/aiTools/appStateProvider.ts',
     'services/aiTools/writeExecutor.ts',
-    // [SANDBOX-PROMPTS-MARQUER-CONTEXTE] 2026-09-29 : lit `modeDonneesFictives()` au point de
-    // contact SDK pour marquer le `system` quand les données sont fictives (ARCHITECTURE §2).
-    'services/gemini.ts',
     'services/dataRecovery.ts',
     'services/fintable/autoSync.ts',
     'services/firebase/workspaceSync.ts',
-    'services/pdfReport.ts',
-    'services/sync/syncPull.ts',
-    'services/sync/syncPush.ts',
-    'services/sync/syncSnapshot.ts',
 ];
 
 /**
@@ -120,11 +113,10 @@ describe('[SVC-STORE-COUPLING] frontière services/ ↔ store', () => {
         // la garde a laissé passer `syncPush.ts` le 2026-09-21.
         expect(MODULES_STORE).toContain('store/useFinanceStore');
         expect(MODULES_STORE.length, 'la dérivation ne voit plus aucun alias du store').toBeGreaterThan(1);
-        // Témoin NOMMÉ, dans la forme la moins familière : un module qui n'expose PAS le store
-        // lui-même mais un prédicat lu dessus. C'est celui qui a démasqué le défaut.
-        expect(MODULES_STORE).toContain('store/modeTestActif');
+        // Témoin NOMMÉ : un module auxiliaire de store/ qui importe `useFinanceStore`.
+        expect(MODULES_STORE).toContain('store/idbBootHydration');
         // …et la garde reconnaît bien l'import tel qu'un fichier de services/ l'écrit.
-        expect(IMPORT_STORE.test("import { modeDonneesFictives } from '../../store/modeTestActif';")).toBe(true);
+        expect(IMPORT_STORE.test("import { hydrateStoreFromIndexedDb } from '../../store/idbBootHydration';")).toBe(true);
         // Contre-témoin : un chemin voisin qui ne mène pas au store reste ignoré.
         expect(IMPORT_STORE.test("import { x } from '../../utils/format';")).toBe(false);
     });

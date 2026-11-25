@@ -15,7 +15,6 @@
 import { useMemo } from 'react';
 import type { MarketDataPoint } from '../services/finance';
 import { useFinanceStore } from '../store/useFinanceStore';
-import { generateTestMarketData } from '../services/testFixtures';
 import { buildMarketData } from '../services/history/buildMarketData';
 
 interface UsePortfolioHistoryResult {
@@ -43,25 +42,10 @@ interface UsePortfolioHistoryResult {
 }
 
 export function usePortfolioHistory(): UsePortfolioHistoryResult {
-    const isTestMode = useFinanceStore(s => s.isTestMode);
     const assets = useFinanceStore(s => s.assets);
-    const initialBalances = useFinanceStore(s => s.initialBalances);
     const fxRates = useFinanceStore(s => s.fxRates);
 
     const result = useMemo<UsePortfolioHistoryResult>(() => {
-        if (isTestMode) {
-            return {
-                history: generateTestMarketData(assets, initialBalances as Record<string, number>),
-                isLoading: false,
-                error: null,
-                noHistorySymbols: [],
-                partialHistorySymbols: [],
-                staleTailSymbols: [],
-                syntheticTailKeys: new Set(),
-                gapBridges: [],
-                omittedKeys: new Set(),
-            };
-        }
         // [HUB-TOTAL-AMPUTE] `omittedKeys` est EXPOSÉ : un inventaire que le hook garde pour lui
         // ne protège personne — c'est le défaut exact que ce lot a trouvé un étage plus haut
         // (`UN-INVENTAIRE-N-EST-UNE-PROTECTION-QUE-POUR-QUI-LE-LIT`). ⚠️ Ici `buildMarketData` est
@@ -70,7 +54,7 @@ export function usePortfolioHistory(): UsePortfolioHistoryResult {
         // (`downsample` ne fait que SÉLECTIONNER des lignes existantes, il n'en fabrique aucune).
         const { rows, noHistorySymbols, partialHistorySymbols, staleTailSymbols, syntheticTailKeys, gapBridges, omittedKeys } = buildMarketData(assets, fxRates as Record<string, number>);
         return { history: rows, isLoading: false, error: null, noHistorySymbols, partialHistorySymbols, staleTailSymbols, syntheticTailKeys, gapBridges, omittedKeys };
-    }, [isTestMode, assets, initialBalances, fxRates]);
+    }, [assets, fxRates]);
 
     return result;
 }

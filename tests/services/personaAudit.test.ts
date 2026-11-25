@@ -7,8 +7,8 @@
 // Imprime aussi un rapport lisible par persona.
 
 import { describe, it, expect } from 'vitest';
-import { TEST_PERSONAS } from '../../services/testPersonas';
-import { generateTestMarketData } from '../../services/testMarketData';
+import { TEST_PERSONAS } from '../fixtures/testPersonas';
+import { generateTestMarketData } from '../fixtures/testMarketData';
 import { calculateFutureProjection, type SimulationParams } from '../../services/projection';
 import type { ProjectionResult, ProjectionChartPoint } from '../../services/projection/types';
 import { reconstructPortfolioHistory } from '../../services/history/reconstructPortfolioHistory';

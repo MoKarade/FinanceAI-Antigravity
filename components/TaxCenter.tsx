@@ -43,11 +43,6 @@ interface TaxCenterProps {
     apiKey?: string;
 }
 
-const DRIVE_FOLDER_URL = "https://drive.google.com";
-
-// Phase 4 A4: les modèles Gemini sont remplacés par Claude Sonnet 4.6
-// (cf services/claude.ts analyzePayslip).
-
 export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKey }) => {
     // [AI-TAXCENTER-APPLY-NOGATE] Plomberie PARTAGÉE de la confirmation (diff → clic → apply).
     const { pendingWrite, requestConfirmation, resolvePendingWrite } = useWriteConfirmation();
@@ -92,7 +87,7 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
         const [{ executeWriteTool }, { applyPayslipSpec }] = await importWithRetry(
             () => Promise.all([
                 import('../services/aiTools/writeExecutor'),
-                import('../mcp/tools/applyPayslip.spec'),
+                import('../services/aiTools/specs/applyPayslip.spec'),
             ]),
             'taxCenterPayslipWrite',
         );
@@ -380,7 +375,6 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
     const transactions = useFinanceStore(s => s.transactions);
     const realAverages = useMemo(() => computeMonthlyActualAverages(transactions), [transactions]);
 
-    const openDrive = () => window.open(DRIVE_FOLDER_URL, '_blank');
     const importer = () => fileInputRef.current?.click();
     const annee = new Date().getFullYear();
     const paieAppliquee = salarySource?.kind === 'payslip' || salarySource?.kind === 'mcp';
@@ -452,7 +446,6 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
                     <Icon name="lock" size={14} className="shrink-0" />
                     <span>
                         <strong className="text-succes-texte font-semibold">Revenu de la fiche de paie</strong>{salarySource?.label ? ` « ${salarySource.label} »` : ''}
-                        {salarySource?.kind === 'mcp' ? ' (via le connecteur Claude)' : ''}
                         {salarySource?.appliedAt ? `, appliquée le ${formatIsoDay(salarySource.appliedAt)}` : ''}.
                         {' '}La Santé financière et le Budget utilisent ce même revenu.
                     </span>
@@ -469,8 +462,7 @@ export const TaxCenter: React.FC<TaxCenterProps> = ({ config, assets = [], apiKe
             {/* [SEC-VISION-CONSENT-INJECTION] Loi 25 : l'import envoie la fiche de paie BRUTE (nom,
                 employeur, salaire exact) à Google Gemini — le dire explicitement près de l'action. */}
             <p className="text-tiny text-ink-400 -mt-2">
-                L'import envoie ta fiche de paie (image/PDF, avec nom/employeur/salaire) à Google Gemini pour en extraire les montants.{' '}
-                <button type="button" onClick={openDrive} className="touch-target inline-flex items-center underline underline-offset-2 hover:text-ink-100 focus-ring rounded-sm">Ouvrir Google Drive ↗</button>
+                L'import envoie ta fiche de paie (image/PDF, avec nom/employeur/salaire) à Google Gemini pour en extraire les montants.
             </p>
 
             {isAnalyzing && (

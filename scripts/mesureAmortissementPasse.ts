@@ -18,7 +18,7 @@
 // Run : `npx tsx scripts/mesureAmortissementPasse.ts`
 import { buildPastPrefix } from '../services/history/buildPastPrefix.ts';
 import { KIND_AMORTISSANT, type DebtAmortissable } from '../services/projection/debtAmortization.ts';
-import { TEST_PERSONAS } from '../services/testPersonas/index.ts';
+import { TEST_PERSONAS } from '../tests/fixtures/testPersonas/index.ts';
 import type { PortfolioHistoryPoint } from '../services/history/reconstructPortfolioHistory.ts';
 
 // ── Scénario, tous paramètres nommés ────────────────────────────────────────────────────────────

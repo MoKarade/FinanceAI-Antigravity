@@ -22,7 +22,7 @@ import { describe, it, expect } from 'vitest';
 import { buildFinancialSnapshot } from '../../services/financialSnapshot';
 import { computePresentNetWorth } from '../../services/portfolio';
 import { presentEquityOfGoal } from '../../services/projection/pastPurchaseInit';
-import { normalizeAppState } from '../../mcp/state/appStateDefaults';
+import { normalizeAppState } from '../../services/aiTools/appStateDefaults';
 import type { Asset, Debt, RealEstateGoal } from '../../types';
 
 const FX = { CAD: 1, USD: 1.38, EUR: 1.5 };

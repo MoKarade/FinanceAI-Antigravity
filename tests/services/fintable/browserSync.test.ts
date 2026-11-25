@@ -9,11 +9,11 @@ import { describe, it, expect, vi } from 'vitest';
 import { runFintableBrowserSync, listFintableAccountsForSetup } from '../../../services/fintable/browserSync';
 import { FintableClient } from '../../../services/fintable/client';
 import { FintableError } from '../../../services/fintable/types';
-import { buildDefaultAppState } from '../../../mcp/state/appStateDefaults';
+import { buildDefaultAppState } from '../../../services/aiTools/appStateDefaults';
 import type { AppState, FintableAccountRoleConfig } from '../../../types';
 import type { FintableAccountRole } from '../../../services/fintable/mapSnapshot';
 
-vi.mock('../../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn() }));
+vi.mock('../../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(), }));
 
 const NOW = Date.parse('2026-07-30T12:00:00Z');
 const now = () => NOW;

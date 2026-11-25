@@ -10,8 +10,6 @@ import * as runAsyncMod from '../../../services/projection/runAsync';
 import * as grandCalculStoreMod from '../../../services/grandCalculStore';
 import type { GrandCalculConfig, GrandCalculResult, SimulationParams } from '../../../services/projection/types';
 
-const TEST_PERSONA_STORAGE_KEY = 'financeai:grandCalculTestPersona:v1';
-
 function makeParams(targetAge = 65): SimulationParams {
     return {
         projection: {
@@ -316,48 +314,6 @@ describe('useGrandCalcul', () => {
         expect(result.current.result).toEqual(prior);
     });
 
-    it('isole le mode test par persona : purge lors d’un changement de persona mais restaure le même persona', async () => {
-        const params = makeParams(65);
-        const saved = makeResult(params, {
-            iterations: 50_000,
-            enableMacroRegimes: true,
-            includeHistoricalCrises: true,
-        });
-        const clearSpy = vi.spyOn(grandCalculStoreMod, 'clearGrandCalculResult').mockResolvedValue(undefined);
-        const loadSpy = vi.spyOn(grandCalculStoreMod, 'loadGrandCalculResult').mockResolvedValue({
-            status: 'ok',
-            result: saved,
-        });
-
-        // Cas 1 : rechargement sur le même persona -> restaure { isTestMode: true }
-        localStorage.setItem(TEST_PERSONA_STORAGE_KEY, 'couple-confort');
-        useFinanceStore.setState({ isTestMode: true, activeTestPersonaId: 'couple-confort' });
-
-        const { result, unmount } = renderHook(() => useGrandCalcul(params));
-        await waitFor(() => expect(result.current.status).toBe('ready'));
-        expect(loadSpy).toHaveBeenCalledWith({ isTestMode: true });
-
-        // Cas 2 : changement de persona en direct -> purge le slot test IDB
-        act(() => {
-            useFinanceStore.setState({ activeTestPersonaId: 'lea-fauchee' });
-        });
-        expect(clearSpy).toHaveBeenCalledWith({ isTestMode: true });
-        expect(localStorage.getItem(TEST_PERSONA_STORAGE_KEY)).toBeNull();
-        unmount();
-
-        // Cas 3 : changement de persona alors que le composant était démonté
-        localStorage.setItem(TEST_PERSONA_STORAGE_KEY, 'couple-confort');
-        useFinanceStore.setState({
-            isTestMode: true,
-            activeTestPersonaId: 'pre-retraite-riche',
-            grandCalculResult: null,
-            grandCalculStatus: 'idle',
-        });
-        const { result: r3 } = renderHook(() => useGrandCalcul(params));
-        await waitFor(() => expect(r3.current.status).toBe('idle'));
-        expect(clearSpy).toHaveBeenCalledWith({ isTestMode: true });
-    });
-
     it('efface les résultats via clear() et nettoie IDB + store', async () => {
         const params = makeParams(65);
         const prior = makeResult(params, {
@@ -366,10 +322,7 @@ describe('useGrandCalcul', () => {
             includeHistoricalCrises: true,
         });
         const clearSpy = vi.spyOn(grandCalculStoreMod, 'clearGrandCalculResult').mockResolvedValue(undefined);
-        localStorage.setItem(TEST_PERSONA_STORAGE_KEY, 'couple-confort');
         useFinanceStore.setState({
-            isTestMode: true,
-            activeTestPersonaId: 'couple-confort',
             grandCalculResult: prior,
             grandCalculStatus: 'ready',
         });
@@ -382,8 +335,7 @@ describe('useGrandCalcul', () => {
 
         expect(result.current.result).toBeNull();
         expect(result.current.status).toBe('idle');
-        expect(clearSpy).toHaveBeenCalledWith({ isTestMode: true });
-        expect(localStorage.getItem(TEST_PERSONA_STORAGE_KEY)).toBeNull();
+        expect(clearSpy).toHaveBeenCalledWith({ isTestMode: false });
     });
 
     it('préserve la configuration non par défaut après démontage/remontage (calcul terminé ou en cours) sans faux isStale', async () => {
@@ -453,443 +405,7 @@ describe('useGrandCalcul', () => {
         });
     });
 
-    it('avorte le worker en cours et ignore ses écritures lors d’un changement de persona hors onglet Futur', async () => {
-        const params = makeParams(65);
-        let capturedSignal: AbortSignal | undefined;
-        let capturedOnProgress: ((p: runAsyncMod.GrandCalculProgress) => void) | undefined;
-        let resolveStaleWorker!: (r: GrandCalculResult) => void;
-
-        vi.spyOn(runAsyncMod, 'runGrandCalculAsync').mockImplementationOnce(
-            (_p, _c, opts) => {
-                capturedSignal = opts.signal;
-                capturedOnProgress = opts.onProgress;
-                return new Promise((resolve) => {
-                    resolveStaleWorker = resolve;
-                });
-            },
-        );
-
-        useFinanceStore.setState({ isTestMode: true, activeTestPersonaId: 'couple-confort' });
-        const h1 = renderHook(() => useGrandCalcul(params));
-        await waitFor(() => expect(h1.result.current.isRestoring).toBe(false));
-
-        act(() => {
-            void h1.result.current.launch();
-        });
-        expect(h1.result.current.isRunning).toBe(true);
-        h1.unmount();
-
-        // Changement de persona depuis #SETTINGS pendant que l'onglet Futur est démonté
-        useFinanceStore.setState({
-            isTestMode: true,
-            activeTestPersonaId: 'lea-fauchee',
-            grandCalculResult: null,
-            grandCalculStatus: 'idle',
-            grandCalculProgress: null,
-        });
-
-        // Progrès tardif émis avant le remontage : doit être ignoré
-        capturedOnProgress?.({ done: 10_000, total: 50_000, pct: 20, simPerSec: 5_000, etaMs: 8_000 });
-        expect(useFinanceStore.getState().grandCalculProgress).toBeNull();
-
-        // Remontage sur Futur avec le nouveau persona : doit avorter le worker orphelin
-        const h2 = renderHook(() => useGrandCalcul(params));
-        await waitFor(() => expect(h2.result.current.status).toBe('idle'));
-        expect(capturedSignal?.aborted).toBe(true);
-        expect(h2.result.current.result).toBeNull();
-
-        // Résolution tardive du worker avorté : ne doit pas polluer le store
-        resolveStaleWorker(makeResult(params, { iterations: 50_000, enableMacroRegimes: true, includeHistoricalCrises: true }));
-        await act(async () => {
-            await Promise.resolve();
-        });
-        expect(useFinanceStore.getState().grandCalculResult).toBeNull();
-    });
-
-    it('empêche toute fuite IDB inter-personas si saveGrandCalculResult est en vol lors d’un changement de persona (montage B après et avant résolution)', async () => {
-        const params = makeParams(65);
-        const nonDefault: GrandCalculConfig = {
-            iterations: 100_000,
-            enableMacroRegimes: false,
-            includeHistoricalCrises: false,
-        };
-        const computedA: GrandCalculResult = {
-            ...makeResult(params, nonDefault),
-            survivalRatePct: 77.7,
-        };
-
-        const idbSlots = new Map<'current' | 'test', GrandCalculResult>();
-        vi.spyOn(grandCalculStoreMod, 'loadGrandCalculResult').mockImplementation(async (opts) => {
-            const slot = opts?.isTestMode ? 'test' : 'current';
-            const found = idbSlots.get(slot);
-            return found ? { status: 'ok', result: found } : { status: 'empty' };
-        });
-        vi.spyOn(grandCalculStoreMod, 'clearGrandCalculResult').mockImplementation(async (opts) => {
-            const slot = opts?.isTestMode ? 'test' : 'current';
-            idbSlots.delete(slot);
-        });
-
-        // --- Cas A (Probe 2b) : bascule vers lea-fauchee puis résolution de saveGrandCalculResult AVANT le montage de lea-fauchee ---
-        let resolveSaveA!: (ok: boolean) => void;
-        vi.spyOn(grandCalculStoreMod, 'saveGrandCalculResult').mockImplementationOnce(
-            (res, opts) =>
-                new Promise<boolean>((resolve) => {
-                    resolveSaveA = (ok: boolean) => {
-                        if (ok) {
-                            idbSlots.set(opts?.isTestMode ? 'test' : 'current', res);
-                        }
-                        resolve(ok);
-                    };
-                }),
-        );
-        vi.spyOn(runAsyncMod, 'runGrandCalculAsync').mockResolvedValueOnce(computedA);
-
-        act(() => {
-            useFinanceStore.getState().enableTestMode({}, 'couple-confort');
-        });
-        const h1 = renderHook(() => useGrandCalcul(params));
-        await waitFor(() => expect(h1.result.current.isRestoring).toBe(false));
-
-        act(() => {
-            h1.result.current.updateConfig(nonDefault);
-        });
-        let launchPromise!: Promise<void>;
-        act(() => {
-            launchPromise = h1.result.current.launch();
-        });
-        await waitFor(() => expect(h1.result.current.status).toBe('ready'));
-        // La propriété du slot test doit être enregistrée synchronement avant la fin de l'await IDB
-        expect(localStorage.getItem(TEST_PERSONA_STORAGE_KEY)).toBe('couple-confort');
-
-        h1.unmount();
-        act(() => {
-            useFinanceStore.getState().enableTestMode({}, 'lea-fauchee');
-        });
-
-        await act(async () => {
-            resolveSaveA(true);
-            await launchPromise;
-        });
-
-        const h2 = renderHook(() => useGrandCalcul(params));
-        await waitFor(() => expect(h2.result.current.isRestoring).toBe(false));
-        expect(h2.result.current.result).toBeNull();
-        expect(h2.result.current.status).toBe('idle');
-        expect(idbSlots.get('test')).toBeUndefined();
-        expect(localStorage.getItem(TEST_PERSONA_STORAGE_KEY)).toBeNull();
-        h2.unmount();
-
-        // --- Cas B : montage de lea-fauchee AVANT la résolution du saveGrandCalculResult de couple-confort ---
-        let resolveSaveA2!: (ok: boolean) => void;
-        vi.spyOn(grandCalculStoreMod, 'saveGrandCalculResult').mockImplementationOnce(
-            (res, opts) =>
-                new Promise<boolean>((resolve) => {
-                    resolveSaveA2 = (ok: boolean) => {
-                        if (ok) {
-                            idbSlots.set(opts?.isTestMode ? 'test' : 'current', res);
-                        }
-                        resolve(ok);
-                    };
-                }),
-        );
-        vi.spyOn(runAsyncMod, 'runGrandCalculAsync').mockResolvedValueOnce(computedA);
-
-        act(() => {
-            useFinanceStore.getState().enableTestMode({}, 'couple-confort');
-        });
-        const h3 = renderHook(() => useGrandCalcul(params));
-        await waitFor(() => expect(h3.result.current.isRestoring).toBe(false));
-        act(() => {
-            h3.result.current.updateConfig(nonDefault);
-        });
-        let launchPromise2!: Promise<void>;
-        act(() => {
-            launchPromise2 = h3.result.current.launch();
-        });
-        await waitFor(() => expect(h3.result.current.status).toBe('ready'));
-
-        h3.unmount();
-        act(() => {
-            useFinanceStore.getState().enableTestMode({}, 'lea-fauchee');
-        });
-
-        // lea-fauchee monte pendant que saveGrandCalculResult de couple-confort est toujours en attente
-        const h4 = renderHook(() => useGrandCalcul(params));
-        await waitFor(() => expect(h4.result.current.status).toBe('idle'));
-        expect(h4.result.current.result).toBeNull();
-
-        await act(async () => {
-            resolveSaveA2(true);
-            await launchPromise2;
-        });
-
-        expect(h4.result.current.result).toBeNull();
-        expect(h4.result.current.status).toBe('idle');
-        expect(idbSlots.get('test')).toBeUndefined();
-        expect(localStorage.getItem(TEST_PERSONA_STORAGE_KEY)).toBeNull();
-        h4.unmount();
-
-        // Remontage ultérieur sur lea-fauchee : le slot test reste vide
-        const h5 = renderHook(() => useGrandCalcul(params));
-        await waitFor(() => expect(h5.result.current.isRestoring).toBe(false));
-        expect(h5.result.current.result).toBeNull();
-        expect(h5.result.current.status).toBe('idle');
-    });
-
-    it('nettoie la clé persona test si saveGrandCalculResult échoue (savedOk === false)', async () => {
-        const params = makeParams(65);
-        const computed = makeResult(params, {
-            iterations: 50_000,
-            enableMacroRegimes: true,
-            includeHistoricalCrises: true,
-        });
-        vi.spyOn(runAsyncMod, 'runGrandCalculAsync').mockResolvedValueOnce(computed);
-        vi.spyOn(grandCalculStoreMod, 'saveGrandCalculResult').mockResolvedValueOnce(false);
-
-        act(() => {
-            useFinanceStore.getState().enableTestMode({}, 'couple-confort');
-        });
-        const { result } = renderHook(() => useGrandCalcul(params));
-        await waitFor(() => expect(result.current.isRestoring).toBe(false));
-
-        await act(async () => {
-            await result.current.launch();
-        });
-
-        expect(result.current.status).toBe('ready');
-        expect(localStorage.getItem(TEST_PERSONA_STORAGE_KEY)).toBeNull();
-    });
-
-    it('2b-C2 (writeChain sérialisé) : saveA lent + Persona B lancement/saveB rapide -> saveA résout sans effacer B', async () => {
-        const idb = installSerializedIdbMock();
-        try {
-            const paramsA = makeParams(65);
-            const paramsB = makeParams(60);
-            const cfg: GrandCalculConfig = {
-                iterations: 50_000,
-                enableMacroRegimes: true,
-                includeHistoricalCrises: true,
-            };
-            const computedA: GrandCalculResult = { ...makeResult(paramsA, cfg), survivalRatePct: 71.1 };
-            const computedB: GrandCalculResult = { ...makeResult(paramsB, cfg), survivalRatePct: 89.9 };
-
-            const resolveSaveA = idb.deferNextSave();
-            vi.spyOn(runAsyncMod, 'runGrandCalculAsync')
-                .mockResolvedValueOnce(computedA)
-                .mockResolvedValueOnce(computedB);
-
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'couple-confort');
-            });
-            const hA = renderHook(() => useGrandCalcul(paramsA));
-            await waitFor(() => expect(hA.result.current.isRestoring).toBe(false));
-
-            let launchA!: Promise<void>;
-            act(() => {
-                launchA = hA.result.current.launch();
-            });
-            await waitFor(() => expect(hA.result.current.status).toBe('ready'));
-            hA.unmount();
-
-            // Bascule vers Persona B et lancement rapide pendant que saveA est encore en attente sur _writeChain
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'lea-fauchee');
-            });
-            const hB = renderHook(() => useGrandCalcul(paramsB));
-            await waitFor(() => expect(hB.result.current.status).toBe('idle'));
-
-            let launchB!: Promise<void>;
-            act(() => {
-                launchB = hB.result.current.launch();
-            });
-            await waitFor(() => expect(hB.result.current.status).toBe('ready'));
-            expect(localStorage.getItem(TEST_PERSONA_STORAGE_KEY)).toBe('lea-fauchee');
-
-            await act(async () => {
-                resolveSaveA(true);
-                await Promise.all([launchA, launchB]);
-                await idb.drainWrites();
-            });
-
-            expect(idb.idbSlots.get('test')).toEqual(computedB);
-            expect(localStorage.getItem(TEST_PERSONA_STORAGE_KEY)).toBe('lea-fauchee');
-            hB.unmount();
-
-            // Remontage de Persona B avec store réinitialisé : doit restaurer computedB
-            useFinanceStore.setState({
-                grandCalculResult: null,
-                grandCalculStatus: 'idle',
-                grandCalculProgress: null,
-                grandCalculError: null,
-            });
-            const hB2 = renderHook(() => useGrandCalcul(paramsB));
-            await waitFor(() => expect(hB2.result.current.status).toBe('ready'));
-            expect(hB2.result.current.result).toEqual(computedB);
-        } finally {
-            await idb.cleanup();
-        }
-    });
-
-    it('2b-D3 (writeChain sérialisé) : Test A saveA lent -> disableTestMode + Real Mode actif -> saveA résout -> Persona B reste vide', async () => {
-        const idb = installSerializedIdbMock();
-        try {
-            const params = makeParams(65);
-            const cfg: GrandCalculConfig = {
-                iterations: 50_000,
-                enableMacroRegimes: true,
-                includeHistoricalCrises: true,
-            };
-            const computedA: GrandCalculResult = { ...makeResult(params, cfg), survivalRatePct: 62.5 };
-            const computedReal: GrandCalculResult = { ...makeResult(params, cfg), survivalRatePct: 94.2 };
-
-            const resolveSaveA = idb.deferNextSave();
-            let resolveRealWorker!: (r: GrandCalculResult) => void;
-            vi.spyOn(runAsyncMod, 'runGrandCalculAsync')
-                .mockResolvedValueOnce(computedA)
-                .mockImplementationOnce(
-                    () =>
-                        new Promise<GrandCalculResult>((resolve) => {
-                            resolveRealWorker = resolve;
-                        }),
-                );
-
-            // 1. Test Persona A termine le worker, saveA est bloqué
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'couple-confort');
-            });
-            const hTestA = renderHook(() => useGrandCalcul(params));
-            await waitFor(() => expect(hTestA.result.current.isRestoring).toBe(false));
-
-            let launchTestA!: Promise<void>;
-            act(() => {
-                launchTestA = hTestA.result.current.launch();
-            });
-            await waitFor(() => expect(hTestA.result.current.status).toBe('ready'));
-            hTestA.unmount();
-
-            // 2. Retour en mode réel et lancement actif d'un worker réel (_activeController !== null)
-            act(() => {
-                useFinanceStore.getState().disableTestMode();
-            });
-            const hReal = renderHook(() => useGrandCalcul(params));
-            await waitFor(() => expect(hReal.result.current.isRestoring).toBe(false));
-
-            let launchReal!: Promise<void>;
-            act(() => {
-                launchReal = hReal.result.current.launch();
-            });
-            expect(hReal.result.current.isRunning).toBe(true);
-
-            // 3. saveA résout pendant que le worker réel tourne encore -> doit purger 'test' sans toucher au réel
-            await act(async () => {
-                resolveSaveA(true);
-                await launchTestA;
-                await idb.drainWrites();
-            });
-
-            expect(idb.idbSlots.get('test')).toBeUndefined();
-            expect(localStorage.getItem(TEST_PERSONA_STORAGE_KEY)).toBeNull();
-            expect(hReal.result.current.isRunning).toBe(true);
-
-            // 4. Fin du worker réel puis passage à Persona B : 'current' préservé, Persona B vide
-            await act(async () => {
-                resolveRealWorker(computedReal);
-                await launchReal;
-                await idb.drainWrites();
-            });
-            expect(idb.idbSlots.get('current')).toEqual(computedReal);
-            hReal.unmount();
-
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'lea-fauchee');
-            });
-            const hTestB = renderHook(() => useGrandCalcul(params));
-            await waitFor(() => expect(hTestB.result.current.status).toBe('idle'));
-            expect(hTestB.result.current.result).toBeNull();
-            expect(idb.idbSlots.get('test')).toBeUndefined();
-        } finally {
-            await idb.cleanup();
-        }
-    });
-
-    it('Relancer -> Annuler -> changement de persona : save1 conservé pour A tant que même persona, puis purgé pour B', async () => {
-        const idb = installSerializedIdbMock();
-        try {
-            const params = makeParams(65);
-            const cfg: GrandCalculConfig = {
-                iterations: 50_000,
-                enableMacroRegimes: true,
-                includeHistoricalCrises: true,
-            };
-            const computed1: GrandCalculResult = { ...makeResult(params, cfg), survivalRatePct: 81.2 };
-
-            const resolveSave1 = idb.deferNextSave();
-            vi.spyOn(runAsyncMod, 'runGrandCalculAsync')
-                .mockResolvedValueOnce(computed1)
-                .mockImplementationOnce(
-                    (_p, _c, opts) =>
-                        new Promise((_, reject) => {
-                            opts.signal?.addEventListener('abort', () => {
-                                reject(new Error(GRAND_CALCUL_CANCELLED));
-                            });
-                        }),
-                );
-
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'couple-confort');
-            });
-            const h = renderHook(() => useGrandCalcul(params));
-            await waitFor(() => expect(h.result.current.isRestoring).toBe(false));
-
-            // Run 1 termine son worker, save1 reste en attente
-            let launch1!: Promise<void>;
-            act(() => {
-                launch1 = h.result.current.launch();
-            });
-            await waitFor(() => expect(h.result.current.status).toBe('ready'));
-
-            // Relancer (Run 2) alors que save1 est en cours
-            let launch2!: Promise<void>;
-            act(() => {
-                launch2 = h.result.current.launch();
-            });
-            expect(h.result.current.isRunning).toBe(true);
-
-            // save1 résout pendant que Run 2 tourne : ne doit PAS effacer la propriété de couple-confort
-            await act(async () => {
-                resolveSave1(true);
-                await launch1;
-                await idb.drainWrites();
-            });
-            expect(localStorage.getItem(TEST_PERSONA_STORAGE_KEY)).toBe('couple-confort');
-            expect(idb.idbSlots.get('test')).toEqual(computed1);
-
-            // Annuler Run 2 puis basculer vers lea-fauchee
-            act(() => {
-                h.result.current.cancel();
-            });
-            await act(async () => {
-                await launch2;
-            });
-            expect(h.result.current.status).toBe('cancelled');
-            expect(h.result.current.result).toEqual(computed1);
-
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'lea-fauchee');
-            });
-            await waitFor(() => expect(h.result.current.status).toBe('idle'));
-            await act(async () => {
-                await idb.drainWrites();
-            });
-            expect(h.result.current.result).toBeNull();
-            expect(idb.idbSlots.get('test')).toBeUndefined();
-            expect(localStorage.getItem(TEST_PERSONA_STORAGE_KEY)).toBeNull();
-        } finally {
-            await idb.cleanup();
-        }
-    });
-
-    it('clearGrandCalculResult différé + remontage immédiat : loadGrandCalculResult attend la fin du clear (mode réel et mode test)', async () => {
+    it('clearGrandCalculResult différé + remontage immédiat : loadGrandCalculResult attend la fin du clear', async () => {
         const idb = installSerializedIdbMock();
         try {
             const params = makeParams(65);
@@ -899,15 +415,9 @@ describe('useGrandCalcul', () => {
                 includeHistoricalCrises: true,
             };
             const realResult: GrandCalculResult = { ...makeResult(params, cfg), survivalRatePct: 91.5 };
-            const testResultA: GrandCalculResult = { ...makeResult(params, cfg), survivalRatePct: 73.3 };
-            const testResultB: GrandCalculResult = { ...makeResult(params, cfg), survivalRatePct: 84.4 };
 
-            vi.spyOn(runAsyncMod, 'runGrandCalculAsync')
-                .mockResolvedValueOnce(realResult)
-                .mockResolvedValueOnce(testResultA)
-                .mockResolvedValueOnce(testResultB);
+            vi.spyOn(runAsyncMod, 'runGrandCalculAsync').mockResolvedValueOnce(realResult);
 
-            // --- Partie A : Mode Réel clear() différé -> démontage/remontage immédiat ---
             const hReal1 = renderHook(() => useGrandCalcul(params));
             await waitFor(() => expect(hReal1.result.current.isRestoring).toBe(false));
             await act(async () => {
@@ -938,249 +448,9 @@ describe('useGrandCalcul', () => {
             expect(hReal2.result.current.result).toBeNull();
             expect(idb.idbSlots.get('current')).toBeUndefined();
             hReal2.unmount();
-
-            // --- Partie B : Mode Test bascule A -> B avec clear différé puis lancement rapide B ---
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'couple-confort');
-            });
-            const hTestA = renderHook(() => useGrandCalcul(params));
-            await waitFor(() => expect(hTestA.result.current.isRestoring).toBe(false));
-            await act(async () => {
-                await hTestA.result.current.launch();
-                await idb.drainWrites();
-            });
-
-            const resolveTestClear = idb.deferNextClear();
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'lea-fauchee');
-            });
-            await waitFor(() => expect(hTestA.result.current.status).toBe('idle'));
-            expect(hTestA.result.current.result).toBeNull();
-            // Même si idbSlots contient encore testResultA avant résolution, A ne peut pas ressusciter
-            hTestA.unmount();
-
-            const hTestB = renderHook(() => useGrandCalcul(params));
-            await waitFor(() => expect(hTestB.result.current.status).toBe('idle'));
-            let launchB!: Promise<void>;
-            act(() => {
-                launchB = hTestB.result.current.launch();
-            });
-            await waitFor(() => expect(hTestB.result.current.status).toBe('ready'));
-
-            await act(async () => {
-                resolveTestClear();
-                await launchB;
-                await idb.drainWrites();
-            });
-            // saveB s'est exécuté APRÈS clear, donc testResultB survit
-            expect(idb.idbSlots.get('test')).toEqual(testResultB);
         } finally {
             await idb.cleanup();
         }
-    });
-
-    it('2b-D2 : échec saveGrandCalculResult (false) après une sauvegarde antérieure A1 purge le slot test IDB et la clé persona', async () => {
-        const idb = installSerializedIdbMock();
-        try {
-            const params = makeParams(65);
-            const cfg: GrandCalculConfig = {
-                iterations: 50_000,
-                enableMacroRegimes: true,
-                includeHistoricalCrises: true,
-            };
-            const resultA1: GrandCalculResult = { ...makeResult(params, cfg), survivalRatePct: 68.0 };
-            const resultA2: GrandCalculResult = { ...makeResult(params, cfg), survivalRatePct: 79.0 };
-
-            const resolveSave1 = idb.deferNextSave();
-            const resolveSave2 = idb.deferNextSave();
-            vi.spyOn(runAsyncMod, 'runGrandCalculAsync')
-                .mockResolvedValueOnce(resultA1)
-                .mockResolvedValueOnce(resultA2);
-
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'couple-confort');
-            });
-            const hA = renderHook(() => useGrandCalcul(params));
-            await waitFor(() => expect(hA.result.current.isRestoring).toBe(false));
-
-            // Run 1 réussit et persiste A1 dans 'test'
-            resolveSave1(true);
-            await act(async () => {
-                await hA.result.current.launch();
-                await idb.drainWrites();
-            });
-            expect(idb.idbSlots.get('test')).toEqual(resultA1);
-
-            // Run 2 échoue à la sauvegarde (false) -> doit purger A1 et TEST_PERSONA_STORAGE_KEY
-            resolveSave2(false);
-            await act(async () => {
-                await hA.result.current.launch();
-                await idb.drainWrites();
-            });
-            expect(hA.result.current.status).toBe('ready');
-            expect(localStorage.getItem(TEST_PERSONA_STORAGE_KEY)).toBeNull();
-            expect(idb.idbSlots.get('test')).toBeUndefined();
-            hA.unmount();
-
-            // Bascule vers B : aucune fuite de A1
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'lea-fauchee');
-            });
-            const hB = renderHook(() => useGrandCalcul(params));
-            await waitFor(() => expect(hB.result.current.status).toBe('idle'));
-            expect(hB.result.current.result).toBeNull();
-            expect(idb.idbSlots.get('test')).toBeUndefined();
-        } finally {
-            await idb.cleanup();
-        }
-    });
-
-    it('2b-C1 (mocks non sérialisés) : saveA lent résolvant pendant B -> cancel() B + remontage B reste vide', async () => {
-        const params = makeParams(65);
-        const cfg: GrandCalculConfig = {
-            iterations: 50_000,
-            enableMacroRegimes: true,
-            includeHistoricalCrises: true,
-        };
-        const computedA: GrandCalculResult = { ...makeResult(params, cfg), survivalRatePct: 64.0 };
-        const idbSlots = new Map<'current' | 'test', GrandCalculResult>();
-
-        vi.spyOn(grandCalculStoreMod, 'loadGrandCalculResult').mockImplementation(async (opts) => {
-            const slot = opts?.isTestMode ? 'test' : 'current';
-            const found = idbSlots.get(slot);
-            return found ? { status: 'ok', result: found } : { status: 'empty' };
-        });
-        // Mock volontairement NON sérialisé : exécute delete immédiatement à l'appel
-        vi.spyOn(grandCalculStoreMod, 'clearGrandCalculResult').mockImplementation(async (opts) => {
-            const slot = opts?.isTestMode ? 'test' : 'current';
-            idbSlots.delete(slot);
-        });
-        let resolveSaveA!: (ok: boolean) => void;
-        vi.spyOn(grandCalculStoreMod, 'saveGrandCalculResult').mockImplementationOnce(
-            (res, opts) =>
-                new Promise<boolean>((resolve) => {
-                    resolveSaveA = (ok: boolean) => {
-                        if (ok) idbSlots.set(opts?.isTestMode ? 'test' : 'current', res);
-                        resolve(ok);
-                    };
-                }),
-        );
-
-        vi.spyOn(runAsyncMod, 'runGrandCalculAsync')
-            .mockResolvedValueOnce(computedA)
-            .mockImplementationOnce(
-                (_p, _c, opts) =>
-                    new Promise((_, reject) => {
-                        opts.signal?.addEventListener('abort', () => {
-                            reject(new Error(GRAND_CALCUL_CANCELLED));
-                        });
-                    }),
-            );
-
-        try {
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'couple-confort');
-            });
-            const hA = renderHook(() => useGrandCalcul(params));
-            await waitFor(() => expect(hA.result.current.isRestoring).toBe(false));
-
-            let launchA!: Promise<void>;
-            act(() => {
-                launchA = hA.result.current.launch();
-            });
-            await waitFor(() => expect(hA.result.current.status).toBe('ready'));
-            hA.unmount();
-
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'lea-fauchee');
-            });
-            const hB = renderHook(() => useGrandCalcul(params));
-            await waitFor(() => expect(hB.result.current.status).toBe('idle'));
-
-            let launchB!: Promise<void>;
-            act(() => {
-                launchB = hB.result.current.launch();
-            });
-            expect(hB.result.current.isRunning).toBe(true);
-
-            // saveA résout pendant que B exécute son worker
-            await act(async () => {
-                resolveSaveA(true);
-                await launchA;
-            });
-
-            act(() => {
-                hB.result.current.cancel();
-            });
-            await act(async () => {
-                await launchB;
-            });
-            hB.unmount();
-
-            // Remontage de B : la sérialisation côté hook garantit que clearB s'exécute après saveA
-            useFinanceStore.setState({
-                grandCalculResult: null,
-                grandCalculStatus: 'idle',
-                grandCalculProgress: null,
-                grandCalculError: null,
-            });
-            const hB2 = renderHook(() => useGrandCalcul(params));
-            await waitFor(() => expect(hB2.result.current.status).toBe('idle'));
-            expect(hB2.result.current.result).toBeNull();
-            expect(idbSlots.get('test')).toBeUndefined();
-        } finally {
-            resolveSaveA?.(false);
-        }
-    });
-
-    it('Mode réel hors onglet : enableTestMode -> disableTestMode pendant un worker réel actif avorte le worker orphelin au remontage', async () => {
-        const params = makeParams(65);
-        let capturedSignal: AbortSignal | undefined;
-        let resolveOrphan!: (r: GrandCalculResult) => void;
-
-        vi.spyOn(runAsyncMod, 'runGrandCalculAsync').mockImplementationOnce((_p, _c, opts) => {
-            capturedSignal = opts.signal;
-            return new Promise<GrandCalculResult>((resolve) => {
-                resolveOrphan = resolve;
-            });
-        });
-
-        const h1 = renderHook(() => useGrandCalcul(params));
-        await waitFor(() => expect(h1.result.current.isRestoring).toBe(false));
-
-        let launchPromise!: Promise<void>;
-        act(() => {
-            launchPromise = h1.result.current.launch();
-        });
-        expect(h1.result.current.isRunning).toBe(true);
-        h1.unmount();
-
-        // Aller-retour mode test hors onglet Futur : grandCalculStatus revient à 'idle'
-        act(() => {
-            useFinanceStore.getState().enableTestMode({}, 'couple-confort');
-            useFinanceStore.getState().disableTestMode();
-        });
-        expect(useFinanceStore.getState().grandCalculStatus).toBe('idle');
-
-        // Remontage en mode réel : le worker orphelin doit être avorté proprement
-        const h2 = renderHook(() => useGrandCalcul(params));
-        await waitFor(() => expect(h2.result.current.status).toBe('idle'));
-        expect(capturedSignal?.aborted).toBe(true);
-        expect(h2.result.current.isRunning).toBe(false);
-
-        // Résolution tardive ne doit pas corrompre le store
-        await act(async () => {
-            resolveOrphan(
-                makeResult(params, {
-                    iterations: 50_000,
-                    enableMacroRegimes: true,
-                    includeHistoricalCrises: true,
-                }),
-            );
-            await launchPromise;
-        });
-        expect(h2.result.current.result).toBeNull();
-        expect(useFinanceStore.getState().grandCalculResult).toBeNull();
     });
 
     it('Course restauration vs launch() rapide : un loadGrandCalculResult tardif n’écrase pas le résultat plus récent', async () => {
@@ -1224,7 +494,7 @@ describe('useGrandCalcul', () => {
         }
     });
 
-    it('isSaving par slot propriétaire : vrai pendant saveGrandCalculResult, faux après commit, et isolé entre personas', async () => {
+    it('isSaving par slot propriétaire : vrai pendant saveGrandCalculResult, faux après commit', async () => {
         const idb = installSerializedIdbMock();
         try {
             const params = makeParams(65);
@@ -1238,9 +508,6 @@ describe('useGrandCalcul', () => {
             const resolveSaveA = idb.deferNextSave();
             vi.spyOn(runAsyncMod, 'runGrandCalculAsync').mockResolvedValueOnce(computedA);
 
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'couple-confort');
-            });
             const hA = renderHook(() => useGrandCalcul(params));
             await waitFor(() => expect(hA.result.current.isRestoring).toBe(false));
             expect(hA.result.current.isSaving).toBe(false);
@@ -1252,27 +519,14 @@ describe('useGrandCalcul', () => {
             await waitFor(() => expect(hA.result.current.status).toBe('ready'));
             expect(hA.result.current.isSaving).toBe(true);
 
-            // Basculer sur Persona B pendant la sauvegarde de Persona A ne bloque pas B
-            hA.unmount();
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'lea-fauchee');
-            });
-            const hB = renderHook(() => useGrandCalcul(params));
-            await waitFor(() => expect(hB.result.current.status).toBe('idle'));
-            expect(hB.result.current.isSaving).toBe(false);
-
             await act(async () => {
                 resolveSaveA(true);
                 await launchA;
                 await idb.drainWrites();
             });
-            expect(hB.result.current.isSaving).toBe(false);
-            hB.unmount();
+            expect(hA.result.current.isSaving).toBe(false);
+            hA.unmount();
 
-            // Vérifie aussi que le slot 'couple-confort' redevient non-saving après commit
-            act(() => {
-                useFinanceStore.getState().enableTestMode({}, 'couple-confort');
-            });
             const hA2 = renderHook(() => useGrandCalcul(params));
             await waitFor(() => expect(hA2.result.current.isRestoring).toBe(false));
             expect(hA2.result.current.isSaving).toBe(false);

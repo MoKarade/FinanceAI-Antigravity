@@ -37,7 +37,7 @@ export const STORAGE_KEYS = {
      * Le blob du store persistant (Zustand `persist`) — TOUTES les données de l'utilisateur.
      * Propriétaire : `store/useFinanceStore.ts` (c'est son `name`).
      * Lecteurs : `services/backupAuto.ts` (snapshot des sauvegardes automatiques),
-     * `services/sync/syncSnapshot.ts` (charge utile poussée vers Drive), et le store lui-même
+     * `services/sauvegardeJson.ts` (charge utile JSON), et le store lui-même
      * (détection « déjà migré » au boot legacy).
      */
     persistStore: 'financeai-storage',
@@ -59,8 +59,7 @@ export const STORAGE_KEYS = {
 
     /**
      * L'écran de bienvenue a été passé. Propriétaire : `App.tsx`.
-     * Écrit aussi par `services/sync/syncPull.ts` (un pull Drive qui ramène des données signifie
-     * que l'utilisateur n'est pas nouveau) et par le harnais E2E, qui l'injecte avant le
+     * Écrit aussi par le harnais E2E, qui l'injecte avant le
      * chargement de la page.
      */
     onboardingDone: 'app_onboarding_done',

@@ -11,8 +11,7 @@ import { formatCAD } from '../utils/format';
 import { z } from 'zod';
 import { Transaction, RecurringItem } from '../types';
 import { logError } from './errorLogger';
-import { sanitizePromptText, wrapUserData, VISION_INJECTION_GUARD, marquerSystemFictif, type SystemTextBlock } from '../utils/promptSafety';
-import { modeDonneesFictives } from '../store/modeTestActif';
+import { sanitizePromptText, wrapUserData, VISION_INJECTION_GUARD } from '../utils/promptSafety';
 import { signalerUsageIa } from './aiChat/coutIa';
 import { isInternalTransferLabel } from '../utils/transactionParser';
 import { MODEL_IDS } from './aiChat/models';
@@ -151,22 +150,6 @@ export const makeClient = async (apiKey: string, _kind: 'text' | 'vision' = 'tex
     return creerClientCompatibleGemini(apiKey);
 };
 
-/**
- * [SANDBOX-PROMPTS-MARQUER-CONTEXTE] `system` à envoyer au modèle : celui reçu, plus le marqueur
- * « scénario hypothétique » si l'app tourne sur des DONNÉES FICTIVES en ce moment.
- *
- * ⚠️ Appelé AU POINT DE CONTACT SDK (chaque `messages.create(`/`messages.stream(`), jamais chez
- * l'appelant. Garde : `tests/services/promptMarqueurFictif.test.ts` rougit
- * sur tout site qui n'enveloppe pas son `system` dans cette fonction.
- * Prédicat lu FRAIS à chaque appel (le mode peut basculer entre deux tours de l'agent).
- */
-function systemPourAppel(system: string | undefined): string | undefined;
-function systemPourAppel<B extends SystemTextBlock>(system: B[]): Array<B | SystemTextBlock>;
-function systemPourAppel<B extends SystemTextBlock>(system: string | B[] | undefined): string | Array<B | SystemTextBlock> | undefined;
-function systemPourAppel<B extends SystemTextBlock>(system: string | B[] | undefined): string | Array<B | SystemTextBlock> | undefined {
-    return marquerSystemFictif(system, modeDonneesFictives());
-}
-
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 interface ChatMessage {
@@ -236,7 +219,7 @@ export async function chat(
             model: options.model ?? MODEL_SONNET,
             max_tokens: options.maxTokens ?? 4096,
             ...reglagesPourChat(options.model ?? MODEL_SONNET),
-            system: systemPourAppel(options.system),
+            system: options.system,
             messages,
         }, { signal });
         signalerUsageIa(options.model ?? MODEL_SONNET, response.usage);
@@ -266,7 +249,7 @@ export async function* chatStream(
             model: options.model ?? MODEL_SONNET,
             max_tokens: options.maxTokens ?? 4096,
             ...reglagesPourChat(options.model ?? MODEL_SONNET),
-            system: systemPourAppel(options.system),
+            system: options.system,
             messages,
         }, { signal });
         for await (const event of stream) {
@@ -1009,7 +992,7 @@ export const analyzePayslip = async (file: File, apiKey: string): Promise<Paysli
         model: MODEL_SONNET,
         max_tokens: 1024,
         ...reglagesLecture(MODEL_SONNET),
-        system: systemPourAppel(`${QUEBEC_FISCAL_CONTEXT}\nTu analyses des fiches de paie québécoises (T4, RL-1, talons). Extrais les montants de la PÉRIODE COURANTE uniquement (pas les cumuls YTD).\n${VISION_INJECTION_GUARD}`),
+        system: `${QUEBEC_FISCAL_CONTEXT}\nTu analyses des fiches de paie québécoises (T4, RL-1, talons). Extrais les montants de la PÉRIODE COURANTE uniquement (pas les cumuls YTD).\n${VISION_INJECTION_GUARD}`,
         messages: [{
             role: 'user',
             content: [
@@ -1094,9 +1077,9 @@ export const analyzeBankStatement = async (file: File, apiKey: string): Promise<
         model: MODEL_SONNET,
         max_tokens: 16000,
         ...reglagesLecture(MODEL_SONNET),
-        system: systemPourAppel(`${QUEBEC_FISCAL_CONTEXT}
+        system: `${QUEBEC_FISCAL_CONTEXT}
 Tu es un extracteur EXPERT de relevés bancaires et de cartes de crédit québécois (Desjardins, RBC, BMO, TD, Banque Nationale, Tangerine, etc.). Tu lis le document (image/PDF) et retournes des transactions structurées FIDÈLES au document, sans rien inventer ni omettre.
-${VISION_INJECTION_GUARD}`),
+${VISION_INJECTION_GUARD}`,
         messages: [{
             role: 'user',
             content: [

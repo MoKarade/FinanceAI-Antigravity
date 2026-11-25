@@ -205,7 +205,7 @@ describe('Refonte Google Finance — GoogleFinanceHero & FutureScenarioHeader', 
         expect(screen.getByText(/1\. Import rapide de relevés/i)).toBeInTheDocument();
         expect(screen.getByText(/2\. Synchronisation bancaire Fintable/i)).toBeInTheDocument();
         expect(screen.getByText(/3\. Cours de marché & Devises/i)).toBeInTheDocument();
-        expect(screen.getByText(/4\. Cloud Google \(Firestore & Drive\) & Fichier JSON/i)).toBeInTheDocument();
+        expect(screen.getByText(/4\. Cloud Firestore & Fichier JSON/i)).toBeInTheDocument();
         expect(screen.queryByText(/Connecteur MCP Claude & Analyse IA/i)).not.toBeInTheDocument();
     });
 

@@ -26,7 +26,6 @@ describe('[PH2-c-1] usePastPortfolioHistory — dédup module du fetch', () => {
         act(() => {
             useFinanceStore.setState({
                 assets: [asset],
-                isTestMode: false,
                 apiKeys: { gemini: '', anthropic: '', finnhub: 'k-test' },
             });
         });

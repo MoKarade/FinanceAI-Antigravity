@@ -14,7 +14,7 @@ tournent en parallèle (un fil par cœur). `npm run test` lance tout ; c'est la 
 | `tests/utils/` | Fonctions utilitaires |
 | `tests/guards/` | **Gardes et cliquets** : scans du dépôt qui empêchent une régression de revenir. Ne jamais affaiblir |
 | `tests/a11y/` | Accessibilité (axe, piège de focus) |
-| `tests/aiTools/`, `tests/mcp/`, `tests/api/` | Outils IA, serveur MCP, routes `api/` |
+| `tests/aiTools/`, `tests/api/`, `tests/cloudrun/` | Outils IA, relais `server/` & `cloudrun/` |
 | `tests/helpers/` | Aides partagées (pas de tests ici) |
 | `tests/fixtures/` | Données fictives figées (JSON) |
 

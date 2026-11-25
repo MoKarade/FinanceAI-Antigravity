@@ -8,8 +8,8 @@
 //   3. SANITIZER + STORE : purge chirurgicale, pureté, no-op propre, sortie de mode test.
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { TEST_PERSONAS } from '../../services/testPersonas';
-import { isPersonaArtifactId, PERSONA_EXACT_IDS, PERSONA_ID_PREFIXES } from '../../services/testPersonas/artifactIds';
+import { TEST_PERSONAS } from '../fixtures/testPersonas';
+import { isPersonaArtifactId, PERSONA_EXACT_IDS, PERSONA_ID_PREFIXES } from '../../services/migrations/personaArtifactIds';
 import { sanitizePersonaArtifacts, sanitizePersistEnvelope } from '../../services/personaSanitizer';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import type { AppState, Transaction, Debt, FinancialGoal } from '../../types';
@@ -206,7 +206,7 @@ describe('sanitizePersistEnvelope (payload sync/backup)', () => {
     });
 });
 
-// ——— 4. STORE : purge en mode réel, no-op en mode test, sortie de mode test désinfectée ———
+// ——— 4. STORE : purge au démarrage des artefacts résiduels ———
 
 describe('useFinanceStore.purgePersonaArtifacts', () => {
     beforeEach(() => {
@@ -225,32 +225,10 @@ describe('useFinanceStore.purgePersonaArtifacts', () => {
         expect(useFinanceStore.getState().purgePersonaArtifacts()).toBe(0);
     });
 
-    it('NO-OP en mode test (les fixtures du persona restent)', () => {
-        const karim = TEST_PERSONAS.find(p => p.id === 'karim-immigre')!;
-        useFinanceStore.getState().enableTestMode(karim.build(), karim.id);
-        expect(useFinanceStore.getState().purgePersonaArtifacts()).toBe(0);
-        expect(useFinanceStore.getState().transactions.length).toBeGreaterThan(0);
-        useFinanceStore.getState().disableTestMode();
-    });
-
-    it('disableTestMode désinfecte un snapshot réel POLLUÉ (la sortie de mode test rend un état propre)', () => {
-        useFinanceStore.setState({ transactions: [personaTx(5), realTx('1752585600011')] }); // réel pollué
-        const karim = TEST_PERSONAS.find(p => p.id === 'karim-immigre')!;
-        useFinanceStore.getState().enableTestMode(karim.build(), karim.id); // snapshot = réel pollué
-        useFinanceStore.getState().disableTestMode();
-        const s = useFinanceStore.getState();
-        expect(s.isTestMode).toBe(false);
-        expect(s.transactions.map(t => t.id)).toEqual(['1752585600011']); // persona-tx-5 purgé du snapshot
-    });
-
-    it('disableTestMode — childGoal SINGULIER pollué du snapshot ne laisse PAS fuiter celui du persona (bug spread, finding panel)', () => {
-        // Réel pollué sur le singulier childGoal (id de fixture legacy).
+    it('purge childGoal SINGULIER pollué et remet le défaut app child_1', () => {
         useFinanceStore.setState({ childGoal: { id: 'child-1', name: 'Études (fixture)' } } as unknown as Partial<ReturnType<typeof useFinanceStore.getState>>);
-        const karim = TEST_PERSONAS.find(p => p.id === 'karim-immigre')!;
-        useFinanceStore.getState().enableTestMode(karim.build(), karim.id);
-        useFinanceStore.getState().disableTestMode();
+        expect(useFinanceStore.getState().purgePersonaArtifacts()).toBe(1);
         const s = useFinanceStore.getState();
-        // Ni la fixture polluée ('child-1'), ni le childGoal du persona : le DÉFAUT app reprend.
         expect(s.childGoal?.id).toBe('child_1');
     });
 });

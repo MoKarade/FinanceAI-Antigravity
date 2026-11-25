@@ -8,7 +8,7 @@
 // initial sur tout l'historique.
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { TEST_PERSONAS } from '../../services/testPersonas';
+import { TEST_PERSONAS } from '../fixtures/testPersonas';
 import { reconstructCashHistory } from '../../services/history/reconstructCashHistory';
 import type { AppState, Transaction } from '../../types';
 

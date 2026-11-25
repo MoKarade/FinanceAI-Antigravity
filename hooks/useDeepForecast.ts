@@ -82,20 +82,10 @@ const UNREADABLE_ERROR_MESSAGE =
 const SAVE_FAILED_ERROR_MESSAGE =
     'Sauvegarde locale impossible (espace ou stockage restreint) — le rapport reste en prévisualisation pour cette session.';
 
-function resolveScopeKey(isTestMode: boolean, personaId: string | null): string {
-    if (!isTestMode) return 'real';
-    return `test:${personaId || 'default'}`;
-}
+const REAL_SCOPE_KEY = 'real';
+const REAL_SCOPE: DeepForecastStorageScope = { isTestMode: false, personaId: null };
 
-function buildScope(isTestMode: boolean, personaId: string | null): DeepForecastStorageScope {
-    return {
-        isTestMode,
-        personaId: isTestMode ? personaId : null,
-    };
-}
-
-// File d'attente FIFO par scope pour sérialiser lectures, écritures et effacements IndexedDB
-// et éliminer toute course lors des bascules rapides mode réel <-> persona de test.
+// File d'attente FIFO par scope pour sérialiser lectures, écritures et effacements IndexedDB.
 function createSlotSerializer() {
     let queue: Promise<void> = Promise.resolve();
     let pendingCount = 0;
@@ -142,8 +132,6 @@ export function useDeepForecast(
     options?: UseDeepForecastOptions,
 ): UseDeepForecastReturn {
     const {
-        isTestMode,
-        activeTestPersonaId,
         transactions,
         assets,
         fxRates,
@@ -156,8 +144,6 @@ export function useDeepForecast(
         storeLastProjection,
     } = useFinanceStore(
         useShallow((s) => ({
-            isTestMode: s.isTestMode,
-            activeTestPersonaId: s.activeTestPersonaId,
             transactions: s.transactions ?? EMPTY_ARRAY,
             assets: s.assets ?? EMPTY_ARRAY,
             fxRates: s.fxRates,
@@ -178,9 +164,6 @@ export function useDeepForecast(
     const skipNetwork = options?.skipNetwork;
     const maxWorkers = options?.maxWorkers;
 
-    const scopePersonaId = isTestMode ? activeTestPersonaId : null;
-    const scopeKey = resolveScopeKey(isTestMode, scopePersonaId);
-
     const [appliedReport, setAppliedReport] = useState<DeepForecastReport | null>(null);
     const [pendingReport, setPendingReport] = useState<DeepForecastReport | null>(null);
     const [selectedScenario, setSelectedScenario] = useState<DeepScenarioId>('real_trajectory');
@@ -196,7 +179,6 @@ export function useDeepForecast(
     const scopeTokenRef = useRef<number>(0);
     const isApplyingRef = useRef<boolean>(false);
     const unreadableOnDiskRef = useRef<boolean>(false);
-    const prevScopeKeyRef = useRef<string>(scopeKey);
 
     const cleanFxRates = useMemo<Record<string, number>>(() => {
         const out: Record<string, number> = {};
@@ -280,49 +262,24 @@ export function useDeepForecast(
         };
     }, []);
 
-    // Restauration au montage et isolation stricte lors d'un changement de mode test / persona.
+    // Restauration au montage.
     useEffect(() => {
-        const scopeChanged = prevScopeKeyRef.current !== scopeKey;
-        if (scopeChanged) {
-            prevScopeKeyRef.current = scopeKey;
-            scopeTokenRef.current += 1;
-            launchTokenRef.current += 1;
-            mutationTokenRef.current += 1;
-            if (activeControllerRef.current) {
-                activeControllerRef.current.abort();
-                activeControllerRef.current = null;
-            }
-            isApplyingRef.current = false;
-            unreadableOnDiskRef.current = false;
-            setPendingReport(null);
-            setAppliedReport(null);
-            setIsApplying(false);
-            setProgress(null);
-            setError(null);
-            setUnreadableStorage(false);
-        }
-
         let effectCancelled = false;
         const restoreScopeToken = scopeTokenRef.current;
         const restoreMutationToken = mutationTokenRef.current;
-        const targetScope = buildScope(isTestMode, scopePersonaId);
 
         setStatus('restoring');
 
-        void enqueueScopeOp(scopeKey, () =>
+        void enqueueScopeOp(REAL_SCOPE_KEY, () =>
             effectCancelled
                 ? Promise.resolve({ status: 'empty' } as const)
-                : Promise.resolve(loadAppliedDeepForecast(targetScope)).catch(
+                : Promise.resolve(loadAppliedDeepForecast(REAL_SCOPE)).catch(
                       () => ({ status: 'empty' }) as const,
                   ),
         ).then((loaded) => {
             if (effectCancelled) return;
             if (scopeTokenRef.current !== restoreScopeToken) return;
             if (mutationTokenRef.current !== restoreMutationToken) return;
-
-            const live = useFinanceStore.getState();
-            const liveScopeKey = resolveScopeKey(live.isTestMode, live.activeTestPersonaId);
-            if (liveScopeKey !== scopeKey) return;
 
             if (loaded.status === 'ok') {
                 unreadableOnDiskRef.current = false;
@@ -348,7 +305,7 @@ export function useDeepForecast(
         return () => {
             effectCancelled = true;
         };
-    }, [scopeKey, isTestMode, scopePersonaId]);
+    }, []);
 
     const launchDeepForecast = useCallback(async () => {
         if (activeControllerRef.current !== null) {
@@ -365,7 +322,6 @@ export function useDeepForecast(
         activeControllerRef.current = controller;
         const launchToken = ++launchTokenRef.current;
         const launchScopeToken = scopeTokenRef.current;
-        const launchScopeKey = scopeKey;
         const apiKey = geminiApiKey.trim() || null;
 
         setPendingReport(null);
@@ -408,10 +364,6 @@ export function useDeepForecast(
                         ) {
                             return;
                         }
-                        const live = useFinanceStore.getState();
-                        if (resolveScopeKey(live.isTestMode, live.activeTestPersonaId) !== launchScopeKey) {
-                            return;
-                        }
                         setProgress(p);
                     },
                     ...(trajectoriesOverride !== undefined ? { trajectoriesOverride } : {}),
@@ -425,11 +377,6 @@ export function useDeepForecast(
                 || scopeTokenRef.current !== launchScopeToken
                 || controller.signal.aborted
             ) {
-                return;
-            }
-
-            const live = useFinanceStore.getState();
-            if (resolveScopeKey(live.isTestMode, live.activeTestPersonaId) !== launchScopeKey) {
                 return;
             }
 
@@ -448,11 +395,6 @@ export function useDeepForecast(
                 launchTokenRef.current !== launchToken
                 || scopeTokenRef.current !== launchScopeToken
             ) {
-                return;
-            }
-
-            const live = useFinanceStore.getState();
-            if (resolveScopeKey(live.isTestMode, live.activeTestPersonaId) !== launchScopeKey) {
                 return;
             }
 
@@ -504,7 +446,6 @@ export function useDeepForecast(
         realEstateGoals,
         refusMessage,
         resolvedBaseProjection,
-        scopeKey,
         skipNetwork,
         trajectoriesOverride,
         transactions,
@@ -531,8 +472,6 @@ export function useDeepForecast(
         }
 
         const reportToApply = pendingReport;
-        const targetScope = buildScope(isTestMode, scopePersonaId);
-        const targetScopeKey = scopeKey;
         const applyScopeToken = scopeTokenRef.current;
 
         isApplyingRef.current = true;
@@ -541,15 +480,11 @@ export function useDeepForecast(
         setError(null);
 
         try {
-            const savedOk = await enqueueScopeOp(targetScopeKey, () =>
-                saveAppliedDeepForecast(reportToApply, targetScope),
+            const savedOk = await enqueueScopeOp(REAL_SCOPE_KEY, () =>
+                saveAppliedDeepForecast(reportToApply, REAL_SCOPE),
             );
 
             if (scopeTokenRef.current !== applyScopeToken) {
-                return false;
-            }
-            const live = useFinanceStore.getState();
-            if (resolveScopeKey(live.isTestMode, live.activeTestPersonaId) !== targetScopeKey) {
                 return false;
             }
 
@@ -572,7 +507,7 @@ export function useDeepForecast(
                 setIsApplying(false);
             }
         }
-    }, [isTestMode, pendingReport, scopeKey, scopePersonaId]);
+    }, [pendingReport]);
 
     const discardPendingReport = useCallback(() => {
         setPendingReport(null);
@@ -581,8 +516,6 @@ export function useDeepForecast(
     }, []);
 
     const clearAppliedReport = useCallback(async () => {
-        const targetScope = buildScope(isTestMode, scopePersonaId);
-        const targetScopeKey = scopeKey;
         const clearScopeToken = scopeTokenRef.current;
 
         mutationTokenRef.current += 1;
@@ -592,11 +525,11 @@ export function useDeepForecast(
         setError(null);
         setStatus((curr) => (curr === 'running' || curr === 'staged' ? curr : 'idle'));
 
-        await enqueueScopeOp(targetScopeKey, () => clearAppliedDeepForecast(targetScope));
+        await enqueueScopeOp(REAL_SCOPE_KEY, () => clearAppliedDeepForecast(REAL_SCOPE));
         if (scopeTokenRef.current !== clearScopeToken) {
             return;
         }
-    }, [isTestMode, scopeKey, scopePersonaId]);
+    }, []);
 
     const activeReport = useMemo<DeepForecastReport>(
         () => pendingReport ?? appliedReport ?? quickPreviewReport,

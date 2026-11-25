@@ -11,17 +11,15 @@
 // jamais de liste maintenue à la main (drift garanti sinon).
 
 import type { AppState, Tab } from '../../types';
-import { buildDefaultAppState, normalizeAppState } from '../../mcp/state/appStateDefaults';
-import { validateAppStateShape } from '../../mcp/state/appStateSchema';
+import { buildDefaultAppState, normalizeAppState } from './appStateDefaults';
+import { validateAppStateShape } from './appStateSchema';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { extrairePersistable } from '../../store/optionsPersistance';
-import { modeDonneesFictives } from '../../store/modeTestActif';
 
 /**
- * Snapshot PLAT, VALIDÉ et CLONÉ de l'état courant. Trois protections (findings panel 2026-07-21) :
+ * Snapshot PLAT, VALIDÉ et CLONÉ de l'état courant. Deux protections (findings panel 2026-07-21) :
  *  - `apiKeys` EXCLU : aucun tool n'en a besoin — les vraies clés (Gemini/Finnhub) ne doivent
- *    jamais entrer dans un état que des handlers pourraient sérialiser vers un tool_result (même
- *    principe que l'Omit<'apiKeys'> de realDataSnapshot côté store) ;
+ *    jamais entrer dans un état que des handlers pourraient sérialiser vers un tool_result ;
  *  - `validateAppStateShape` AVANT normalisation : la MÊME étape que le chemin MCP (loadAppState) —
  *    un champ `null` corrompu doit LEVER une erreur claire, jamais être masqué en « absence
  *    légitime » par les `??` des handlers (chiffres à zéro plausibles sans trace) ;
@@ -90,16 +88,6 @@ export const facadeStoreAssistant = {
         const s = useFinanceStore.getState();
         return { taux: structuredClone(s.fxRates), source: s.fxRatesSource ?? null, estime: s.fxRatesEstimated ?? null };
     },
-    donneesFictives(): boolean {
-        return modeDonneesFictives();
-    },
-    porteeTest(): { isTestMode: boolean; personaId: string | null } {
-        const s = useFinanceStore.getState();
-        return {
-            isTestMode: Boolean(s.isTestMode),
-            personaId: s.isTestMode ? s.activeTestPersonaId : null,
-        };
-    },
     async lancerComitePlacement(
         etat: AppState,
         question: string,
@@ -118,7 +106,7 @@ export const facadeStoreAssistant = {
             state: etat,
             apiKey: cleGemini(s),
             isPrivacyMode: s.isPrivacyMode,
-            isTestMode: Boolean(s.isTestMode),
+            isTestMode: false,
             targetAmountCad: montantCibleCad,
             signal,
         });

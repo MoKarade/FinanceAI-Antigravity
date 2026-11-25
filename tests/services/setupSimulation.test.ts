@@ -92,8 +92,8 @@ describe('computeIncomeBaseline — régression bug « revenu ×12 »', () => {
             'buildSimulationParams ne passe plus l’année à computeBaseGrossAnnual')
             .toMatch(/computeBaseGrossAnnual\(\s*users,\s*inputs\.startYear\s*\)/);
         // Les deux sites MCP, oubliés au premier jet et trouvés en revue.
-        expect(lire('mcp/financialSignals.ts')).toMatch(/computeBaseGrossAnnual\(\s*users,\s*year\s*\)/);
-        expect(lire('mcp/tools/getTaxSituation.spec.ts')).toMatch(/computeBaseGrossAnnual\(\s*users,\s*year\s*\)/);
+        expect(lire('services/aiTools/financialSignals.ts')).toMatch(/computeBaseGrossAnnual\(\s*users,\s*year\s*\)/);
+        expect(lire('services/aiTools/specs/getTaxSituation.spec.ts')).toMatch(/computeBaseGrossAnnual\(\s*users,\s*year\s*\)/);
     });
 
     it('aucun user : tout à zéro (pas de NaN)', () => {

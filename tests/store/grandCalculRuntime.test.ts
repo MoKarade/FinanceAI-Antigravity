@@ -149,7 +149,7 @@ describe('store — état runtime Grand Calcul (non persisté et isolé par doss
         expect(after.grandCalculError).toBeNull();
     });
 
-    it('préserve grandCalculResult lors de setAppState et réinitialise sur resetState, enableTestMode et disableTestMode', () => {
+    it('préserve grandCalculResult lors de setAppState et réinitialise sur resetState', () => {
         const store = useFinanceStore.getState();
         const realResult = makeDummyGrandCalculResult('gc1:real-user');
         store.setGrandCalculResult(realResult);
@@ -159,45 +159,6 @@ describe('store — état runtime Grand Calcul (non persisté et isolé par doss
         store.setAppState({ lastUpdate: 999_999 });
         expect(useFinanceStore.getState().grandCalculResult).toBe(realResult);
         expect(useFinanceStore.getState().grandCalculStatus).toBe('ready');
-
-        // enableTestMode (réel → persona A) réinitialise grandCalcul* et exclut grandCalcul* de realDataSnapshot
-        store.enableTestMode({ transactions: [] }, 'persona-a');
-        expect(useFinanceStore.getState().grandCalculResult).toBeNull();
-        expect(useFinanceStore.getState().grandCalculStatus).toBe('idle');
-        const snap = useFinanceStore.getState().realDataSnapshot as Record<string, unknown>;
-        expect(snap).not.toHaveProperty('grandCalculResult');
-        expect(snap).not.toHaveProperty('grandCalculStatus');
-        expect(snap).not.toHaveProperty('grandCalculProgress');
-        expect(snap).not.toHaveProperty('grandCalculError');
-
-        // Persona A → Persona B réinitialise grandCalcul*
-        useFinanceStore.getState().setGrandCalculResult(makeDummyGrandCalculResult('gc1:persona-a'));
-        useFinanceStore.getState().setGrandCalculStatus('ready');
-        useFinanceStore.getState().enableTestMode({ transactions: [] }, 'persona-b');
-        expect(useFinanceStore.getState().grandCalculResult).toBeNull();
-        expect(useFinanceStore.getState().grandCalculStatus).toBe('idle');
-
-        // disableTestMode (branche normale avec snapshot) réinitialise grandCalcul*
-        useFinanceStore.getState().setGrandCalculResult(makeDummyGrandCalculResult('gc1:persona-b'));
-        useFinanceStore.getState().setGrandCalculStatus('error');
-        useFinanceStore.getState().setGrandCalculError('err persona');
-        useFinanceStore.getState().disableTestMode();
-        expect(useFinanceStore.getState().grandCalculResult).toBeNull();
-        expect(useFinanceStore.getState().grandCalculStatus).toBe('idle');
-        expect(useFinanceStore.getState().grandCalculError).toBeNull();
-
-        // disableTestMode (branche dégradée sans snapshot) réinitialise grandCalcul*
-        useFinanceStore.setState({
-            isTestMode: true,
-            realDataSnapshot: null,
-            grandCalculResult: makeDummyGrandCalculResult('gc1:orphan-test'),
-            grandCalculStatus: 'ready',
-            grandCalculError: 'orphan',
-        });
-        useFinanceStore.getState().disableTestMode();
-        expect(useFinanceStore.getState().grandCalculResult).toBeNull();
-        expect(useFinanceStore.getState().grandCalculStatus).toBe('idle');
-        expect(useFinanceStore.getState().grandCalculError).toBeNull();
 
         // resetState réinitialise grandCalcul*
         useFinanceStore.getState().setGrandCalculResult(makeDummyGrandCalculResult('gc1:before-reset'));

@@ -14,7 +14,7 @@
 // est cassé (le piège de l'ancienne garde, qui comparait deux répliques).
 
 import { describe, it, expect } from 'vitest';
-import { TEST_PERSONAS } from '../../services/testPersonas';
+import { TEST_PERSONAS } from '../fixtures/testPersonas';
 import { reconstructPortfolioHistory, type MinimalAsset } from '../../services/history/reconstructPortfolioHistory';
 import { deriveStartingBalancesFromHistory } from '../../services/history/startingBalancesFromHistory';
 import { getEffectivePurchases } from '../../utils/assetPurchases';

@@ -63,7 +63,7 @@ describe('[COUPLE-CTX-FAKE-ZERO] un salaire absent ne devient pas un « 0 $ » a
 describe('[TOOL-TAXSITUATION-FAKE-ZERO] un conjoint exclu du calcul est NOMMÉ, pas effacé', () => {
     // Scan de source : le handler du tool est un `withState` async difficile à instancier ici, et ce
     // qui compte est structurel — le payload DOIT porter le champ, et le filtre DOIT rester.
-    const src = readFileSync(join(__dirname, '../../mcp/tools/getTaxSituation.spec.ts'), 'utf-8');
+    const src = readFileSync(join(__dirname, '../../services/aiTools/specs/getTaxSituation.spec.ts'), 'utf-8');
 
     it('le payload publie `perUserOmitted`', () => {
         expect(src.length).toBeGreaterThan(1_000);          // anti-vacuité

@@ -23,13 +23,12 @@
 | Crypto pricing | CoinGecko REST | Gratuit, sans clé, CORS-friendly |
 | Stock/ETF pricing | Finnhub REST | Clé gratuite optionnelle |
 | Tests | Vitest + React Testing Library | compte à jour dans `GEMINI.md` (source unique) |
-| Auth & Sync Cloud | **Firebase Auth** + **Cloud Firestore** + **Google Drive** | Google Sign-In, `workspaces/{uid}` + sous-collections `transactionMonths/{AAAA-MM}` et `conversations/{id}`, `appDataFolder` chiffré |
+| Auth & Sync Cloud | **Firebase Auth** + **Cloud Firestore** | Google Sign-In, `workspaces/{uid}` + sous-collections `transactionMonths/{AAAA-MM}` et `conversations/{id}` |
 | Hébergement & Relais | **Firebase Hosting** + **Cloud Run** (`firebase.json`, `cloudrun/proxy/`) | SPA statique + réécriture `/api/**` vers le service Cloud Run `financeai-proxy` (`/api/fintable/*`, `/api/yahoo/*`) |
 
 L'application fonctionne à 100 % côté navigateur dans l'écosystème Google, persiste localement via `persist`
 (chiffré en AES-256-GCM dans IndexedDB pour les clés API `apiKeys.gemini` et `apiKeys.finnhub`), synchronise
-les espaces de travail via **Cloud Firestore** (`services/firebase/workspaceSync.ts`) et **Google Drive**
-(`appDataFolder`), et appelle **Google Gemini** (`@google/genai`), Finnhub et CoinGecko depuis le client.
+les espaces de travail via **Cloud Firestore** (`services/firebase/workspaceSync.ts`), et appelle **Google Gemini** (`@google/genai`), Finnhub et CoinGecko depuis le client.
 
 ---
 
@@ -61,6 +60,7 @@ FinanceAI/
 │   ├── portfolio.ts         Historique CSV portfolio
 │   ├── realEstate.ts        Amortissement hypothèque
 │   └── …                    finance, macroApi, pdfReport, cloudBackup
+├── server/                  Proxys et garde-fou de débit Express local (`proxies.ts`, `garde.ts`)
 ├── store/
 │   └── useFinanceStore.ts   Zustand store unique (schema v7, persist)
 ├── utils/
@@ -85,18 +85,17 @@ Règles structurelles :
 - **Frontière store ↔ services** (`[SVC-STORE-COUPLING]`, 2026-09-04, mis à jour 2026-11-02) : le **moteur**
   (`services/projection.ts`, `services/projection/`, `projection.worker.ts`) est **PUR** — zéro
   import du store, tout entre par arguments (c'est ce qui rend chaque calcul testable par
-  fixture). Les services d'**orchestration/IO** (sync Cloud Firestore, sync Google Drive, sync Fintable,
-  restauration de données, outils IA Gemini/MCP, rapport PDF) LISENT le store via `useFinanceStore.getState()` —
+  fixture). Les services d'**orchestration/IO** (sync Cloud Firestore, sync Fintable,
+  restauration de données, outils IA Gemini, rapport PDF) LISENT le store via `useFinanceStore.getState()` —
   c'est assumé et **inventorié** dans `tests/services/storeCouplingBoundary.test.ts`.
   Liste exacte des services autorisés à coupler au store :
-  - `services/aiTools/appStateProvider.ts` (lecture de l'état pour les outils IA / MCP)
+  - `services/aiTools/appStateProvider.ts` (lecture de l'état pour les outils IA)
   - `services/aiTools/writeExecutor.ts` (application des écritures confirmées sur le store)
   - `services/gemini.ts` (`[SANDBOX-PROMPTS-MARQUER-CONTEXTE]` : lit `modeDonneesFictives()` au point de contact SDK `@google/genai` pour marquer le prompt système quand les données sont un scénario hypothétique)
   - `services/dataRecovery.ts` (diagnostic et récupération locale/infonuagique des données)
   - `services/fintable/autoSync.ts` (synchronisation automatique courtier)
   - `services/firebase/workspaceSync.ts` (synchronisation temps réel avec Cloud Firestore `users/{uid}/workspaces/main`)
   - `services/pdfReport.ts` (génération du bilan PDF)
-  - `services/sync/syncPull.ts`, `services/sync/syncPush.ts`, `services/sync/syncSnapshot.ts` (synchronisation Google Drive `appDataFolder`)
   Tout nouvel importeur du store dans `services/` est une décision d'architecture (à documenter ici, puis à ajouter à l'inventaire).
   ⚠️ Jamais de `getState() as unknown as …` : `FinanceState extends AppState`, l'assignation
   directe est déjà typée — un cast désactive tsc exactement là où l'IA écrit (garde dédiée).
@@ -215,11 +214,11 @@ Stock/ETF prices (AAPL, VOO, …)
 API keys (Google Gemini, Finnhub)
   ├─ Chiffrées AES-256-GCM (services/secureKeyStore.ts)
   ├─ Clé device IndexedDB (non-extractible)
-  └─► Zustand (en mémoire) + IndexedDB chiffré (exclues de localStorage, Firestore et Drive)
+  └─► Zustand (en mémoire) + IndexedDB chiffré (exclues de localStorage et Firestore)
 
 Historique de portefeuille / Courbes de cours
   ├─ **Chaîne multi-providers** : 
-  │    Finnhub (stock/ETF US) → fallback Yahoo Finance (Euronext/CAD via proxy rewrite Vercel)
+  │    Finnhub (stock/ETF US) → fallback Yahoo Finance (Euronext/CAD via relais Cloud Run / Express)
   │    + CoinGecko (crypto) + CSV legacy importé
   ├─ Pipeline hydratation :
   │    hydrateAssetHistories (boot, pacing 2,5s) 
@@ -275,19 +274,15 @@ marquent automatiquement le prompt système lorsque le mode données fictives es
 - `categorizeBatch()` — catégorisation transactions par lot (`gemini-2.5-flash`)
 - `analyzePayslip()` / `analyzeBankStatement()` — **Gemini Vision** sur fiches de paie et relevés bancaires PDF/images
 - `detectSubscriptionsAI()` — détection abonnements récurrents (`gemini-2.5-flash`)
-- `computeFinancialSignals` (`mcp/financialSignals.ts`, pur, partagé avec le serveur MCP) — signaux financiers déterministes
+- `computeFinancialSignals` (`services/aiTools/financialSignals.ts`, pur) — signaux financiers déterministes
 - `getRebalanceJustifications()` — Phase E.7, justifications de rééquilibrage Investments (`gemini-2.5-flash`)
 - `getCoupleOptimizationStrategies()` — Phase G.4, REER de conjoint / fractionnement de pension (`gemini-2.5-flash`)
 - `getRealEstateAdvice()` — Phase F.8, 5 catégories cost/timing/leverage/tax/risk (`gemini-2.5-flash`)
 
-**Frontière spec/register des tools MCP** (ADR-1) :
-chaque tool est scindé en `mcp/tools/<x>.spec.ts` (logique métier PURE, browser-safe : nom,
-description, schéma zod, handler/toDocument — types dans `_toolSpec.ts`) et `mcp/tools/<x>.tool.ts`
-(enregistrement serveur MINCE, seul autorisé à importer `@modelcontextprotocol/sdk`). Le
-consommateur des specs est le serveur MCP (`server.tool(...)`). Exclus de la parité :
-`ping` (trivial) et `connect_drive` (OAuth loopback Node, sans équivalent dans l'app).
-Gardes : `tests/aiTools/noMcpSdkInSpecs.test.ts` (frontière + tools minces, volume prouvé) ;
-parité mesurée par capture d'enregistrement (16 tools identiques).
+**Spécifications des outils IA** :
+les specs vivent dans `services/aiTools/specs/<x>.spec.ts` (logique métier PURE, browser-safe : nom,
+description, schéma zod, handler/toDocument — types dans `_toolSpec.ts`) et `services/ingest/`
+(`applyDocument*`). Garde : `tests/aiTools/noMcpSdkInSpecs.test.ts` (frontière browser-safe).
 
 ---
 
@@ -312,7 +307,7 @@ tests/
 
 **Compte de tests : voir `GEMINI.md`** — source unique, re-mesurée à chaque push. Ne pas le
 recopier ici : ce document a porté trois chiffres contradictoires (1 440 / 3 887 / 339 fichiers)
-avant le nettoyage du 2026-08-19. Tous les scénarios MC, les helpers de projection, les primitives UI, les migrations de store, la fiscalité (dont `taxDecember`/`taxJanuary`) et les moteurs de synchronisation Cloud Firestore et Google Drive sont couverts.
+avant le nettoyage du 2026-08-19. Tous les scénarios MC, les helpers de projection, les primitives UI, les migrations de store, la fiscalité (dont `taxDecember`/`taxJanuary`) et le moteur de synchronisation Cloud Firestore sont couverts.
 
 ---
 
@@ -320,8 +315,7 @@ avant le nettoyage du 2026-08-19. Tous les scénarios MC, les helpers de project
 
 La liste à jour et les titres exacts sont dans [`docs/adr/README.md`](adr/README.md) (numérotation 0001 et suivantes ; une ADR est un récit daté qui ne se réécrit pas). Ne pas recopier la liste ici : l'ancienne numérotation « ADR-001…009 » de ce paragraphe ne correspondait plus aux fichiers.
 
-Couches serveur et infonuagiques, en plus du client : **Firebase Auth** + **Cloud Firestore** (`firestore.rules` strictes par propriétaire `request.auth.uid == userId`), **Google Drive** (`appDataFolder`), `api/` (fonctions serverless Vercel : proxys Yahoo Finance et Fintable, santé) et `mcp/` (serveur MCP sur Google Cloud Run).
-Suivi des erreurs (FinanceAI#1171, 18/10/2026) : les fonctions `api/` signalent leurs exceptions imprévues à Sentry (`api/_lib/sentry.ts`, projet `financeai`, organisation `mokarade`) quand la variable serveur `SENTRY_DSN` est définie ; sans elle rien ne part et le SDK n'est pas chargé. Aucune donnée perso : ni requête (le symbole est dans l'adresse), ni IP, ni message d'erreur (`api/_lib/sentryConfig.ts`, verrou `tests/api/sentryConfig.test.ts`). Le navigateur et le serveur MCP (Cloud Run) n'envoient RIEN pour l'instant. Preuve de la chaîne : workflow manuel « Essai Sentry » (`npm run sentry:essai`).
+Couches serveur et infonuagiques, en plus du client : **Firebase Auth** + **Cloud Firestore** (`firestore.rules` strictes par propriétaire `request.auth.uid == userId`), `server/` (proxys locaux Yahoo Finance et Fintable) et `cloudrun/proxy/` (relais Cloud Run `financeai-proxy` pour Firebase Hosting).
 
 ---
 

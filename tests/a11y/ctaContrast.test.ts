@@ -75,9 +75,9 @@ describe('contraste WCAG AA des CTA pleins', () => {
     });
 
     it('[A11Y-CONTRAST-ANGLE-MORT-541] le texte de la palette par défaut sur les fonds de page : volume plausible, aucun sous le seuil', () => {
-        // Anti-vacuité : 38 classes distinctes mesurées le 2026-09-06 (114 combinaisons sur 3 fonds).
+        // Anti-vacuité : 38 classes distinctes mesurées le 2026-09-06 (57 paires après retrait Drive/Sync).
         expect(texte.classesLues).toBeGreaterThan(30);
-        expect(texte.paires.length).toBeGreaterThan(60);
+        expect(texte.paires.length).toBeGreaterThan(50);
         // Un élément qui porte son PROPRE fond n'est pas sur le fond de page : `bg-white text-rose-700`
         // (SyncStatusBanner) vaut 5,9 sur son blanc et sortait à 2,83 sur `surfaceHighlight` avant ce filtre.
         expect(texte.paires.some((p) => p.text === 'text-rose-700')).toBe(false);

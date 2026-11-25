@@ -15,7 +15,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { extrairePersistable } from '../../store/optionsPersistance';
-import { buildDefaultAppState } from '../../mcp/state/appStateDefaults';
+import { buildDefaultAppState } from '../../services/aiTools/appStateDefaults';
 import { ACTIONS, declarationsOutils } from '../../services/assistant/actionRegistry';
 import { TRANCHES, TRANCHES_EXCLUES } from '../../services/assistant/tranches';
 

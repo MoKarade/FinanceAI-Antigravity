@@ -12,12 +12,12 @@ import {
     isLikelyCreditCardAccount,
 } from '../../../services/fintable/browserSync';
 import type { FintableClient } from '../../../services/fintable/client';
-import { buildDefaultAppState } from '../../../mcp/state/appStateDefaults';
+import { buildDefaultAppState } from '../../../services/aiTools/appStateDefaults';
 import type { AppState, Transaction } from '../../../types';
 
 vi.mock('../../../services/errorLogger', () => ({
     logError: vi.fn(),
-    logErrorThrottled: vi.fn(),
+    logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(),
 }));
 
 const NOW = Date.parse('2026-11-18T12:00:00Z');

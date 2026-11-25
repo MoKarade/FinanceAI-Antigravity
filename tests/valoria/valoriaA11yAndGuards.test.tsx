@@ -13,7 +13,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { ValoriaWorkspace } from '../../components/valoria/ValoriaWorkspace';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { TEST_ASSETS } from '../../services/testAssets';
+import { TEST_ASSETS } from '../fixtures/testAssets';
 import { stripComments, stripCommentsJsx } from '../../utils/stripComments';
 
 vi.mock('react-i18next', () => ({
@@ -167,7 +167,6 @@ describe('ValoriaWorkspace — Accessibilité Axe, Isolation & Gardes', () => {
       budgetItems: [],
       initialBalances: {},
       isPrivacyMode: false,
-      isTestMode: false,
     });
 
     const { container } = render(<ValoriaWorkspace />);

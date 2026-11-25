@@ -185,15 +185,6 @@ describe('[SILENT-*] les erreurs avalées laissent désormais une trace (scan de
         // Et la lecture, elle, garde son `catch` NU : le tracer crierait à chaque chargement.
         expect(src).toMatch(/const raw = localStorage\.getItem\(DISMISSED_KEY\);[\s\S]{0,220}?\} catch \{\n\s*return false;/);
     });
-
-    it('[SYSVIEW-DBSIZE-ZERO] la taille indisponible rend « — », jamais « 0 KB »', () => {
-        const src = lire('components/SystemView.tsx');
-        // Le discriminant : le `catch` ne fabrique plus une valeur crédible.
-        expect(sansCommentaires(src), 'un échec de sérialisation redevient un « 0 KB » crédible')
-            .not.toMatch(/catch \{ return 0; \}/);
-        expect(src).toMatch(/catch \{ return null; \}/);
-        expect(src).toContain("dbSize === null ? '—'");
-    });
 });
 
 describe('[DEAD-PARSETX-SILENT-DROP] le parseur orphelin est parti, ses voisins restent', () => {
@@ -226,7 +217,7 @@ describe('[DEAD-PARSETX-SILENT-DROP] le parseur orphelin est parti, ses voisins 
         const racine = join(__dirname, '../..');
         const estSource = (f: string): boolean => /\.(ts|tsx)$/.test(f) && !/\.test\.(ts|tsx)$/.test(f);
         const fichiers = ['App.tsx', 'index.tsx', 'constants.ts', 'types.ts', 'i18n.ts'];
-        for (const dir of ['components', 'services', 'hooks', 'utils', 'store', 'mcp', 'scripts']) {
+        for (const dir of ['components', 'services', 'hooks', 'utils', 'store', 'scripts']) {
             for (const entree of readdirSync(join(racine, dir), { recursive: true })) {
                 const rel = `${dir}/${entree.toString().split(sep).join('/')}`;
                 if (estSource(rel)) fichiers.push(rel);

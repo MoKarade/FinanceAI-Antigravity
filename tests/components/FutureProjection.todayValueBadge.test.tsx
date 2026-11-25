@@ -7,7 +7,7 @@ import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
 import { FutureProjection } from '../../components/FutureProjection';
 import { TodayValueBadge } from '../../components/projection/ProjectionTooltip';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../../services/testFixtures';
+import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../fixtures/testFixtures';
 
 let badgeValues: Array<string | undefined>;
 
@@ -30,7 +30,7 @@ vi.mock('recharts', async () => {
         XAxis: () => null, YAxis: () => null, Tooltip: () => null, CartesianGrid: () => null,
     };
 });
-vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn() }));
+vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(), }));
 vi.mock('../../services/deepForecastStore', () => ({
     loadAppliedDeepForecast: vi.fn(async () => ({ status: 'empty' as const })),
     saveAppliedDeepForecast: vi.fn(async () => true),
@@ -67,8 +67,9 @@ async function afficherEtCapturer(isPrivacyMode: boolean) {
     badgeValues = [];
     const persona = getPersonaOrDefault(DEFAULT_PERSONA_ID);
     act(() => {
-        useFinanceStore.getState().enableTestMode(persona.build(), persona.id);
+        useFinanceStore.getState().resetState();
         useFinanceStore.setState({
+            ...(persona.build() as Record<string, unknown>),
             projectionRunMC: false, projectionStatus: 'idle',
             lastProjection: { chartData: chartDataMinimale(), fireNumber: 400_000, allResults: [] } as never,
             isProjectionLocked: false, lockedProjection: null,

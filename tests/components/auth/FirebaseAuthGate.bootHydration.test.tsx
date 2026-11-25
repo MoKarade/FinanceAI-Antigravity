@@ -105,11 +105,6 @@ vi.mock('../../../services/firebase/workspaceSync', () => ({
     getFirebaseSyncStatus: mocks.getSyncStatus,
 }));
 
-vi.mock('../../../services/dataRecovery', () => ({
-    ensureDefaultGoogleAuthConfigured: vi.fn(),
-    chercherEtRestaurerDepuisGoogleDrive: vi.fn().mockResolvedValue(null),
-}));
-
 vi.mock('../../../store/idbBootHydration', () => ({
     needsBlockingIdbHydration: vi.fn(() => false),
     hydrateStoreFromIdbOnce: vi.fn().mockResolvedValue(undefined),

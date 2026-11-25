@@ -20,17 +20,15 @@ import { installGlobalErrorHandlers, logError } from '../services/errorLogger';
 import { initAutoBackup, createBackupNow } from '../services/backupAuto';
 import { sanitizePersonaArtifacts } from '../services/personaSanitizer';
 import { loadLockedProjection } from '../services/lockedProjectionStore';
-import { initSync, runBootSync, schedulePush, flushPush, startDrivePolling, markApiKeysHydrated, startInactivityWatch, handleInactivityLogout, subscribeSyncNotice } from '../services/sync/syncOrchestrator';
 import { maybeRunDailyFintableSync } from '../services/fintable/autoSync';
 import { fetchFxRates } from '../services/finance';
 import { apresPremierAffichage } from '../utils/apresPremierAffichage';
 import { requestPersistentStorage } from '../services/storagePersistence';
 import { ecritureFxSelonLecture } from '../services/fx/ecritureFx';
-import { modeDonneesFictives } from '../store/modeTestActif';
 import { surveillerSessionAccess } from '../utils/sessionAccess';
 
 /** Tous les effets de boot d'App : handlers d'erreur, courbe verrouillée, service worker, purge
- *  persona, init sync Drive, filets migration/hydratation, provider marché, clés API chiffrées,
+ *  persona, filets migration/hydratation, provider marché, clés API chiffrées,
  *  sync bancaire auto, taux FX. Appelé UNE fois, en tête d'App. */
 export function useAppBootEffects(): void {
     // P1 — installation des handlers d'erreur globaux au boot (une seule fois)
@@ -68,7 +66,7 @@ export function useAppBootEffects(): void {
         // ARCHIVE : refusée si l'app tourne sur des données fictives (mode test / bac à sable).
         // Le prédicat est lu DANS le timer, pas à la pose : 2 s séparent les deux, et le mode
         // peut avoir basculé entre-temps.
-        const timer = setTimeout(() => { initAutoBackup(modeDonneesFictives()); }, 2000);
+        const timer = setTimeout(() => { initAutoBackup(false); }, 2000);
 
         // P2.9 — service worker en PROD seulement (Vite HMR en dev s'auto-gère).
         // Bug fix 2026-05-21 : ce useEffect tourne souvent APRÈS window.load
@@ -108,17 +106,12 @@ export function useAppBootEffects(): void {
         // des vraies données a son filet), PUIS purge. Best-effort : backup HS ≠ rester pollué.
         void (async () => {
             const st = useFinanceStore.getState();
-            if (st.isTestMode) return;
             const { report } = sanitizePersonaArtifacts(st as unknown as Parameters<typeof sanitizePersonaArtifacts>[0]);
             if (report.removedTotal === 0) return;
             try {
                 // Depuis [BACKUP-PROMISE-CATCH], createBackupNow journalise EN INTERNE ses échecs
                 // IndexedDB (rejet async tx.onerror → null) ; ici on trace juste que le filet est absent.
-                // FILET avant la purge. ⚠️ Ce chemin ne tourne jamais en mode fictif (un
-                // `if (st.isTestMode) return;` le coupe plus haut) — on passe quand même le
-                // prédicat RÉEL plutôt que `false` en dur : inscrire une prémisse ici la rendrait
-                // fausse le jour où la garde du dessus bouge, sans rien de rouge.
-                const backup = await createBackupNow('auto', { intent: 'filet', donneesFictives: modeDonneesFictives() });
+                const backup = await createBackupNow('auto', { intent: 'filet', donneesFictives: false });
                 if (!backup.ok) {
                     logError({ source: 'storage', severity: 'warning', message: 'purgePersonaArtifacts : backup pré-purge indisponible (null) — purge SANS filet' });
                 }
@@ -145,47 +138,9 @@ export function useAppBootEffects(): void {
             .then((m) => m.hydrateProtectedDossierCacheFromIdb())
             .catch(() => {});
 
-        // Sync Google Drive — inerte si VITE_GOOGLE_CLIENT_ID absent. Init + sync silencieuse au
-        // boot (uniquement si déjà connecté), puis push debouncé sur chaque changement du store.
-        initSync(import.meta.env.VITE_GOOGLE_CLIENT_ID);
-        // [PURGE-TOAST-UX] Abonnement générique aux AVIS de sync → toast. Posé AVANT le premier pull
-        // (un avis sans abonné est perdu, il n'y a pas de file) ; un seul point de sortie UI pour
-        // tous les avis futurs, sans qu'un module sync* n'importe jamais le composant Toast.
-        const unsubNotice = subscribeSyncNotice((n) => showToast(n.texte, 'info'));
-        const syncTimer = setTimeout(() => { void runBootSync(); }, 2500);
-        const unsubSync = useFinanceStore.subscribe(() => schedulePush());
-        // [AUTH-DRIVE-INACTIVITY] Déconnexion auto après 30 jours d'inactivité (8h demandées par Marc le
-        // 2026-07-22, portées à 30 jours le 2026-10-28) : le minuteur suit l'activité (clic/clavier/retour
-        // d'onglet) et, au bout de 30 jours sans interaction, révoque le jeton Drive + prévient. La reprise
-        // silencieuse au boot s'appuie sur le même seuil (< 30 jours → reconnexion sans clic ; ≥ → login
-        // requis). Données locales jamais touchées.
-        const stopInactivity = startInactivityWatch(() => {
-            handleInactivityLogout();
-            showToast('Déconnecté de Google Drive après 30 jours d\'inactivité (sécurité). Reconnecte-toi pour reprendre la sauvegarde.', 'info');
-        });
-        // Rafraîchissement « fluide » : reflète SEUL les changements de Drive (ex. doc rangé par le
-        // connecteur MCP) sur intervalle + au retour sur l'onglet (garde anti-perte réutilisée).
-        const stopPolling = startDrivePolling();
-        // Flush du push en attente quand l'onglet se masque/ferme : garantit que le DERNIER changement
-        // atteint Drive avant que Marc parte parler à Claude (sinon le debounce 8s pourrait ne jamais
-        // partir → le connecteur MCP lirait une copie périmée). No-op si non connecté / rien de neuf.
-        const onHide = () => {
-            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') flushPush();
-        };
-        const onPageHide = () => flushPush();
-        if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onHide);
-        if (typeof window !== 'undefined') window.addEventListener('pagehide', onPageHide);
-
         return () => {
             clearTimeout(timer);
             stopSessionAccess();
-            clearTimeout(syncTimer);
-            unsubSync();
-            unsubNotice();
-            stopPolling();
-            stopInactivity();
-            if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onHide);
-            if (typeof window !== 'undefined') window.removeEventListener('pagehide', onPageHide);
         };
     }, []);
 
@@ -216,7 +171,7 @@ export function useAppBootEffects(): void {
         if (hydration.failed && !hydrationWarningShown.current) {
             hydrationWarningShown.current = true;
             showToast(
-                '[CRITIQUE] Tes données n\'ont PAS pu être chargées (sauvegarde locale illisible). NE RIEN SAISIR : tes données existent encore — restaure un backup (Réglages → Sauvegarde) ou reconnecte Drive.',
+                '[CRITIQUE] Tes données n\'ont PAS pu être chargées (sauvegarde locale illisible). NE RIEN SAISIR : tes données existent encore — restaure un backup (Réglages → Sauvegarde) ou reconnecte ton compte Google (Cloud Firestore).',
                 'error'
             );
             console.error('[FinanceAI] Hydration failure:', hydration);
@@ -245,11 +200,6 @@ export function useAppBootEffects(): void {
             try {
                 const result = await loadApiKeysDetailed();
                 if (cancelled) return;
-                // D5 (anti-race sync) : le vault a répondu « ok » → l'état des clés est CONNU (même
-                // vide). À partir d'ici, un push avec clés vides reflète l'intention (et n'est plus
-                // bloqué/préservé). NB : on NE marque PAS sur decrypt_failed (clés présentes mais
-                // illisibles ici → mieux vaut préserver celles du Drive).
-                if (result.status === 'ok') markApiKeysHydrated();
                 if (result.status === 'decrypt_failed') {
                     // Blob chiffré présent mais clé IDB absente (ex: navigation privée
                     // entre sessions, IndexedDB vidé) → on prévient l'utilisateur.

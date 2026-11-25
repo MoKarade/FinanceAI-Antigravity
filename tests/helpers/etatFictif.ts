@@ -6,7 +6,7 @@
 // NEUF — un test peut le muter sans contaminer le suivant.
 //
 // Usage : `const s = etatFictif({ initialBalances: { REER: 1000 } });`
-import { buildDefaultAppState } from '../../mcp/state/loadAppState';
+import { buildDefaultAppState } from '../../services/aiTools/appStateDefaults';
 import type { AppState } from '../../types';
 
 export function etatFictif(surcharges: Partial<AppState> = {}): AppState {

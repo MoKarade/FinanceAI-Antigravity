@@ -8,6 +8,7 @@ import type { AppState, BudgetConfig, User } from '../../types';
 vi.mock('../../services/cloudBackup', () => ({
     downloadBackup: vi.fn().mockResolvedValue(undefined),
     defaultBackupFilename: () => 'backup.enc',
+    MIN_PASSPHRASE_LENGTH: 12,
 }));
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'fr' } }),
@@ -22,32 +23,6 @@ const defaultConfig: BudgetConfig = {
     splitMode: '50/50',
 };
 
-// G22-N5 — Settings forwarde appState à SystemView (sous-onglet diagnostics).
-// AppState minimal pour satisfaire le type (les tests ci-dessous ne naviguent
-// pas vers le sous-onglet Système).
-const minimalAppState: AppState = {
-    transactions: [],
-    assets: [],
-    investmentTransactions: [],
-    investmentAccounts: [],
-    budgetItems: [],
-    config: defaultConfig,
-    projection: { years: 30, returnRate: 0.06, inflationRate: 0.02, savingsMode: 'manual', manualContribution: 0, usePortfolioRate: false },
-    realEstateGoals: [],
-    childGoals: [],
-    debts: [],
-    travelGoals: [],
-    lifeEvents: [],
-    retirementGoal: { targetAge: 65, targetMonthlyIncome: 4000, governmentPension: 1200 },
-    financialGoals: [],
-    initialBalances: {},
-    apiKeys: defaultApiKeys,
-    fxRates: { USD: 1.35, EUR: 1.45, CAD: 1 },
-    lastUpdate: Date.now(),
-    categorizationRules: [],
-    aiConversation: [],
-};
-
 const baseProps = {
     apiKeys: defaultApiKeys,
     setApiKeys: vi.fn(),
@@ -57,7 +32,6 @@ const baseProps = {
     initialBalances: {},
     setInitialBalances: vi.fn(),
     transactions: [],
-    appState: minimalAppState,
 };
 
 describe('Settings', () => {
@@ -86,12 +60,12 @@ describe('Settings', () => {
 
     afterEach(() => { vi.unstubAllGlobals(); _resetViewportXlMqlForTests(); });
 
-    it('mobile : carte du mode test, liste des sections, complétude ; une section s\'ouvre et se referme', () => {
+    it('mobile : liste des sections ; une section s\'ouvre et se referme', () => {
         render(<Settings {...baseProps} />);
-        expect(screen.getByRole('heading', { name: /Mode test/ })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: /Mode test/ })).toBeNull();
         const nav = screen.getByRole('navigation', { name: 'Sections des réglages' });
         const lignes = within(nav).getAllByRole('button').map((b) => b.textContent?.replace(/[›\s]+$/, '').trim());
-        expect(lignes).toEqual(['Profil', 'Comptes et soldes', 'Patrimoine', 'Clés API', 'Sauvegarde', 'Système et diagnostics']);
+        expect(lignes).toEqual(['Profil', 'Comptes et soldes', 'Patrimoine', 'Clés API', 'Sauvegarde']);
         expect(screen.queryByRole('tab')).toBeNull();
 
         ouvrirSection('Sauvegarde');
@@ -107,15 +81,15 @@ describe('Settings', () => {
         expect(within(nav).getByRole('button', { name: /^Clés API/ }).textContent).toContain('à faire');
     });
 
-    it('bureau large (≥ xl) : menu en onglets VERTICAUX, « Complétude » ouvert par défaut', () => {
+    it('bureau large (≥ xl) : menu en onglets VERTICAUX, « Comptes et soldes » ouvert par défaut', () => {
         vi.stubGlobal('matchMedia', (q: string) => ({
             media: q, matches: true, addEventListener: () => {}, removeEventListener: () => {},
         }));
         render(<Settings {...baseProps} />);
         const menu = screen.getByRole('tablist', { name: 'Sections des réglages' });
         expect(menu).toHaveAttribute('aria-orientation', 'vertical');
-        expect(within(menu).getAllByRole('tab')).toHaveLength(6);
-        expect(within(menu).getByRole('tab', { name: /Complétude/ })).toHaveAttribute('aria-selected', 'true');
+        expect(within(menu).getAllByRole('tab')).toHaveLength(4);
+        expect(within(menu).getByRole('tab', { name: 'Comptes et soldes' })).toHaveAttribute('aria-selected', 'true');
         fireEvent.click(within(menu).getByRole('tab', { name: 'Sauvegarde' }));
         expect(within(menu).getByRole('tab', { name: 'Sauvegarde' })).toHaveAttribute('aria-selected', 'true');
     });
@@ -178,10 +152,11 @@ describe('Settings', () => {
     // Les tests de `FintableSyncCard` la rendent en ISOLATION — ils passeraient à l'identique
     // si `Settings.tsx` cessait de la monter. Ce test-ci verrouille le CÂBLAGE : depuis
     // la section réellement libellée « Clés API », le champ du jeton doit exister.
-    it('le champ du jeton Fintable est ATTEIGNABLE depuis le sous-onglet « Clés API »', () => {
+    it('la carte taux de change FxRatesCard est ATTEIGNABLE depuis le sous-onglet « Clés API »', () => {
         render(<Settings {...baseProps} />);
         ouvrirSection('Clés API');
         expect(screen.getByLabelText(/Jeton Fintable/i)).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /Taux de change/i })).toBeInTheDocument();
     });
 
     it("dans la modal chiffrée, le bouton confirmer est désactivé si passphrase vide", async () => {

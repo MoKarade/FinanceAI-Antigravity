@@ -23,8 +23,39 @@
 // Module PUR : il reçoit l'enveloppe et le mode, il ne lit ni le store ni `localStorage`
 // (`UN-IMPORT-DANS-LA-COUCHE-SERVICES-ELARGIT-LE-CONTRAT-DE-MOCK-DE-TOUS-LES-MONTAGES`).
 
+import { sanitizePersistEnvelope } from './personaSanitizer';
+import { STORAGE_KEYS } from '../utils/storageKeys';
+import { getLatestPersistedStateJson } from './unlimitedStateStorage';
+
 /** Version du FORMAT de sauvegarde. `3.2` = l'ancien format par champs (toujours relu). */
 export const VERSION_SAUVEGARDE_ETAT = '4.0';
+
+/** Retire défensivement les clés API du snapshot (déjà exclues par le partialize, ceinture+bretelles). */
+function stripApiKeys(snapshot: unknown): unknown {
+    if (!snapshot || typeof snapshot !== 'object') return snapshot;
+    const obj = snapshot as Record<string, unknown>;
+    const state = obj.state as Record<string, unknown> | undefined;
+    if (state && 'apiKeys' in state) {
+        const { apiKeys: _drop, ...rest } = state;
+        return { ...obj, state: rest };
+    }
+    return snapshot;
+}
+
+/** Snapshot local désinfecté prêt pour la sauvegarde JSON/chiffrée (sans clés API ni artefacts de persona). */
+export function getLocalPayload(): { payload: unknown } {
+    const raw = getLatestPersistedStateJson(STORAGE_KEYS.persistStore);
+    let parsed: unknown = null;
+    if (raw) {
+        try {
+            parsed = JSON.parse(raw);
+        } catch {
+            parsed = null;
+        }
+    }
+    const { envelope: sanitized } = sanitizePersistEnvelope(stripApiKeys(parsed));
+    return { payload: sanitized };
+}
 
 /** L'enveloppe persistée du store, telle que zustand l'écrit. */
 export interface EnveloppeStore {
@@ -93,7 +124,7 @@ export function messageRefusSauvegarde(cause: Extract<ResultatSauvegarde, { ok: 
         return 'Sauvegarde impossible en mode test : l\'app affiche des données fictives. Quitte le mode test, puis exporte.';
     }
     if (cause === 'illisible') {
-        return 'Sauvegarde impossible : le dossier enregistré sur cet appareil est illisible. Rien n\'a été modifié — restaure depuis Google Drive ou depuis une ancienne sauvegarde.';
+        return 'Sauvegarde impossible : le dossier enregistré sur cet appareil est illisible. Rien n\'a été modifié — restaure depuis Cloud Firestore ou depuis une ancienne sauvegarde.';
     }
     return 'Rien à sauvegarder : aucune donnée enregistrée sur cet appareil pour l\'instant.';
 }

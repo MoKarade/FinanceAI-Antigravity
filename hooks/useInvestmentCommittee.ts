@@ -6,14 +6,12 @@
 // - isole les analyses lors d'un changement de mode test / persona ou d'un démontage.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useShallow } from 'zustand/shallow';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { cleGemini } from '../services/geminiAssistant';
 import { MESSAGE_IA_MODE_DISCRET, messageErreurIa } from '../services/messageErreurIa';
 import { runMultiAgentCommittee } from '../services/investments/multiAgentCommittee';
 import {
     clearCommitteeHistory,
-    committeeScopeKey,
     deleteCommitteeAnalysis,
     loadCommitteeHistory,
     saveCommitteeAnalysis,
@@ -51,20 +49,13 @@ const isAbortErr = (err: unknown): boolean =>
     (err instanceof Error && err.name === 'AbortError') ||
     (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError');
 
+const REAL_SCOPE: CommitteeStorageScope = { isTestMode: false, personaId: null };
+
 export function useInvestmentCommittee(
     options: UseInvestmentCommitteeOptions = {},
 ): UseInvestmentCommitteeReturn {
-    const { isTestMode, activeTestPersonaId, isPrivacyMode } = useFinanceStore(
-        useShallow((s) => ({
-            isTestMode: s.isTestMode,
-            activeTestPersonaId: s.activeTestPersonaId,
-            isPrivacyMode: s.isPrivacyMode,
-        })),
-    );
+    const isPrivacyMode = useFinanceStore((s) => s.isPrivacyMode);
     const apiKey = useFinanceStore((s) => cleGemini(s));
-
-    const scopePersonaId = isTestMode ? activeTestPersonaId : null;
-    const scopeKey = committeeScopeKey({ isTestMode, personaId: scopePersonaId });
 
     const [history, setHistory] = useState<CommitteeAnalysisReport[]>([]);
     const [activeAnalysis, setActiveAnalysis] = useState<CommitteeAnalysisReport | null>(null);
@@ -76,7 +67,7 @@ export function useInvestmentCommittee(
     const optionsRef = useRef(options);
     optionsRef.current = options;
 
-    // Restauration isolée par portée + annulation propre si on bascule réel <-> test
+    // Restauration au montage + annulation propre au démontage
     useEffect(() => {
         abortRef.current?.abort();
         abortRef.current = null;
@@ -86,8 +77,7 @@ export function useInvestmentCommittee(
         setError(null);
         setActiveAnalysis(null);
 
-        const scope: CommitteeStorageScope = { isTestMode, personaId: scopePersonaId };
-        void loadCommitteeHistory(scope).then((items) => {
+        void loadCommitteeHistory(REAL_SCOPE).then((items) => {
             if (cancelled) return;
             setHistory(items);
             setActiveAnalysis((prev) => prev ?? items[0] ?? null);
@@ -97,7 +87,7 @@ export function useInvestmentCommittee(
             cancelled = true;
             abortRef.current?.abort();
         };
-    }, [scopeKey, isTestMode, scopePersonaId]);
+    }, []);
 
     const cancelAnalysis = useCallback(() => {
         abortRef.current?.abort();
@@ -125,12 +115,6 @@ export function useInvestmentCommittee(
             const controller = new AbortController();
             abortRef.current = controller;
 
-            const launchScope: CommitteeStorageScope = {
-                isTestMode: live.isTestMode,
-                personaId: live.isTestMode ? live.activeTestPersonaId : null,
-            };
-            const launchScopeKey = committeeScopeKey(launchScope);
-
             setStatus('running');
             setError(null);
             setProgress({
@@ -152,7 +136,7 @@ export function useInvestmentCommittee(
                     state: live,
                     apiKey: liveKey,
                     isPrivacyMode: live.isPrivacyMode,
-                    isTestMode: Boolean(live.isTestMode),
+                    isTestMode: false,
                     targetAmountCad,
                     signal: controller.signal,
                     onProgress: (ev) => {
@@ -164,28 +148,12 @@ export function useInvestmentCommittee(
                     fetchFn: optionsRef.current.fetchFn,
                 });
 
-                const nowState = useFinanceStore.getState();
-                const currentScopeKey = committeeScopeKey({
-                    isTestMode: nowState.isTestMode,
-                    personaId: nowState.isTestMode ? nowState.activeTestPersonaId : null,
-                });
-                if (currentScopeKey !== launchScopeKey) {
-                    return null;
-                }
-
                 setActiveAnalysis(report);
                 setStatus('done');
                 setProgress(null);
 
-                const savedList = await saveCommitteeAnalysis(launchScope, report);
-                const afterSave = useFinanceStore.getState();
-                const afterKey = committeeScopeKey({
-                    isTestMode: afterSave.isTestMode,
-                    personaId: afterSave.isTestMode ? afterSave.activeTestPersonaId : null,
-                });
-                if (afterKey === launchScopeKey) {
-                    setHistory(savedList);
-                }
+                const savedList = await saveCommitteeAnalysis(REAL_SCOPE, report);
+                setHistory(savedList);
                 return report;
             } catch (err) {
                 if (isAbortErr(err)) {
@@ -223,12 +191,7 @@ export function useInvestmentCommittee(
 
     const deleteAnalysis = useCallback(
         async (id: string) => {
-            const live = useFinanceStore.getState();
-            const scope: CommitteeStorageScope = {
-                isTestMode: live.isTestMode,
-                personaId: live.isTestMode ? live.activeTestPersonaId : null,
-            };
-            const next = await deleteCommitteeAnalysis(scope, id);
+            const next = await deleteCommitteeAnalysis(REAL_SCOPE, id);
             setHistory(next);
             setActiveAnalysis((prev) => (prev?.id === id ? next[0] ?? null : prev));
         },
@@ -236,12 +199,7 @@ export function useInvestmentCommittee(
     );
 
     const clearHistory = useCallback(async () => {
-        const live = useFinanceStore.getState();
-        const scope: CommitteeStorageScope = {
-            isTestMode: live.isTestMode,
-            personaId: live.isTestMode ? live.activeTestPersonaId : null,
-        };
-        await clearCommitteeHistory(scope);
+        await clearCommitteeHistory(REAL_SCOPE);
         setHistory([]);
         setActiveAnalysis(null);
     }, []);

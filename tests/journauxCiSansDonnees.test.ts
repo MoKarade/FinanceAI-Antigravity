@@ -26,9 +26,9 @@ export const imprimeUnCorpsBrut = (contenu: string): number[] =>
 describe('[PTF-JOURNAL-PUBLIC] aucun workflow n\'imprime un corps de réponse brut', () => {
     it('balaie tous les workflows', () => {
         const fichiers = readdirSync(DOSSIER).filter((f) => /\.ya?ml$/.test(f));
-        // Anti-vacuité : les deux crons qui appellent le serveur existent toujours.
-        expect(fichiers).toContain('refresh-prices.yml');
-        expect(fichiers).toContain('fintable-sync.yml');
+        // Anti-vacuité : le dossier contient bien les workflows actifs.
+        expect(fichiers).toContain('ci.yml');
+        expect(fichiers).toContain('deploy-hosting.yml');
         const fautes = fichiers.flatMap((f) =>
             imprimeUnCorpsBrut(readFileSync(resolve(DOSSIER, f), 'utf8')).map((l) => `${f}:${l}`));
         expect(fautes, `corps de réponse imprimé tel quel dans un journal PUBLIC :\n${fautes.join('\n')}`).toEqual([]);
@@ -54,22 +54,12 @@ describe('[PTF-JOURNAL-PUBLIC] aucun workflow n\'imprime un corps de réponse br
 
 const normaliser = (p: string): string => p.replace(/\s+/g, ' ').trim();
 
-export const PROGRAMMES_JQ_AUTORISES: Record<string, string[]> = {
-    'fintable-sync.yml': [
-        'def b: if type == "boolean" then . else null end; '
-        + '{ok: (.ok | b), conflict: (.conflict | b), erreur_signalee: (.error != null)}',
-    ],
-    'refresh-prices.yml': [
-        'def b: if type == "boolean" then . else null end; '
-        + 'def code(liste): if . as $v | liste | index($v) then . else "autre" end; '
-        + '{ok: (.ok | b), conflict: (.conflict | b), erreur_signalee: (.error != null), saved: (.saved | b), '
-        + 'rafraichis: ((.refreshed // []) | length), inchanges: ((.unchanged // []) | length), '
-        + 'sautes: ((.skipped // []) | map(.reason | code(["no-quote","invalid-price","currency-mismatch","error"])) '
-        + '| group_by(.) | map({(.[0]): length}) | add), '
-        + 'fx: {ecriture: (.fx.ecriture | code(["taux","diagnostic","aucune","echec"])), '
-        + 'cause: (.fx.cause | code(["ok","partiel","perimee","reseau","http","reponse-illisible","manuel","jamais-tente"]))}}',
-    ],
-};
+export const PROGRAMMES_JQ_AUTORISES: Record<string, string[]> = {};
+
+const SAMPLE_JQ_ALLOWLIST = [
+    'def b: if type == "boolean" then . else null end; '
+    + '{ok: (.ok | b), conflict: (.conflict | b), erreur_signalee: (.error != null)}',
+];
 
 /** Ce qui, dans un workflow, n'est pas un programme jq autorisé (commentaires YAML exclus). */
 export const jqNonAutorises = (contenu: string, autorises: string[]): string[] => {
@@ -111,11 +101,11 @@ describe('[PTF-JOURNAL-PUBLIC-ERREURS] aucun workflow n\'imprime le texte d\'une
         ['programme en fichier', 'jq -f prog.jq /tmp/x'],
         ['champ libre ajouté au bon programme', "jq -c 'def b: if type == \"boolean\" then . else null end; {ok: (.ok | b), message: .message}' /tmp/x"],
     ])('détecteur : %s → refusé', (_nom, ligne) => {
-        expect(jqNonAutorises(ligne, PROGRAMMES_JQ_AUTORISES['fintable-sync.yml']).length).toBeGreaterThan(0);
+        expect(jqNonAutorises(ligne, SAMPLE_JQ_ALLOWLIST).length).toBeGreaterThan(0);
     });
 
     it('le programme autorisé passe, avec d\'autres espaces ; un commentaire qui parle de jq est ignoré', () => {
-        const [p] = PROGRAMMES_JQ_AUTORISES['fintable-sync.yml'];
+        const [p] = SAMPLE_JQ_ALLOWLIST;
         expect(jqNonAutorises(`  jq -c '${p.replace(/; /g, ';\n     ')}' /tmp/x`, [p])).toEqual([]);
         expect(jqNonAutorises("  # jq '.error' /tmp/x", [p])).toEqual([]);
     });

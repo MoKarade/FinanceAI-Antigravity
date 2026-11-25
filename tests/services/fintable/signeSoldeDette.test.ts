@@ -21,13 +21,11 @@
 // C'est ce qu'assertent les gardes de non-fuite, avec leur perturbation.
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('../../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn() }));
+vi.mock('../../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(), }));
 import { readFileSync } from 'node:fs';
 import { mapFintableSnapshot, signeSolde, type FintableAccountRole } from '../../../services/fintable/mapSnapshot';
 import { MAX_CLES_CITEES } from '../../../services/fintable/decode';
 import { runFintableBrowserSync } from '../../../services/fintable/browserSync';
-import { runFintableSync } from '../../../mcp/runFintableSync';
-import type { StateStore } from '../../../mcp/state/stateStore';
 import type { FintableClient } from '../../../services/fintable/client';
 import type { FintableSnapshot } from '../../../services/fintable/types';
 import type { AppState } from '../../../types';
@@ -289,22 +287,6 @@ describe('le message atteint le rapport LU par Marc', () => {
     it('navigateur : le crédit est dans `report.warnings`, sans montant', async () => {
         const { report } = await runFintableBrowserSync(ETAT, 'jeton_factice', {
             client: clientFake(), now: () => Date.parse('2026-09-16T12:00:00Z'),
-        });
-        const w = report.warnings.find((x) => x.includes('EN TA FAVEUR'));
-        expect(w).toBeDefined();
-        expect(w).not.toContain('8642');
-    });
-
-    it('cron : le crédit est dans `report.warnings`, sans montant', async () => {
-        const store: StateStore = {
-            get: async () => ETAT,
-            getWithVersion: async () => ({ state: ETAT, version: 1 }),
-            save: async () => ({ backupPath: '/backup' }),
-            canWrite: true,
-        };
-        // ⚠️ Contrat DIFFÉRENT du navigateur : le cron rend le rapport NU, pas `{ report }`.
-        const report = await runFintableSync(store, {
-            token: 't', roles: { [CARTE.id]: { kind: 'debt', debtName: 'Mastercard' } }, client: clientFake(),
         });
         const w = report.warnings.find((x) => x.includes('EN TA FAVEUR'));
         expect(w).toBeDefined();

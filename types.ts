@@ -111,7 +111,7 @@ type DocumentCategory =
   | 'INVOICE'        // facture importante
   | 'OTHER';         // divers
 
-export interface DocumentMeta {
+interface DocumentMeta {
   id: string;
   name: string;             // nom du fichier original
   category: DocumentCategory;
@@ -517,7 +517,7 @@ export interface PrivateBusiness {
 // ────────────────────────────────────────────────────────────────────
 // W5.x — Goals supplémentaires
 // ────────────────────────────────────────────────────────────────────
-export interface WeddingGoal {
+interface WeddingGoal {
   id: string;
   isActive: boolean;
   date: string;
@@ -786,7 +786,7 @@ export interface RetirementGoal {
   // déjà AllocationStrategy en interne, et l'optimizer côté UI compare les 5 avenirs.
 }
 
-export type GoalType = 'NET_WORTH' | 'CELI' | 'REER' | 'LIQUIDITY' | 'CUSTOM' | 'EXPENSE_OPTIMIZATION' | 'REBALANCING';
+type GoalType = 'NET_WORTH' | 'CELI' | 'REER' | 'LIQUIDITY' | 'CUSTOM' | 'EXPENSE_OPTIMIZATION' | 'REBALANCING';
 
 export interface FinancialGoal {
   id: string;
@@ -1211,6 +1211,8 @@ export interface AppState {
   /** [B4-CHAT-COST] Coût API CUMULÉ À VIE du chat en USD (survit à la suppression des conversations —
    *  affiché en CAD via fxRates.USD au rendu). ADDITIF optionnel (absent = 0). */
   aiChatCostUsdTotal?: number;
+  /** Coût API journalier du chat en USD par date `YYYY-MM-DD` (America/Toronto). ADDITIF optionnel. */
+  aiChatCostUsdByDay?: Record<string, number>;
   // W5.x — Nouveaux containers
   insurancePolicies?: InsurancePolicy[];
   rentalProperties?: RentalProperty[];

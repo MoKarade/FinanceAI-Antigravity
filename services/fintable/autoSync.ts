@@ -23,7 +23,6 @@ import { useFinanceStore } from '../../store/useFinanceStore';
 import { importWithRetry } from '../../utils/lazyWithRetry';
 import { logError } from '../errorLogger';
 import { lastProductiveAtSuivant } from './syncHealth';
-import { modeDonneesFictives } from '../../store/modeTestActif';
 
 /** Une passe réussie par 24 h — la cadence demandée. */
 const DAILY_MS = 24 * 3600_000;
@@ -93,14 +92,6 @@ function hasPendingCreditCardRecovery(report: FintableSyncReport | undefined): b
     if ((report.accountsWithoutRole ?? 0) > 0) return true;
     return (report.warnings ?? []).some((w) => w.includes('retard de postage'));
 }
-
-/**
- * Les données sont-elles FICTIVES MAINTENANT (lecture fraîche du store) ?
- *
- * ⚠️ Corps déménagé vers `store/modeTestActif.ts` — il vivait ici EN DOUBLE avec
- * `services/sync/syncPush.ts`. Alias local gardé pour ne pas toucher aux sites d'appel.
- */
-const isTestModeNow = modeDonneesFictives;
 
 /**
  * [FINTABLE-SYNC-XTAB-MUTEX] Verrou CROSS-ONGLET, quand le navigateur sait le faire.
@@ -200,7 +191,6 @@ async function runDailyFintableSyncGuarded(
         : '';
 
     if (!token) return { ran: false, reason: 'no-token' };
-    if (isTestModeNow()) return { ran: false, reason: 'test-mode' };
     const dueByAge = isDailySyncDue(state.fintableSyncReport, now(), maxAgeMs);
     const dueForCards = Boolean(opts.autoCreditCards) && hasPendingCreditCardRecovery(state.fintableSyncReport);
     if (!dueByAge && !dueForCards) return { ran: false, reason: 'fresh' };
@@ -238,7 +228,6 @@ async function runDailyFintableSyncGuarded(
             ? rawFreshToken.replace(/^["'\s]+|["'\s]+$/g, '').replace(/^Bearer\s+/i, '').replace(/\s+/g, '')
             : '';
         if (!freshToken) return { ran: false, reason: 'no-token' };
-        if (isTestModeNow()) return { ran: false, reason: 'test-mode' };
 
         // ⚠️ [FINTABLE-SYNC-STALE-BASE] `current` est la base PRÉ-fetch ; `getFreshState` relit le
         // store juste avant l'application pour qu'une saisie manuelle faite pendant le réseau ne
@@ -247,14 +236,6 @@ async function runDailyFintableSyncGuarded(
             getFreshState: () => useFinanceStore.getState(),
             ...(opts.autoCreditCards ? { autoCreditCards: true } : {}),
         });
-
-        // ⚠️ [Finding security-privacy #545, ÉLEVÉ, PROUVÉ par sonde] Re-vérifier le mode démo
-        // APRÈS le réseau, AVANT toute écriture : basculer en persona PENDANT le fetch (plusieurs
-        // secondes) faisait écrire de VRAIES transactions/soldes dans la session de DÉMONSTRATION
-        // affichée à un tiers — l'inverse exact de PERSONA-PURGE. Abandon honnête : rien n'est
-        // écrit (pas même le rapport), le travail réseau est perdu, la prochaine ouverture hors
-        // démo re-synchronisera.
-        if (isTestModeNow()) return { ran: false, reason: 'test-mode' };
 
         const setAppState = useFinanceStore.getState().setAppState;
         if (statePatch === null) {
@@ -268,7 +249,6 @@ async function runDailyFintableSyncGuarded(
                 .then((m) => m.scheduleBackgroundAiCategorization(newTransactionIds, {
                     getState: () => useFinanceStore.getState(),
                     setAppState: (patch) => useFinanceStore.getState().setAppState(patch),
-                    isTestModeNow,
                 }))
                 .catch(() => {});
         }
@@ -279,23 +259,18 @@ async function runDailyFintableSyncGuarded(
             message: '[FINTABLE-7] Sync auto : passe interrompue par une exception (chunk périmé ?).',
             error: err instanceof Error ? err : new Error(String(err)),
         });
-        // [Finding code-reviewer #545 §2] « Rapport toujours écrit » vaut AUSSI pour ce chemin :
-        // sans lui, la carte Réglages ne montrait RIEN de cette tentative. Gaté mode démo (jamais
-        // d'écriture pendant un persona, même un rapport).
-        if (!isTestModeNow()) {
-            const setAppState = useFinanceStore.getState().setAppState;
-            setAppState({
-                fintableSyncReport: {
-                    at: now(), cutoverDateUsed: null, accountsSeen: 0, accountsWithoutRole: 0,
-                    transactionsAdded: 0, transfersDetected: 0, cashUpdated: false, debtsUpdated: [],
-                    investmentReferenceCount: 0, warnings: [],
-                    error: err instanceof Error ? err.message : String(err),
-                    // [FINTABLE-SOURCE-TAG] Une tentative ratée ne « dé-produit » pas : report.
-                    lastProductiveAt: lastProductiveAtSuivant(
-                        useFinanceStore.getState().fintableSyncReport, 0, now()),
-                },
-            });
-        }
+        const setAppState = useFinanceStore.getState().setAppState;
+        setAppState({
+            fintableSyncReport: {
+                at: now(), cutoverDateUsed: null, accountsSeen: 0, accountsWithoutRole: 0,
+                transactionsAdded: 0, transfersDetected: 0, cashUpdated: false, debtsUpdated: [],
+                investmentReferenceCount: 0, warnings: [],
+                error: err instanceof Error ? err.message : String(err),
+                // [FINTABLE-SOURCE-TAG] Une tentative ratée ne « dé-produit » pas : report.
+                lastProductiveAt: lastProductiveAtSuivant(
+                    useFinanceStore.getState().fintableSyncReport, 0, now()),
+            },
+        });
         return { ran: false, reason: 'error' };
     } finally {
         releaseFintableSyncLock();

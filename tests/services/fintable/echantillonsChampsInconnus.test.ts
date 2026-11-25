@@ -15,14 +15,12 @@
  * La séparation est VÉRIFIÉE ici, jamais laissée à la vigilance
  * (`UN-COMMENTAIRE-QUI-RECLAME-DE-LA-VIGILANCE-EST-UNE-SOURCE-UNIQUE-MANQUANTE`).
  */
-vi.mock('../../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn() }));
+vi.mock('../../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(), }));
 
 import { describe, it, expect, vi } from 'vitest';
 import { echantillonsClesInconnues, MAX_CLES_CITEES } from '../../../services/fintable/decode';
 import { runFintableBrowserSync } from '../../../services/fintable/browserSync';
-import { runFintableSync } from '../../../mcp/runFintableSync';
 import type { FintableClient } from '../../../services/fintable/client';
-import type { StateStore } from '../../../mcp/state/stateStore';
 import type { AppState } from '../../../types';
 
 /** Valeur TÉMOIN : aucun autre champ du rapport ne peut la produire par hasard. */
@@ -144,26 +142,5 @@ describe('la valeur atteint l\'ÉCRAN, et jamais le rapport', () => {
             client: clientFake(), now: () => Date.parse('2026-09-16T12:00:00Z'),
         });
         expect(JSON.stringify(r.statePatch ?? {})).not.toContain('USD 4.40');
-    });
-
-    it('⚠️⚠️ cron : l\'échantillon n\'existe PAS dans son retour — fuite structurellement impossible', async () => {
-        // Le chemin serveur `cat` son résultat dans un journal public. Il ne RRND que le rapport,
-        // donc il n'a aucun moyen d'émettre ces valeurs, même par erreur de câblage future.
-        const store: StateStore = {
-            get: async () => ETAT,
-            getWithVersion: async () => ({ state: ETAT, version: 1 }),
-            save: async () => ({ backupPath: '/b' }),
-            canWrite: true,
-        };
-        const report = await runFintableSync(store, {
-            token: 't', roles: { acc_1: { kind: 'debt', debtName: '' } }, client: clientFake(),
-        });
-        const serialise = JSON.stringify(report);
-        expect(serialise).not.toContain('USD 4.40');
-        expect(serialise).not.toContain('MARC TREMBLAY');
-        // Le champ reste NOMMÉ côté serveur : l'inventaire n'est pas ce qu'on retire, c'est la valeur.
-        expect(serialise).toContain('external_memo');
-        // Et il n'y a pas de porte : la clé elle-même est absente du contrat de retour.
-        expect(Object.keys(report)).not.toContain('echantillonsChampsInconnus');
     });
 });

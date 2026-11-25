@@ -28,7 +28,6 @@ interface Props {
 
 export const HistorySyncDoctor: React.FC<Props> = ({ onApplyQuoteSymbol, isSyncing }) => {
     const report = useSyncExternalStore(subscribeHistorySyncReport, getHistorySyncReport, getHistorySyncReport);
-    const isTestMode = useFinanceStore((s) => s.isTestMode);
     const isPrivacyMode = useFinanceStore((s) => s.isPrivacyMode);
     const assets = useFinanceStore((s) => s.assets);
     const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -54,7 +53,6 @@ export const HistorySyncDoctor: React.FC<Props> = ({ onApplyQuoteSymbol, isSynci
         }
     };
 
-    if (isTestMode) return null; // ceinture — tickers réels, jamais en démo persona
     if (!report) return null;
     // [FUTURE-HISTORY-EMPTY-CAUSE] Le critère (quelles raisons sont actionnables + dédup par
     // symbole) vit désormais dans `skipsActionnables` : l'état vide du graphe « Évolution » le lit
@@ -219,7 +217,7 @@ export const HistorySyncDoctor: React.FC<Props> = ({ onApplyQuoteSymbol, isSynci
                                 // automatique au prochain chargement » — la promesse que le lot 80
                                 // vient de retirer en amont, recopiée ici. Un repli s'atteint quand
                                 // on ne SAIT pas : il ne peut donc rien promettre.
-                                ? 'Échec du fournisseur de cours pour ce titre — voir le journal des erreurs (écran Système).'
+                                ? 'Échec du fournisseur de cours pour ce titre.'
                                 : 'Aucun historique trouvé pour ce titre.')}
                         {s.reason === 'empty' && (suggestions[s.symbol]?.length ?? 0) > 0 && (
                             <ul className="mt-1.5 flex flex-wrap gap-2" aria-label={`Titres suggérés pour ${s.symbol}`}>

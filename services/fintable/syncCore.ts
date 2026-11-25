@@ -13,7 +13,7 @@
 // deux chemins reste le TRANSPORT et le PORTEUR D'ÉTAT ; tout le reste vit ici.
 
 import type { AppState, Transaction } from '../../types';
-import { applyDocument, type DocumentPayload } from '../../mcp/ingest/applyDocument';
+import { applyDocument, type DocumentPayload } from '../ingest/applyDocument';
 import { deriveCutoverDate, deriveCutoverDatesByAccount, plancherNonAttribuable, cleCompte } from './deriveCutoverDate';
 
 interface CutoverDecision {

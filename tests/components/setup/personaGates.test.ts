@@ -7,7 +7,7 @@
 // Réutilise la SOURCE UNIQUE (`PAGE_SETUP` + `REQUIREMENTS`) : si on ajoute un
 // persona, un prérequis ou une page, ce test attrape toute régression de gating.
 import { describe, it, expect } from 'vitest';
-import { TEST_PERSONAS } from '../../../services/testPersonas';
+import { TEST_PERSONAS } from '../../fixtures/testPersonas';
 import { PAGE_SETUP } from '../../../components/setup/PageSetupGate';
 import { REQUIREMENTS } from '../../../components/setup/requirements';
 import type { FinanceState } from '../../../store/useFinanceStore';

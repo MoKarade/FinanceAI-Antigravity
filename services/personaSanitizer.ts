@@ -14,7 +14,7 @@
 // re-render/re-hash parasite).
 
 import type { AppState } from '../types';
-import { isPersonaArtifactId } from './testPersonas/artifactIds';
+import { isPersonaArtifactId } from './migrations/personaArtifactIds';
 
 /** Tranches TABLEAU de AppState où un persona plante des fixtures à id. */
 const ARRAY_SLICES = [

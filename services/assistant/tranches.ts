@@ -315,6 +315,7 @@ export const TRANCHES_EXCLUES: Record<string, string> = {
     aiConversations: 'historique de l\'ancien chat',
     activeAiConversationId: 'historique de l\'ancien chat',
     aiChatCostUsdTotal: 'compteur de coût IA, écrit par le seul point de contact SDK',
+    aiChatCostUsdByDay: 'répartition journalière du coût IA (YYYY-MM-DD, America/Toronto)',
     aiChatModel: 'réglage du modèle, piloté par le sélecteur du panneau de l\'assistant',
     // Documents : métadonnées de fichiers stockés à part (un ajout sans octets créerait une pièce fantôme).
     documents: 'métadonnées de pièces jointes dont les octets vivent ailleurs',
@@ -333,10 +334,6 @@ export const TRANCHES_EXCLUES: Record<string, string> = {
     projectionRunMC: 'bascule d\'interface (Monte Carlo), pilotée par lancer_projection',
     isProjectionLocked: 'verrou d\'interface de la projection',
     revealedProjectionSig: 'état d\'interface de la projection',
-    // Mode test : le jeu fictif et l'instantané des vraies données ne passent jamais par l'assistant.
-    isTestMode: 'mode test (bascule d\'interface)',
-    realDataSnapshot: 'instantané des vraies données pendant le mode test — jamais exposé',
-    activeTestPersonaId: 'mode test',
     // Valoria : préférences pilotées directement dans l'onglet Valoria.
     valoriaWatchlist: 'liste de suivi Valoria pilotée directement dans l onglet Valoria',
     valoriaRiskProfile: 'profil de risque Valoria piloté directement dans l onglet Valoria',

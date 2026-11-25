@@ -97,42 +97,17 @@ export async function fermerToastsSiPresents(page: Page): Promise<void> {
 }
 
 /**
- * Charge un persona spécifique dans le panneau Mode Test (`/#SETTINGS`).
- */
-export async function chargerPersonaDansModeTest(page: Page, personaId: PersonaId): Promise<void> {
-  await page.goto('/#SETTINGS');
-  await page.waitForLoadState('domcontentloaded');
-  await passerGardeLocale(page);
-  await ecarterLeRail(page);
-
-  const selectPersona = page
-    .locator('select')
-    .filter({ has: page.locator(`option[value="${personaId}"]`) })
-    .first();
-  await expect(selectPersona).toBeVisible({ timeout: 10_000 });
-
-  if ((await selectPersona.inputValue()) !== personaId) {
-    await selectPersona.selectOption(personaId);
-    await page.waitForTimeout(300);
-  }
-  await fermerToastsSiPresents(page);
-}
-
-/**
- * Prépare la page sur `#FUTURE` avec le persona demandé actif.
+ * Prépare la page sur `#FUTURE` avec le persona demandé injecté dans `localStorage`.
  */
 export async function preparerFuturAvecPersona(
   page: Page,
   personaId: PersonaId = 'couple-confort',
 ): Promise<void> {
   await page.addInitScript(scriptBypassOnboarding());
-  await page.goto('/');
+  await page.goto('/?nogate=1');
   await page.waitForLoadState('domcontentloaded');
   await passerGardeLocale(page);
-  await activateTestMode(page);
-  if (personaId !== 'couple-confort') {
-    await chargerPersonaDansModeTest(page, personaId);
-  }
+  await activateTestMode(page, personaId);
   await naviguerVersFutur(page);
 }
 
@@ -146,32 +121,6 @@ export async function naviguerVersFutur(page: Page): Promise<void> {
   await fermerToastsSiPresents(page);
   await expect(page.getByRole('group', { name: /Courbe de vie/ })).toBeVisible({ timeout: 20_000 });
   await expect(zoneScenarios(page)).toBeVisible({ timeout: 15_000 });
-}
-
-/**
- * Quitte le mode test via le bandeau ou `/#SETTINGS`.
- */
-export async function quitterModeTest(page: Page): Promise<void> {
-  const btnBandeau = page.getByRole('button', { name: /Quitter le mode test/i }).first();
-  if (await btnBandeau.isVisible().catch(() => false)) {
-    await btnBandeau.click();
-  } else {
-    await page.goto('/#SETTINGS');
-    await page.waitForLoadState('domcontentloaded');
-    await ecarterLeRail(page);
-    const btnSettings = page.getByRole('button', { name: /Désactiver le mode test|Quitter le mode test/i }).first();
-    if (await btnSettings.isVisible().catch(() => false)) {
-      await btnSettings.click();
-      const btnOui = page.getByRole('button', { name: /^Oui$/i }).first();
-      if (await btnOui.isVisible({ timeout: 3_000 }).catch(() => false)) {
-        await btnOui.click();
-      }
-    }
-  }
-  await page
-    .waitForFunction(() => !document.body.innerText.includes('MODE TEST'), { timeout: 10_000 })
-    .catch(() => {});
-  await fermerToastsSiPresents(page);
 }
 
 /* -------------------------------------------------------------------------- */

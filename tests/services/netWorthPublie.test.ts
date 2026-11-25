@@ -21,7 +21,7 @@ import { NET_WORTH_DAILY_ASSETS, FIELD_KIND } from '../../services/projection/da
 import type { ProjectionResult, ProjectionChartPoint } from '../../services/projection/types';
 import type { BudgetConfig, User } from '../../types';
 import { stripCommentsJsx, partDeCodeRestante } from '../../utils/stripComments';
-import { extractYearlySeries } from '../../mcp/whatIf';
+import { extractYearlySeries } from '../../services/aiTools/whatIf';
 
 /** Terme du patrimoine → champ PUBLIÉ dans `chartData`. Les trois dettes sont sommées dans `DettesNonImmo`. */
 const PUBLIE_PAR_TERME: Record<keyof NetWorthParts, string> = {

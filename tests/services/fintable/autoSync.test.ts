@@ -40,7 +40,6 @@ beforeEach(() => {
     useFinanceStore.getState().resetState();
     useFinanceStore.setState({
         apiKeys: { gemini: '', anthropic: '', finnhub: '', fintable: 'ft_test' },
-        isTestMode: false,
         fintableSyncReport: undefined,
     });
 });
@@ -66,13 +65,6 @@ describe('maybeRunDailyFintableSync — gardes', () => {
         useFinanceStore.setState({ apiKeys: { gemini: '', anthropic: '', finnhub: '', fintable: '' } });
         const out = await maybeRunDailyFintableSync();
         expect(out).toEqual({ ran: false, reason: 'no-token' });
-        expect(runMock).not.toHaveBeenCalled();
-    });
-
-    it('en MODE TEST : ne court JAMAIS (données réelles ↮ persona)', async () => {
-        useFinanceStore.setState({ isTestMode: true });
-        const out = await maybeRunDailyFintableSync();
-        expect(out).toEqual({ ran: false, reason: 'test-mode' });
         expect(runMock).not.toHaveBeenCalled();
     });
 
@@ -215,32 +207,6 @@ describe('withCrossTabLock — générique (lot 27, partagé auto ↔ manuel ENT
             message: expect.stringContaining('[FINTABLE-SYNC-XTAB]'),
         }));
         logErrorSpy.mockRestore();
-    });
-});
-
-describe('maybeRunDailyFintableSync — TOCTOU mode démo (finding security-privacy #545, prouvé par sonde)', () => {
-    it('basculer en mode DÉMO pendant le fetch → RIEN n\'est écrit (ni contenu, ni rapport)', async () => {
-        const personaTx = { id: -7, date: '2026-07-01', payee: 'persona', amount: -1, category: 'Autre', status: 'processed' as const };
-        useFinanceStore.setState({ transactions: [personaTx] as never });
-        const report = mkReport({ transactionsAdded: 1 });
-        runMock.mockImplementation(async (current: { transactions: unknown[] }) => {
-            // Simule la bascule en démo PENDANT l'attente réseau (le scénario mesuré par l'agent).
-            useFinanceStore.setState({ isTestMode: true });
-            return {
-                report,
-                statePatch: {
-                    transactions: [...current.transactions, { id: 42, payee: 'REAL-TXN', amount: -99, date: '2026-07-30', category: 'Autre', status: 'processed' }],
-                    fintableSyncReport: report,
-                },
-            };
-        });
-
-        const out = await maybeRunDailyFintableSync();
-
-        expect(out).toEqual({ ran: false, reason: 'test-mode' });
-        // Les VRAIES données n'ont PAS contaminé la session de démonstration.
-        expect(useFinanceStore.getState().transactions.some((t) => t.id === 42)).toBe(false);
-        expect(useFinanceStore.getState().fintableSyncReport).toBeUndefined();
     });
 });
 

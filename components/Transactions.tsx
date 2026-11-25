@@ -630,12 +630,6 @@ export const Transactions: React.FC<TransactionsProps> = ({
             showToast('Export CSV refusé : le mode discret est actif. Le fichier contiendrait tes marchands et tes montants en clair.', 'info');
             return true;
         }
-        if (e.name === 'CsvRefusedTestModeError') {
-            // Le message nomme l'ISSUE (revenir aux données réelles) — jamais « réessaie » :
-            // aucun nouvel essai ne réussira tant que le mode est actif.
-            showToast("Export CSV refusé : l’app affiche des données fictives (mode test / bac à sable). Le fichier aurait l’allure de vraies transactions. Reviens aux données réelles pour l’exporter.", 'info');
-            return true;
-        }
         return false;
     };
 

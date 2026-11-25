@@ -29,7 +29,7 @@ import { readFileSync } from 'node:fs';
 const ROOT = process.cwd();
 /** Dossiers de PRODUCTION susceptibles de parler au SDK Anthropic. Les tests sont hors périmètre :
  *  un test a le droit de convertir des schémas lui-même (c'est ce que fait `toolSchemaContract`). */
-const SCAN_DIRS = ['services', 'hooks', 'components', 'api', 'mcp', 'utils', 'store'];
+const SCAN_DIRS = ['services', 'hooks', 'components', 'server', 'utils', 'store'];
 
 function walk(dir: string, out: string[] = []): string[] {
     for (const entry of readdirSync(dir)) {

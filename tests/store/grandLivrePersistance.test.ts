@@ -24,12 +24,12 @@ vi.mock('../../services/errorLogger', async (orig) => ({
 }));
 
 import type { BrokerAccountRegime, BrokerInstrument, BrokerLedgerEvent } from '../../types';
-import { useFinanceStore, getHydrationStatus, personaResetBase } from '../../store/useFinanceStore';
+import { useFinanceStore, getHydrationStatus } from '../../store/useFinanceStore';
 import { initialState, getInitialStateWithMigration } from '../../store/etatParDefaut';
 import { extrairePersistable } from '../../store/optionsPersistance';
 import { verifierTypesRestaures } from '../../services/verifierTypesRestaures';
 import { hasMeaningfulData } from '../../utils/onboarding';
-import { buildDefaultAppState, normalizeAppState } from '../../mcp/state/appStateDefaults';
+import { buildDefaultAppState, normalizeAppState } from '../../services/aiTools/appStateDefaults';
 import { sanitizePersonaArtifacts } from '../../services/personaSanitizer';
 import { BackupSchema } from '../../components/settings/BackupPanel';
 
@@ -64,7 +64,6 @@ const INSTRUMENTS: BrokerInstrument[] = [
 
 afterEach(() => {
     localStorage.removeItem(STORE_KEY);
-    if (useFinanceStore.getState().isTestMode) useFinanceStore.getState().disableTestMode();
     useFinanceStore.setState({ brokerLedger: undefined, instruments: undefined });
 });
 
@@ -73,8 +72,6 @@ describe('[PTF-L1A] tri-état : `undefined` = jamais importé, jamais `[]` par d
         for (const cle of ['brokerLedger', 'instruments'] as const) {
             expect(Object.hasOwn(initialState, cle), `${cle} doit être une clé du littéral (PERSONA-PURGE)`).toBe(true);
             expect(initialState[cle]).toBeUndefined();
-            expect(Object.hasOwn(personaResetBase(), cle)).toBe(true);
-            expect(personaResetBase()[cle]).toBeUndefined();
         }
     });
 
@@ -141,19 +138,9 @@ describe('[PTF-L1A] réhydratation : un grand livre réel ne vide pas l\'app', (
     });
 });
 
-describe('[PTF-L1A] démo persona : le vrai grand livre ne la traverse pas', () => {
-    it('entrée en mode test → livre et référentiel à `undefined` ; sortie → restaurés', () => {
-        useFinanceStore.setState({ brokerLedger: LIVRE, instruments: INSTRUMENTS });
-        useFinanceStore.getState().enableTestMode({}, 'persona-test');
-        expect(useFinanceStore.getState().brokerLedger).toBeUndefined();
-        expect(useFinanceStore.getState().instruments).toBeUndefined();
-        useFinanceStore.getState().disableTestMode();
-        expect(useFinanceStore.getState().brokerLedger).toEqual(LIVRE);
-        expect(useFinanceStore.getState().instruments).toEqual(INSTRUMENTS);
-    });
-
+describe('[PTF-L1A] nettoyeur d\'artefacts', () => {
     it('le nettoyeur d\'artefacts retire un événement à id de persona, garde le réel, ne crée pas la clé', () => {
-        // `persona-tx-…` est un préfixe du registre des artefacts (`services/testPersonas/artifactIds.ts`).
+        // `persona-tx-…` est un préfixe du registre des artefacts (`services/migrations/personaArtifactIds.ts`).
         const { state } = sanitizePersonaArtifacts({ brokerLedger: [LIVRE[0], { ...LIVRE[1], id: 'persona-tx-1' }] });
         expect(state.brokerLedger?.map((e) => e.id)).toEqual(['e1']);
         expect(Object.hasOwn(sanitizePersonaArtifacts({ assets: [] }).state, 'brokerLedger')).toBe(false);
@@ -219,10 +206,9 @@ describe('[PTF-L1E] régimes des comptes du livre : même contrat tri-état que 
         localStorage.removeItem('app_broker_account_regimes');
     });
 
-    it('défauts store, persona et MCP : clé PRÉSENTE à `undefined`, jamais matérialisée au JSON', () => {
+    it('défauts store et MCP : clé PRÉSENTE à `undefined`, jamais matérialisée au JSON', () => {
         expect(Object.hasOwn(initialState, 'brokerAccountRegimes')).toBe(true);
         expect(initialState.brokerAccountRegimes).toBeUndefined();
-        expect(Object.hasOwn(personaResetBase(), 'brokerAccountRegimes')).toBe(true);
         expect(Object.hasOwn(buildDefaultAppState(), 'brokerAccountRegimes')).toBe(true);
         expect(Object.hasOwn(JSON.parse(JSON.stringify(normalizeAppState({}))), 'brokerAccountRegimes')).toBe(false);
     });
@@ -243,14 +229,6 @@ describe('[PTF-L1E] régimes des comptes du livre : même contrat tri-état que 
         localStorage.setItem(STORE_KEY, JSON.stringify({ state: { assets: [] }, version: 7 }));
         await useFinanceStore.persist.rehydrate();
         expect(useFinanceStore.getState().brokerAccountRegimes).toBeUndefined();
-    });
-
-    it('démo persona : les régimes réels ne la traversent pas, et reviennent à la sortie', () => {
-        useFinanceStore.setState({ brokerAccountRegimes: REGIMES });
-        useFinanceStore.getState().enableTestMode({}, 'persona-test');
-        expect(useFinanceStore.getState().brokerAccountRegimes).toBeUndefined();
-        useFinanceStore.getState().disableTestMode();
-        expect(useFinanceStore.getState().brokerAccountRegimes).toEqual(REGIMES);
     });
 
     it('sauvegarde JSON : le schéma les garde, un backup sans eux ne les invente pas, la relecture les retrouve', () => {

@@ -24,39 +24,24 @@ import {
 import { messageDeRefus } from '../services/projection/verifierEntreesMoteur';
 import { logError } from '../services/errorLogger';
 
-// Clé localStorage mono-propriétaire : identifie quel persona de test possède le slot IDB `'test'`
-// afin d'éviter toute fuite inter-personas lors d'un changement de persona hors onglet Futur.
-const TEST_PERSONA_STORAGE_KEY = 'financeai:grandCalculTestPersona:v1';
-
 const UNREADABLE_ERROR_MESSAGE =
     'Donnée illisible — la sauvegarde locale du Grand Calcul est corrompue ou inaccessible. Relancez un calcul.';
 
 // Contrôleur actif et dernier contexte de configuration au niveau module pour survivre
-// à la navigation entre onglets/tiroirs tout en permettant une annulation ou une isolation
-// immédiate lors d'un changement de mode/persona.
-interface LaunchContext {
-    isTestMode: boolean;
-    personaId: string;
-    config: GrandCalculConfig;
-}
-
+// à la navigation entre onglets/tiroirs.
 let _activeController: AbortController | null = null;
 let _activeLaunchToken = 0;
-let _activeLaunchContext: LaunchContext | null = null;
-let _lastKnownConfig: LaunchContext | null = null;
+let _activeLaunchConfig: GrandCalculConfig | null = null;
+let _lastKnownConfig: GrandCalculConfig | null = null;
 
-// Suivi par slot propriétaire de la persistance IDB en vol (chiffrement AES-GCM + commit) :
-// empêche la réactivation de « Relancer » / « Effacer » avant le commit effectif en IDB
-// sans bloquer un autre persona ou mode si l'utilisateur bascule en cours de sauvegarde.
+// Suivi de la persistance IDB en vol (chiffrement AES-GCM + commit) :
+// empêche la réactivation de « Relancer » / « Effacer » avant le commit effectif en IDB.
+const REAL_OWNER_KEY = 'real';
 const _savingCounts = new Map<string, number>();
 const _savingListeners = new Set<() => void>();
 
-function saveSlotKey(isTestMode: boolean, personaId: string | null): string {
-    return isTestMode ? `test:${personaId ?? ''}` : 'real';
-}
-
-function isOwnerSaving(isTestMode: boolean, personaId: string | null): boolean {
-    return (_savingCounts.get(saveSlotKey(isTestMode, personaId)) ?? 0) > 0;
+function isOwnerSaving(): boolean {
+    return (_savingCounts.get(REAL_OWNER_KEY) ?? 0) > 0;
 }
 
 function notifySavingListeners(): void {
@@ -111,28 +96,7 @@ function createSlotSerializer() {
     };
 }
 
-const enqueueTestSlotOp = createSlotSerializer();
 const enqueueRealSlotOp = createSlotSerializer();
-let _testSlotEpoch = 0;
-
-// Seul point de sortie autorisé pour retirer la propriété du slot `'test'` :
-// garantit l'atomicité entre `TEST_PERSONA_STORAGE_KEY = null` et l'effacement IDB sérialisé.
-function purgeTestSlot(): Promise<void> {
-    _testSlotEpoch += 1;
-    writeSavedTestPersonaId(null);
-    return enqueueTestSlotOp(() =>
-        Promise.resolve(clearGrandCalculResult({ isTestMode: true })).catch(() => undefined),
-    );
-}
-
-function sameOwner(
-    ctx: LaunchContext | null,
-    isTestMode: boolean,
-    activeTestPersonaId: string | null,
-): boolean {
-    if (!ctx) return false;
-    return ctx.isTestMode === isTestMode && ctx.personaId === (activeTestPersonaId ?? '');
-}
 
 function configFromResult(result: GrandCalculResult): GrandCalculConfig {
     return {
@@ -149,28 +113,6 @@ function sameConfig(a: GrandCalculConfig, b: GrandCalculConfig): boolean {
         a.includeHistoricalCrises === b.includeHistoricalCrises &&
         a.seed === b.seed
     );
-}
-
-function readSavedTestPersonaId(): string | null {
-    try {
-        if (typeof localStorage === 'undefined') return null;
-        return localStorage.getItem(TEST_PERSONA_STORAGE_KEY);
-    } catch {
-        return null;
-    }
-}
-
-function writeSavedTestPersonaId(personaId: string | null): void {
-    try {
-        if (typeof localStorage === 'undefined') return;
-        if (personaId === null) {
-            localStorage.removeItem(TEST_PERSONA_STORAGE_KEY);
-        } else {
-            localStorage.setItem(TEST_PERSONA_STORAGE_KEY, personaId);
-        }
-    } catch {
-        // Ignorer en environnement restreint (navigation privée / quota)
-    }
 }
 
 function defaultGrandCalculConfig(): GrandCalculConfig {
@@ -205,8 +147,6 @@ export function useGrandCalcul(params: SimulationParams): UseGrandCalculReturn {
     const grandCalculStatus = useFinanceStore((s) => s.grandCalculStatus);
     const grandCalculProgress = useFinanceStore((s) => s.grandCalculProgress);
     const grandCalculError = useFinanceStore((s) => s.grandCalculError);
-    const isTestMode = useFinanceStore((s) => s.isTestMode);
-    const activeTestPersonaId = useFinanceStore((s) => s.activeTestPersonaId);
 
     const setGrandCalculResult = useFinanceStore((s) => s.setGrandCalculResult);
     const setGrandCalculStatus = useFinanceStore((s) => s.setGrandCalculStatus);
@@ -216,11 +156,11 @@ export function useGrandCalcul(params: SimulationParams): UseGrandCalculReturn {
 
     const [config, setConfig] = useState<GrandCalculConfig>(() => {
         const snap = useFinanceStore.getState();
-        if (_activeController !== null && sameOwner(_activeLaunchContext, snap.isTestMode, snap.activeTestPersonaId)) {
-            return { ..._activeLaunchContext!.config };
+        if (_activeController !== null && _activeLaunchConfig !== null) {
+            return { ..._activeLaunchConfig };
         }
-        if (sameOwner(_lastKnownConfig, snap.isTestMode, snap.activeTestPersonaId)) {
-            return { ..._lastKnownConfig!.config };
+        if (_lastKnownConfig !== null) {
+            return { ..._lastKnownConfig };
         }
         if (snap.grandCalculResult !== null) {
             return configFromResult(snap.grandCalculResult);
@@ -240,15 +180,11 @@ export function useGrandCalcul(params: SimulationParams): UseGrandCalculReturn {
 
     const isSaving = useMemo(() => {
         void savingVersion;
-        return isOwnerSaving(isTestMode, activeTestPersonaId);
-    }, [savingVersion, isTestMode, activeTestPersonaId]);
+        return isOwnerSaving();
+    }, [savingVersion]);
 
     const userEditedConfigRef = useRef<boolean>(false);
     const unreadableOnDiskRef = useRef<boolean>(false);
-    const prevModeRef = useRef<{ isTestMode: boolean; activeTestPersonaId: string | null }>({
-        isTestMode,
-        activeTestPersonaId,
-    });
 
     const updateConfig = useCallback((patch: Partial<GrandCalculConfig>) => {
         userEditedConfigRef.current = true;
@@ -261,12 +197,7 @@ export function useGrandCalcul(params: SimulationParams): UseGrandCalculReturn {
                         ? clampGrandCalculIterations(patch.iterations)
                         : prev.iterations,
             };
-            const live = useFinanceStore.getState();
-            _lastKnownConfig = {
-                isTestMode: live.isTestMode,
-                personaId: live.activeTestPersonaId ?? '',
-                config: next,
-            };
+            _lastKnownConfig = next;
             return next;
         });
     }, []);
@@ -284,42 +215,12 @@ export function useGrandCalcul(params: SimulationParams): UseGrandCalculReturn {
     }, [params.entreesRefusees]);
 
     useEffect(() => {
-        const prev = prevModeRef.current;
-        const modeChanged =
-            prev.isTestMode !== isTestMode || prev.activeTestPersonaId !== activeTestPersonaId;
-        prevModeRef.current = { isTestMode, activeTestPersonaId };
-
-        if (modeChanged) {
-            _activeLaunchToken += 1;
-            if (_activeController) {
-                _activeController.abort();
-                _activeController = null;
-            }
-            _activeLaunchContext = null;
-            _lastKnownConfig = null;
-            userEditedConfigRef.current = false;
-            unreadableOnDiskRef.current = false;
-            setConfig(defaultGrandCalculConfig());
-            setUnreadableStorage(false);
-
-            // Changement en direct entre deux personas de test : purger le slot IDB `'test'`
-            // pour empêcher la restauration du résultat du persona précédent.
-            if (prev.isTestMode && isTestMode && prev.activeTestPersonaId !== activeTestPersonaId) {
-                resetGrandCalcul();
-                void purgeTestSlot();
-                return;
-            }
-        }
-
-        // Ne jamais écraser un calcul actif appartenant au même contexte lors d'un retour sur Futur,
-        // mais avorter immédiatement un worker orphelin si mode/persona a changé ou a été réinitialisé hors onglet.
+        // Ne jamais écraser un calcul actif lors d'un retour sur Futur,
+        // mais avorter immédiatement un worker orphelin s'il n'est plus en cours.
         if (_activeController !== null) {
-            if (
-                sameOwner(_activeLaunchContext, isTestMode, activeTestPersonaId) &&
-                useFinanceStore.getState().grandCalculStatus === 'running'
-            ) {
-                if (!userEditedConfigRef.current && _activeLaunchContext) {
-                    const activeCfg = _activeLaunchContext.config;
+            if (useFinanceStore.getState().grandCalculStatus === 'running') {
+                if (!userEditedConfigRef.current && _activeLaunchConfig) {
+                    const activeCfg = _activeLaunchConfig;
                     setConfig((prevCfg) => (sameConfig(prevCfg, activeCfg) ? prevCfg : { ...activeCfg }));
                 }
                 return;
@@ -327,74 +228,41 @@ export function useGrandCalcul(params: SimulationParams): UseGrandCalculReturn {
             _activeLaunchToken += 1;
             _activeController.abort();
             _activeController = null;
-            _activeLaunchContext = null;
+            _activeLaunchConfig = null;
             _lastKnownConfig = null;
             userEditedConfigRef.current = false;
             resetGrandCalcul();
             setConfig(defaultGrandCalculConfig());
         }
 
-        if (_lastKnownConfig && !sameOwner(_lastKnownConfig, isTestMode, activeTestPersonaId)) {
-            _lastKnownConfig = null;
-        }
-
         const stateSnapshot = useFinanceStore.getState();
         if (stateSnapshot.grandCalculResult !== null) {
             if (!userEditedConfigRef.current) {
-                const synced = sameOwner(_lastKnownConfig, isTestMode, activeTestPersonaId)
-                    ? _lastKnownConfig!.config
-                    : configFromResult(stateSnapshot.grandCalculResult);
+                const synced = _lastKnownConfig ?? configFromResult(stateSnapshot.grandCalculResult);
                 setConfig((prevCfg) => (sameConfig(prevCfg, synced) ? prevCfg : { ...synced }));
             }
             return;
-        }
-
-        // En mode test, porte de lecture stricte : seul le persona propriétaire enregistré
-        // dans `TEST_PERSONA_STORAGE_KEY` a le droit de lire le slot IDB `'test'`.
-        if (isTestMode) {
-            const currentPersonaKey = activeTestPersonaId ?? '';
-            const savedPersona = readSavedTestPersonaId();
-            if (savedPersona !== currentPersonaKey) {
-                _lastKnownConfig = null;
-                userEditedConfigRef.current = false;
-                unreadableOnDiskRef.current = false;
-                setConfig(defaultGrandCalculConfig());
-                setUnreadableStorage(false);
-                if (savedPersona !== null) {
-                    void purgeTestSlot();
-                }
-                setGrandCalculError(null);
-                setGrandCalculStatus('idle');
-                return;
-            }
         }
 
         let effectCancelled = false;
         const restoreToken = _activeLaunchToken;
         setGrandCalculStatus('restoring');
 
-        const enqueueRead = isTestMode ? enqueueTestSlotOp : enqueueRealSlotOp;
-        void enqueueRead(() =>
+        void enqueueRealSlotOp(() =>
             effectCancelled
                 ? Promise.resolve({ status: 'empty' } as const)
-                : Promise.resolve(loadGrandCalculResult({ isTestMode })).catch(
+                : Promise.resolve(loadGrandCalculResult({ isTestMode: false })).catch(
                       () => ({ status: 'empty' }) as const,
                   ),
         ).then((loaded) => {
             if (effectCancelled) return;
             if (restoreToken !== _activeLaunchToken) return;
             const live = useFinanceStore.getState();
-            if (live.isTestMode !== isTestMode || live.activeTestPersonaId !== activeTestPersonaId) {
-                return;
-            }
             if (
                 _activeController !== null ||
                 live.grandCalculStatus === 'running' ||
                 live.grandCalculResult !== null
             ) {
-                return;
-            }
-            if (isTestMode && readSavedTestPersonaId() !== (activeTestPersonaId ?? '')) {
                 return;
             }
 
@@ -426,8 +294,6 @@ export function useGrandCalcul(params: SimulationParams): UseGrandCalculReturn {
             effectCancelled = true;
         };
     }, [
-        isTestMode,
-        activeTestPersonaId,
         resetGrandCalcul,
         setGrandCalculError,
         setGrandCalculResult,
@@ -466,15 +332,8 @@ export function useGrandCalcul(params: SimulationParams): UseGrandCalculReturn {
             _activeController = controller;
             const token = ++_activeLaunchToken;
 
-            const launchIsTest = liveState.isTestMode;
-            const launchPersona = liveState.activeTestPersonaId ?? '';
-            const launchCtx: LaunchContext = {
-                isTestMode: launchIsTest,
-                personaId: launchPersona,
-                config: merged,
-            };
-            _activeLaunchContext = launchCtx;
-            _lastKnownConfig = launchCtx;
+            _activeLaunchConfig = merged;
+            _lastKnownConfig = merged;
             setConfig((prevCfg) => (sameConfig(prevCfg, merged) ? prevCfg : merged));
 
             setUnreadableStorage(false);
@@ -496,14 +355,7 @@ export function useGrandCalcul(params: SimulationParams): UseGrandCalculReturn {
                         if (token !== _activeLaunchToken || controller.signal.aborted) {
                             return;
                         }
-                        const current = useFinanceStore.getState();
-                        if (
-                            current.isTestMode !== launchIsTest ||
-                            (current.activeTestPersonaId ?? '') !== launchPersona
-                        ) {
-                            return;
-                        }
-                        current.setGrandCalculProgress(p);
+                        useFinanceStore.getState().setGrandCalculProgress(p);
                     },
                 });
 
@@ -512,13 +364,6 @@ export function useGrandCalcul(params: SimulationParams): UseGrandCalculReturn {
                 }
 
                 const current = useFinanceStore.getState();
-                if (
-                    current.isTestMode !== launchIsTest ||
-                    (current.activeTestPersonaId ?? '') !== launchPersona
-                ) {
-                    return;
-                }
-
                 current.setGrandCalculResult(computed);
                 current.setGrandCalculProgress(null);
                 current.setGrandCalculError(null);
@@ -526,52 +371,34 @@ export function useGrandCalcul(params: SimulationParams): UseGrandCalculReturn {
 
                 if (_activeController === controller) {
                     _activeController = null;
-                    _activeLaunchContext = null;
+                    _activeLaunchConfig = null;
                 }
 
-                const ownerKey = saveSlotKey(launchIsTest, launchPersona);
-                beginOwnerSave(ownerKey);
+                beginOwnerSave(REAL_OWNER_KEY);
                 try {
-                    if (launchIsTest) {
-                        const saveEpoch = ++_testSlotEpoch;
-                        writeSavedTestPersonaId(launchPersona);
-                        const savedOk = await enqueueTestSlotOp(() =>
-                            saveGrandCalculResult(computed, { isTestMode: true }),
-                        );
-                        const st = useFinanceStore.getState();
-                        const stillSameTestPersona =
-                            st.isTestMode === true && (st.activeTestPersonaId ?? '') === launchPersona;
-
-                        if (_testSlotEpoch === saveEpoch && (!savedOk || !stillSameTestPersona)) {
-                            await purgeTestSlot();
-                        } else if (savedOk && stillSameTestPersona) {
-                            unreadableOnDiskRef.current = false;
-                        }
+                    const savedOk = await enqueueRealSlotOp(() =>
+                        saveGrandCalculResult(computed, { isTestMode: false }),
+                    );
+                    if (savedOk) {
+                        unreadableOnDiskRef.current = false;
                     } else {
-                        const savedOk = await enqueueRealSlotOp(() =>
-                            saveGrandCalculResult(computed, { isTestMode: false }),
-                        );
-                        if (savedOk) {
-                            unreadableOnDiskRef.current = false;
-                        } else {
-                            logError({
-                                source: 'storage',
-                                severity: 'warning',
-                                message: 'Échec de sauvegarde locale du Grand Calcul (IndexedDB).',
-                            });
-                            if (token === _activeLaunchToken && !useFinanceStore.getState().isTestMode) {
-                                if (unreadableOnDiskRef.current) {
-                                    setUnreadableStorage(true);
-                                }
-                                current.setGrandCalculError(
-                                    'Sauvegarde locale impossible (espace ou stockage restreint) — le résultat reste affiché pour cette session.',
-                                );
-                                current.setGrandCalculStatus('error');
+                        logError({
+                            source: 'storage',
+                            severity: 'warning',
+                            message: 'Échec de sauvegarde locale du Grand Calcul (IndexedDB).',
+                        });
+                        if (token === _activeLaunchToken) {
+                            if (unreadableOnDiskRef.current) {
+                                setUnreadableStorage(true);
                             }
+                            current.setGrandCalculError(
+                                'Sauvegarde locale impossible (espace ou stockage restreint) — le résultat reste affiché pour cette session.',
+                            );
+                            current.setGrandCalculStatus('error');
                         }
                     }
                 } finally {
-                    endOwnerSave(ownerKey);
+                    endOwnerSave(REAL_OWNER_KEY);
                 }
             } catch (err) {
                 if (token !== _activeLaunchToken) {
@@ -614,7 +441,7 @@ export function useGrandCalcul(params: SimulationParams): UseGrandCalculReturn {
             } finally {
                 if (_activeController === controller) {
                     _activeController = null;
-                    _activeLaunchContext = null;
+                    _activeLaunchConfig = null;
                 }
             }
         },
@@ -634,7 +461,7 @@ export function useGrandCalcul(params: SimulationParams): UseGrandCalculReturn {
             _activeController.abort();
             _activeController = null;
         }
-        _activeLaunchContext = null;
+        _activeLaunchConfig = null;
         if (unreadableOnDiskRef.current) {
             setUnreadableStorage(true);
         }
@@ -649,20 +476,15 @@ export function useGrandCalcul(params: SimulationParams): UseGrandCalculReturn {
             _activeController.abort();
             _activeController = null;
         }
-        _activeLaunchContext = null;
+        _activeLaunchConfig = null;
         _lastKnownConfig = null;
         userEditedConfigRef.current = false;
         unreadableOnDiskRef.current = false;
         resetGrandCalcul();
         setUnreadableStorage(false);
-        const currentIsTest = useFinanceStore.getState().isTestMode;
-        if (currentIsTest) {
-            await purgeTestSlot();
-        } else {
-            await enqueueRealSlotOp(() =>
-                Promise.resolve(clearGrandCalculResult({ isTestMode: false })).catch(() => undefined),
-            );
-        }
+        await enqueueRealSlotOp(() =>
+            Promise.resolve(clearGrandCalculResult({ isTestMode: false })).catch(() => undefined),
+        );
     }, [resetGrandCalcul]);
 
     return {

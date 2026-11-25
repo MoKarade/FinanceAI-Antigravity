@@ -21,7 +21,7 @@ vi.mock('../../services/fintable/browserSync', () => ({
     runFintableBrowserSync: (...a: unknown[]) => syncMock(...a),
 }));
 const logErrorMock = vi.fn();
-vi.mock('../../services/errorLogger', () => ({ logError: (...a: unknown[]) => logErrorMock(...a), logErrorThrottled: vi.fn(), }));
+vi.mock('../../services/errorLogger', () => ({ logError: (...a: unknown[]) => logErrorMock(...a), logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(), }));
 
 // [FINTABLE-TOKEN-PERSIST] Coffre chiffré mocké : ces tests verrouillent que le jeton est bien
 // ÉCRIT dans secureKeyStore (incident 2026-08-05 : il ne l'était jamais → perdu à chaque reload).
@@ -62,7 +62,6 @@ beforeEach(() => {
         apiKeys: { gemini: '', anthropic: '', finnhub: '', fintable: 'ft_test' },
         fintableRoles: undefined,
         fintableSyncReport: undefined,
-        isTestMode: false,
         // [FINTABLE-DEBTNAME-AUTO] Remis à zéro entre les cas : la liste des dettes pilote désormais
         // ce que la carte rend, donc un cas qui en pose contaminerait les suivants.
         debts: [],
@@ -92,14 +91,6 @@ describe('FintableSyncCard — garde-fous d\'action', () => {
         render(<FintableSyncCard />);
         expect(screen.getByRole('button', { name: /Tester la connexion/i })).toBeDisabled();
         expect(screen.getByRole('button', { name: /Synchroniser maintenant/i })).toBeDisabled();
-    });
-
-    it('en MODE DÉMO : la synchronisation est bloquée et dite (jamais de mélange démo/réel)', () => {
-        useFinanceStore.setState({ isTestMode: true });
-        render(<FintableSyncCard />);
-        expect(screen.getByRole('button', { name: /Synchroniser maintenant/i })).toBeDisabled();
-        expect(screen.getByText(/Mode démo actif/i)).toBeInTheDocument();
-        expect(syncMock).not.toHaveBeenCalled();
     });
 
     it('une erreur de connexion est rendue en alerte, sans liste de comptes fabriquée', async () => {
@@ -379,15 +370,6 @@ describe('FintableSyncCard — trajet complet du jeton (findings panel #559)', (
         expect(useFinanceStore.getState().fintableSyncReport?.at).toBeGreaterThan(0);
     });
 
-    it('finding #2 bis — en MODE DÉMO, l\'exception n\'écrit AUCUN rapport (jamais de trace persona)', async () => {
-        useFinanceStore.setState({ isTestMode: true, fintableSyncReport: undefined });
-        syncMock.mockRejectedValue(new Error('boom'));
-        render(<FintableSyncCard />);
-        // Le bouton est désactivé en démo : on prouve qu'aucun rapport n'apparaît par ce chemin.
-        expect(screen.getByRole('button', { name: /Synchroniser maintenant/i })).toBeDisabled();
-        expect(useFinanceStore.getState().fintableSyncReport).toBeUndefined();
-    });
-
     it('finding #3 — « Synchroniser maintenant » persiste AUSSI le jeton (chemin le plus sensible)', async () => {
         // Le commentaire « ceinture : idem handleTest » n'était prouvé que pour handleTest : un
         // refactor retirant l'appel dans le SEUL handleSync serait passé inaperçu — alors que c'est
@@ -453,23 +435,6 @@ describe('FintableSyncCard — rattrapage d\'historique', () => {
         fireEvent.click(screen.getByRole('button', { name: /Rattraper l’historique/ }));
         await waitFor(() => expect(screen.getByText(/1 transaction\(s\) à vérifier/)).toBeInTheDocument());
         expect(document.body.textContent).toContain(MARCHAND);
-    });
-
-    // ⚠️ LE test de ce bloc.
-    it('mode démo activé PENDANT la passe → aucune donnée réelle à l\'écran', async () => {
-        syncMock.mockImplementation(async () => {
-            // Simule l'activation du mode démo pendant la fenêtre réseau.
-            useFinanceStore.setState({ isTestMode: true } as never);
-            return {
-                report: { at: 1, error: null, transactionsAdded: 5, accountsSeen: 1, warnings: [], wasBackfill: true },
-                statePatch: { lastUpdate: 1 }, incertaines: [douteuse],
-            };
-        });
-        render(<FintableSyncCard />);
-        fireEvent.click(screen.getByRole('button', { name: /Rattraper l’historique/ }));
-        await waitFor(() => expect(screen.getByText(/Mode démo activé pendant/)).toBeInTheDocument());
-        // `innerHTML` : le marchand ne doit être ni dans le texte, ni dans un attribut.
-        expect(document.body.innerHTML, 'les vraies données de Marc dans une session persona').not.toContain(MARCHAND);
     });
 
     it('une nouvelle passe REMET À ZÉRO la liste précédente', async () => {

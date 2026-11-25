@@ -27,7 +27,7 @@ vi.mock('../../services/projection/latentTax', async (importOriginal) => {
 });
 
 import { __runScenarioForTests, type SimulationParams } from '../../services/projection';
-import { getPersonaOrDefault } from '../../services/testPersonas';
+import { getPersonaOrDefault } from '../fixtures/testPersonas';
 import { buildSimulationParamsFromState } from '../../services/projection/buildSimulationParams';
 import { INITIAL_PROJECTION } from '../../constants';
 import type { AppState } from '../../types';

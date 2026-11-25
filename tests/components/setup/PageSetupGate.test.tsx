@@ -29,8 +29,8 @@ describe('PageSetupGate (pilote Impôts)', () => {
         expect(screen.getByText(/Page verrouillée/i)).toBeInTheDocument();
         expect(screen.getByText(/Rien ne s'affiche tant que/i)).toBeInTheDocument();
         expect(screen.getByText(/Salaire — utilisateur principal/i)).toBeInTheDocument();
-        // Option « données de test » proposée.
-        expect(screen.getByRole('button', { name: /données de test/i })).toBeInTheDocument();
+        // Aucune option « données de test » en production.
+        expect(screen.queryByRole('button', { name: /données de test/i })).toBeNull();
         // Rien du contenu réel de la page ne doit s'afficher tant que c'est pas fait.
         expect(screen.queryByText('CONTENU_IMPOTS')).not.toBeInTheDocument();
     });

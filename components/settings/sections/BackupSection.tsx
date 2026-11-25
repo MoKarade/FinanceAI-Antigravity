@@ -1,33 +1,22 @@
 // components/settings/sections/BackupSection.tsx
 // Onglet Sauvegarde :
 // 1. État du dossier actif et indicateur de protection (bouclier anti-mode test + persistance)
-// 2. Récupération directe des points de sauvegarde détectés (IndexedDB, localStorage, Google Drive)
-// 3. Synchronisation unifiée Cloud Firestore & Google Drive via compte Google
-// 4. Carte de synchronisation Google Drive et verrou d'écritures MCP
-// 5. Instantanés locaux (AutoBackupPanel) et export/import de fichiers (BackupPanel)
+// 2. Récupération directe des points de sauvegarde détectés (IndexedDB, localStorage)
+// 3. Synchronisation Cloud Firestore via compte Google
+// 4. Instantanés locaux (AutoBackupPanel) et export/import de fichiers (BackupPanel)
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { GoogleDriveSyncCard } from '../GoogleDriveSyncCard';
-import { WriteLockCard } from '../WriteLockCard';
 import { AutoBackupPanel } from '../AutoBackupPanel';
 import { BackupPanel } from '../BackupPanel';
 import { useFirebaseAuth } from '../../auth/FirebaseAuthGate';
 import { useFinanceStore } from '../../../store/useFinanceStore';
 import {
-  chercherEtRestaurerDepuisGoogleDrive,
   listRecoverableSnapshots,
   restoreSpecificSnapshot,
   computeCandidateNetWorth,
   isStarterTemplateState,
-  ensureDefaultGoogleAuthConfigured,
   type RecoverableSnapshotInfo,
 } from '../../../services/dataRecovery';
-import {
-  getSyncStatus,
-  subscribeSyncStatus,
-  connectAndSync,
-  type SyncStatus,
-} from '../../../services/sync/syncOrchestrator';
 import {
   queryStoragePersisted,
   requestPersistentStorage,
@@ -40,8 +29,6 @@ import { Icon } from '../../ui/Icon';
 import { Card } from '../../ui/Card';
 
 export const BackupSection: React.FC = () => {
-  ensureDefaultGoogleAuthConfigured();
-
   const state = useFinanceStore();
   const {
     user,
@@ -60,7 +47,6 @@ export const BackupSection: React.FC = () => {
   const isCurrentStarter = isStarterTemplateState(state);
 
   const [isRecovering, setIsRecovering] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus);
   const [storageState, setStorageState] = useState<EtatPersistance>('inconnue');
   const [recoverableSnapshots, setRecoverableSnapshots] = useState<RecoverableSnapshotInfo[]>([]);
 
@@ -72,10 +58,7 @@ export const BackupSection: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    ensureDefaultGoogleAuthConfigured();
-    setSyncStatus(getSyncStatus());
     void refreshRecoverableList();
-    return subscribeSyncStatus(setSyncStatus);
   }, [refreshRecoverableList, transactionsCount, assetsCount]);
 
   useEffect(() => {
@@ -122,27 +105,7 @@ export const BackupSection: React.FC = () => {
   };
 
   const handleConnectGoogleAccount = async () => {
-    ensureDefaultGoogleAuthConfigured();
     await signInWithGoogle();
-    await refreshRecoverableList();
-  };
-
-  const handleConnectDriveDirect = async () => {
-    ensureDefaultGoogleAuthConfigured(true);
-    await connectAndSync();
-    const driveRecovered = await chercherEtRestaurerDepuisGoogleDrive();
-    if (driveRecovered?.restored) {
-      if (user) {
-        await syncWorkspaceNow();
-      }
-      // MONTANT-HORS-ECRAN
-      showToast(
-        `Dossier Google Drive restauré (${driveRecovered.sourceLabel} · ${formatCAD(driveRecovered.netWorth)}).`,
-        'success',
-      );
-    } else if (getSyncStatus().connected) {
-      showToast('Google Drive connecté et synchronisé.', 'success');
-    }
     await refreshRecoverableList();
   };
 
@@ -157,11 +120,9 @@ export const BackupSection: React.FC = () => {
             <div className="inline-flex items-center gap-2 text-tiny font-semibold uppercase tracking-wider text-succes-texte">
               <Icon name="shield" size={14} aria-hidden="true" />
               <span>
-                {state.isTestMode
-                  ? 'Mode test actif · Dossier réel verrouillé en sécurité'
-                  : isCurrentStarter
-                    ? 'Profil de départ détecté · Recherche de sauvegarde disponible'
-                    : 'Protection automatique active'}
+                {isCurrentStarter
+                  ? 'Profil de départ détecté · Recherche de sauvegarde disponible'
+                  : 'Protection automatique active'}
                 {' · '}
                 <PrivateAmount>{formatCAD(currentNetWorth)}</PrivateAmount>
               </span>
@@ -170,9 +131,9 @@ export const BackupSection: React.FC = () => {
               État du dossier &amp; Protection
             </h3>
             <p className="text-meta text-ink-300 max-w-2xl leading-relaxed">
-              Chaque modification de votre dossier est enregistrée automatiquement et isolée du mode
-              test. Si un profil de départ ou de démonstration est affiché, cliquez sur le bouton
-              ci-contre pour fouiller Google Drive et vos sauvegardes locales.
+              Chaque modification de votre dossier est enregistrée automatiquement. Si un profil de
+              départ est affiché, cliquez sur le bouton ci-contre pour fouiller Cloud Firestore et
+              vos sauvegardes locales.
             </p>
           </div>
 
@@ -187,9 +148,7 @@ export const BackupSection: React.FC = () => {
               <span>
                 {isRecovering
                   ? 'Recherche et restauration…'
-                  : state.isTestMode
-                    ? 'Quitter le mode test et rétablir mon dossier'
-                    : 'Retrouver mes données (Drive & sauvegardes)'}
+                  : 'Retrouver mes données (Cloud & sauvegardes)'}
               </span>
             </button>
           </div>
@@ -233,7 +192,7 @@ export const BackupSection: React.FC = () => {
             </div>
             <div className="space-y-1 text-xs">
               <div className="flex items-center justify-between gap-2 text-ink-300">
-                <span>Bouclier anti-mode test</span>
+                <span>Assainissement automatique</span>
                 <span className="font-semibold text-succes-texte">Actif</span>
               </div>
               <div className="flex items-center justify-between gap-2 text-ink-300">
@@ -251,9 +210,9 @@ export const BackupSection: React.FC = () => {
                 )}
               </div>
               <div className="flex items-center justify-between gap-2 text-ink-300">
-                <span>Cloud Firestore &amp; Google Drive</span>
+                <span>Cloud Firestore</span>
                 <span className="font-semibold text-ink-50">
-                  {user ? 'Synchronisés' : 'Prêts (1 clic Google)'}
+                  {user ? 'Synchronisé' : 'Prêt (1 clic Google)'}
                 </span>
               </div>
             </div>
@@ -304,13 +263,12 @@ export const BackupSection: React.FC = () => {
 
       <Card
         icon={<Icon name="cloud" size={18} />}
-        title="Synchronisation Cloud Firestore & Google Drive"
+        title="Synchronisation Cloud Firestore"
       >
         <div className="space-y-4">
           <p className="text-tiny text-ink-300 leading-relaxed">
             Une seule connexion avec votre compte Google active la sauvegarde temps réel de votre
-            dossier dans <strong>Cloud Firestore</strong> et{' '}
-            <strong>Google Drive</strong>, sans jamais avoir à ressaisir d’identifiant technique.
+            dossier dans <strong>Cloud Firestore</strong>, sans jamais avoir à ressaisir d’identifiant technique.
           </p>
 
           {!user ? (
@@ -365,28 +323,6 @@ export const BackupSection: React.FC = () => {
         </div>
       </Card>
 
-      {syncStatus.configured ? (
-        <GoogleDriveSyncCard />
-      ) : (
-        <Card icon={<Icon name="cloud" size={18} />} title="Synchronisation Google Drive">
-          <div className="space-y-4">
-            <p className="text-tiny text-ink-300 leading-relaxed">
-              Synchronisez votre dossier dans votre espace privé Google Drive en un clic.
-            </p>
-            <button
-              type="button"
-              disabled={syncStatus.busy}
-              onClick={() => void handleConnectDriveDirect()}
-              className="touch-target h-11 px-4 rounded-xl bg-repere-fond text-repere border border-bordure-lien text-xs font-semibold inline-flex items-center gap-2 hover:opacity-90 transition-opacity focus-ring whitespace-nowrap shrink-0 disabled:opacity-50"
-            >
-              <Icon name="cloud" size={15} aria-hidden="true" />
-              <span>{syncStatus.busy ? 'Connexion…' : 'Connecter Google Drive'}</span>
-            </button>
-          </div>
-        </Card>
-      )}
-
-      <WriteLockCard />
       <AutoBackupPanel />
       <BackupPanel />
     </div>

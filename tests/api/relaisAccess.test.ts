@@ -1,8 +1,8 @@
 // @vitest-environment node
 // Proxys Yahoo / Fintable : méthodes, liste blanche de paramètres, débit par IP. Fetch mocké : aucun réseau.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { proxyYahooHistorique, proxyYahooRecherche, proxyFintable } from '../../api/_lib/proxies';
-import { reinitialiserLimites } from '../../api/_lib/garde';
+import { proxyYahooHistorique, proxyYahooRecherche, proxyFintable } from '../../server/proxies';
+import { reinitialiserLimites } from '../../server/garde';
 
 let fetchSpy: ReturnType<typeof vi.fn>;
 beforeEach(() => {

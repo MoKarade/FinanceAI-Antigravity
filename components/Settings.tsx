@@ -3,7 +3,7 @@
 // orchestrateur léger : il délègue chaque thème à une section dédiée sous
 // components/settings/sections/ (la sauvegarde lit l'état persisté elle-même).
 //
-// Sous-onglets : Complétude | Comptes et soldes | Patrimoine | Clés API | Sauvegarde | Système et diagnostics
+// Sous-onglets : Comptes et soldes | Patrimoine | Clés API | Sauvegarde
 // (+ lien « Profil ↗ » hors tablist : c'est une autre page, pas un onglet).
 // (« Hypothèses éco » du plan initial est sans objet ici : les hypothèses
 // économiques vivent dans l'onglet Futur. « Patrimoine » accueille les panneaux
@@ -19,18 +19,14 @@ import { type IconName } from './ui/Icon';
 import { SubTabs, TabPanel } from './ui/SubTabs';
 import { AppState, Transaction, Tab } from '../types';
 import { useFinanceStore } from '../store/useFinanceStore';
-import { SetupHub, useCompletudeOnglets } from './setup/SetupHub';
 import { usePendingFocus } from '../utils/usePendingFocus';
-import { TestModePanel } from './settings/TestModePanel';
-import { startGuidedTour } from './tour/tourControl';
 import { useViewportXl } from '../hooks/useViewportXl';
 import { AccountsSection } from './settings/sections/AccountsSection';
 import { PatrimoineSection } from './settings/sections/PatrimoineSection';
 import { IntegrationsSection } from './settings/sections/IntegrationsSection';
 import { FintableSyncCard } from './settings/FintableSyncCard';
+import { FxRatesCard } from './settings/FxRatesCard';
 import { BackupSection } from './settings/sections/BackupSection';
-// G22-N5 — Système fusionné dans Config (6e sous-onglet « Système & diagnostics »).
-import { SystemView } from './SystemView';
 
 interface SettingsProps {
   apiKeys: AppState['apiKeys'];
@@ -41,24 +37,15 @@ interface SettingsProps {
   initialBalances: Record<string, number>;
   setInitialBalances: (balances: Record<string, number>) => void;
   transactions: Transaction[];
-  // [EXPORT-JSON-PERD-FINTABLE] Les quatorze collections qu'on passait ici ne servaient qu'à
-  // construire le payload de sauvegarde à la main. La sauvegarde lit désormais l'état persisté
-  // ENTIER (BackupPanel) : les garder aurait laissé une porte vers l'ancien export incomplet.
-  // G22-N5 — état complet, forwardé à SystemView (sous-onglet diagnostics).
-  appState: AppState;
 }
 
-type SubTab = 'completude' | 'accounts' | 'patrimoine' | 'integrations' | 'backup' | 'system';
+type SubTab = 'accounts' | 'patrimoine' | 'integrations' | 'backup';
 
 const SUB_TABS: ReadonlyArray<{ id: SubTab; label: string; icon: IconName }> = [
-  // [S5-REFONTE-REGLAGES] « Complétude » ouvre les Réglages ; le Profil a son propre onglet (lien sous
-  // le menu) et le mode test sa carte à droite — l'ancien sous-onglet « Profil » n'avait plus que ça.
-  { id: 'completude', label: 'Complétude', icon: 'check' },
   { id: 'accounts', label: 'Comptes et soldes', icon: 'bank' },
   { id: 'patrimoine', label: 'Patrimoine', icon: 'real-estate' },
   { id: 'integrations', label: 'Clés API', icon: 'link' },
   { id: 'backup', label: 'Sauvegarde', icon: 'cloud' },
-  { id: 'system', label: 'Système et diagnostics', icon: 'group-tools' },
 ];
 
 /** Mappe un data-focus-section (deep-link) vers le sous-onglet qui le contient. */
@@ -69,7 +56,7 @@ function subTabForSection(section: string | null | undefined): SubTab | null {
   // entrée, le deep-link ouvrait Réglages sur le sous-onglet courant sans rien focaliser :
   // un bouton d'apparence fonctionnelle qui ne mène nulle part (panne silencieuse).
   if (section.startsWith('fintable-')) return 'integrations';
-  if (section.startsWith('profile-')) return 'completude';
+  if (section.startsWith('fx-')) return 'integrations';
   return null;
 }
 
@@ -82,13 +69,12 @@ export const Settings: React.FC<SettingsProps> = ({
   setInitialBalances,
   transactions,
   onImportData,
-  appState,
 }) => {
   const pendingFocus = useFinanceStore(s => s.pendingFocus);
 
   // Deep-link : on démarre sur le sous-onglet ciblé pour que le champ soit
   // monté quand usePendingFocus tente le scroll.
-  // `null` = accueil des Réglages : « Complétude » sur bureau, liste des sections sur mobile.
+  // `null` = accueil des Réglages : « Comptes et soldes » sur bureau, liste des sections sur mobile.
   const [sub, setSub] = useState<SubTab | null>(() => {
     if (pendingFocus && pendingFocus.tab === Tab.SETTINGS && Date.now() <= pendingFocus.expiresAt) {
       return subTabForSection(pendingFocus.section);
@@ -99,21 +85,17 @@ export const Settings: React.FC<SettingsProps> = ({
   // Consomme pendingFocus + scroll vers le champ (one-shot).
   usePendingFocus(Tab.SETTINGS);
 
-  const { pct } = useCompletudeOnglets();
   const large = useViewportXl();
   const setActiveTab = useFinanceStore(s => s.setActiveTab);
   const aFaire = (id: SubTab) => id === 'integrations' && !(apiKeys.gemini || apiKeys.anthropic);
   const onglets = SUB_TABS.map((t) => ({
     ...t,
-    badge: t.id === 'completude' ? `${pct} %` : aFaire(t.id) ? <span className="text-alerte-texte">à faire</span> : undefined,
+    badge: aFaire(t.id) ? <span className="text-alerte-texte">à faire</span> : undefined,
   }));
 
   // Contenu d'une section — partagé par les deux mises en page.
   const contenu = (id: SubTab): React.ReactNode => {
     switch (id) {
-      case 'completude':
-        // Hub de complétude PAR ONGLET : ce qui manque pour débloquer chaque page + remplir ici.
-        return <SetupHub compact={!large} />;
       case 'accounts':
         return (
           <AccountsSection
@@ -132,38 +114,26 @@ export const Settings: React.FC<SettingsProps> = ({
             <IntegrationsSection apiKeys={apiKeys} setApiKeys={setApiKeys} />
             {/* [FINTABLE-7] Sync bancaire in-app : jeton + rôles de comptes, sans aucune config externe. */}
             <FintableSyncCard />
+            <div data-focus-section="fx-rates">
+              <FxRatesCard />
+            </div>
           </div>
         );
       case 'backup':
         return <BackupSection />;
-      case 'system':
-        return <SystemView state={appState} />;
     }
   };
 
-  const enTete = (
-    <PageHeader
-      title="Réglages"
-      actions={
-        <button
-          type="button"
-          onClick={startGuidedTour}
-          className="touch-target min-h-11 px-4 rounded-lg border border-bordure-champ bg-fond text-body text-ink-50 hover:bg-surface-douce transition-colors focus-ring"
-        >
-          Revoir le tutoriel
-        </button>
-      }
-    />
-  );
+  const enTete = <PageHeader title="Réglages" />;
 
   // [S5-REFONTE-REGLAGES] Bureau large (≥ xl, maquette E-reglages) : menu à gauche (onglets verticaux),
-  // section au centre, carte du mode test à droite.
+  // section à droite.
   if (large) {
-    const actif = sub ?? 'completude';
+    const actif = sub ?? 'accounts';
     return (
       <div className="space-y-6 stagger-in">
         {enTete}
-        <div className="grid grid-cols-[240px_minmax(0,1fr)_380px] gap-5 items-start">
+        <div className="grid grid-cols-[240px_minmax(0,1fr)] gap-5 items-start">
           <div className="gf-terminal-card p-3 min-w-0 flex flex-col gap-1 bg-surface border border-bordure">
             <SubTabs<SubTab>
               idPrefix="config"
@@ -187,18 +157,14 @@ export const Settings: React.FC<SettingsProps> = ({
               <TabPanel key={id} idPrefix="config" tab={id} when={actif === id}>{contenu(id)}</TabPanel>
             ))}
           </div>
-          {/* Mode test (dev) — charger un persona réaliste ; vraies données sauvegardées/restaurées. */}
-          <div className="gf-terminal-card p-3 min-w-0 bg-surface border border-bordure">
-            <TestModePanel />
-          </div>
         </div>
       </div>
     );
   }
 
-  // Mobile et bureau étroit (maquette M-reglages) : carte du mode test, liste des sections (on touche
-  // pour ouvrir), puis la complétude. Une section ouverte remplace la liste, avec un retour.
-  const ouverte = sub && sub !== 'completude' ? SUB_TABS.find((t) => t.id === sub) : undefined;
+  // Mobile et bureau étroit (maquette M-reglages) : liste des sections (on touche pour ouvrir).
+  // Une section ouverte remplace la liste, avec un retour.
+  const ouverte = sub ? SUB_TABS.find((t) => t.id === sub) : undefined;
   if (ouverte) {
     return (
       <div className="space-y-6 stagger-in">
@@ -208,7 +174,7 @@ export const Settings: React.FC<SettingsProps> = ({
           aria-label="Accès rapide aux sections"
           className="gf-subtab-bar flex items-center gap-1.5 overflow-x-auto no-scrollbar"
         >
-          {SUB_TABS.filter((t) => t.id !== 'completude').map((t) => (
+          {SUB_TABS.map((t) => (
             <button
               key={t.id}
               type="button"
@@ -249,12 +215,11 @@ export const Settings: React.FC<SettingsProps> = ({
   return (
     <div className="space-y-4 stagger-in">
       {enTete}
-      <TestModePanel compact />
       <nav aria-label="Sections des réglages" className="gf-terminal-card rounded-2xl bg-surface border border-bordure overflow-hidden">
         <button type="button" onClick={() => setActiveTab(Tab.PROFILE)} className={ligne}>
           Profil <span className="text-ink-400" aria-hidden="true">›</span>
         </button>
-        {SUB_TABS.filter((t) => t.id !== 'completude').map((t) => (
+        {SUB_TABS.map((t) => (
           <button key={t.id} id={`reglages-ligne-${t.id}`} type="button" onClick={() => ouvrir(t.id)} className={`${ligne} border-t border-bordure`}>
             {t.label}
             <span className="flex items-center gap-3">
@@ -264,9 +229,6 @@ export const Settings: React.FC<SettingsProps> = ({
           </button>
         ))}
       </nav>
-      <div className="gf-terminal-card p-3 sm:p-4 rounded-2xl bg-surface border border-bordure">
-        {contenu('completude')}
-      </div>
     </div>
   );
 };

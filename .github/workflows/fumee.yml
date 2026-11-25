@@ -4,11 +4,9 @@ name: Fumée de production
 # le site répond. Le contrôle est le workflow commun de MoKarade/.github (plan de standardisation du
 # 15/10/2026, décision 5) ; ce fichier ne fait que l'appeler.
 #
-# Particularité de FinanceAI : l'app est une page statique (Vite) + des fonctions Vercel, SANS connexion
-# propre ni `/hub/summary` sur ce domaine (le summary du hub vit dans le serveur MCP de Cloud Run, et
-# l'accès est un mur Cloudflare Access à venir, tâche #1159). Contrôles donc réduits à ce que le domaine
-# sert vraiment : la santé (`/api/sante`, api/sante.ts) et la page d'accueil. `chemin-summary` vide : pas
-# de contrôle du summary ici ; il est vérifié par la route vivante du serveur MCP (tâche #1196).
+# Particularité de FinanceAI : l'app est une page statique (Vite) sur Firebase Hosting + relais Cloud Run (`financeai-proxy`), SANS connexion
+# propre ni `/hub/summary` sur ce domaine. Contrôles donc réduits à ce que le domaine
+# sert vraiment : la santé (`/api/sante` sur Cloud Run) et la page d'accueil. `chemin-summary` vide.
 # Le journal ne contient ni corps de réponse ni jeton.
 on:
   deployment_status:

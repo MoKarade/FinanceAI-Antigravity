@@ -165,7 +165,6 @@ describe('idbBootHydration — réhydratation complète au boot sans flash de ma
         );
 
         useFinanceStore.setState({
-            isTestMode: false,
             fxRates: { USD: 1.40, EUR: 1.47, CAD: 1, lastFetched: 0 },
             fxRatesEstimated: true,
             fxRatesSource: 'repli',
@@ -192,30 +191,5 @@ describe('idbBootHydration — réhydratation complète au boot sans flash de ma
         applyCachedFxRatesSyncIfNeeded();
         expect(useFinanceStore.getState().fxRatesSource).toBe('manuel');
         expect(useFinanceStore.getState().fxRates.USD).toBe(1.385);
-    });
-
-    it('ne touche pas aux données en cours lorsque isTestMode est actif', async () => {
-        await writeIdbEntry(
-            STORAGE_KEYS.persistStore,
-            JSON.stringify({
-                version: 7,
-                state: {
-                    initialBalances: { 'Chèque': 99_999 },
-                    transactions: [],
-                    lastUpdate: Date.now() + 10_000,
-                },
-            }),
-        );
-        await waitForIdbFlush();
-
-        localStorage.setItem(PARTIAL_MIRROR_FLAG_KEY, '1');
-        useFinanceStore.setState({
-            isTestMode: true,
-            initialBalances: { 'Chèque': 1_234 },
-        });
-
-        await hydrateStoreFromIdbOnce();
-
-        expect(useFinanceStore.getState().initialBalances).toEqual({ 'Chèque': 1_234 });
     });
 });

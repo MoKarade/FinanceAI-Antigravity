@@ -73,12 +73,7 @@ const norm = (s: string): string => s.replace(/[^\p{L}\p{N}%()/ -]/gu, '').repla
  * descriptif. Déclarées ici avec le MOT que l'`aria-label` doit encore porter — une dérive
  * (renommer « Champ » en « Colonne » d'un seul côté) rougit quand même.
  */
-const DESCRIPTIFS: ReadonlyArray<{ fichier: string; libelle: string; motCle: string }> = [
-    { fichier: 'system/AuditLogViewer.tsx', libelle: 'Champ :', motCle: 'champ' },
-    { fichier: 'system/AuditLogViewer.tsx', libelle: 'Opération :', motCle: 'opération' },
-    { fichier: 'system/ErrorLogViewer.tsx', libelle: 'Source :', motCle: 'source' },
-    { fichier: 'system/ErrorLogViewer.tsx', libelle: 'Severity :', motCle: 'severity' },
-];
+const DESCRIPTIFS: ReadonlyArray<{ fichier: string; libelle: string; motCle: string }> = [];
 
 describe('[A11Y-LABELS-REDONDANTS-NON-ASSOCIES] un libellé visible et son aria-label ne divergent pas en silence', () => {
     const { paires, nonComparables } = extraire();
@@ -97,7 +92,7 @@ describe('[A11Y-LABELS-REDONDANTS-NON-ASSOCIES] un libellé visible et son aria-
         // [SANDBOX-CURSEURS-THEORIQUES-RETRAIT] Re-mesuré le 2026-09-29 : 9 dans la famille après le
         // retrait de `FluxMensuelsFields.tsx` (curseurs Revenus / Dépenses théoriques). Plancher 8.
         const familleHypotheses = paires.filter((p) => p.fichier.startsWith('projection/ProjectionControls') || p.fichier.startsWith('projection/macroFields/'));
-        expect(paires.length).toBeGreaterThanOrEqual(20);
+        expect(paires.length).toBeGreaterThanOrEqual(16);
         expect(familleHypotheses.length, 'les sliders de l\'onglet Hypothèses (ProjectionControls + macroFields) sont le gros du contingent').toBeGreaterThanOrEqual(8);
         expect(paires.some((p) => p.libelle.includes('Part actions US')), 'témoin : le libellé à emoji doit être vu ET normalisé').toBe(true);
         expect(nonComparables, 'libellés dynamiques non comparables (mesuré : 1, la boucle INFLATION_CATEGORIES)').toBeLessThanOrEqual(3);

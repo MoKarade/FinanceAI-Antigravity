@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, act, cleanup, fireEvent, within } from '@testing-library/react';
 import { FutureProjection } from '../../components/FutureProjection';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../../services/testFixtures';
+import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../fixtures/testFixtures';
 import {
     DEEP_SCENARIO_IDS,
     type DeepForecastReport,
@@ -23,7 +23,7 @@ vi.mock('recharts', async () => {
         XAxis: () => null, YAxis: () => null, Tooltip: () => null, CartesianGrid: () => null,
     };
 });
-vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn() }));
+vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(), }));
 
 const deepMocks = vi.hoisted(() => ({
     loadApplied: vi.fn(async () => ({ status: 'empty' as const })),
@@ -181,8 +181,9 @@ describe('FutureProjection — scénarios, hypothèses et Appliquer et mémorise
 
         const persona = getPersonaOrDefault(DEFAULT_PERSONA_ID);
         act(() => {
-            useFinanceStore.getState().enableTestMode(persona.build(), persona.id);
+            useFinanceStore.getState().resetState();
             useFinanceStore.setState({
+                ...(persona.build() as Record<string, unknown>),
                 projectionRunMC: false,
                 projectionStatus: 'idle',
                 lastProjection: {

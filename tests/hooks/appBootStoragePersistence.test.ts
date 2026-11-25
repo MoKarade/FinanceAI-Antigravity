@@ -16,7 +16,7 @@ describe('[STORAGE-PERSIST-REQUEST] useAppBootEffects demande la persistance du 
         expect(SRC).toMatch(/import \{ requestPersistentStorage \} from '\.\.\/services\/storagePersistence'/);
         expect(SRC).toMatch(/void requestPersistentStorage\(\)/);
     });
-    it('anti-vacuité : la source décommentée contient encore le boot Drive (le lecteur n\'a pas tout blanchi)', () => {
-        expect(SRC).toContain('runBootSync');
+    it('anti-vacuité : la source décommentée contient encore le boot Fintable (le lecteur n\'a pas tout blanchi)', () => {
+        expect(SRC).toContain('maybeRunDailyFintableSync');
     });
 });

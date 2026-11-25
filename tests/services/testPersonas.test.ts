@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { TEST_PERSONAS } from '../../services/testPersonas';
+import { TEST_PERSONAS } from '../fixtures/testPersonas';
 
 // Horloge GELÉE pour tout le fichier : les personas génèrent des données
 // relatives à `new Date()` (transactions sur 24 mois, âges d'enfants). Sans gel,

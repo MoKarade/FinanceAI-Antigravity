@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { verifierTypesRestaures, messageDeRefusTypes, resumeTechniqueDesFautifs, CHAMPS_TEXTE, CHAMPS_BOOLEENS, LONGUEUR_MAX_DIAGNOSTIC } from '../../services/verifierTypesRestaures';
-import { TEST_PERSONAS, getPersonaOrDefault } from '../../services/testPersonas';
+import { TEST_PERSONAS, getPersonaOrDefault } from '../fixtures/testPersonas';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { INITIAL_PROJECTION } from '../../constants';
 import type { AppState } from '../../types';
@@ -301,10 +301,9 @@ describe('[BACKUP-SCHEMA-NON-TYPE] ce qui NE doit pas être refusé', () => {
             if (EXCLUS_DE_LA_PERSISTANCE.has(cle)) continue;
             textuels.add(cle);
         }
-        // Anti-vacuité + témoins : les deux clés que l'incident a révélées doivent être VUES ici.
+        // Anti-vacuité + témoin : la clé révélée par l'incident doit être VUE ici.
         expect(textuels.size).toBeGreaterThan(0);
         expect(textuels.has('revealedProjectionSig')).toBe(true);
-        expect(textuels.has('activeTestPersonaId')).toBe(true);
 
         const manquants = [...textuels].filter((c) => !CHAMPS_TEXTE.has(c)).sort();
         expect(

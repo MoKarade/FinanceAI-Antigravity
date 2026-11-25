@@ -12,8 +12,6 @@ describe('hooks/useInvestmentCommittee', () => {
     beforeEach(() => {
         vi.stubGlobal('indexedDB', undefined);
         useFinanceStore.setState({
-            isTestMode: false,
-            activeTestPersonaId: null,
             isPrivacyMode: false,
             apiKeys: { gemini: 'gemini-test-key', finnhub: '' },
             assets: [],
@@ -80,20 +78,5 @@ describe('hooks/useInvestmentCommittee', () => {
         expect(result.current.activeAnalysis?.subject).toBe('Anthropic');
         expect(result.current.activeAnalysis?.verdict).toBe('EXPOSITION_INDIRECTE');
         expect(result.current.history[0]?.id).toBe(result.current.activeAnalysis?.id);
-    });
-
-    it('réinitialise le rapport actif lors d’un changement de mode test / persona', async () => {
-        const { result } = renderHook(() => useInvestmentCommittee());
-        await act(async () => {
-            useFinanceStore.setState({ apiKeys: { gemini: '', finnhub: '' } } as never);
-            await result.current.runAnalysis("Est-ce que ça vaut le coup d'acheter Anthropic ?");
-        });
-        expect(result.current.activeAnalysis).not.toBeNull();
-
-        act(() => {
-            useFinanceStore.setState({ isTestMode: true, activeTestPersonaId: 'jeune' } as never);
-        });
-
-        await waitFor(() => expect(result.current.activeAnalysis).toBeNull());
     });
 });

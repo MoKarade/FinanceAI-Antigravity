@@ -15,7 +15,7 @@
 import { describe, it, expect } from 'vitest';
 import { READ_SPECS, WRITE_SPECS } from '../../services/aiTools/registry';
 import { z } from 'zod';
-import type { AnyToolSpec } from '../../mcp/tools/_toolSpec';
+import type { AnyToolSpec } from '../../services/aiTools/specs/_toolSpec';
 
 type Schema = Record<string, unknown>;
 

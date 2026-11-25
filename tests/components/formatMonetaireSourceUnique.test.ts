@@ -41,7 +41,7 @@ const COMPOSE_A_LA_MAIN = [
  * journaux du moteur et dans les résumés d'outils MCP — deux surfaces que cette garde ne regardait
  * pas, et où le recensement a trouvé de vrais montants sans séparateur.
  */
-const RACINES = ['components', 'services', 'mcp'];
+const RACINES = ['components', 'services'];
 
 const files = RACINES.flatMap((r) => readdirSync(path.join(ROOT, r), { recursive: true, encoding: 'utf8' })
     .filter((f) => (f.endsWith('.tsx') || f.endsWith('.ts')) && !f.includes('.test.') && !f.includes('.spec.'))

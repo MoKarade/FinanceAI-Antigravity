@@ -85,7 +85,6 @@ beforeEach(() => {
     useFinanceStore.getState().resetState();
     useFinanceStore.setState({
         apiKeys: { gemini: '', anthropic: '', finnhub: '', fintable: 'ft_test' },
-        isTestMode: false,
         fintableSyncReport: undefined,
     });
 });

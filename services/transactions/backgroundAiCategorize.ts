@@ -25,7 +25,6 @@ interface BackgroundAiCategorizeOutcome {
 export interface BackgroundAiStorePort {
     getState: () => Pick<AppState, 'apiKeys' | 'transactions' | 'budgetItems' | 'categorizationRules'>;
     setAppState: (patch: Partial<AppState>) => void;
-    isTestModeNow: () => boolean;
 }
 
 let _aiInFlight = false;
@@ -71,9 +70,6 @@ export async function scheduleBackgroundAiCategorization(
     storePort: BackgroundAiStorePort,
 ): Promise<BackgroundAiCategorizeOutcome> {
     if (_aiInFlight || targetIds.length === 0) {
-        return { ran: false, classifiedCount: 0, needsReviewCount: 0 };
-    }
-    if (storePort.isTestModeNow()) {
         return { ran: false, classifiedCount: 0, needsReviewCount: 0 };
     }
 
@@ -133,10 +129,6 @@ export async function scheduleBackgroundAiCategorization(
             },
         );
 
-        // Relit l'état frais après le réseau (mode test / éditions manuelles concurrentes)
-        if (storePort.isTestModeNow()) {
-            return { ran: false, classifiedCount: 0, needsReviewCount: 0 };
-        }
         const fresh = storePort.getState();
         const budgetItems = fresh.budgetItems ?? [];
         const byId = new Map<number, Transaction>(

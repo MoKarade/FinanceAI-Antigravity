@@ -14,26 +14,26 @@
 // ⚠️ Browser-safe : ce module (et tout services/aiTools/) ne doit JAMAIS importer le SDK serveur
 // MCP ni un module Node-only — garde : tests/aiTools/noMcpSdkInSpecs.test.ts.
 
-import type { AnyReadToolSpec, AnyWriteToolSpec } from '../../mcp/tools/_toolSpec';
-import { getFinancialOverviewSpec } from '../../mcp/tools/getFinancialOverview.spec';
-import { getHoldingsSpec } from '../../mcp/tools/getHoldings.spec';
-import { getProjectionSpec } from '../../mcp/tools/getProjection.spec';
-import { getTaxSituationSpec } from '../../mcp/tools/getTaxSituation.spec';
-import { getRetirementOutlookSpec } from '../../mcp/tools/getRetirementOutlook.spec';
-import { getNextBestActionsSpec } from '../../mcp/tools/getNextBestActions.spec';
-import { searchTransactionsSpec } from '../../mcp/tools/searchTransactions.spec';
-import { simulateWhatIfSpec } from '../../mcp/tools/simulateWhatIf.spec';
-import { getTaxRoomSpec } from '../../mcp/tools/getTaxRoom.spec';
-import { calculateRealEstateSpec } from '../../mcp/tools/calculateRealEstate.spec';
-import { runProjectionSpec } from '../../mcp/tools/runProjection.spec';
-import { applyDebtSpec } from '../../mcp/tools/applyDebt.spec';
-import { applyPayslipSpec } from '../../mcp/tools/applyPayslip.spec';
-import { applyBankStatementSpec } from '../../mcp/tools/applyBankStatement.spec';
-import { applyBrokerStatementSpec } from '../../mcp/tools/applyBrokerStatement.spec';
-import { applyTaxSlipSpec } from '../../mcp/tools/applyTaxSlip.spec';
-import { setCashSpec } from '../../mcp/tools/setCash.spec';
-import { setBudgetItemSpec } from '../../mcp/tools/setBudgetItem.spec';
-import { deleteItemSpec } from '../../mcp/tools/deleteItem.spec';
+import type { AnyReadToolSpec, AnyWriteToolSpec } from './specs/_toolSpec';
+import { getFinancialOverviewSpec } from './specs/getFinancialOverview.spec';
+import { getHoldingsSpec } from './specs/getHoldings.spec';
+import { getProjectionSpec } from './specs/getProjection.spec';
+import { getTaxSituationSpec } from './specs/getTaxSituation.spec';
+import { getRetirementOutlookSpec } from './specs/getRetirementOutlook.spec';
+import { getNextBestActionsSpec } from './specs/getNextBestActions.spec';
+import { searchTransactionsSpec } from './specs/searchTransactions.spec';
+import { simulateWhatIfSpec } from './specs/simulateWhatIf.spec';
+import { getTaxRoomSpec } from './specs/getTaxRoom.spec';
+import { calculateRealEstateSpec } from './specs/calculateRealEstate.spec';
+import { runProjectionSpec } from './specs/runProjection.spec';
+import { applyDebtSpec } from './specs/applyDebt.spec';
+import { applyPayslipSpec } from './specs/applyPayslip.spec';
+import { applyBankStatementSpec } from './specs/applyBankStatement.spec';
+import { applyBrokerStatementSpec } from './specs/applyBrokerStatement.spec';
+import { applyTaxSlipSpec } from './specs/applyTaxSlip.spec';
+import { setCashSpec } from './specs/setCash.spec';
+import { setBudgetItemSpec } from './specs/setBudgetItem.spec';
+import { deleteItemSpec } from './specs/deleteItem.spec';
 
 /** Tools de LECTURE exposés au chat in-app. AUCUNE mutation possible par ces handlers. */
 export const READ_SPECS: AnyReadToolSpec[] = [

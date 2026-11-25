@@ -1,8 +1,8 @@
-// [DURCISSEMENT-GARDE] Tests unitaires de api/_lib/garde.ts : débit, plafond de corps, IP client.
+// [DURCISSEMENT-GARDE] Tests unitaires de server/garde.ts : débit, plafond de corps, IP client.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
     reinitialiserLimites, essayerDebit, tailleCompteurs, lireCorpsBorne, CORPS_MAX_OCTETS, CorpsTropGros, ipClient,
-} from '../../api/_lib/garde';
+} from '../../server/garde';
 
 beforeEach(() => {
     reinitialiserLimites();

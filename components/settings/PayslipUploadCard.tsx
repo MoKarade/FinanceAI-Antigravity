@@ -104,7 +104,7 @@ export const PayslipUploadCard: React.FC<PayslipUploadCardProps> = ({ targetUser
             const [{ executeWriteTool }, { applyPayslipSpec }] = await importWithRetry(
                 () => Promise.all([
                     import('../../services/aiTools/writeExecutor'),
-                    import('../../mcp/tools/applyPayslip.spec'),
+                    import('../../services/aiTools/specs/applyPayslip.spec'),
                 ]),
                 'payslipWrite',
             );

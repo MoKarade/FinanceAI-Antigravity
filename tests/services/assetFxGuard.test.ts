@@ -24,7 +24,7 @@ import { resolve, join } from 'node:path';
 import { stripComments } from '../../utils/stripComments';
 
 const ROOT = resolve(process.cwd());
-const SCAN_DIRS = ['components', 'services', 'utils', 'hooks', 'mcp'];
+const SCAN_DIRS = ['components', 'services', 'utils', 'hooks'];
 
 /** Fichier:ligne autorisés à multiplier qty×prix SANS mention fx sur la ligne (justifiés). */
 const ALLOWLIST: Array<{ file: string; reason: string }> = [

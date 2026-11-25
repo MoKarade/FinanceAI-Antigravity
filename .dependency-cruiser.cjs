@@ -23,7 +23,7 @@ module.exports = {
       name: "prod-sans-dependance-de-dev",
       comment: "Le code servi ne doit pas dépendre d'un paquet de développement (absent en production).",
       severity: "error",
-      from: { path: "^(services|components|hooks|store|utils|api)/", pathNot: "\\.test\\.tsx?$" },
+      from: { path: "^(services|components|hooks|store|utils|server)/", pathNot: "\\.test\\.tsx?$" },
       to: { dependencyTypes: ["npm-dev"], dependencyTypesNot: ["type-only"] },
     },
     {
@@ -37,7 +37,7 @@ module.exports = {
       name: "tests-hors-du-code-servi",
       comment: "Le code servi n'importe jamais un test.",
       severity: "error",
-      from: { path: "^(services|components|hooks|store|utils|api|mcp)/" },
+      from: { path: "^(services|components|hooks|store|utils|server)/" },
       to: { path: "^(tests|e2e)/" },
     },
   ],

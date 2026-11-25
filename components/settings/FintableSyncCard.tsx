@@ -80,7 +80,6 @@ export const FintableSyncCard: React.FC = () => {
     const fintableRoles = useFinanceStore((s) => s.fintableRoles);
     const report = useFinanceStore((s) => s.fintableSyncReport);
     const setAppState = useFinanceStore((s) => s.setAppState);
-    const isTestMode = useFinanceStore((s) => s.isTestMode);
     // [FINTABLE-DEBTNAME-AUTO] Les dettes RÉELLES : elles peuplent la liste déroulante et nourrissent
     // la suggestion. Lues du store plutôt que saisies — c'est tout l'objet du lot.
     const debts = useFinanceStore((s) => s.debts) ?? EMPTY_DEBTS;
@@ -267,21 +266,7 @@ export const FintableSyncCard: React.FC = () => {
             // (de vraies données dans une session persona = l'inverse de PERSONA-PURGE).
             // ⚠️ [finding silent-failure #649] LE TEST PASSE AVANT `setIncertaines`, et ce n'est pas
             // cosmétique : la liste des douteuses affiche des DATES, des MARCHANDS et des MONTANTS
-            // réels. En la remplissant d'abord, l'écran montrait les vraies données de Marc dans une
-            // session persona — sous un message affirmant « rien n'a été écrit ». Vrai pour le
-            // store, FAUX pour l'écran : le pire des deux, une fuite avec une confirmation
-            // rassurante par-dessus.
-            if (useFinanceStore.getState().isTestMode === true) {
-                setError('Mode démo activé pendant la synchronisation — rien n\'a été écrit.');
-                return;
-            }
             setIncertaines(douteusesSures);
-            // ⚠⚠ [revue panel] APRÈS le contrôle de mode démo, pour la raison écrite juste au-dessus,
-            // et elle vaut ENCORE PLUS ici : ces échantillons sont des extraits BRUTS de mémos
-            // bancaires (un nom, un numéro de chèque). Mon premier jet les posait AVANT le
-            // contrôle — les vraies données de Marc restaient donc affichées dans une session
-            // persona, sous un message affirmant « rien n'a été écrit ». Le commentaire qui
-            // explique cet ordre était déjà là, trois lignes plus haut.
             setChampsInconnus(echantillonsChampsInconnus ?? []);
             if (statePatch === null) {
                 // Échec : on écrit LE RAPPORT seul (pour que la carte de diagnostic le montre), et
@@ -299,7 +284,6 @@ export const FintableSyncCard: React.FC = () => {
                     .then((m) => m.scheduleBackgroundAiCategorization(newTransactionIds, {
                         getState: () => useFinanceStore.getState(),
                         setAppState: (patch) => useFinanceStore.getState().setAppState(patch),
-                        isTestModeNow: () => useFinanceStore.getState().isTestMode === true,
                     }))
                     .catch(() => {});
             }
@@ -318,25 +302,17 @@ export const FintableSyncCard: React.FC = () => {
                 ? 'Nouvelle version de l\'app disponible — recharge la page puis réessaie.'
                 : 'La synchronisation a échoué. Réessaie dans un moment.');
             logError({ source: 'ui', severity: 'error', message: '[FINTABLE-7] Synchronisation manuelle échouée.' });
-            // [FINTABLE-STALE-ALERT, finding #2 panel #561] « Rapport TOUJOURS écrit » ne valait que
-            // pour la sync AUTO (autoSync.ts, finding #545) — pas ici. Or toute la détection de gel
-            // repose sur `fintableSyncReport` : sans cette écriture, une exception laissait le
-            // rapport figé sur l'ANCIEN succès, donc la bannière et le tool MCP ne voyaient JAMAIS
-            // la tentative ratée (seul un toast éphémère, perdu au rechargement). Gaté mode démo,
-            // comme l'auto : jamais d'écriture pendant un persona, même un simple rapport.
-            if (useFinanceStore.getState().isTestMode !== true) {
-                setAppState({
-                    fintableSyncReport: {
-                        at: Date.now(), cutoverDateUsed: null, accountsSeen: 0, accountsWithoutRole: 0,
-                        transactionsAdded: 0, transfersDetected: 0, cashUpdated: false, debtsUpdated: [],
-                        investmentReferenceCount: 0, warnings: [],
-                        error: err instanceof Error ? err.message : String(err),
-                        // [FINTABLE-SOURCE-TAG] Une tentative ratée ne « dé-produit » pas : report.
-                        lastProductiveAt: lastProductiveAtSuivant(
-                            useFinanceStore.getState().fintableSyncReport, 0, Date.now()),
-                    },
-                });
-            }
+            setAppState({
+                fintableSyncReport: {
+                    at: Date.now(), cutoverDateUsed: null, accountsSeen: 0, accountsWithoutRole: 0,
+                    transactionsAdded: 0, transfersDetected: 0, cashUpdated: false, debtsUpdated: [],
+                    investmentReferenceCount: 0, warnings: [],
+                    error: err instanceof Error ? err.message : String(err),
+                    // [FINTABLE-SOURCE-TAG] Une tentative ratée ne « dé-produit » pas : report.
+                    lastProductiveAt: lastProductiveAtSuivant(
+                        useFinanceStore.getState().fintableSyncReport, 0, Date.now()),
+                },
+            });
         } finally { releaseFintableSyncLock(); setBusy('idle'); }
     }, () => {
         // Onglet perdant : identique au message intra-onglet — Marc n'a pas à savoir LEQUEL des
@@ -354,13 +330,6 @@ export const FintableSyncCard: React.FC = () => {
                     tes liquidités et le solde de tes cartes à l&apos;ouverture, toutes les 30 minutes et au retour
                     sur l&apos;onglet. Tout se passe dans le navigateur : rien à configurer ailleurs.
                 </p>
-
-                {isTestMode && (
-                    <div role="status" className="text-meta text-warning-400 bg-warning-500/10 border border-warning-500/20 rounded-lg px-3 py-2">
-                        Mode démo actif : la synchronisation est désactivée pour ne pas mélanger des données
-                        de démonstration avec tes vraies données.
-                    </div>
-                )}
 
                 {/* [FINTABLE-STALE-ALERT] Cible du deep-link de la bannière d'Accueil. */}
                 <div data-focus-section="fintable-sync">
@@ -399,7 +368,7 @@ export const FintableSyncCard: React.FC = () => {
                     <button
                         type="button"
                         onClick={() => { void handleSync(false); }}
-                        disabled={busy !== 'idle' || token.trim() === '' || isTestMode}
+                        disabled={busy !== 'idle' || token.trim() === ''}
                         aria-describedby="fintable-actions-why"
                         className="px-3 py-2 touch-target bg-primary/90 hover:bg-primary text-dark rounded-card text-meta font-bold transition-colors focus-ring disabled:opacity-50"
                     >
@@ -412,7 +381,7 @@ export const FintableSyncCard: React.FC = () => {
                     <button
                         type="button"
                         onClick={() => { void handleSync(true); }}
-                        disabled={busy !== 'idle' || token.trim() === '' || isTestMode}
+                        disabled={busy !== 'idle' || token.trim() === ''}
                         aria-describedby="fintable-actions-why"
                         title="Rapatrie TOUT l'historique exposé par Fintable, pas seulement les jours qui suivent ta transaction la plus récente. Les doublons évidents sont neutralisés automatiquement ; les cas douteux te sont listés."
                         className="px-3 py-2 touch-target bg-surface-douce hover:bg-bordure border border-bordure-champ rounded-card text-ink-200 text-meta font-bold transition-colors focus-ring disabled:opacity-50"
@@ -495,11 +464,9 @@ export const FintableSyncCard: React.FC = () => {
                 <p id="fintable-actions-why" className="sr-only">
                     {token.trim() === ''
                         ? 'Ces actions nécessitent un jeton Fintable.'
-                        : isTestMode
-                            ? 'La synchronisation est indisponible en mode démo.'
-                            : busy !== 'idle'
-                                ? 'Une opération est déjà en cours.'
-                                : 'Prêt.'}
+                        : busy !== 'idle'
+                            ? 'Une opération est déjà en cours.'
+                            : 'Prêt.'}
                 </p>
 
                 {/* ⚠️ [finding a11y-auditor, PR #536] Régions live montées en PERMANENCE, dont le
@@ -751,7 +718,6 @@ export const FintableSyncCard: React.FC = () => {
                                 </span>
                             </div>
                         )}
-                        <span className="block mt-1">Détail complet dans Réglages → Système &amp; diagnostics.</span>
                     </div>
                 )}
             </div>

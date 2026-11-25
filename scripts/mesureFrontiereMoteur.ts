@@ -22,7 +22,7 @@
 import { buildSimulationParamsFromState } from '../services/projection/buildSimulationParams.ts';
 import { calculateFutureProjection } from '../services/projection.ts';
 import type { SimulationParams } from '../services/projection.ts';
-import { buildCoupleConfort } from '../services/testPersonas/coupleConfort.ts';
+import { buildCoupleConfort } from '../tests/fixtures/testPersonas/coupleConfort.ts';
 import type { AppState } from '../types.ts';
 
 /** Tous les paramètres du scénario, nommés — y compris ceux dont le ticket a montré qu'on peut

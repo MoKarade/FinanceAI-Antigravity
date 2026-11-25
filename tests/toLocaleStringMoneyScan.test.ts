@@ -22,7 +22,7 @@ import { join, extname } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { stripCommentsJsx } from '../utils/stripComments';
 
-const RACINES = ['components', 'services', 'hooks', 'store', 'mcp', 'utils'];
+const RACINES = ['components', 'services', 'hooks', 'store', 'utils'];
 
 const fichiersProd = (): string[] => {
     const out: string[] = [];
@@ -139,7 +139,8 @@ describe('[FMT-TOLOCALESTRING-MONEY] le scan qui définit le périmètre', () =>
         // MONTANT, elle, est désormais VIDE par construction — c'est le sujet du test d'inventaire
         // plus bas, et sa capacité de détection est prouvée par les témoins nommés.
         expect(r.montants.length + r.compteurs.length + r.dates).toBeGreaterThan(8);
-        expect(r.dates).toBeGreaterThan(5);
+        // Re-mesuré à 5 après retrait F10-F14 (SystemView/AuditLogViewer/ErrorLogViewer/pdfReport).
+        expect(r.dates).toBeGreaterThanOrEqual(5);
         expect(r.compteurs.length).toBeGreaterThan(0);
     });
 

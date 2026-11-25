@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import {
-    GoogleAuthProvider,
     onAuthStateChanged,
     signInWithPopup,
     signInWithRedirect,
@@ -23,13 +22,6 @@ import {
     getFirebaseSyncStatus,
     type FirebaseWorkspaceSyncStatus,
 } from '../../services/firebase/workspaceSync';
-import { cacheExternalGoogleToken } from '../../services/googleDrive/gisAuth';
-import {
-    ensureDefaultGoogleAuthConfigured,
-    chercherEtRestaurerDepuisGoogleDrive,
-} from '../../services/dataRecovery';
-import { setStatus as setDriveSyncStatus } from '../../services/sync/syncStatusStore';
-import { setGateAuthedThisSession } from '../../services/sync/authGate';
 import {
     needsBlockingIdbHydration,
     hydrateStoreFromIdbOnce,
@@ -114,7 +106,7 @@ interface FirebaseAuthGateProps {
 
 /**
  * Portail d'authentification Firebase et orchestrateur de la synchronisation temps réel
- * Cloud Firestore (`/workspaces/{uid}`) + Google Drive.
+ * Cloud Firestore (`/workspaces/{uid}`).
  */
 export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
     children,
@@ -186,10 +178,6 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
             void getRedirectResult(auth)
                 .then((result) => {
                     if (result?.user) {
-                        const oauthCred = GoogleAuthProvider.credentialFromResult(result);
-                        if (oauthCred?.accessToken) {
-                            cacheExternalGoogleToken(oauthCred.accessToken);
-                        }
                         void pullWorkspaceFromFirestoreNow(result.user);
                     }
                 })
@@ -204,16 +192,8 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                 setUser(nextUser);
                 if (nextUser) {
                     setRequireGateScreen(false);
-                    setGateAuthedThisSession();
-                    setDriveSyncStatus({
-                        connected: true,
-                        email: nextUser.email ?? null,
-                        resumeSettled: true,
-                        error: null,
-                    });
                 } else {
                     void recoverOrEnsureInitialWorkspace(false);
-                    void chercherEtRestaurerDepuisGoogleDrive();
                     const bypassOffline =
                         typeof sessionStorage !== 'undefined' &&
                         sessionStorage.getItem('financeai:offline_bypass') === '1';
@@ -256,21 +236,9 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
         setIsSigningIn(true);
         setAuthError(null);
         try {
-            ensureDefaultGoogleAuthConfigured();
             const credential = await signInWithPopup(auth, googleProvider);
-            const oauthCred = GoogleAuthProvider.credentialFromResult(credential);
             setUser(credential.user);
             setRequireGateScreen(false);
-            setGateAuthedThisSession();
-            setDriveSyncStatus({
-                connected: true,
-                email: credential.user.email ?? null,
-                resumeSettled: true,
-                error: null,
-            });
-            if (oauthCred?.accessToken) {
-                cacheExternalGoogleToken(oauthCred.accessToken);
-            }
             const firestoreRestored = await pullWorkspaceFromFirestoreNow(credential.user);
             if (firestoreRestored.restored) {
                 showToast(
@@ -278,17 +246,6 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                     'success',
                 );
                 return;
-            }
-            if (oauthCred?.accessToken) {
-                const driveRecovered = await chercherEtRestaurerDepuisGoogleDrive();
-                if (driveRecovered?.restored) {
-                    await pushWorkspaceToFirestore(credential.user);
-                    showToast(
-                        `Dossier retrouvé (${driveRecovered.sourceLabel}) et synchronisé.`,
-                        'success',
-                    );
-                    return;
-                }
             }
             showToast(
                 'Compte Google connecté · Synchronisation automatique PC & mobile active.',
@@ -349,14 +306,6 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                 );
                 return;
             }
-        }
-        const driveRecovered = await chercherEtRestaurerDepuisGoogleDrive();
-        if (driveRecovered?.restored) {
-            if (user) {
-                await pushWorkspaceToFirestore(user).catch(() => {});
-            }
-            showToast(`Dossier restauré depuis ${driveRecovered.sourceLabel}.`, 'success');
-            return;
         }
         const result = await recoverOrEnsureInitialWorkspace(true);
         if (result === 'restored-idb' || result === 'restored-snapshot') {

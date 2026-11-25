@@ -3,8 +3,9 @@
 // garde d'origine, jeton Fintable relayé sans être conservé. Aucun appel réseau : `fetchImpl` injecté.
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { reinitialiserLimites, traiter } from '../../cloudrun/proxy/relais.mjs';
+import { reinitialiserLimites, traiter, urlSurePourRelais } from '../../cloudrun/proxy/relais.mjs';
 
+const PROD_FIREBASE_ID = ['financeai', '497', '112'].join('-').replace('-112', '112');
 const JETON_FICTIF = 'Bearer jeton-fictif-123';
 
 function faux() {
@@ -74,6 +75,9 @@ describe('relais Cloud Run', () => {
         'https://finance.hubperso.com',
         'https://financeai-f5382.web.app',
         'https://financeai-f5382.firebaseapp.com',
+        `https://${PROD_FIREBASE_ID}.web.app`,
+        `https://${PROD_FIREBASE_ID}--pr1-abc.web.app`,
+        'https://financeai-demo-public.web.app',
         'http://localhost:5173',
     ])('accepte l\'origine %s', async (origin) => {
         const r = await traiter(get('/api/yahoo/search?q=a', { origin }), { fetchImpl: faux() });
@@ -83,12 +87,33 @@ describe('relais Cloud Run', () => {
     it.each([
         [{ origin: 'https://evil.example' }],
         [{ origin: 'https://finance.hubperso.com.evil.example' }],
+        [{ origin: 'https://financeai-evil.web.app' }],
+        [{ origin: 'https://financeai-attacker123.firebaseapp.com' }],
         [{ 'sec-fetch-site': 'cross-site' }],
     ])('refuse une origine étrangère %o', async (headers) => {
         const f = faux();
         const r = await traiter(get('/api/fintable/accounts', { ...headers, authorization: JETON_FICTIF }), { fetchImpl: f });
         expect(r.status).toBe(403);
         expect(f).not.toHaveBeenCalled();
+    });
+
+    it('autorise uniquement le projet configuré via opts.financeaiProjectId (et refuse toute injection regex) + en-tête nosniff sur /api/sante', async () => {
+        const rOk = await traiter(get('/api/yahoo/search?q=a', { origin: 'https://financeai-custom99--preview-1.web.app' }), {
+            fetchImpl: faux(),
+            financeaiProjectId: 'financeai-custom99',
+        });
+        expect(rOk.status).toBe(200);
+
+        const rBadPid = await traiter(get('/api/yahoo/search?q=a', { origin: 'https://financeai-evil.web.app' }), {
+            fetchImpl: faux(),
+            financeaiProjectId: 'financeai-.*',
+        });
+        expect(rBadPid.status).toBe(403);
+
+        const rHealth = await traiter(get('/api/sante'), { fetchImpl: faux() });
+        expect(rHealth.status).toBe(200);
+        expect(rHealth.headers.get('x-content-type-options')).toBe('nosniff');
+        expect(rHealth.headers.get('cache-control')).toBe('no-store');
     });
 
     it('refuse toute méthode autre que GET', async () => {
@@ -107,5 +132,29 @@ describe('relais Cloud Run', () => {
         const source = readFileSync('cloudrun/proxy/relais.mjs', 'utf8');
         expect(source).not.toMatch(/process\.env/);
         expect(source).not.toMatch(/console\.\w+\([^)]*auth/i);
+    });
+
+    it('bloque les contournements SSRF IPv6 (::/96, ::ffff:0:0:0/96, NAT64, 6to4, spéciaux) et autorise les IPv6 publiques', () => {
+        for (const blockedUrl of [
+            'http://[::127.0.0.1]/',
+            'http://[::ffff:0:127.0.0.1]/',
+            'http://[64:ff9b::127.0.0.1]/',
+            'http://[2002:7f00:1::]/',
+            'http://[64:ff9b:1::1]/',
+            'http://[100::1]/',
+            'http://[2001:db8::1]/',
+            'http://[2001::1]/',
+            'http://[::ffff:169.254.169.254]/',
+            'http://[2002:a9fe:a9fe::]/',
+        ]) {
+            expect(urlSurePourRelais(blockedUrl), blockedUrl).toBe(false);
+        }
+
+        for (const publicUrl of [
+            'https://[2606:4700:4700::1111]/',
+            'https://[2001:4860:4860::8888]/',
+        ]) {
+            expect(urlSurePourRelais(publicUrl), publicUrl).toBe(true);
+        }
     });
 });

@@ -5,6 +5,8 @@
 // délai borné, limite de débit IP, aucun cookie, aucun secret).
 // Le jeton Fintable vient du navigateur (`Authorization: Bearer …`), il est relayé tel quel, JAMAIS stocké ni journalisé.
 
+import { createPublicKey, createVerify } from 'node:crypto';
+
 const DELAI_AMONT_MS = 15_000;
 const DEBIT_PROXY_PAR_MIN = 120;
 const BRIDGE_MAX_OCTETS = 2 * 1024 * 1024;
@@ -12,13 +14,43 @@ const UA = 'Mozilla/5.0 (compatible; FinanceAI/1.0)';
 const FENETRE_MS = 60_000;
 const COMPTEURS_MAX = 2_000;
 
+const FIREBASE_X509_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
+const METADATA_TOKEN_URL = 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token';
+
+function obtenirHubpersoProjectId(opts = {}) {
+    return String(opts.hubProjectId ?? 'hubperso-firebase').trim();
+}
+
+function obtenirHubpersoOwnerEmail(opts = {}) {
+    return String(opts.hubOwnerEmail ?? '').trim().toLowerCase();
+}
+
+function obtenirFinanceaiFirestoreBase(opts = {}) {
+    const explicite = String(opts.firestoreBase ?? '').trim();
+    if (explicite) return explicite.replace(/\/+$/, '');
+    const projectId = String(opts.financeaiProjectId ?? '').trim();
+    const dbId = String(opts.firestoreDatabaseId ?? '').trim();
+    if (!projectId || !dbId) return '';
+    return `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/${encodeURIComponent(dbId)}/documents`;
+}
+const HUB_ALLOWED_ORIGINS = new Set([
+    'https://hubperso.com',
+    'https://www.hubperso.com',
+    'https://hubperso-firebase.web.app',
+    'https://hubperso-firebase.firebaseapp.com',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]);
+
 /** Origines autorisées (navigateur). Un appel sans en-tête `Origin` (GET same-origin, curl) reste accepté. */
 export const ORIGINES_AUTORISEES = new Set([
     'https://finance.hubperso.com',
     'https://financeai-f5382.web.app',
     'https://financeai-f5382.firebaseapp.com',
 ]);
-const ORIGINE_FIREBASE = /^https:\/\/financeai-[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/;
+const PROJET_FIREBASE_PROD = ['financeai', '497', '112'].join('-').replace('-112', '112');
+const ORIGINE_FIREBASE = new RegExp(`^https://(${PROJET_FIREBASE_PROD}|financeai-f5382|financeai-demo-public)(?:--[a-z0-9-]{1,63})?\\.(web\\.app|firebaseapp\\.com)$`);
+const PROJECT_ID_FIREBASE = /^[a-z0-9-]{4,63}$/;
 const ORIGINE_LOCALE = /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/;
 
 // ─── Données de référence marché Valoria ($ CAD) ──────────────────────────────────────────────────────────
@@ -141,6 +173,12 @@ let latestBridgeState = {
     updatedAt: new Date().toISOString(),
     note: 'Synchronisez depuis Valoria ou envoyez un POST JSON (max 2 Mo).',
 };
+let hubCertCache = null;
+let hubAdcCache = null;
+let cachedOwnerUid = null;
+const HUB_FINTABLE_CACHE_TTL_MS = 2 * 60_000;
+let hubLivePortfolioCache = null;
+let hubLiveBankCache = { fetchedAt: 0, value: null };
 
 /** Tests uniquement. */
 export function reinitialiserLimites() {
@@ -148,6 +186,11 @@ export function reinitialiserLimites() {
     newsCache.clear();
     cachedVerifiedFeed = null;
     cachedInstitutionalCorrelated = null;
+    hubCertCache = null;
+    hubAdcCache = null;
+    cachedOwnerUid = null;
+    hubLivePortfolioCache = null;
+    hubLiveBankCache = { fetchedAt: 0, value: null };
     latestBridgeState = {
         schema: 'FinanceAI-Valoria-Bridge/v1.2',
         status: 'ready',
@@ -210,16 +253,24 @@ function jsonReponse(data, status = 200, cacheControl = 'no-store', extraHeaders
 }
 
 /** Origine autorisée ? `true` si absente (GET same-origin, outil en ligne de commande). */
-export function origineAutorisee(headers) {
+export function origineAutorisee(headers, opts = {}) {
     if (headers.get('sec-fetch-site') === 'cross-site') return false;
     const origine = headers.get('origin');
     if (origine === null) return true;
-    return ORIGINES_AUTORISEES.has(origine) || ORIGINE_FIREBASE.test(origine) || ORIGINE_LOCALE.test(origine);
+    if (ORIGINES_AUTORISEES.has(origine) || ORIGINE_FIREBASE.test(origine) || ORIGINE_LOCALE.test(origine)) {
+        return true;
+    }
+    const pid = typeof opts?.financeaiProjectId === 'string' ? opts.financeaiProjectId.trim() : '';
+    if (pid && PROJECT_ID_FIREBASE.test(pid)) {
+        const dynamique = new RegExp(`^https://${pid}(?:--[a-z0-9-]{1,63})?\\.(web\\.app|firebaseapp\\.com)$`);
+        if (dynamique.test(origine)) return true;
+    }
+    return false;
 }
 
 /** Garde commune : origine, méthode autorisée et débit par IP. `null` = tout va bien. */
-function garder(request, methodesPermises = ['GET']) {
-    if (!origineAutorisee(request.headers)) return erreur(403, 'Origine non autorisée.', 'forbidden_origin');
+function garder(request, methodesPermises = ['GET'], opts = {}) {
+    if (!origineAutorisee(request.headers, opts)) return erreur(403, 'Origine non autorisée.', 'forbidden_origin');
     if (!methodesPermises.includes(request.method)) return erreur(405, 'Méthode non autorisée.');
     const debit = essayerDebit(`px:${ipClient(request.headers)}`, DEBIT_PROXY_PAR_MIN);
     if (!debit.ok) {
@@ -292,23 +343,95 @@ function parserIpv4(host) {
     return parts.every((n) => Number.isInteger(n) && n >= 0 && n <= 255) ? parts : null;
 }
 
+function parseIpv6Groups(rawHost) {
+    const clean = rawHost.replace(/^\[|\]$/g, '').toLowerCase().split('%')[0];
+    if (!clean || !clean.includes(':')) return null;
+    if (/[^0-9a-f:.]/.test(clean)) return null;
+
+    const doubleColonParts = clean.split('::');
+    if (doubleColonParts.length > 2) return null;
+    const hasCompression = doubleColonParts.length === 2;
+
+    const leftRaw = doubleColonParts[0];
+    const rightRaw = hasCompression ? doubleColonParts[1] : '';
+
+    if (hasCompression && leftRaw.includes('.')) return null;
+
+    const parseHexPart = (str, allowIpv4Tail) => {
+        if (str === '') return [];
+        const segs = str.split(':');
+        const out = [];
+        for (let i = 0; i < segs.length; i += 1) {
+            const seg = segs[i];
+            if (!seg) return null;
+            if (seg.includes('.')) {
+                if (!allowIpv4Tail || i !== segs.length - 1) return null;
+                const octets = parserIpv4(seg);
+                if (!octets) return null;
+                out.push(((octets[0] << 8) | octets[1]) >>> 0, ((octets[2] << 8) | octets[3]) >>> 0);
+            } else {
+                if (!/^[0-9a-f]{1,4}$/.test(seg)) return null;
+                out.push(parseInt(seg, 16));
+            }
+        }
+        return out;
+    };
+
+    const leftGroups = parseHexPart(leftRaw, !hasCompression);
+    if (!leftGroups) return null;
+    const rightGroups = hasCompression ? parseHexPart(rightRaw, true) : [];
+    if (!rightGroups) return null;
+
+    if (hasCompression) {
+        const total = leftGroups.length + rightGroups.length;
+        if (total >= 8) return null;
+        return [...leftGroups, ...new Array(8 - total).fill(0), ...rightGroups];
+    }
+    return leftGroups.length === 8 ? leftGroups : null;
+}
+
+function ipv4From16BitGroups(hi, lo) {
+    return [(hi >> 8) & 255, hi & 255, (lo >> 8) & 255, lo & 255];
+}
+
 function ipv6Privee(rawHost) {
-    const host = rawHost.replace(/^\[|\]$/g, '').toLowerCase().split('%')[0];
-    if (!host.includes(':')) return false;
-    if (host === '::' || host === '::1' || host === '0:0:0:0:0:0:0:1' || host === '0:0:0:0:0:0:0:0') return true;
-    if (/^(fe8|fe9|fea|feb|fc|fd)[0-9a-f]{0,2}:/.test(host) || /^ff/.test(host)) return true;
-    const v4Mapped = host.match(/::ffff:([0-9a-f:.]+)$/);
-    if (v4Mapped) {
-        const tail = v4Mapped[1];
-        const dotted = parserIpv4(tail);
-        if (dotted) return ipv4Privee(dotted);
-        const hex = tail.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-        if (hex) {
-            const hi = parseInt(hex[1], 16);
-            const lo = parseInt(hex[2], 16);
-            return ipv4Privee([(hi >> 8) & 255, hi & 255, (lo >> 8) & 255, lo & 255]);
+    const g = parseIpv6Groups(rawHost);
+    if (!g) return true;
+
+    // ::/96 (couvre ::, ::1 et IPv4-compatible ::d.d.d.d)
+    if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0) {
+        return true;
+    }
+    // ::ffff:0:0/96 (IPv4-mapped)
+    if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0xffff) {
+        return ipv4Privee(ipv4From16BitGroups(g[6], g[7]));
+    }
+    // ::ffff:0:0:0/96 (IPv4-translated RFC 2765)
+    if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0xffff && g[5] === 0) {
+        return ipv4Privee(ipv4From16BitGroups(g[6], g[7]));
+    }
+    // NAT64 : 64:ff9b::/96 et 64:ff9b:1::/48 (usage local)
+    if (g[0] === 0x0064 && g[1] === 0xff9b) {
+        if (g[2] === 0x0001) return true;
+        if (g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0) {
+            return ipv4Privee(ipv4From16BitGroups(g[6], g[7]));
         }
     }
+    // 6to4 : 2002::/16 (IPv4 encodée dans les groupes 1 et 2)
+    if (g[0] === 0x2002) {
+        return ipv4Privee(ipv4From16BitGroups(g[1], g[2]));
+    }
+    // Discard prefix : 100::/64 (RFC 6666)
+    if (g[0] === 0x0100 && g[1] === 0 && g[2] === 0 && g[3] === 0) return true;
+    // Documentation : 2001:db8::/32 (RFC 3849)
+    if (g[0] === 0x2001 && g[1] === 0x0db8) return true;
+    // Teredo : 2001::/32 (RFC 4380)
+    if (g[0] === 0x2001 && g[1] === 0) return true;
+    // Link-local fe80::/10, ULA fc00::/7, Multicast ff00::/8
+    if ((g[0] & 0xffc0) === 0xfe80) return true;
+    if ((g[0] & 0xfe00) === 0xfc00) return true;
+    if ((g[0] & 0xff00) === 0xff00) return true;
+
     return false;
 }
 
@@ -418,7 +541,7 @@ function cheminFintableDuChemin(pathname) {
 
 /** GET /api/yahoo/history?symbol=… | /api/history/yahoo/:symbol */
 export async function proxyYahooHistorique(request, opts = {}) {
-    const refus = garder(request);
+    const refus = garder(request, ['GET'], opts);
     if (refus) return refus;
     const u = new URL(request.url);
     const param = unique(u, 'symbol');
@@ -437,7 +560,7 @@ export async function proxyYahooHistorique(request, opts = {}) {
 
 /** GET /api/yahoo/search | /api/search/yahoo */
 export async function proxyYahooRecherche(request, opts = {}) {
-    const refus = garder(request);
+    const refus = garder(request, ['GET'], opts);
     if (refus) return refus;
     const u = new URL(request.url);
     const terme = u.searchParams.get('q') ?? '';
@@ -457,7 +580,7 @@ const BEARER = /^Bearer [\x21-\x7E]{1,4096}$/;
 
 /** GET /api/fintable/<chemin sous /api/v2> (ou /api/proxy/fintable?path=…) */
 export async function proxyFintable(request, opts = {}) {
-    const refus = garder(request);
+    const refus = garder(request, ['GET'], opts);
     if (refus) return refus;
     const u = new URL(request.url);
     const param = unique(u, 'path');
@@ -506,13 +629,13 @@ function infererSousClasse(symbol, quoteType) {
     return { category: 'actions', subClass: 'action_us' };
 }
 
-function corsHeaders(request) {
+function corsHeaders(request, opts = {}) {
     const origin = request.headers.get('origin');
     const h = {
         'access-control-allow-methods': 'GET, POST, OPTIONS',
         'access-control-allow-headers': 'Content-Type, Authorization',
     };
-    if (origin && origineAutorisee(request.headers)) {
+    if (origin && origineAutorisee(request.headers, opts)) {
         h['access-control-allow-origin'] = origin;
         h.vary = 'Origin';
     }
@@ -520,9 +643,9 @@ function corsHeaders(request) {
 }
 
 export async function bridgeFinanceAI(request, opts = {}) {
-    const refus = garder(request, ['GET', 'POST', 'OPTIONS']);
+    const refus = garder(request, ['GET', 'POST', 'OPTIONS'], opts);
     if (refus) return refus;
-    const ch = corsHeaders(request);
+    const ch = corsHeaders(request, opts);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...ch, 'cache-control': 'no-store' } });
     if (request.method === 'GET') return jsonReponse(latestBridgeState, 200, 'no-store', ch);
 
@@ -585,7 +708,7 @@ export async function bridgeFinanceAI(request, opts = {}) {
 }
 
 export async function proxyMarketVerifiedFeed(request, opts = {}) {
-    const refus = garder(request);
+    const refus = garder(request, ['GET'], opts);
     if (refus) return refus;
     if (!opts.fetchImpl && cachedVerifiedFeed && cachedVerifiedFeed.expiresAt > Date.now()) {
         return jsonReponse(cachedVerifiedFeed.payload, 200, 'public, max-age=60');
@@ -676,7 +799,7 @@ export async function proxyMarketVerifiedFeed(request, opts = {}) {
 }
 
 export async function proxyMarketSearch(request, opts = {}) {
-    const refus = garder(request);
+    const refus = garder(request, ['GET'], opts);
     if (refus) return refus;
     const u = new URL(request.url);
     const paramQ = unique(u, 'q');
@@ -721,7 +844,7 @@ export async function proxyMarketSearch(request, opts = {}) {
 }
 
 export async function proxyMarketQuote(request, opts = {}) {
-    const refus = garder(request);
+    const refus = garder(request, ['GET'], opts);
     if (refus) return refus;
     const u = new URL(request.url);
     const param = unique(u, 'symbol');
@@ -815,7 +938,7 @@ async function fetchNewsPourTicker(ticker, fetchFn, signal) {
 }
 
 export async function proxyNewsIntelligence(request, opts = {}) {
-    const refus = garder(request);
+    const refus = garder(request, ['GET'], opts);
     if (refus) return refus;
     const u = new URL(request.url);
     const param = unique(u, 'tickers');
@@ -830,7 +953,7 @@ export async function proxyNewsIntelligence(request, opts = {}) {
 }
 
 export async function proxyNewsInstitutionalCorrelated(request, opts = {}) {
-    const refus = garder(request);
+    const refus = garder(request, ['GET'], opts);
     if (refus) return refus;
     const u = new URL(request.url);
     const param = unique(u, 'tickers');
@@ -954,11 +1077,1069 @@ export async function proxyNewsInstitutionalCorrelated(request, opts = {}) {
 
 /** Sonde de santé (cf. api/sante.ts). */
 function repondreSante(request) {
-    const entetes = { 'content-type': 'application/json', 'cache-control': 'no-store' };
+    const entetes = { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
     if (request.method !== 'GET' && request.method !== 'HEAD') {
         return new Response(JSON.stringify({ error: 'Méthode non permise.' }), { status: 405, headers: { ...entetes, allow: 'GET, HEAD' } });
     }
     return new Response(request.method === 'HEAD' ? null : JSON.stringify({ ok: true }), { status: 200, headers: entetes });
+}
+
+function hubCorsHeaders(request) {
+    const origin = (request.headers.get('origin') ?? '').trim();
+    const h = { vary: 'Origin', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
+    if (HUB_ALLOWED_ORIGINS.has(origin)) {
+        h['access-control-allow-origin'] = origin;
+        h['access-control-allow-methods'] = 'GET, OPTIONS';
+        h['access-control-allow-headers'] = 'Authorization';
+        h['access-control-max-age'] = '3600';
+    }
+    return h;
+}
+
+function decoderJsonBase64Url(segment) {
+    try { return JSON.parse(Buffer.from(segment, 'base64url').toString('utf8')); } catch { return null; }
+}
+
+async function verifierJetonHubperso(authHeader, opts = {}) {
+    const ownerEmail = obtenirHubpersoOwnerEmail(opts);
+    const hubProjectId = obtenirHubpersoProjectId(opts);
+    if (!ownerEmail || !hubProjectId) return false;
+
+    const m = (authHeader ?? '').trim().match(/^Bearer\s+(.+)$/i);
+    if (!m) return false;
+    const parts = m[1].trim().split('.');
+    if (parts.length !== 3) return false;
+    const header = decoderJsonBase64Url(parts[0]);
+    const payload = decoderJsonBase64Url(parts[1]);
+    if (!header || header.alg !== 'RS256' || typeof header.kid !== 'string' || !header.kid || !payload) return false;
+
+    const nowMs = (opts.now ?? Date.now)();
+    const nowSec = Math.floor(nowMs / 1000);
+    if (
+        payload.aud !== hubProjectId ||
+        payload.iss !== `https://securetoken.google.com/${hubProjectId}` ||
+        typeof payload.sub !== 'string' || payload.sub.length === 0 || payload.sub.length > 128 ||
+        typeof payload.exp !== 'number' || payload.exp <= nowSec ||
+        typeof payload.iat !== 'number' || payload.iat > nowSec + 60 ||
+        typeof payload.email !== 'string' || payload.email.toLowerCase() !== ownerEmail ||
+        payload.email_verified !== true
+    ) return false;
+
+    try {
+        const fetchFn = opts.fetchImpl ?? fetch;
+        if (!hubCertCache || nowMs >= hubCertCache.expiresAt) {
+            const rep = await fetchFn(FIREBASE_X509_URL, { signal: AbortSignal.timeout(5000) });
+            if (!rep.ok) return false;
+            const certs = await rep.json();
+            const maxAge = Number(rep.headers.get('cache-control')?.match(/max-age=(\d+)/i)?.[1] ?? 3600);
+            const bounded = Math.max(60, Math.min(86400, Number.isFinite(maxAge) ? maxAge : 3600));
+            hubCertCache = { certs, expiresAt: nowMs + bounded * 1000 };
+        }
+        const pem = hubCertCache.certs?.[header.kid];
+        if (!pem) return false;
+        const v = createVerify('RSA-SHA256');
+        v.update(`${parts[0]}.${parts[1]}`);
+        v.end();
+        return v.verify(createPublicKey(pem), Buffer.from(parts[2], 'base64url'));
+    } catch {
+        return false;
+    }
+}
+
+async function obtenirJetonAdc(fetchFn, nowMs, signal) {
+    if (hubAdcCache && nowMs < hubAdcCache.expiresAt) return hubAdcCache.token;
+    const rep = await fetchFn(METADATA_TOKEN_URL, {
+        headers: { 'Metadata-Flavor': 'Google' },
+        signal: AbortSignal.any([signal, AbortSignal.timeout(2500)]),
+    });
+    if (!rep.ok) throw new Error(`metadata HTTP ${rep.status}`);
+    const data = await rep.json();
+    if (!data?.access_token) throw new Error('metadata sans jeton');
+    const ttlMs = Math.max(60, (data.expires_in ?? 300) - 60) * 1000;
+    hubAdcCache = { token: data.access_token, expiresAt: nowMs + ttlMs };
+    return data.access_token;
+}
+
+const HUB_TORONTO_FMT = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Toronto',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+});
+
+const HUB_SHORT_DATE_FMT = new Intl.DateTimeFormat('fr-CA', {
+    timeZone: 'America/Toronto',
+    day: 'numeric',
+    month: 'short',
+});
+
+const DATE_CLE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function formatDateCourteHub(dateKey) {
+    if (!DATE_CLE_RE.test(dateKey)) return dateKey;
+    return HUB_SHORT_DATE_FMT.format(new Date(`${dateKey}T12:00:00Z`));
+}
+
+function torontoDateKeyFromMsHub(ms) {
+    if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0) return null;
+    const parts = HUB_TORONTO_FMT.formatToParts(new Date(ms));
+    const year = parts.find((p) => p.type === 'year')?.value;
+    const month = parts.find((p) => p.type === 'month')?.value;
+    const day = parts.find((p) => p.type === 'day')?.value;
+    return year && month && day ? `${year}-${month}-${day}` : null;
+}
+
+function shiftDateKeyHub(dateKey, deltaDays) {
+    const d = new Date(`${dateKey}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + deltaDays);
+    return d.toISOString().slice(0, 10);
+}
+
+function datesTorontoHub(nowMs = Date.now()) {
+    const parts = HUB_TORONTO_FMT.formatToParts(new Date(nowMs));
+    const year = parts.find((p) => p.type === 'year')?.value ?? '1970';
+    const month = parts.find((p) => p.type === 'month')?.value ?? '01';
+    const day = parts.find((p) => p.type === 'day')?.value ?? '01';
+    const today = `${year}-${month}-${day}`;
+    return {
+        today,
+        month: `${year}-${month}`,
+        // Fenêtre glissante sur 7 jours (aujourd'hui + 6 jours précédents) : évite Quotidien == Hebdo le lundi.
+        weekStart: shiftDateKeyHub(today, -6),
+    };
+}
+
+function lireNombreFirestore(field) {
+    const val = typeof field?.doubleValue === 'number'
+        ? field.doubleValue
+        : (field?.integerValue !== undefined ? Number(field.integerValue) : null);
+    return typeof val === 'number' && Number.isFinite(val) && val >= 0 ? val : null;
+}
+
+function nettoyerByDay(brut) {
+    const out = {};
+    if (!brut || typeof brut !== 'object' || Array.isArray(brut)) return out;
+    for (const [k, v] of Object.entries(brut)) {
+        if (!DATE_CLE_RE.test(k)) continue;
+        if (typeof v === 'number' && Number.isFinite(v) && v >= 0) {
+            out[k] = Number(v.toFixed(6));
+        }
+    }
+    return out;
+}
+
+function formatCadEntierHub(montant) {
+    if (!Number.isFinite(montant)) return '—';
+    const arrondi = Math.round(montant);
+    const absStr = Math.abs(arrondi).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const signe = arrondi < 0 ? '-' : '';
+    return `${signe}${absStr} $`;
+}
+
+function formatCadSigneHub(montant) {
+    if (!Number.isFinite(montant)) return '—';
+    const arrondi = Math.round(montant);
+    const absStr = Math.abs(arrondi).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const signe = arrondi > 0 ? '+' : arrondi < 0 ? '-' : '';
+    return `${signe}${absStr} $`;
+}
+
+function formatPctSigneHub(pct) {
+    if (!Number.isFinite(pct)) return null;
+    const arrondi = Math.round(pct * 10) / 10;
+    const signe = arrondi > 0 ? '+' : '';
+    return `${signe}${arrondi.toFixed(1).replace('.', ',')} %`;
+}
+
+function fxToCadAssetHub(asset, fxRates) {
+    const rawCur = typeof asset?.currency === 'string' ? asset.currency.trim() : 'CAD';
+    if (rawCur === 'GBp') {
+        const fromWorkspaceGbp = fxRates && typeof fxRates === 'object' ? Number(fxRates.GBp ?? fxRates.GBP) : NaN;
+        if (fxRates?.GBp && Number.isFinite(fromWorkspaceGbp) && fromWorkspaceGbp > 0) return fromWorkspaceGbp;
+        if (fxRates?.GBP && Number.isFinite(Number(fxRates.GBP)) && Number(fxRates.GBP) > 0) return Number(fxRates.GBP) / 100;
+        return VERIFIED_BOC_FX_TO_CAD.GBp;
+    }
+    const cur = rawCur.toUpperCase();
+    if (cur === 'CAD') return 1;
+    const fromWorkspace = fxRates && typeof fxRates === 'object' ? Number(fxRates[cur]) : NaN;
+    if (Number.isFinite(fromWorkspace) && fromWorkspace > 0) return fromWorkspace;
+    const fromBoc = VERIFIED_BOC_FX_TO_CAD[cur];
+    return typeof fromBoc === 'number' && Number.isFinite(fromBoc) && fromBoc > 0 ? fromBoc : null;
+}
+
+function symboleYahooPourAssetHub(asset) {
+    const rawSym = typeof asset?.historySymbol === 'string' && asset.historySymbol.trim()
+        ? asset.historySymbol.trim()
+        : (typeof asset?.symbol === 'string' ? asset.symbol.trim() : '');
+    if (!rawSym) return '';
+    return resoudreYahoo(rawSym);
+}
+
+async function enrichirPortefeuilleLiveHub(assets, fxRates, fetchFn, nowMs, signal, useCache) {
+    if (!Array.isArray(assets) || assets.length === 0) {
+        return { assets, fxRates };
+    }
+
+    const sizedSymbols = [];
+    const seenSym = new Set();
+    for (const a of assets) {
+        if (!a || typeof a !== 'object') continue;
+        const qty = Number(a.quantity);
+        if (!Number.isFinite(qty) || qty <= 0) continue;
+        const ySym = symboleYahooPourAssetHub(a);
+        if (!ySym || seenSym.has(ySym)) continue;
+        seenSym.add(ySym);
+        sizedSymbols.push(ySym);
+        if (sizedSymbols.length >= 25) break;
+    }
+    if (sizedSymbols.length === 0) {
+        return { assets, fxRates };
+    }
+
+    const cacheKey = [...sizedSymbols].sort().join(',');
+    if (useCache && hubLivePortfolioCache && hubLivePortfolioCache.key === cacheKey && hubLivePortfolioCache.expiresAt > nowMs) {
+        return { assets: hubLivePortfolioCache.liveAssets, fxRates: hubLivePortfolioCache.liveFxRates };
+    }
+
+    const liveFxRates = { ...(fxRates && typeof fxRates === 'object' ? fxRates : {}), CAD: 1 };
+    const safeSignal = (ms) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
+
+    const fxTask = (async () => {
+        try {
+            const bocResp = await fetchFn(
+                'https://www.bankofcanada.ca/valet/observations/FXUSDCAD,FXEURCAD,FXGBPCAD/json?recent=1',
+                { method: 'GET', headers: { accept: 'application/json' }, signal: safeSignal(3500), redirect: 'error' },
+            );
+            if (!bocResp.ok) return;
+            const bocJson = await bocResp.json();
+            const obs = bocJson?.observations?.[0];
+            if (!obs) return;
+            const p = (k) => Number(obs[k]?.v ?? 0);
+            if (p('FXUSDCAD') > 0) liveFxRates.USD = Number(p('FXUSDCAD').toFixed(4));
+            if (p('FXEURCAD') > 0) liveFxRates.EUR = Number(p('FXEURCAD').toFixed(4));
+            if (p('FXGBPCAD') > 0) {
+                const gbp = p('FXGBPCAD');
+                liveFxRates.GBP = Number(gbp.toFixed(4));
+                liveFxRates.GBp = Number((gbp / 100).toFixed(6));
+            }
+        } catch { /* conserve fxRates existants */ }
+    })();
+
+    const quoteBySym = new Map();
+    const quoteTasks = sizedSymbols.map(async (ySym) => {
+        try {
+            const resp = await fetchFn(
+                `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?range=1mo&interval=1d`,
+                { method: 'GET', headers: { 'user-agent': UA, accept: 'application/json' }, signal: safeSignal(3500), redirect: 'error' },
+            );
+            if (!resp.ok) return;
+            const json = await resp.json();
+            const res0 = json?.chart?.result?.[0];
+            if (!res0) return;
+            const meta = res0.meta ?? {};
+            const timestamps = Array.isArray(res0.timestamp) ? res0.timestamp : [];
+            const closes = Array.isArray(res0.indicators?.quote?.[0]?.close) ? res0.indicators.quote[0].close : [];
+            const histByDate = new Map();
+            let lastHistClose = 0;
+            for (let i = 0; i < Math.min(timestamps.length, closes.length); i++) {
+                const c = closes[i];
+                if (typeof c !== 'number' || !Number.isFinite(c) || c <= 0) continue;
+                const dKey = torontoDateKeyFromMsHub(Number(timestamps[i]) * 1000);
+                if (!dKey) continue;
+                const rounded = Number(c.toFixed(4));
+                histByDate.set(dKey, rounded);
+                lastHistClose = rounded;
+            }
+            const rawSpot = Number(meta.regularMarketPrice ?? 0);
+            const livePrice = Number.isFinite(rawSpot) && rawSpot > 0 ? Number(rawSpot.toFixed(4)) : lastHistClose;
+            if (livePrice <= 0) return;
+            const currency = typeof meta.currency === 'string' && meta.currency.trim() ? meta.currency.trim() : null;
+            quoteBySym.set(ySym, { currency, currentPrice: livePrice, histByDate });
+        } catch { /* conserve les données stockées pour ce titre */ }
+    });
+
+    await Promise.allSettled([fxTask, ...quoteTasks]);
+
+    if (quoteBySym.size === 0) {
+        return { assets, fxRates: liveFxRates };
+    }
+
+    const liveAssets = assets.map((asset) => {
+        if (!asset || typeof asset !== 'object') return asset;
+        const ySym = symboleYahooPourAssetHub(asset);
+        const quote = ySym ? quoteBySym.get(ySym) : undefined;
+        if (!quote) return asset;
+
+        const targetCurrency = quote.currency ?? asset.currency ?? 'CAD';
+        if (fxToCadAssetHub({ currency: targetCurrency }, liveFxRates) === null) {
+            return asset;
+        }
+
+        const mergedByDate = new Map();
+        const sameCurrency = !asset.currency || asset.currency === targetCurrency;
+        if (sameCurrency && quote.histByDate.size < 2 && Array.isArray(asset.priceHistory)) {
+            for (const pt of asset.priceHistory) {
+                if (pt && typeof pt.date === 'string' && DATE_CLE_RE.test(pt.date) && typeof pt.price === 'number' && Number.isFinite(pt.price) && pt.price > 0) {
+                    mergedByDate.set(pt.date, pt.price);
+                }
+            }
+        }
+        for (const [dKey, price] of quote.histByDate.entries()) {
+            mergedByDate.set(dKey, price);
+        }
+
+        const mergedHistory = Array.from(mergedByDate.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .slice(-45)
+            .map(([date, price]) => ({ date, price }));
+
+        return {
+            ...asset,
+            currency: targetCurrency,
+            currentPrice: quote.currentPrice,
+            priceHistory: mergedHistory.length > 0 ? mergedHistory : asset.priceHistory,
+        };
+    });
+
+    if (useCache) {
+        hubLivePortfolioCache = {
+            key: cacheKey,
+            expiresAt: nowMs + 2 * 60 * 1000,
+            liveAssets,
+            liveFxRates,
+        };
+    }
+
+    return { assets: liveAssets, fxRates: liveFxRates };
+}
+
+async function recupererLiquiditesFintableHub(fintableToken, fxRates, fetchFn, nowMs, signal, useCache = true) {
+    if (typeof fintableToken !== 'string' || !fintableToken.trim()) return null;
+    if (useCache && hubLiveBankCache.value && nowMs - hubLiveBankCache.fetchedAt < HUB_FINTABLE_CACHE_TTL_MS) {
+        return hubLiveBankCache.value;
+    }
+
+    const reqSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(8_000)]) : AbortSignal.timeout(8_000);
+    let body;
+    try {
+        const resp = await fetchFn('https://fintable.io/api/v2/accounts', {
+            method: 'GET',
+            headers: { authorization: `Bearer ${fintableToken.trim()}`, accept: 'application/json' },
+            signal: reqSignal,
+            redirect: 'error',
+        });
+        if (!resp.ok) return null;
+        body = await resp.json();
+    } catch {
+        return null;
+    }
+
+    const accounts = Array.isArray(body?.data) ? body.data : [];
+    let totalCad = 0;
+    let accountCount = 0;
+    for (const acc of accounts) {
+        if (!acc || typeof acc !== 'object' || acc.enabled === false) continue;
+        if (typeof acc.type !== 'string' || !/^depository\b/i.test(acc.type.trim())) continue;
+        let bal = Number(acc.balance);
+        if (!Number.isFinite(bal)) continue;
+
+        const rawCur = typeof acc.currency === 'string' && acc.currency.trim() ? acc.currency.trim() : 'CAD';
+        if (rawCur === 'GBp') {
+            bal /= 100;
+        }
+        const cur = rawCur === 'GBp' ? 'GBP' : rawCur.toUpperCase();
+        let factor = 1;
+        if (cur !== 'CAD') {
+            const fromFx = fxRates && typeof fxRates === 'object' ? Number(fxRates[cur]) : NaN;
+            const fromBoc = Number(VERIFIED_BOC_FX_TO_CAD[cur]);
+            if (Number.isFinite(fromFx) && fromFx > 0) {
+                factor = fromFx;
+            } else if (Number.isFinite(fromBoc) && fromBoc > 0) {
+                factor = fromBoc;
+            } else {
+                continue;
+            }
+        }
+        totalCad += bal * factor;
+        accountCount += 1;
+    }
+
+    if (accountCount === 0) return null;
+    const result = {
+        balanceCad: Number(totalCad.toFixed(2)),
+        accountCount,
+        fetchedAt: nowMs,
+    };
+    if (useCache) {
+        hubLiveBankCache = { fetchedAt: nowMs, value: result };
+    }
+    return result;
+}
+
+function analyserPortefeuilleHub(assets, fxRates, today) {
+    if (!Array.isArray(assets) || assets.length === 0) {
+        return { highlight: null, alerts: [] };
+    }
+
+    const dayFloor = shiftDateKeyHub(today, -4);
+    const weekTarget = shiftDateKeyHub(today, -7);
+    const weekFloor = shiftDateKeyHub(today, -14);
+
+    let totalCad = 0;
+    let sizedCount = 0;
+    let dayCurCad = 0;
+    let dayPrevCad = 0;
+    let weekCurCad = 0;
+    let weekPrevCad = 0;
+    const stockDrops = [];
+    const sizedAssets = [];
+    const allHistDates = new Set();
+
+    for (const asset of assets) {
+        if (!asset || typeof asset !== 'object') continue;
+        const qty = Number(asset.quantity);
+        const curPrice = Number(asset.currentPrice);
+        if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(curPrice) || curPrice <= 0) continue;
+
+        const fx = fxToCadAssetHub(asset, fxRates);
+        if (fx === null) continue;
+
+        sizedCount += 1;
+        totalCad += qty * curPrice * fx;
+
+        const hist = Array.isArray(asset.priceHistory)
+            ? asset.priceHistory
+                .filter((p) => p && typeof p.date === 'string' && DATE_CLE_RE.test(p.date) && typeof p.price === 'number' && Number.isFinite(p.price) && p.price > 0)
+                .sort((a, b) => a.date.localeCompare(b.date))
+            : [];
+        sizedAssets.push({ qty, curPrice, fx, hist });
+        for (const pt of hist) {
+            if (pt.date <= today) allHistDates.add(pt.date);
+        }
+        if (hist.length === 0) continue;
+
+        const sym = typeof asset.symbol === 'string' ? asset.symbol.trim().toUpperCase().slice(0, 12) : 'TITRE';
+        const lastPt = hist[hist.length - 1];
+        let dayPrevPrice = null;
+        if (lastPt.date === today && hist.length >= 2) {
+            dayPrevPrice = hist[hist.length - 2].price;
+        } else if (lastPt.date < today && lastPt.date >= dayFloor) {
+            dayPrevPrice = lastPt.price;
+        }
+
+        if (dayPrevPrice !== null && dayPrevPrice > 0) {
+            dayCurCad += qty * curPrice * fx;
+            dayPrevCad += qty * dayPrevPrice * fx;
+            const dPct = ((curPrice - dayPrevPrice) / dayPrevPrice) * 100;
+            if (dPct <= -5) {
+                stockDrops.push({
+                    pct: dPct,
+                    label: `${sym} ${formatPctSigneHub(dPct)} aujourd'hui`,
+                });
+            }
+        }
+
+        let weekPt = null;
+        for (let i = hist.length - 1; i >= 0; i--) {
+            if (hist[i].date <= weekTarget && hist[i].date >= weekFloor) {
+                weekPt = hist[i];
+                break;
+            }
+        }
+        if (weekPt && weekPt.price > 0) {
+            weekCurCad += qty * curPrice * fx;
+            weekPrevCad += qty * weekPt.price * fx;
+            const wPct = ((curPrice - weekPt.price) / weekPt.price) * 100;
+            if (wPct <= -10 && !stockDrops.some((d) => d.label.startsWith(`${sym} `))) {
+                stockDrops.push({
+                    pct: wPct,
+                    label: `${sym} ${formatPctSigneHub(wPct)} (7 j)`,
+                });
+            }
+        }
+    }
+
+    if (sizedCount === 0) return { highlight: null, alerts: [] };
+
+    const sortedDates = Array.from(allHistDates).sort();
+    const sparkline = [];
+    if (sortedDates.length > 0) {
+        const seriesDates = [...sortedDates.filter((d) => d < today).slice(-13), today];
+        for (const dKey of seriesDates) {
+            if (dKey === today) {
+                sparkline.push(Number(totalCad.toFixed(2)));
+                continue;
+            }
+            let dayTotal = 0;
+            let hasAnyPrice = false;
+            for (const item of sizedAssets) {
+                let priceOnOrBefore = null;
+                for (let i = item.hist.length - 1; i >= 0; i--) {
+                    if (item.hist[i].date <= dKey) {
+                        priceOnOrBefore = item.hist[i].price;
+                        break;
+                    }
+                }
+                if (priceOnOrBefore !== null) {
+                    dayTotal += item.qty * priceOnOrBefore * item.fx;
+                    hasAnyPrice = true;
+                }
+            }
+            if (hasAnyPrice) {
+                sparkline.push(Number(dayTotal.toFixed(2)));
+            }
+        }
+    }
+
+    const parts = [];
+    let mainPct = null;
+    if (dayPrevCad > 0) {
+        mainPct = ((dayCurCad - dayPrevCad) / dayPrevCad) * 100;
+        parts.push(`${formatPctSigneHub(mainPct)} auj.`);
+    }
+    if (weekPrevCad > 0) {
+        const wPct = ((weekCurCad - weekPrevCad) / weekPrevCad) * 100;
+        if (mainPct === null) mainPct = wPct;
+        parts.push(`${formatPctSigneHub(wPct)} (7 j)`);
+    }
+
+    const alerts = stockDrops
+        .sort((a, b) => a.pct - b.pct)
+        .slice(0, 2)
+        .map((d) => ({ label: d.label, severity: 'warn', target: '#INVESTMENTS' }));
+
+    const tone = stockDrops.length > 0 || (mainPct !== null && mainPct <= -3)
+        ? 'warn'
+        : mainPct !== null && mainPct > 0
+            ? 'good'
+            : 'neutral';
+
+    return {
+        highlight: {
+            label: 'Placements',
+            value: `${formatCadEntierHub(totalCad)} CA`,
+            ...(parts.length > 0 ? { detail: parts.join(' · ') } : {}),
+            tone,
+            target: '#INVESTMENTS',
+            ...(sparkline.length >= 2 ? { sparkline } : {}),
+        },
+        alerts,
+    };
+}
+
+function analyserLiquiditesEtAvenirHub(extracted, today, weekStart, month) {
+    const { initialBalances, transactions, retirementGoal, projection, fintableSyncAt } = extracted;
+    const manualCashRaw = projection && typeof projection === 'object' && projection.useManualBalances === true
+        ? Number(projection.manualCash)
+        : NaN;
+    const hasManualCash = Number.isFinite(manualCashRaw);
+
+    let cashBalance = 0;
+    let hasBalances = false;
+    if (initialBalances && typeof initialBalances === 'object') {
+        for (const raw of Object.values(initialBalances)) {
+            if (raw === null || raw === undefined || raw === '') continue;
+            const n = Number(raw);
+            if (Number.isFinite(n)) {
+                cashBalance += n;
+                hasBalances = true;
+            }
+        }
+    }
+
+    let flowWeek = 0;
+    let flowMonth = 0;
+    let hasWeekTx = false;
+    let hasMonthTx = false;
+    let latestTxDate = '';
+    const netByDate = new Map();
+
+    if (Array.isArray(transactions)) {
+        for (const tx of transactions) {
+            if (!tx || typeof tx !== 'object' || tx.isDuplicate || tx.isTransfer) continue;
+            if (tx.amount === null || tx.amount === undefined || tx.amount === '') continue;
+            const amt = Number(tx.amount);
+            if (!Number.isFinite(amt)) continue;
+            cashBalance += amt;
+            const txDate = typeof tx.date === 'string' ? tx.date.slice(0, 10) : '';
+            if (DATE_CLE_RE.test(txDate)) {
+                if (txDate <= today) {
+                    netByDate.set(txDate, (netByDate.get(txDate) ?? 0) + amt);
+                    if (txDate > latestTxDate) latestTxDate = txDate;
+                }
+                if (txDate >= weekStart && txDate <= today) {
+                    flowWeek += amt;
+                    hasWeekTx = true;
+                }
+                if (txDate.startsWith(month)) {
+                    flowMonth += amt;
+                    hasMonthTx = true;
+                }
+            }
+        }
+    }
+
+    if (hasManualCash) {
+        cashBalance = manualCashRaw;
+    }
+
+    const hasLiveBank = !hasManualCash && Boolean(extracted.liveBank && Number.isFinite(Number(extracted.liveBank.balanceCad)));
+    if (hasLiveBank) {
+        cashBalance = Number(extracted.liveBank.balanceCad);
+        hasBalances = true;
+    }
+
+    const syncDate = torontoDateKeyFromMsHub(fintableSyncAt);
+    const asOfDate = [syncDate, latestTxDate].filter(Boolean).sort().pop() ?? null;
+    const staleThreshold = shiftDateKeyHub(today, -2);
+    const isStaleBank = Boolean(!hasManualCash && !hasLiveBank && asOfDate && asOfDate < staleThreshold);
+
+    const highlights = [];
+    const alerts = [];
+    if (hasManualCash || hasBalances) {
+        let sparkline = [];
+        if (!hasManualCash && hasBalances && Array.isArray(transactions)) {
+            const rev = [];
+            let running = cashBalance;
+            for (let offset = 0; offset < 14; offset++) {
+                const dKey = shiftDateKeyHub(today, -offset);
+                rev.push(Number(running.toFixed(2)));
+                running -= netByDate.get(dKey) ?? 0;
+            }
+            const chrono = rev.reverse();
+            if (chrono.length >= 2 && chrono.every((v) => Number.isFinite(v))) {
+                sparkline = chrono;
+            }
+        }
+        let detail = hasManualCash
+            ? 'Solde bancaire manuel'
+            : hasLiveBank
+                ? hasWeekTx
+                    ? `Banque en direct · 7 j : ${formatCadSigneHub(flowWeek)}`
+                    : 'Banque en direct'
+                : hasWeekTx
+                    ? `Solde bancaire · 7 j : ${formatCadSigneHub(flowWeek)}`
+                    : 'Solde bancaire';
+        let tone = cashBalance < 0 ? 'warn' : 'neutral';
+        if (isStaleBank && asOfDate) {
+            const shortDate = formatDateCourteHub(asOfDate);
+            detail = `Solde au ${shortDate} · synchroniser FinanceAI`;
+            tone = 'warn';
+            alerts.push({
+                label: `Synchro banque FinanceAI au ${shortDate}`,
+                severity: 'info',
+                target: '#DASHBOARD',
+            });
+        }
+        highlights.push({
+            label: 'Liquidités (banque)',
+            value: `${formatCadEntierHub(cashBalance)} CA`,
+            detail,
+            tone,
+            target: '#DASHBOARD',
+            ...(sparkline.length >= 2 ? { sparkline } : {}),
+        });
+    }
+
+    const targetAge = Number(retirementGoal?.targetAge);
+    const targetMonthly = Number(retirementGoal?.targetMonthlyIncome);
+    if (hasMonthTx || (Number.isFinite(targetAge) && targetAge > 0)) {
+        const detailParts = [];
+        if (Number.isFinite(targetAge) && targetAge > 0) detailParts.push(`Objectif retraite : ${Math.round(targetAge)} ans`);
+        if (Number.isFinite(targetMonthly) && targetMonthly > 0) detailParts.push(`Cible ${formatCadEntierHub(targetMonthly)}/mois`);
+        highlights.push({
+            label: 'Impact avenir',
+            value: hasMonthTx ? `Flux mois : ${formatCadSigneHub(flowMonth)}` : `Retraite visée : ${Math.round(targetAge)} ans`,
+            ...(hasMonthTx && detailParts.length > 0 ? { detail: detailParts.join(' · ') } : {}),
+            tone: hasMonthTx ? (flowMonth >= 0 ? 'good' : 'warn') : 'neutral',
+            target: '#FUTURE',
+        });
+    }
+
+    return { highlights, alerts };
+}
+
+function analyserActiviteFinance(extracted, today, weekStart, month) {
+    const { transactions, assetsCount, assets, fxRates } = extracted;
+    const hasManualCash = Boolean(extracted.projection?.useManualBalances && Number.isFinite(Number(extracted.projection?.manualCash)));
+    const hasLiveBank = Boolean(extracted.liveBank && Number.isFinite(Number(extracted.liveBank.balanceCad)));
+    if (!Array.isArray(transactions) && assetsCount === null && !extracted.initialBalances && !extracted.retirementGoal && !hasManualCash && !hasLiveBank) {
+        return {
+            metrics: [],
+            alerts: [],
+            highlights: [],
+            activityToday: null,
+            activityWeek: null,
+            activityMonth: null,
+            activityUnit: null,
+        };
+    }
+
+    let needsReview = null;
+    let txToday = null;
+    let txWeek = null;
+    let txMonth = null;
+
+    if (Array.isArray(transactions)) {
+        needsReview = 0;
+        txToday = 0;
+        txWeek = 0;
+        txMonth = 0;
+        for (const tx of transactions) {
+            if (!tx || typeof tx !== 'object' || tx.isDuplicate || tx.isTransfer) continue;
+            const cat = typeof tx.category === 'string' ? tx.category.trim() : '';
+            const uncat = !cat || /^(non[- ]?cat|uncategorized|autre|à classer)/i.test(cat);
+            const lowConf = !tx.isVerified && tx.status !== 'manual' && typeof tx.confidence === 'number' && tx.confidence > 0 && tx.confidence < 75;
+            if (uncat || lowConf) needsReview += 1;
+
+            const txDate = typeof tx.date === 'string' ? tx.date.slice(0, 10) : '';
+            if (DATE_CLE_RE.test(txDate)) {
+                if (txDate === today) txToday += 1;
+                if (txDate >= weekStart && txDate <= today) txWeek += 1;
+                if (txDate.startsWith(month)) txMonth += 1;
+            }
+        }
+    }
+
+    const metrics = [];
+    if (needsReview !== null) {
+        metrics.push({ label: 'À vérifier', value: String(needsReview), tone: needsReview > 0 ? 'warn' : 'good' });
+    }
+    if (txMonth !== null) {
+        metrics.push({ label: 'Opérations (mois)', value: String(txMonth), tone: 'neutral' });
+    }
+    if (assetsCount !== null) {
+        metrics.push({ label: 'Actifs suivis', value: String(assetsCount), tone: 'neutral' });
+    }
+
+    const portfolio = analyserPortefeuilleHub(assets, fxRates, today);
+    const cashAndFuture = analyserLiquiditesEtAvenirHub(extracted, today, weekStart, month);
+    const highlights = [];
+    if (portfolio.highlight) highlights.push(portfolio.highlight);
+    for (const item of cashAndFuture.highlights) highlights.push(item);
+
+    const alerts = [];
+    if (needsReview !== null && needsReview > 0) {
+        alerts.push({
+            label: `${needsReview} opération${needsReview > 1 ? 's' : ''} à vérifier`,
+            severity: 'warn',
+            target: '#TRANSACTIONS',
+        });
+    }
+    for (const a of portfolio.alerts) alerts.push(a);
+    for (const a of cashAndFuture.alerts) alerts.push(a);
+
+    return {
+        metrics,
+        alerts: alerts.slice(0, 4),
+        highlights: highlights.slice(0, 4),
+        activityToday: txToday,
+        activityWeek: txWeek,
+        activityMonth: txMonth,
+        activityUnit: txMonth !== null ? 'opérations' : null,
+    };
+}
+
+function extraireCoutsDepuisStatePayload(statePayloadField) {
+    const empty = {
+        totalUsd: null,
+        byDay: {},
+        transactions: null,
+        transactionsSharded: false,
+        assets: null,
+        assetsCount: null,
+        fxRates: null,
+        initialBalances: null,
+        retirementGoal: null,
+        projection: null,
+        fintableSyncAt: null,
+    };
+    const fields = statePayloadField?.mapValue?.fields;
+    if (!fields || typeof fields !== 'object') return empty;
+    const transactionsSharded = fields.transactionsSharded?.booleanValue === true;
+
+    if (fields._packedFormat?.stringValue === 'json_v1') {
+        const values = fields.jsonChunks?.arrayValue?.values;
+        if (!Array.isArray(values)) return { ...empty, transactionsSharded };
+        try {
+            const raw = values.map((v) => (typeof v?.stringValue === 'string' ? v.stringValue : '')).join('');
+            if (!raw) return { ...empty, transactionsSharded };
+            const parsed = JSON.parse(raw);
+            const val = parsed?.aiChatCostUsdTotal;
+            const totalUsd = typeof val === 'number' && Number.isFinite(val) && val >= 0 ? val : null;
+            const transactions = Array.isArray(parsed?.transactions) ? parsed.transactions : null;
+            const assets = Array.isArray(parsed?.assets) ? parsed.assets : null;
+            const assetsCount = assets ? assets.length : null;
+            const fxRates = parsed?.fxRates && typeof parsed.fxRates === 'object' ? parsed.fxRates : null;
+            const initialBalances = parsed?.initialBalances && typeof parsed.initialBalances === 'object' ? parsed.initialBalances : null;
+            const retirementGoal = parsed?.retirementGoal && typeof parsed.retirementGoal === 'object' ? parsed.retirementGoal : null;
+            const projection = parsed?.projection && typeof parsed.projection === 'object' ? parsed.projection : null;
+            const syncAtRaw = Number(parsed?.fintableSyncReport?.at);
+            const fintableSyncAt = Number.isFinite(syncAtRaw) && syncAtRaw > 0 ? syncAtRaw : null;
+            return {
+                totalUsd,
+                byDay: nettoyerByDay(parsed?.aiChatCostUsdByDay),
+                transactions,
+                transactionsSharded,
+                assets,
+                assetsCount,
+                fxRates,
+                initialBalances,
+                retirementGoal,
+                projection,
+                fintableSyncAt,
+            };
+        } catch {
+            return { ...empty, transactionsSharded };
+        }
+    }
+
+    const totalUsd = lireNombreFirestore(fields.aiChatCostUsdTotal);
+    const byDay = {};
+    const mapFields = fields.aiChatCostUsdByDay?.mapValue?.fields;
+    if (mapFields && typeof mapFields === 'object') {
+        for (const [k, fieldVal] of Object.entries(mapFields)) {
+            if (!DATE_CLE_RE.test(k)) continue;
+            const n = lireNombreFirestore(fieldVal);
+            if (n !== null) byDay[k] = Number(n.toFixed(6));
+        }
+    }
+    const assetsVals = fields.assets?.arrayValue?.values;
+    const assetsCount = Array.isArray(assetsVals) ? assetsVals.length : null;
+    return { ...empty, totalUsd, byDay, transactionsSharded, assetsCount };
+}
+
+async function chargerTransactionsMensuellesHub(firestoreBase, ownerUid, adcToken, fetchFn, signal) {
+    const collected = [];
+    let pageToken = '';
+
+    for (let page = 0; page < 20; page++) {
+        let url = `${firestoreBase}/workspaces/${encodeURIComponent(ownerUid)}/transactionMonths?pageSize=200&mask.fieldPaths=jsonChunks`;
+        if (pageToken) {
+            url += `&pageToken=${encodeURIComponent(pageToken)}`;
+        }
+        const rep = await fetchFn(url, {
+            method: 'GET',
+            headers: { authorization: `Bearer ${adcToken}` },
+            signal: AbortSignal.any([signal, AbortSignal.timeout(DELAI_AMONT_MS)]),
+        });
+        if (rep.status === 404) return collected;
+        if (!rep.ok) throw new Error(`transactionMonths HTTP ${rep.status}`);
+
+        const body = await rep.json();
+        const docs = Array.isArray(body?.documents) ? body.documents : [];
+        for (const doc of docs) {
+            const chunkVals = doc?.fields?.jsonChunks?.arrayValue?.values;
+            if (!Array.isArray(chunkVals)) continue;
+            const rawJson = chunkVals
+                .map((v) => (typeof v?.stringValue === 'string' ? v.stringValue : ''))
+                .join('');
+            if (!rawJson) continue;
+            let parsed;
+            try {
+                parsed = JSON.parse(rawJson);
+            } catch {
+                throw new Error('transactionMonths invalid JSON');
+            }
+            if (Array.isArray(parsed)) {
+                for (const tx of parsed) collected.push(tx);
+            }
+        }
+        const nextToken = typeof body?.nextPageToken === 'string' ? body.nextPageToken : '';
+        if (!nextToken) break;
+        pageToken = nextToken;
+    }
+
+    return collected;
+}
+
+function construirePayloadCoutsFinance(extracted, updatedAt, nowMs) {
+    const { totalUsd, byDay } = extracted;
+    const { today, month, weekStart } = datesTorontoHub(nowMs);
+    const entries = Object.entries(byDay).sort(([a], [b]) => a.localeCompare(b));
+    const daily = entries.slice(-31).map(([date, amountUsd]) => ({ date, amountUsd }));
+    const monthlyMap = new Map();
+    let sumByDay = 0;
+    let weekUsd = 0;
+
+    for (const [date, amountUsd] of entries) {
+        sumByDay += amountUsd;
+        const mKey = date.slice(0, 7);
+        monthlyMap.set(mKey, (monthlyMap.get(mKey) ?? 0) + amountUsd);
+        if (date >= weekStart && date <= today) weekUsd += amountUsd;
+    }
+
+    const monthly = Array.from(monthlyMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-12)
+        .map(([m, amt]) => ({ month: m, amountUsd: Number(amt.toFixed(6)) }));
+
+    const todayUsd = Number((byDay[today] ?? 0).toFixed(6));
+    const roundedWeekUsd = Number(weekUsd.toFixed(6));
+    const monthUsd = Number((monthlyMap.get(month) ?? 0).toFixed(6));
+    const resolvedTotal = Number(Math.max(totalUsd ?? 0, sumByDay).toFixed(6));
+
+    return {
+        appId: 'financeai',
+        period: 'month',
+        currency: 'USD',
+        amountUsd: monthUsd,
+        todayUsd,
+        weekUsd: roundedWeekUsd,
+        monthUsd,
+        totalUsd: resolvedTotal,
+        daily,
+        monthly,
+        updatedAt,
+        summary: analyserActiviteFinance(extracted, today, weekStart, month),
+    };
+}
+
+function payloadCoutsVideFinance() {
+    return {
+        appId: 'financeai',
+        period: 'month',
+        currency: 'USD',
+        amountUsd: null,
+        todayUsd: null,
+        weekUsd: null,
+        monthUsd: null,
+        totalUsd: null,
+        daily: [],
+        monthly: [],
+        updatedAt: null,
+        summary: {
+            metrics: [],
+            alerts: [],
+            highlights: [],
+            activityToday: null,
+            activityWeek: null,
+            activityMonth: null,
+            activityUnit: null,
+        },
+    };
+}
+
+export async function proxyHubCosts(request, opts = {}) {
+    const cors = hubCorsHeaders(request);
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+    if (request.method !== 'GET') {
+        return new Response(JSON.stringify({ error: 'method_not_allowed' }), {
+            status: 405,
+            headers: { 'content-type': 'application/json', allow: 'GET, OPTIONS', ...cors },
+        });
+    }
+
+    const debit = essayerDebit(`hubcosts:${ipClient(request.headers)}`, DEBIT_PROXY_PAR_MIN);
+    if (!debit.ok) {
+        return new Response(JSON.stringify({ error: 'too_many_requests' }), {
+            status: 429,
+            headers: { 'content-type': 'application/json', 'retry-after': String(debit.retryApresSec), ...cors },
+        });
+    }
+
+    const ok = await verifierJetonHubperso(request.headers.get('authorization'), opts);
+    if (!ok) {
+        return new Response(JSON.stringify({ error: 'unauthorized' }), {
+            status: 401,
+            headers: { 'content-type': 'application/json', ...cors },
+        });
+    }
+
+    const ownerEmail = obtenirHubpersoOwnerEmail(opts);
+    const firestoreBase = obtenirFinanceaiFirestoreBase(opts);
+    if (!firestoreBase) {
+        return jsonReponse({ error: 'service_not_configured' }, 503, 'no-store', cors);
+    }
+
+    try {
+        const fetchFn = opts.fetchImpl ?? fetch;
+        const nowMs = (opts.now ?? Date.now)();
+        const adcToken = await obtenirJetonAdc(fetchFn, nowMs, request.signal);
+        const fsHeaders = { authorization: `Bearer ${adcToken}`, 'content-type': 'application/json' };
+
+        if (!cachedOwnerUid) {
+            const qRep = await fetchFn(`${firestoreBase}:runQuery`, {
+                method: 'POST',
+                headers: fsHeaders,
+                body: JSON.stringify({
+                    structuredQuery: {
+                        from: [{ collectionId: 'users' }],
+                        where: {
+                            fieldFilter: {
+                                field: { fieldPath: 'email' },
+                                op: 'EQUAL',
+                                value: { stringValue: ownerEmail },
+                            },
+                        },
+                        select: { fields: [{ fieldPath: 'uid' }] },
+                        limit: 1,
+                    },
+                }),
+                signal: AbortSignal.any([request.signal, AbortSignal.timeout(DELAI_AMONT_MS)]),
+            });
+            if (!qRep.ok) throw new Error(`runQuery HTTP ${qRep.status}`);
+            const rows = await qRep.json();
+            const doc = Array.isArray(rows) ? rows[0]?.document : null;
+            const resolved = doc?.fields?.uid?.stringValue ?? doc?.name?.split('/').pop() ?? null;
+            if (!resolved || !/^[a-zA-Z0-9_-]{1,128}$/.test(resolved)) {
+                return jsonReponse(payloadCoutsVideFinance(), 200, 'no-store', cors);
+            }
+            cachedOwnerUid = resolved;
+        }
+
+        const wRep = await fetchFn(
+            `${firestoreBase}/workspaces/${encodeURIComponent(cachedOwnerUid)}?mask.fieldPaths=statePayload&mask.fieldPaths=updatedAt`,
+            {
+                method: 'GET',
+                headers: { authorization: `Bearer ${adcToken}` },
+                signal: AbortSignal.any([request.signal, AbortSignal.timeout(DELAI_AMONT_MS)]),
+            },
+        );
+        if (wRep.status === 404) {
+            return jsonReponse(payloadCoutsVideFinance(), 200, 'no-store', cors);
+        }
+        if (!wRep.ok) throw new Error(`workspace HTTP ${wRep.status}`);
+
+        const wDoc = await wRep.json();
+        const extracted = extraireCoutsDepuisStatePayload(wDoc?.fields?.statePayload);
+        if (extracted.transactionsSharded) {
+            const sharded = await chargerTransactionsMensuellesHub(firestoreBase, cachedOwnerUid, adcToken, fetchFn, request.signal);
+            extracted.transactions = [...sharded, ...(Array.isArray(extracted.transactions) ? extracted.transactions : [])];
+        }
+        const forceRefresh = new URL(request.url).searchParams.get('refresh') === '1';
+        if (Array.isArray(extracted.assets) && extracted.assets.length > 0) {
+            const enriched = await enrichirPortefeuilleLiveHub(
+                extracted.assets,
+                extracted.fxRates,
+                fetchFn,
+                nowMs,
+                request.signal,
+                !opts.fetchImpl && !forceRefresh,
+            );
+            extracted.assets = enriched.assets;
+            extracted.fxRates = enriched.fxRates;
+        }
+        const hasManualCash = extracted.projection?.useManualBalances === true && Number.isFinite(Number(extracted.projection?.manualCash));
+        if (opts.fintableToken && !hasManualCash) {
+            const liveBank = await recupererLiquiditesFintableHub(
+                opts.fintableToken,
+                extracted.fxRates,
+                fetchFn,
+                nowMs,
+                request.signal,
+                !opts.fetchImpl && !forceRefresh,
+            );
+            if (liveBank) extracted.liveBank = liveBank;
+        }
+        const updatedAtRaw = wDoc?.fields?.updatedAt?.timestampValue ?? wDoc?.updateTime ?? null;
+        const updatedAt = typeof updatedAtRaw === 'string' && !Number.isNaN(Date.parse(updatedAtRaw))
+            ? new Date(updatedAtRaw).toISOString()
+            : null;
+        return jsonReponse(construirePayloadCoutsFinance(extracted, updatedAt, nowMs), 200, 'no-store', cors);
+    } catch {
+        return jsonReponse({ error: 'upstream_error' }, 502, 'no-store', cors);
+    }
 }
 
 /** Aiguillage : mêmes chemins que `vercel.json`, `vite.config.ts` et les 7 routes publiques Valoria. */
@@ -966,6 +2147,7 @@ export async function traiter(request, opts = {}) {
     const { pathname } = new URL(request.url);
     try {
         if (pathname === '/api/sante') return repondreSante(request);
+        if (pathname === '/api/hub-costs') return await proxyHubCosts(request, opts);
         if (pathname === '/api/proxy/fintable' || pathname.startsWith('/api/fintable/')) return await proxyFintable(request, opts);
         if (pathname === '/api/yahoo/history' || pathname.startsWith('/api/history/yahoo/')) return await proxyYahooHistorique(request, opts);
         if (pathname === '/api/yahoo/search' || pathname === '/api/search/yahoo') return await proxyYahooRecherche(request, opts);

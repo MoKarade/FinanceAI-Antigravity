@@ -1,12 +1,14 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Tab } from '../types';
+import { Tab, type AppState } from '../types';
+import { INITIAL_CHILD_GOAL } from '../constants';
 import { unlimitedStateStorage } from '../services/unlimitedStateStorage';
 import { saveLockedProjection, clearLockedProjection } from '../services/lockedProjectionStore';
+import { logError } from '../services/errorLogger';
+import { sanitizePersonaArtifacts } from '../services/personaSanitizer';
 import { STORAGE_KEYS } from '../utils/storageKeys';
 import { initialState } from './etatParDefaut';
 import { migratePersistedState } from './migrationsPersistees';
-import { creerActionsModeTest } from './actionsModeTest';
 import { fusionnerEtatPersiste, surRehydratation, extrairePersistable } from './optionsPersistance';
 import { champsFxApres } from '../services/fx/ecritureFx';
 import { brancherCoutIa } from '../services/aiChat/coutIa';
@@ -16,7 +18,7 @@ export type { FinanceState, PendingFocus, ProjectionStatus, GrandCalculStatus } 
 
 // [GODFILE-STORE] Ré-exports de compatibilité : les consommateurs (composants, services, tests)
 // importent ces symboles depuis CE module depuis toujours — la façade les garde adressables.
-export { personaResetBase, getInitialStateWithMigration, getMigrationStatus } from './etatParDefaut';
+export { getInitialStateWithMigration, getMigrationStatus } from './etatParDefaut';
 export { migratePersistedState } from './migrationsPersistees';
 export { getHydrationStatus } from './optionsPersistance';
 
@@ -39,9 +41,6 @@ export const useFinanceStore = create<FinanceState>()(
             grandCalculProgress: null,
             grandCalculError: null,
             pendingFocus: null,
-            isTestMode: false,
-            realDataSnapshot: null,
-            activeTestPersonaId: null,
 
             // Navigation : on synchronise window.location.hash AVANT le set.
             // Sinon l'effet applyHash (App.tsx, deps [activeTab]) se relance au
@@ -102,21 +101,35 @@ export const useFinanceStore = create<FinanceState>()(
                 return { apiKeys: next };
             }),
             updateLastUpdate: () => set({ lastUpdate: Date.now() }),
-            // `set` fait un merge superficiel et `initialState` (AppState) ne contient PAS les flags
-            // propres au store (isTestMode/realDataSnapshot/activeTestPersonaId) → on les remet
-            // explicitement, sinon un reset déclenché EN mode test n'en sortirait jamais (bannière figée).
             resetState: () => set({
                 ...initialState,
-                isTestMode: false,
-                realDataSnapshot: null,
-                activeTestPersonaId: null,
                 grandCalculResult: null,
                 grandCalculStatus: 'idle',
                 grandCalculProgress: null,
                 grandCalculError: null,
             }),
 
-            ...creerActionsModeTest(set, get),
+            // [PERSONA-PURGE] Self-heal au démarrage : purge par id déterministe
+            // (registre personaArtifactIds) si des résidus legacy persistent.
+            purgePersonaArtifacts: () => {
+                const prev = get();
+                const { state: cleaned, report } = sanitizePersonaArtifacts(prev as unknown as Partial<AppState>);
+                if (report.removedTotal === 0) return 0;
+                logError({
+                    source: 'storage', severity: 'warning',
+                    message: `purgePersonaArtifacts : ${report.removedTotal} artefact(s) de persona de test retirés des données réelles (${Object.entries(report.bySlice).map(([k, v]) => `${k}:${v}`).join(', ')})`,
+                });
+                const patch: Partial<FinanceState> = { lastUpdate: Date.now() };
+                for (const slice of Object.keys(report.bySlice)) {
+                    if (slice === 'childGoal') {
+                        patch.childGoal = structuredClone(INITIAL_CHILD_GOAL);
+                    } else {
+                        (patch as Record<string, unknown>)[slice] = (cleaned as Record<string, unknown>)[slice];
+                    }
+                }
+                set(patch);
+                return report.removedTotal;
+            },
         }),
         {
             name: STORAGE_KEYS.persistStore,
@@ -125,8 +138,6 @@ export const useFinanceStore = create<FinanceState>()(
             // de la forme du state, et ajouter une étape dans `migrate`.
             // Sans version, toute évolution casse silencieusement le boot des
             // utilisateurs existants (cf audit 2026-05 §State management).
-            // NB : la persistance du MODE TEST (cf partialize : isTestMode/realDataSnapshot/
-            // activeTestPersonaId) est ADDITIVE/rétrocompatible (champs en plus) → pas de bump requis.
             // Le strip <7 (cf migrate) reste pour nettoyer les blobs de l'ère buggée (≤ v6).
             version: 7,
             migrate: migratePersistedState,
@@ -140,9 +151,35 @@ export const useFinanceStore = create<FinanceState>()(
     )
 );
 
-// [COUT-IA-MESURE] Seul écrivain du cumul à vie du coût IA (FinanceAI#50) : chaque réponse payée,
-// mesurée au point de contact SDK (`services/gemini.ts`), s'ajoute ici. Le bloc `usage` du hub le lit.
+const TORONTO_DATE_FMT = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Toronto',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+});
+
+// [COUT-IA-MESURE] Seul écrivain du cumul à vie + journalier du coût IA (FinanceAI#50) : chaque réponse payée,
+// mesurée au point de contact SDK (`services/gemini.ts`), s'ajoute ici. Le bloc `usage` et Hubperso le lisent.
 brancherCoutIa((coutUsd) => {
     const s = useFinanceStore.getState();
-    s.setAppState({ aiChatCostUsdTotal: (s.aiChatCostUsdTotal ?? 0) + coutUsd });
+    const parts = TORONTO_DATE_FMT.formatToParts(new Date());
+    const y = parts.find((p) => p.type === 'year')?.value ?? '1970';
+    const m = parts.find((p) => p.type === 'month')?.value ?? '01';
+    const d = parts.find((p) => p.type === 'day')?.value ?? '01';
+    const todayKey = `${y}-${m}-${d}`;
+    const prevByDay = s.aiChatCostUsdByDay ?? {};
+    const nextByDay: Record<string, number> = {
+        ...prevByDay,
+        [todayKey]: Number(((prevByDay[todayKey] ?? 0) + coutUsd).toFixed(6)),
+    };
+    const keys = Object.keys(nextByDay).sort();
+    if (keys.length > 400) {
+        for (const k of keys.slice(0, keys.length - 400)) {
+            delete nextByDay[k];
+        }
+    }
+    s.setAppState({
+        aiChatCostUsdTotal: (s.aiChatCostUsdTotal ?? 0) + coutUsd,
+        aiChatCostUsdByDay: nextByDay,
+    });
 });

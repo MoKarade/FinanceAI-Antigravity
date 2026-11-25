@@ -157,7 +157,7 @@ describe('[CONSTANTES-MOTEUR-NON-SOURCEES] 3 — `CoastFIRE`/`BaristaFIRE` reste
     // blanc « portée nulle » pour justifier de NE PAS corriger leur incohérence de croissance. Le
     // jour où quelqu'un branche l'un de ces champs sur un écran, cette justification devient fausse
     // — et sans cette garde, elle resterait écrite au présent dans le dépôt.
-    const DOSSIERS = ['components', 'hooks', 'utils', 'mcp', 'services/aiChat'] as const;
+    const DOSSIERS = ['components', 'hooks', 'utils', 'services/aiTools', 'services/ingest', 'services/aiChat'] as const;
 
     const fichiers = (dossier: string): string[] => {
         const base = resolve(RACINE, dossier);

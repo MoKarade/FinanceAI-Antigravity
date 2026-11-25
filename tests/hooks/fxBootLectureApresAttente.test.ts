@@ -39,6 +39,6 @@ describe('l\'effet FX du boot relit l\'état après l\'attente', () => {
         // [FX-SERVEUR-JAMAIS-RAFRAICHI] La décision passe désormais par `ecritureFxSelonLecture`
         // (source unique partagée avec le serveur), qui appelle `decisionEcritureFx` lui-même.
         expect(SRC).toContain('ecritureFxSelonLecture(fxEtat, rates)');
-        expect(SRC).toContain('runBootSync');
+        expect(SRC).toContain('maybeRunDailyFintableSync');
     });
 });

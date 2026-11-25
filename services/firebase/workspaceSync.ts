@@ -78,6 +78,7 @@ export const PERSISTED_WORKSPACE_KEYS = [
     'activeAiConversationId',
     'aiChatModel',
     'aiChatCostUsdTotal',
+    'aiChatCostUsdByDay',
     'insurancePolicies',
     'rentalProperties',
     'privateBusinesses',
@@ -476,11 +477,6 @@ export async function pullWorkspaceFromFirestoreNow(user: FirebaseUser): Promise
                 ...sanitizedRemote,
                 lastUpdate: remoteUpdatedAtMs ?? Date.now(),
             });
-            useFinanceStore.setState({
-                isTestMode: false,
-                activeTestPersonaId: null,
-                realDataSnapshot: null,
-            });
             lastSerializedPayload = JSON.stringify(
                 extractSanitizedWorkspacePayload(useFinanceStore.getState()),
             );
@@ -509,8 +505,8 @@ export async function pullWorkspaceFromFirestoreNow(user: FirebaseUser): Promise
 }
 
 /**
- * Recherche dans Cloud Firestore (`/workspaces/{uid}`), le bouclier local, les sauvegardes auto IndexedDB
- * et Google Drive un vrai dossier personnalisé (hors gabarit Alex), en privilégiant toujours le dossier le plus riche.
+ * Recherche dans Cloud Firestore (`/workspaces/{uid}`), le bouclier local et les sauvegardes auto IndexedDB
+ * un vrai dossier personnalisé (hors gabarit Alex), en privilégiant toujours le dossier le plus riche.
  */
 export async function recoverOrEnsureInitialWorkspace(
     forceEvenIfNotEmpty = false,
@@ -529,19 +525,6 @@ export async function recoverOrEnsureInitialWorkspace(
     if (!forceEvenIfNotEmpty && hasMeaningfulData(current) && !currentIsStarter) {
         await recoverUser230kData(false);
         return 'kept';
-    }
-
-    if (
-        current.realDataSnapshot &&
-        hasMeaningfulData(current.realDataSnapshot) &&
-        !isStarterTemplateState(current.realDataSnapshot)
-    ) {
-        const cleaned = cleanCandidateState(current.realDataSnapshot);
-        useFinanceStore.getState().setAppState({
-            ...cleaned,
-            lastUpdate: typeof cleaned.lastUpdate === 'number' ? cleaned.lastUpdate : 0,
-        });
-        return 'restored-snapshot';
     }
 
     try {
@@ -752,7 +735,7 @@ export async function pushWorkspaceToFirestore(user: FirebaseUser): Promise<void
     const uid = (user.uid || '').slice(0, MAX_UID_LENGTH);
     if (!SAFE_ID_REGEX.test(uid)) return;
     const currentState = useFinanceStore.getState();
-    if (currentState.isTestMode || isStarterTemplateState(currentState)) return;
+    if (isStarterTemplateState(currentState)) return;
 
     const statePayload = extractSanitizedWorkspacePayload(currentState);
     const localTransactions = Array.isArray(statePayload.transactions) ? statePayload.transactions : [];
@@ -958,11 +941,6 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                     ...sanitizedRemote,
                     lastUpdate: remoteUpdatedAtMs ?? Date.now(),
                 });
-                useFinanceStore.setState({
-                    isTestMode: false,
-                    activeTestPersonaId: null,
-                    realDataSnapshot: null,
-                });
                 lastSerializedPayload = JSON.stringify(
                     extractSanitizedWorkspacePayload(useFinanceStore.getState()),
                 );
@@ -1160,7 +1138,7 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
 
     const unsubscribeStore = useFinanceStore.subscribe((state) => {
         if (!initialSnapshotHandled || applyingRemoteSnapshot) return;
-        if (state.isTestMode || isStarterTemplateState(state)) return;
+        if (isStarterTemplateState(state)) return;
         if (!hasMeaningfulData(state)) return;
         const nextPayload = extractSanitizedWorkspacePayload(state);
         const serialized = JSON.stringify(nextPayload);

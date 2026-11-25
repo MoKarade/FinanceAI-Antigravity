@@ -191,7 +191,7 @@ describe('⚠️ une lecture SANS autorité ne remplace JAMAIS un taux qui en a'
 // que `merge` prend pour BASE ne peut pas être contredite par un état ancien, elle le recouvre.**
 describe('rétrocompatibilité de l\'état PERSISTÉ — le piège du défaut qui recouvre', () => {
     it('l\'état par défaut ne DÉCLARE PAS la provenance (sinon il recouvre les blobs anciens)', async () => {
-        const { buildDefaultAppState } = await import('../../../mcp/state/appStateDefaults');
+        const { buildDefaultAppState } = await import('../../../services/aiTools/appStateDefaults');
         const { initialState } = await import('../../../store/etatParDefaut');
         // La clé doit être ABSENTE, pas juste `undefined` à la lecture : c'est la présence de la
         // clé dans la base de `merge` qui décide.
@@ -202,7 +202,7 @@ describe('rétrocompatibilité de l\'état PERSISTÉ — le piège du défaut qu
     });
 
     it('un état d\'AVANT ce lot, avec de VRAIS taux, reste « api » après fusion sur les défauts', async () => {
-        const { buildDefaultAppState } = await import('../../../mcp/state/appStateDefaults');
+        const { buildDefaultAppState } = await import('../../../services/aiTools/appStateDefaults');
         // Ce que `merge` produit : les défauts, recouverts clé par clé par le blob ancien.
         const ancien = { fxRates: { USD: 1.3845, EUR: 1.4512, CAD: 1, lastFetched: 1_700_000_000 }, fxRatesEstimated: false };
         const fusionne = { ...buildDefaultAppState(), ...ancien };
@@ -215,7 +215,7 @@ describe('rétrocompatibilité de l\'état PERSISTÉ — le piège du défaut qu
 // exactement les deux mêmes pièges — le défaut qui recouvre, et le champ qu'un appelant oublie.
 describe('la date d\'observation suit la provenance, par CONSTRUCTION', () => {
     it('elle est ABSENTE des défauts (même raison que la provenance)', async () => {
-        const { buildDefaultAppState } = await import('../../../mcp/state/appStateDefaults');
+        const { buildDefaultAppState } = await import('../../../services/aiTools/appStateDefaults');
         const { initialState } = await import('../../../store/etatParDefaut');
         expect(Object.prototype.hasOwnProperty.call(buildDefaultAppState(), 'fxObservationDate')).toBe(false);
         expect(Object.prototype.hasOwnProperty.call(initialState, 'fxObservationDate')).toBe(false);

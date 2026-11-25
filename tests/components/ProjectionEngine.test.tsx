@@ -3,12 +3,12 @@ import { render, cleanup, waitFor, act } from '@testing-library/react';
 import { ProjectionEngine, FUTURE_REQ_IDS } from '../../components/ProjectionEngine';
 import { PAGE_SETUP } from '../../components/setup/PageSetupGate';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../../services/testFixtures';
+import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../fixtures/testFixtures';
 import { Tab } from '../../types';
 
 // Le moteur est headless (rend null) et lit/écrit le store : pas de provider requis.
 // errorLogger n'est sollicité qu'en cas de crash — muet ici (persona valide).
-vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn() }));
+vi.mock('../../services/errorLogger', () => ({ logError: vi.fn(), logErrorThrottled: vi.fn(), onLogEntry: vi.fn(() => () => {}), __resetErrorThrottle: vi.fn(), }));
 
 describe('ProjectionEngine (PH2-c) — moteur app-level, source unique', () => {
     afterEach(() => cleanup());
@@ -34,8 +34,13 @@ describe('ProjectionEngine (PH2-c) — moteur app-level, source unique', () => {
         const persona = getPersonaOrDefault(DEFAULT_PERSONA_ID);
         act(() => {
             // Données complètes et valides → prérequis (salaire + placements + profil retraite) remplis.
-            useFinanceStore.getState().enableTestMode(persona.build(), persona.id);
-            useFinanceStore.setState({ projectionRunMC: false, lastProjection: null, projectionStatus: 'idle' });
+            useFinanceStore.getState().resetState();
+            useFinanceStore.setState({
+                ...(persona.build() as Record<string, unknown>),
+                projectionRunMC: false,
+                lastProjection: null,
+                projectionStatus: 'idle',
+            });
         });
 
         render(<ProjectionEngine calculatedMonthlySavings={2000} />);
@@ -64,8 +69,13 @@ describe('ProjectionEngine (PH2-c) — moteur app-level, source unique', () => {
     it('EFFACE lastProjection si les prérequis redeviennent non remplis (ex. salaire supprimé)', async () => {
         const persona = getPersonaOrDefault(DEFAULT_PERSONA_ID);
         act(() => {
-            useFinanceStore.getState().enableTestMode(persona.build(), persona.id);
-            useFinanceStore.setState({ projectionRunMC: false, lastProjection: null, projectionStatus: 'idle' });
+            useFinanceStore.getState().resetState();
+            useFinanceStore.setState({
+                ...(persona.build() as Record<string, unknown>),
+                projectionRunMC: false,
+                lastProjection: null,
+                projectionStatus: 'idle',
+            });
         });
         const { rerender } = render(<ProjectionEngine calculatedMonthlySavings={2000} />);
         await waitFor(() => expect(useFinanceStore.getState().lastProjection).not.toBeNull(), { timeout: 4000 });
@@ -97,8 +107,13 @@ describe('ProjectionEngine — entrée illisible à la frontière (ENG-INFINITY)
         const etat = persona.build() as Record<string, unknown>;
         corrompre?.(etat);
         act(() => {
-            useFinanceStore.getState().enableTestMode(etat as never, persona.id);
-            useFinanceStore.setState({ projectionRunMC: false, lastProjection: null, projectionStatus: 'idle' });
+            useFinanceStore.getState().resetState();
+            useFinanceStore.setState({
+                ...(etat as Record<string, unknown>),
+                projectionRunMC: false,
+                lastProjection: null,
+                projectionStatus: 'idle',
+            });
         });
         return render(<ProjectionEngine calculatedMonthlySavings={2000} />);
     };

@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { ACTIONS, declarationsOutils, executerAction } from '../../services/assistant/actionRegistry';
 import { executerTourLocal, instructionSysteme } from '../../services/assistant/agentLoop';
 import { blocRicheSchema } from '../../services/assistant/blocsRiches';
-import { buildDefaultAppState } from '../../mcp/state/appStateDefaults';
+import { buildDefaultAppState } from '../../services/aiTools/appStateDefaults';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { MESSAGE_IA_MODE_DISCRET } from '../../services/messageErreurIa';
 

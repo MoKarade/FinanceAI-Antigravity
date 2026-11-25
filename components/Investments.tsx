@@ -370,9 +370,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
     }, [subTab, expertToolsOpen, detailOpen]);
 
     // --- INSTANT DATA LOAD ---
-    // Sprint 3B M3 + test-mode-complet : utilise usePortfolioHistory hook qui
-    // retourne le marketData synthétique en mode test (depuis testFixtures)
-    // ou le CSV externe sinon.
+    // Utilise usePortfolioHistory hook dérivé des données réelles du portefeuille.
     const { history: portfolioHistory, noHistorySymbols, partialHistorySymbols, staleTailSymbols, syntheticTailKeys, gapBridges } = usePortfolioHistory();
     // [PERF-STALE-TAIL-ZERO] Prédicat pour seriesReturnPct : une valeur (date, clé) est-elle raccordée
     // au prix courant (candles KO) ? Deux endpoints synthétiques → « — » plutôt qu'un 0 % trompeur.
@@ -602,12 +600,6 @@ export const Investments: React.FC<InvestmentsProps> = ({
     }, [assets]);
     const coursPerimes = useMemo(() => titresAuCoursPerime(assets, todayIsoLocal()), [assets]);
     const handleRefreshPrices = async () => {
-        // Garde MODE TEST (finding panel) : ne jamais écraser les prix de fixtures persona (CoinGecko
-        // répond même sans clé → un clic corromprait l'état déterministe du persona).
-        if (useFinanceStore.getState().isTestMode === true) {
-            showToast('Actualisation désactivée en mode test (prix des fixtures conservés).', 'info');
-            return;
-        }
         setIsRefreshingPrices(true);
         try {
             // [HIST-MULTI-PROVIDER] Le geste couvre aussi les HISTORIQUES : purge du cache

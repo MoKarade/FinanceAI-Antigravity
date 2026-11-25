@@ -26,13 +26,12 @@ const tx = (id: number, payee: string, extra: Partial<Transaction> = {}): Transa
 });
 
 describe('backgroundAiCategorize — classement IA en arrière-plan', () => {
-    let memState: Pick<AppState, 'apiKeys' | 'transactions' | 'budgetItems' | 'categorizationRules'> & { isTestMode?: boolean };
+    let memState: Pick<AppState, 'apiKeys' | 'transactions' | 'budgetItems' | 'categorizationRules'>;
     let storePort: BackgroundAiStorePort;
 
     beforeEach(() => {
         mocks.categorizeBatch.mockReset();
         memState = {
-            isTestMode: false,
             apiKeys: { gemini: 'fake-gemini-key', finnhub: '' },
             transactions: [],
             budgetItems: [
@@ -47,16 +46,11 @@ describe('backgroundAiCategorize — classement IA en arrière-plan', () => {
             setAppState: (patch) => {
                 memState = { ...memState, ...patch };
             },
-            isTestModeNow: () => memState.isTestMode === true,
         };
     });
 
-    it('ne fait rien en mode test ou sans clé Gemini', async () => {
-        memState = { ...memState, isTestMode: true, transactions: [tx(1, 'BOUTIQUE TEST')] };
-        expect((await scheduleBackgroundAiCategorization([1], storePort)).ran).toBe(false);
-        expect(mocks.categorizeBatch).not.toHaveBeenCalled();
-
-        memState = { ...memState, isTestMode: false, apiKeys: { gemini: '', finnhub: '' } };
+    it('ne fait rien sans clé Gemini', async () => {
+        memState = { ...memState, transactions: [tx(1, 'BOUTIQUE TEST')], apiKeys: { gemini: '', finnhub: '' } };
         expect((await scheduleBackgroundAiCategorization([1], storePort)).ran).toBe(false);
         expect(mocks.categorizeBatch).not.toHaveBeenCalled();
     });

@@ -7,8 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import { ruleCategorize, RULE_CATEGORIES, categoryKey, buildCategoryCanonicalMap, resolveCandidateCategory, mapExternalCategoryHint, isMixedMerchantPayee, isUncategorizedCategory } from '../../services/import/categoryRules';
 import { parseBankCsv } from '../../services/import/parseBankCsv';
-import { applyDocument } from '../../mcp/ingest/applyDocument';
-import { buildDefaultAppState } from '../../mcp/state/loadAppState';
+import { applyDocument } from '../../services/ingest/applyDocument';
+import { buildDefaultAppState } from '../../services/aiTools/appStateDefaults';
 
 describe('ruleCategorize — corpus type (payees compte + MasterCard)', () => {
     const cases: Array<[string, string]> = [

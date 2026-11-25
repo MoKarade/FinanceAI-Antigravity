@@ -18,7 +18,7 @@ import { renderHook, act } from '@testing-library/react';
 import { useSimulationParams } from '../../hooks/useSimulationParams';
 import { buildSimulationParamsFromState } from '../../services/projection/buildSimulationParams';
 import { useDerivedFinancials } from '../../utils/useDerivedFinancials';
-import { TEST_PERSONAS } from '../../services/testPersonas';
+import { TEST_PERSONAS } from '../fixtures/testPersonas';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import type { AppState, Debt, Transaction } from '../../types';
 
@@ -43,7 +43,10 @@ describe('[DETTE-VIREMENTS-REELS] parité navigateur / MCP sur une dette LIÉE �
             startDate: '2026-01-12', termEndDate: '2029-12-12', paymentFrequency: 'weekly',
             balanceAsOf: jour(dep), paymentPayee: 'Credit-bail Auto Nord',
         } as Debt];
-        act(() => { useFinanceStore.getState().enableTestMode(fx, persona.id); });
+        act(() => {
+            useFinanceStore.getState().resetState();
+            useFinanceStore.setState(fx as Record<string, unknown>);
+        });
         const state = useFinanceStore.getState() as unknown as AppState;
         const derived = renderHook(() => useDerivedFinancials(state));
         const { result } = renderHook(() => useSimulationParams(derived.result.current.calculatedMonthlySavings));
