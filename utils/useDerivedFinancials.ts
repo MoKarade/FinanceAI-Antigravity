@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { AppState, Transaction } from '../types';
 import { assetValueCad, computePresentTermes } from '../services/portfolio';
 import { placementsFaisantAutorite } from '../services/fintable/placementsAutorite';
-import { useTodayIsoLocal } from '../hooks/useSimulationParams';
+import { useTodayIsoLocal } from '../hooks/useTodayIsoLocal';
 import { isSavingsNature } from './budget';
 
 interface DerivedFinancials {

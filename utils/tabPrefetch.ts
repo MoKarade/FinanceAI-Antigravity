@@ -4,38 +4,46 @@ import { apresPremierAffichage } from './apresPremierAffichage';
 
 const prefetchedTabs = new Set<Tab>();
 
-const COMPONENT_MODULES = import.meta.glob([
-    '../components/*.tsx',
-    '../components/budget/*.tsx',
-    '../components/life/*.tsx',
-    '../components/valoria/*.tsx',
-]);
-
-function loadComponentModule(path: string): Promise<unknown> {
-    const loader = COMPONENT_MODULES[path];
-    return loader ? loader() : Promise.resolve();
+interface NetworkInformationLike {
+    saveData?: boolean;
+    effectiveType?: string;
 }
 
 const TAB_LOADERS: Partial<Record<Tab, () => Promise<unknown>>> = {
-    [Tab.DASHBOARD]: () => loadComponentModule('../components/AccueilGoogle.tsx'),
+    [Tab.DASHBOARD]: () => import('../components/AccueilGoogle'),
     [Tab.FUTURE]: () => Promise.all([
-        loadComponentModule('../components/FutureProjection.tsx'),
-        loadComponentModule('../components/FutureKpiStrip.tsx'),
+        import('../components/FutureProjection'),
+        import('../components/FutureKpiStrip'),
     ]),
-    [Tab.TRANSACTIONS]: () => loadComponentModule('../components/Transactions.tsx'),
-    [Tab.BUDGET]: () => loadComponentModule('../components/budget/BudgetWorkspace.tsx'),
-    [Tab.DEBT]: () => loadComponentModule('../components/DebtManager.tsx'),
-    [Tab.INVESTMENTS]: () => loadComponentModule('../components/Investments.tsx'),
-    [Tab.VALORIA]: () => loadComponentModule('../components/Investments.tsx'),
-    [Tab.RETIREMENT]: () => loadComponentModule('../components/Retirement.tsx'),
-    [Tab.REAL_ESTATE]: () => loadComponentModule('../components/RealEstate.tsx'),
-    [Tab.REAL_ESTATE_PROJECTS]: () => loadComponentModule('../components/life/RealEstateProjects.tsx'),
-    [Tab.CHILD]: () => loadComponentModule('../components/ChildPlanning.tsx'),
-    [Tab.LIFE_PROJECTS]: () => loadComponentModule('../components/LifeProjects.tsx'),
-    [Tab.TAX]: () => loadComponentModule('../components/TaxCenter.tsx'),
-    [Tab.SETTINGS]: () => loadComponentModule('../components/Settings.tsx'),
-    [Tab.PROFILE]: () => loadComponentModule('../components/Profile.tsx'),
+    [Tab.TRANSACTIONS]: () => import('../components/Transactions'),
+    [Tab.BUDGET]: () => import('../components/budget/BudgetWorkspace'),
+    [Tab.DEBT]: () => import('../components/DebtManager'),
+    [Tab.INVESTMENTS]: () => import('../components/Investments'),
+    [Tab.VALORIA]: () => import('../components/Investments'),
+    [Tab.RETIREMENT]: () => import('../components/Retirement'),
+    [Tab.REAL_ESTATE]: () => import('../components/RealEstate'),
+    [Tab.REAL_ESTATE_PROJECTS]: () => import('../components/life/RealEstateProjects'),
+    [Tab.CHILD]: () => import('../components/ChildPlanning'),
+    [Tab.LIFE_PROJECTS]: () => import('../components/LifeProjects'),
+    [Tab.TAX]: () => import('../components/TaxCenter'),
+    [Tab.SETTINGS]: () => import('../components/Settings'),
+    [Tab.PROFILE]: () => import('../components/Profile'),
 };
+
+const CORE_IDLE_PREFETCH_TABS: readonly Tab[] = [
+    Tab.FUTURE,
+    Tab.TRANSACTIONS,
+    Tab.BUDGET,
+    Tab.INVESTMENTS,
+];
+
+function shouldSkipAutoPrefetch(): boolean {
+    if (typeof navigator === 'undefined') return false;
+    const conn = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
+    if (!conn) return false;
+    if (conn.saveData === true) return true;
+    return conn.effectiveType === 'slow-2g' || conn.effectiveType === '2g';
+}
 
 /**
  * Précharge immédiatement le module d'un onglet (au survol ou au focus d'un bouton de navigation)
@@ -75,19 +83,31 @@ export function getAdjacentTabs(activeTab: Tab): { prev: Tab; next: Tab } {
 }
 
 /**
- * Précharge progressivement tous les onglets en tâche de fond après le premier rendu
- * pour garantir une navigation instantanée (0 ms d'attente) dans toute l'application.
+ * Précharge en douceur les 4 onglets principaux en tâche de fond après le premier rendu,
+ * tout en respectant le mode économie de données / connexions lentes (2G).
  */
 export function scheduleIdleTabPrefetch(): () => void {
+    if (shouldSkipAutoPrefetch()) {
+        return () => {};
+    }
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
+    const idleIds: number[] = [];
 
     const stopApres = apresPremierAffichage(() => {
-        if (cancelled) return;
-        ORDERED_NAV_TABS.forEach((tab, index) => {
+        if (cancelled || shouldSkipAutoPrefetch()) return;
+        CORE_IDLE_PREFETCH_TABS.forEach((tab, index) => {
             const t = setTimeout(() => {
-                if (!cancelled) prefetchTab(tab);
-            }, 120 + index * 90);
+                if (cancelled || shouldSkipAutoPrefetch()) return;
+                if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+                    const id = window.requestIdleCallback(() => {
+                        if (!cancelled) prefetchTab(tab);
+                    }, { timeout: 2000 });
+                    idleIds.push(id);
+                } else {
+                    prefetchTab(tab);
+                }
+            }, 1200 + index * 1000);
             timers.push(t);
         });
     });
@@ -96,5 +116,8 @@ export function scheduleIdleTabPrefetch(): () => void {
         cancelled = true;
         stopApres();
         timers.forEach(clearTimeout);
+        if (typeof window !== 'undefined' && typeof window.cancelIdleCallback === 'function') {
+            idleIds.forEach((id) => window.cancelIdleCallback(id));
+        }
     };
 }

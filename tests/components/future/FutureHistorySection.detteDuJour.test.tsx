@@ -20,9 +20,6 @@ vi.mock('../../../components/dashboard/DashboardEvolutionChart', async () => {
         }),
     };
 });
-vi.mock('react-i18next', () => ({
-    useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'fr' } }),
-}));
 
 // Dates RELATIVES à aujourd'hui (le composant lit le vrai jour) : des dates figées rendraient la
 // garde vacueuse le jour où la fixture passe hors fenêtre.

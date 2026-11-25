@@ -19,7 +19,9 @@ import { Tab, type AppState } from '../types';
 import type { ProjectionChartPoint } from '../services/projection/types';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { useNetWorthVariation } from '../hooks/useNetWorthVariation';
-import { useSimulationParams, useTodayIsoLocal } from '../hooks/useSimulationParams';
+import { useTodayIsoLocal } from '../hooks/useTodayIsoLocal';
+import { usePastTrajectoryContext } from '../hooks/usePastTrajectoryContext';
+import { apresPremierAffichage } from '../utils/apresPremierAffichage';
 import { buildPastPrefix } from '../services/history/buildPastPrefix';
 import { buildDailyPastLedger } from '../services/history/dailyPastLedger';
 import { reconstructRealEstateEquityByYear } from '../services/history/reconstructRealEstateEquity';
@@ -323,25 +325,40 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
             setValoriaSignals({});
             return;
         }
+        const conn = typeof navigator !== 'undefined'
+            ? (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
+            : undefined;
+        if (conn?.saveData === true) {
+            return;
+        }
         let cancelled = false;
-        void import('../services/valoria/valoriaIntegration')
-            .then(({ computeValoriaQuickSignals }) => {
+        let timerId: ReturnType<typeof setTimeout> | null = null;
+        const stopApres = apresPremierAffichage(() => {
+            if (cancelled) return;
+            timerId = setTimeout(() => {
                 if (cancelled) return;
-                setValoriaSignals(
-                    computeValoriaQuickSignals({
-                        assets: state.assets ?? [],
-                        watchlistSymbols: state.valoriaWatchlist ?? [],
-                        fxRates: state.fxRates ?? {},
-                        riskProfile: state.valoriaRiskProfile,
-                        appliedReturnProfile: state.projection?.appliedReturnProfile,
+                void import('../services/valoria/valoriaIntegration')
+                    .then(({ computeValoriaQuickSignals }) => {
+                        if (cancelled) return;
+                        setValoriaSignals(
+                            computeValoriaQuickSignals({
+                                assets: state.assets ?? [],
+                                watchlistSymbols: state.valoriaWatchlist ?? [],
+                                fxRates: state.fxRates ?? {},
+                                riskProfile: state.valoriaRiskProfile,
+                                appliedReturnProfile: state.projection?.appliedReturnProfile,
+                            })
+                        );
                     })
-                );
-            })
-            .catch(() => {
-                // Non-bloquant sur l'Accueil
-            });
+                    .catch(() => {
+                        // Non-bloquant sur l'Accueil
+                    });
+            }, 1800);
+        });
         return () => {
             cancelled = true;
+            stopApres();
+            if (timerId !== null) clearTimeout(timerId);
         };
     }, [state.assets, state.valoriaWatchlist, state.fxRates, state.valoriaRiskProfile, state.projection?.appliedReturnProfile]);
     const todayIso = useTodayIsoLocal();
@@ -352,7 +369,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         startMonth,
         todayMonthIndex,
         pastCurveCalibration,
-    } = useSimulationParams(calculatedMonthlySavings);
+    } = usePastTrajectoryContext();
     const { syncStatus } = useFirebaseAuth();
 
     const [requete, setRequete] = useState('');
@@ -600,12 +617,45 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         return isoDate(d.getFullYear(), d.getMonth(), d.getDate());
     }, [fintableSyncAt]);
 
+    // Bornes temporelles de la fenêtre selon l'horizon sélectionné (1M, 3M, 1A, 5A, 10A, MAX = Tout)
+    const xAuj = todayAxisX ?? todayMonthIndex;
+    const bornesHorizonMois = useMemo<[number, number]>(() => {
+        const minMois = Math.min(pastStartIndex, xAuj);
+        const maxMois = Math.max(lastMonthIndex, xAuj);
+        if (horizon === '1M') {
+            return [Math.max(minMois, xAuj - 1), Math.min(maxMois, xAuj + 1)];
+        }
+        if (horizon === '3M') {
+            return [Math.max(minMois, xAuj - 3), Math.min(maxMois, xAuj + 3)];
+        }
+        if (horizon === '1A') {
+            return [Math.max(minMois, xAuj - 12), Math.min(maxMois, xAuj + 12)];
+        }
+        if (horizon === '5A') {
+            return [Math.max(minMois, xAuj - 12), Math.min(maxMois, xAuj + 60)];
+        }
+        if (horizon === '2025') {
+            const idxJan2025 = (2025 - startYear) * 12 - startMonth;
+            return [Math.max(minMois, idxJan2025), Math.min(maxMois, xAuj + 36)];
+        }
+        if (horizon === '10A') {
+            return [Math.max(minMois, xAuj - 24), Math.min(maxMois, xAuj + 120)];
+        }
+        return [minMois, maxMois];
+    }, [horizon, pastStartIndex, lastMonthIndex, xAuj, startYear, startMonth]);
+
+    const minMonthWindow = Math.floor(bornesHorizonMois[0]) - 2;
+    const maxMonthWindow = Math.ceil(bornesHorizonMois[1]) + 2;
+
     const dailyPastFrom = useMemo(() => {
         const first = dailyAnchors[0];
         if (!first) return null;
-        const firstIso = isoDate(first.year, first.month, 1);
-        return firstIso < todayIso ? firstIso : null;
-    }, [dailyAnchors, todayIso]);
+        const firstAnchorIso = isoDate(first.year, first.month, 1);
+        const calWindowStart = calendarFromMonthIndex(startYear, startMonth, minMonthWindow);
+        const windowStartIso = isoDate(calWindowStart.year, calWindowStart.month, 1);
+        const boundedIso = firstAnchorIso > windowStartIso ? firstAnchorIso : windowStartIso;
+        return boundedIso < todayIso ? boundedIso : null;
+    }, [dailyAnchors, startYear, startMonth, minMonthWindow, todayIso]);
 
     const dailyPastByDate = useMemo(() => {
         if (!dailyPastFrom) return null;
@@ -651,7 +701,11 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     const dailyAll = useMemo<ProjectionChartPoint[]>(() => {
         if (dailyAnchors.length < 2) return EMPTY_CHART_POINTS;
         const keep = new Set(dailyAnchors.map((a) => a.monthIndex));
-        const months = displayData.filter((p) => keep.has(p.monthIndex));
+        const allAnchorMonths = displayData.filter((p) => keep.has(p.monthIndex));
+        const windowedMonths = allAnchorMonths.filter(
+            (p) => p.monthIndex >= minMonthWindow && p.monthIndex <= maxMonthWindow,
+        );
+        const months = windowedMonths.length >= 2 ? windowedMonths : allAnchorMonths;
         if (months.length < 2) return EMPTY_CHART_POINTS;
 
         const days = buildDailyLedger({
@@ -690,7 +744,7 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         if (anchorDays.length > 0) return [...anchorDays, ...points];
         const { FluxImpots: _anchorFlux, ...anchorRest } = months[0] as ProjectionChartPoint & { FluxImpots?: number };
         return [anchorRest as ProjectionChartPoint, ...points];
-    }, [dailyAnchors, displayData, startYear, startMonth, dailyDated, dailyPastByDate, syncConfirmedUntilIso, todayIso]);
+    }, [dailyAnchors, displayData, minMonthWindow, maxMonthWindow, startYear, startMonth, dailyDated, dailyPastByDate, syncConfirmedUntilIso, todayIso]);
 
     const enrichCache = useMemo(
         () => ({
@@ -726,33 +780,6 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
         },
         [displayData, startYear, startMonth, dailyDated, dailyPastByDate, enrichCache, syncConfirmedUntilIso, todayIso],
     );
-
-    // Bornes temporelles de la fenêtre selon l'horizon sélectionné (1M, 3M, 1A, 5A, 10A, MAX = Tout)
-    const xAuj = todayAxisX ?? todayMonthIndex;
-    const bornesHorizonMois = useMemo<[number, number]>(() => {
-        const minMois = Math.min(pastStartIndex, xAuj);
-        const maxMois = Math.max(lastMonthIndex, xAuj);
-        if (horizon === '1M') {
-            return [Math.max(minMois, xAuj - 1), Math.min(maxMois, xAuj + 1)];
-        }
-        if (horizon === '3M') {
-            return [Math.max(minMois, xAuj - 3), Math.min(maxMois, xAuj + 3)];
-        }
-        if (horizon === '1A') {
-            return [Math.max(minMois, xAuj - 12), Math.min(maxMois, xAuj + 12)];
-        }
-        if (horizon === '5A') {
-            return [Math.max(minMois, xAuj - 12), Math.min(maxMois, xAuj + 60)];
-        }
-        if (horizon === '2025') {
-            const idxJan2025 = (2025 - startYear) * 12 - startMonth;
-            return [Math.max(minMois, idxJan2025), Math.min(maxMois, xAuj + 36)];
-        }
-        if (horizon === '10A') {
-            return [Math.max(minMois, xAuj - 24), Math.min(maxMois, xAuj + 120)];
-        }
-        return [minMois, maxMois];
-    }, [horizon, pastStartIndex, lastMonthIndex, xAuj, startYear, startMonth]);
 
     const dailyWindowRange = useMemo<[number, number]>(() => {
         if (dailyAll.length === 0) return [0, 0];

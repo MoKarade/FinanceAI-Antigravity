@@ -109,10 +109,52 @@ export const App: React.FC = () => {
         }
     }, [authReady, firebaseUser]);
 
-    // Bouclier zéro perte : chaque modification du dossier met à jour l'empreinte protégée.
+    // Bouclier zéro perte : chaque modification du dossier met à jour l'empreinte protégée
+    // sans figer le fil principal lors des changements d'onglet ou de mode discret.
+    const latestStateForSnapshotRef = useRef(state);
+    latestStateForSnapshotRef.current = state;
     useEffect(() => {
-        saveProtectedDossierSnapshot(state);
-    }, [state, state.lastUpdate]);
+        const isTestEnv = typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test';
+        if (isTestEnv) {
+            saveProtectedDossierSnapshot(latestStateForSnapshotRef.current);
+            return;
+        }
+        let flushed = false;
+        const flush = () => {
+            if (flushed) return;
+            flushed = true;
+            saveProtectedDossierSnapshot(latestStateForSnapshotRef.current);
+        };
+        const timer = window.setTimeout(flush, 1200);
+        const onPageHide = () => {
+            window.clearTimeout(timer);
+            flush();
+        };
+        window.addEventListener('pagehide', onPageHide);
+        window.addEventListener('beforeunload', onPageHide);
+        return () => {
+            window.clearTimeout(timer);
+            window.removeEventListener('pagehide', onPageHide);
+            window.removeEventListener('beforeunload', onPageHide);
+        };
+    }, [
+        state.lastUpdate,
+        state.assets,
+        state.transactions,
+        state.budgetItems,
+        state.debts,
+        state.realEstateGoals,
+        state.initialBalances,
+        state.config,
+        state.projection,
+        state.retirementGoal,
+        state.financialGoals,
+        state.childGoals,
+        state.lifeEvents,
+        state.travelGoals,
+        state.subscriptions,
+        state.fintableBrokerBalances,
+    ]);
 
     useEffect(() => {
         if (!state.childGoals || state.childGoals.length === 0) {

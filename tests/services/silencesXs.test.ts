@@ -216,7 +216,7 @@ describe('[DEAD-PARSETX-SILENT-DROP] le parseur orphelin est parti, ses voisins 
         // un (`PATRON-APPLIQUE-A-COTE-MAIS-PAS-ICI`).
         const racine = join(__dirname, '../..');
         const estSource = (f: string): boolean => /\.(ts|tsx)$/.test(f) && !/\.test\.(ts|tsx)$/.test(f);
-        const fichiers = ['App.tsx', 'index.tsx', 'constants.ts', 'types.ts', 'i18n.ts'];
+        const fichiers = ['App.tsx', 'index.tsx', 'constants.ts', 'types.ts'];
         for (const dir of ['components', 'services', 'hooks', 'utils', 'store', 'scripts']) {
             for (const entree of readdirSync(join(racine, dir), { recursive: true })) {
                 const rel = `${dir}/${entree.toString().split(sep).join('/')}`;

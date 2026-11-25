@@ -27,7 +27,7 @@ const TAX_SOURCE_FILES = ['utils/tax.ts', 'services/realEstate.ts'] as const;
 // `mcp/` inclus (les outils MCP exposent des données financières). `scripts/` EXCLU volontairement
 // (outillage build/hooks, pas du calcul fiscal ; surtout du `.mjs`/`.cjs` non couvert par le filtre).
 const SCAN_DIRS = ['components', 'services', 'hooks', 'store', 'utils'] as const;
-const SCAN_ROOT_FILES = ['App.tsx', 'constants.ts', 'i18n.ts'] as const;
+const SCAN_ROOT_FILES = ['App.tsx', 'constants.ts'] as const;
 
 const isSource = (full: string): boolean => /\.(ts|tsx)$/.test(full) && !/\.test\.(ts|tsx)$/.test(full);
 

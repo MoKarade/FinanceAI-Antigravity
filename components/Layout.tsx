@@ -1,5 +1,4 @@
 import React, { Suspense } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Tab, FinancialGoal, User } from '../types';
 import { TAB_LABELS } from '../constants';
 import { NAV_GROUPS, MOBILE_BAR_TABS, PROFILE_TAB, navItemOfTab } from './navDestinations';
@@ -42,7 +41,6 @@ export const Layout: React.FC<LayoutProps> = ({
   financialGoals: _financialGoals = [],
   currentValues: _currentValues = { celi: 0, reer: 0, liquidity: 0 }
 }) => {
-  useTranslation();
   const [showMobileDrawer, setShowMobileDrawer] = React.useState(false);
   const [showConnexionsModal, setShowConnexionsModal] = React.useState(false);
   const [showGeminiModal, setShowGeminiModal] = React.useState(false);

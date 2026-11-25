@@ -4,11 +4,6 @@ import { Layout } from '../../components/Layout';
 import { Tab } from '../../types';
 import { TAB_LABELS } from '../../constants';
 
-vi.mock('react-i18next', () => ({
-    useTranslation: () => ({ t: (k: string, d?: string) => d || k, i18n: { language: 'fr' } }),
-}));
-vi.mock('../../i18n', () => ({ default: {} }));
-
 const baseProps = {
     activeTab: Tab.FUTURE,
     setActiveTab: vi.fn(),

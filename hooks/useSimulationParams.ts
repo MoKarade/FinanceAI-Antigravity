@@ -7,7 +7,7 @@
 // `calculatedMonthlySavings` est passé en argument car il est dérivé en amont par
 // `useDerivedFinancials` (App) — on évite de le recalculer ici.
 
-import { useMemo, useSyncExternalStore } from 'react';
+import { useMemo } from 'react';
 import { computeCashLedgerDetailed } from '../services/startingCash';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { useShallow } from 'zustand/shallow';
@@ -21,57 +21,14 @@ import { computePastCurveCalibration, toSimulationPastCurveCalibration, type Sim
 import type { Transaction, User } from '../types';
 import { usePastPortfolioHistory } from './usePastPortfolioHistory';
 import { deriveStartingBalancesFromHistory } from '../services/history/startingBalancesFromHistory';
-import { todayIsoLocal } from '../services/projection/dailyRefine';
 import { appliquerAutoriteCourtier, mentionAutoriteCourtier } from '../services/fintable/autoriteCourtier';
 import { tauxCourantsDepuisEtat, reconcileBrokerBalances } from '../services/fintable/brokerBalances';
 import { holdingsCadByRegime, jumeauxPorteursDepuisActifs } from '../services/fintable/holdingsByRegime';
+import { useMonthEpoch, useTodayIsoLocal } from './useTodayIsoLocal';
+
+export { useTodayIsoLocal } from './useTodayIsoLocal';
 
 const EMPTY_ARRAY: never[] = [];
-
-// [FUTUR-HIST-DAILY-REFRESH] « Aujourd'hui » (mois calendaire) = source UNIQUE PARTAGÉE au niveau MODULE
-// (finding silent-failure PR #514) : `useSimulationParams` est monté 2× (ProjectionEngine + FutureProjection).
-// Un `useState`/`setInterval` PAR instance ferait diverger transitoirement leurs « aujourd'hui » (2 horloges
-// horaires décalées) → `chartData` (moteur) et `pastPrefix` (affichage) sur un `startMonth` décalé d'un mois à
-// cheval sur minuit du 1er (incohérence visuelle silencieuse). Un SEUL timer + `getSnapshot` frais garantit que
-// les DEUX call-sites lisent le MÊME mois (règle « Future = source unique »), comme la dédup de `usePastPortfolioHistory`.
-const monthEpochOf = (): number => { const d = new Date(); return d.getFullYear() * 12 + d.getMonth(); };
-const _monthListeners = new Set<() => void>();
-let _monthTimer: ReturnType<typeof setInterval> | null = null;
-const _notifyMonth = (): void => { _monthListeners.forEach((l) => l()); };
-const _onMonthVisibility = (): void => { if (typeof document !== 'undefined' && document.visibilityState === 'visible') _notifyMonth(); };
-const _subscribeMonthEpoch = (cb: () => void): (() => void) => {
-    _monthListeners.add(cb);
-    if (_monthTimer === null && typeof window !== 'undefined') {
-        _monthTimer = setInterval(_notifyMonth, 60 * 60 * 1000); // horaire (onglet idle mais visible à cheval sur minuit)
-        if (typeof document !== 'undefined') document.addEventListener('visibilitychange', _onMonthVisibility);
-    }
-    return () => {
-        _monthListeners.delete(cb);
-        if (_monthListeners.size === 0 && _monthTimer !== null) {
-            clearInterval(_monthTimer);
-            _monthTimer = null;
-            if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', _onMonthVisibility);
-        }
-    };
-};
-// `getSnapshot` recalcule le mois courant à CHAQUE lecture (primitif → stable par valeur : bail-out React si inchangé).
-// Le timer/visibility ne fait que NOTIFIER (re-lecture) ; au vrai passage de mois, la valeur change → re-render.
-const _getMonthEpoch = (): number => monthEpochOf();
-const _getTodayIso = (): string => todayIsoLocal();
-
-/**
- * [FUTUR-DAILY-ROLLOVER] Aujourd'hui (JOUR calendaire LOCAL, `YYYY-MM-DD`) RÉACTIF — demande Marc
- * 2026-08-12 : « ça doit se mettre à jour à chaque jour pour le passé ». La courbe au jour borne
- * son passé RÉEL sur cette valeur : figée au montage, une app laissée ouverte gardait la frontière
- * réel/projeté au jour de l'ouverture, et les jours écoulés restaient affichés comme « projetés ».
- * Même horloge PARTAGÉE que le mois (un seul timer, mêmes notifications : tick horaire + retour
- * d'onglet — string stable par valeur → bail-out React tant que le jour n'a pas changé).
- * Latence assumée : au plus ~1 h après minuit onglet resté visible, immédiat au retour d'onglet —
- * même arbitrage que le mois, documenté ci-dessus.
- */
-export function useTodayIsoLocal(): string {
-    return useSyncExternalStore(_subscribeMonthEpoch, _getTodayIso, _getTodayIso);
-}
 
 interface SimulationParamsBundle {
     /** Entrée du moteur : `calculateFutureProjection(params, …)`. */
@@ -196,7 +153,7 @@ export function useSimulationParams(calculatedMonthlySavings: number): Simulatio
     // [FUTUR-HIST-DAILY-REFRESH] « Aujourd'hui » (mois) AVANCE quand le mois calendaire change, même onglet ouvert
     // (avant : figé au MONTAGE via `useMemo([])`). Source PARTAGÉE module-level (une seule horloge pour les 2 montages
     // du hook → pas de divergence inter-instances, cf bloc ci-dessus). Granularité MOIS (passé/moteur mensuels).
-    const monthEpoch = useSyncExternalStore(_subscribeMonthEpoch, _getMonthEpoch, _getMonthEpoch);
+    const monthEpoch = useMonthEpoch();
     const { startYear, startMonth } = useMemo(
         () => ({ startYear: Math.floor(monthEpoch / 12), startMonth: monthEpoch % 12 }),
         [monthEpoch],

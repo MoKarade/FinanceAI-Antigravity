@@ -25,13 +25,7 @@ import { render } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import type * as AxeCore from 'axe-core';
 
-// Mocks globaux : i18n et services réseau
-vi.mock('react-i18next', () => ({
-    useTranslation: () => ({
-        t: (k: string) => k,
-        i18n: { language: 'fr', changeLanguage: () => Promise.resolve() },
-    }),
-}));
+// Mocks globaux : services réseau
 vi.mock('../../services/marketData', () => ({
     configureMarketDataProvider: vi.fn(),
     getQuote: vi.fn().mockResolvedValue(null),

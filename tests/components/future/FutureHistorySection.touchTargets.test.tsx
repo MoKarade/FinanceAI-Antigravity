@@ -12,9 +12,6 @@ vi.mock('../../../components/dashboard/DashboardEvolutionChart', async () => {
     const React = await import('react');
     return { default: () => React.createElement('div', { 'data-testid': 'evo-chart' }) };
 });
-vi.mock('react-i18next', () => ({
-    useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'fr' } }),
-}));
 
 const isoDaysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString().split('T')[0];
 const marketData: MarketDataPoint[] = [

@@ -30,13 +30,6 @@ import { ValoriaFinanceAiHubCard } from '../../components/valoria/ValoriaFinance
 import { executerAction } from '../../services/assistant/actionRegistry';
 import { makeValoriaCommandActions } from '../../components/ui/commandPaletteActions';
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (k: string) => k,
-    i18n: { language: 'fr', changeLanguage: () => Promise.resolve() },
-  }),
-}));
-
 const initialStore = useFinanceStore.getState();
 
 async function assertNoSeriousAxeViolations(container: HTMLElement): Promise<void> {

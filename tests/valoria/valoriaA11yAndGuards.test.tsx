@@ -16,13 +16,6 @@ import { useFinanceStore } from '../../store/useFinanceStore';
 import { TEST_ASSETS } from '../fixtures/testAssets';
 import { stripComments, stripCommentsJsx } from '../../utils/stripComments';
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (k: string) => k,
-    i18n: { language: 'fr', changeLanguage: () => Promise.resolve() },
-  }),
-}));
-
 async function expectNoSeriousViolations(container: HTMLElement): Promise<void> {
   const results = await axe(container);
   const serious = (results.violations || []).filter(

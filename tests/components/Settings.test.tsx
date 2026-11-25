@@ -10,9 +10,6 @@ vi.mock('../../services/cloudBackup', () => ({
     defaultBackupFilename: () => 'backup.enc',
     MIN_PASSPHRASE_LENGTH: 12,
 }));
-vi.mock('react-i18next', () => ({
-    useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'fr' } }),
-}));
 
 const defaultApiKeys: AppState['apiKeys'] = { gemini: 'GEMINI_SECRET', finnhub: '' };
 const defaultConfig: BudgetConfig = {

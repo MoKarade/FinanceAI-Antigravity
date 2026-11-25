@@ -28,9 +28,6 @@ vi.mock('../../../components/dashboard/DashboardEvolutionChart', async () => {
         }),
     };
 });
-vi.mock('react-i18next', () => ({
-    useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'fr' } }),
-}));
 
 // Dates RELATIVES à aujourd'hui : le filtre de période compare à `new Date()` — des dates
 // figées (2024-…) rendraient la fenêtre 1M vide et le test vacueux.

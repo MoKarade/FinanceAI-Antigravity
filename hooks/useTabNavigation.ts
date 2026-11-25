@@ -5,7 +5,6 @@
 // et <html lang>. [S5-SANS-GA] Le page_view GA4 est retiré avec Google Analytics (24/09/2026).
 
 import { useEffect, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Tab } from '../types';
 
 export function useTabNavigation(activeTab: Tab, setActiveTab: (tab: Tab) => void): void {
@@ -85,12 +84,10 @@ export function useTabNavigation(activeTab: Tab, setActiveTab: (tab: Tab) => voi
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [setActiveTab]);
 
-    // §7.D.3 — <html lang> dynamique synchronisé avec i18next.
-    const { i18n: i18nInstance } = useTranslation();
+    // Langue fixe fr sur <html>.
     useEffect(() => {
-        const lang = (i18nInstance.language || 'fr').split('-')[0];
-        if (document.documentElement.lang !== lang) {
-            document.documentElement.lang = lang;
+        if (document.documentElement.lang !== 'fr') {
+            document.documentElement.lang = 'fr';
         }
-    }, [i18nInstance.language]);
+    }, []);
 }
