@@ -9,26 +9,12 @@ interface NetworkInformationLike {
     effectiveType?: string;
 }
 
-const TAB_LOADERS: Partial<Record<Tab, () => Promise<unknown>>> = {
-    [Tab.DASHBOARD]: () => import('../components/AccueilGoogle'),
-    [Tab.FUTURE]: () => Promise.all([
-        import('../components/FutureProjection'),
-        import('../components/FutureKpiStrip'),
-    ]),
-    [Tab.TRANSACTIONS]: () => import('../components/Transactions'),
-    [Tab.BUDGET]: () => import('../components/budget/BudgetWorkspace'),
-    [Tab.DEBT]: () => import('../components/DebtManager'),
-    [Tab.INVESTMENTS]: () => import('../components/Investments'),
-    [Tab.VALORIA]: () => import('../components/Investments'),
-    [Tab.RETIREMENT]: () => import('../components/Retirement'),
-    [Tab.REAL_ESTATE]: () => import('../components/RealEstate'),
-    [Tab.REAL_ESTATE_PROJECTS]: () => import('../components/life/RealEstateProjects'),
-    [Tab.CHILD]: () => import('../components/ChildPlanning'),
-    [Tab.LIFE_PROJECTS]: () => import('../components/LifeProjects'),
-    [Tab.TAX]: () => import('../components/TaxCenter'),
-    [Tab.SETTINGS]: () => import('../components/Settings'),
-    [Tab.PROFILE]: () => import('../components/Profile'),
-};
+const TAB_LOADERS: Partial<Record<Tab, () => Promise<unknown>>> = {};
+
+/** Enregistre les chargeurs lazy depuis `TabRouter` afin d'éviter toute dépendance circulaire vers `components/`. */
+export function registerTabLoaders(loaders: Partial<Record<Tab, () => Promise<unknown>>>): void {
+    Object.assign(TAB_LOADERS, loaders);
+}
 
 const CORE_IDLE_PREFETCH_TABS: readonly Tab[] = [
     Tab.FUTURE,

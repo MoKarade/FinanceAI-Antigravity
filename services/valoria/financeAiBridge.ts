@@ -363,7 +363,7 @@ function getFxMultiplierToCad(
   if (curr === 'CAD' || curr === 'CA$' || curr === '$CAD') return 1;
 
   if (fxRates && typeof fxRates === 'object') {
-    const cadRate = Number(fxRates.CAD ?? 0);
+    const cadRate = fxRates.CAD === undefined ? 1 : Number(fxRates.CAD);
     const currRate = Number(fxRates[curr] ?? 0);
 
     // Convention FinanceAI v4.0 : 1 unité de `curr` = `currRate` CAD, 1 CAD = `cadRate`

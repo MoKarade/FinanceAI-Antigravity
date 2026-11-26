@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, waitFor, act } from '@testing-library/react';
 import { ProjectionEngine, FUTURE_REQ_IDS } from '../../components/ProjectionEngine';
-import { PAGE_SETUP } from '../../components/setup/PageSetupGate';
+import { PAGE_SETUP } from '../../components/setup/requirements';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { getPersonaOrDefault, DEFAULT_PERSONA_ID } from '../fixtures/testFixtures';
 import { Tab } from '../../types';

@@ -24,16 +24,7 @@ import { stripComments, partDeCodeRestante } from '../../utils/stripComments';
 const racine = resolve(process.cwd(), 'components');
 
 /** Ce que le scan NE compte PAS, avec sa raison — jamais une exemption muette. */
-const EXCLUSIONS: ReadonlyArray<{ fichier: string; jeton: string; raison: string }> = [
-    {
-        fichier: 'KPIStat.tsx',
-        jeton: 'cursor-help',
-        raison: 'pastille d\'aide EN LIGNE à côté d\'un libellé : WCAG 2.5.8 exempte explicitement une '
-            + 'cible inline dans un bloc de texte. Et le patron `p-2 -m-2` ne s\'y applique pas — le '
-            + 'bouton porte une bordure visible, donc le padding grossirait le cercle (32 px) au lieu '
-            + 'de la seule zone cliquable.',
-    },
-];
+const EXCLUSIONS: ReadonlyArray<{ fichier: string; jeton: string; raison: string }> = [];
 
 function fichiersTsx(dir: string): string[] {
     return readdirSync(dir).flatMap((nom) => {

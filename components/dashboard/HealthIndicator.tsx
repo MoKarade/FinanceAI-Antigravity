@@ -12,7 +12,6 @@ import { PrivateAmount } from '../ui/PrivateAmount';
 import { useAutoritePlacements } from '../../hooks/useEcartAutoritePlacements';
 import { useTodayIsoLocal } from '../../hooks/useSimulationParams';
 import { useProjectionSelector } from '../../hooks/useProjectionSelector';
-import { MonthlySpendingVsBudgetChart } from './MonthlySpendingVsBudgetChart';
 
 /**
  * Phase D.6 — indicateur de santé financière paramétrable.
@@ -266,13 +265,6 @@ export const HealthIndicator: React.FC<{ className?: string }> = ({ className = 
                     )}
                 </div>
             )}
-            <div className="mt-5 pt-4 border-t border-bordure">
-                <MonthlySpendingVsBudgetChart
-                    transactions={transactions}
-                    budgetItems={budgetItems}
-                    isPrivacyMode={isPrivacyMode}
-                />
-            </div>
         </div>
     );
 };

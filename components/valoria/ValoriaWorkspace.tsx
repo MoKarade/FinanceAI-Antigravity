@@ -6,12 +6,10 @@ import { useFinanceStore } from '../../store/useFinanceStore';
 import { useValoriaBridge } from '../../hooks/useValoriaBridge';
 import {
   MARKET_REGIMES,
-  type InvestmentGoal,
   type MacroIndicators,
   type RegimeId,
   type RiskProfile,
 } from '../../services/valoria/marketData';
-import { applyLiveMarketTick } from '../../services/valoria/engine';
 import { buildProAnalystAdvisory } from '../../services/valoria/proAnalystAdvisor';
 import { analyzeFullMarketUniverse } from '../../services/valoria/multiAssetQuantEngine';
 import { formatCad } from '../../services/valoria/valoriaFormatters';
@@ -28,49 +26,33 @@ import {
   type WorkspaceTabId,
 } from './ProAdvisorUnifiedView';
 import { BacktestView } from './BacktestView';
-import { D3MonteCarloModule } from './D3MonteCarloModule';
-import { PortfolioSimulatorView } from './PortfolioSimulatorView';
-import { DeepQuantModelsView } from './DeepQuantModelsView';
 import { EquitySignalsView } from './EquitySignalsView';
-import { InteractiveAcademyView } from './InteractiveAcademyView';
 import { LiveNewsCatalystView } from './LiveNewsCatalystView';
-import { AIRecommendationsView } from './AIRecommendationsView';
 import { ApplyValoriaToPortfolioModal } from './ApplyValoriaToPortfolioModal';
 import { AssetTearSheetModal } from './AssetTearSheetModal';
 
 type ComplementaryLabId =
   | 'unified'
   | 'backtest'
-  | 'montecarlo'
-  | 'simulator'
-  | 'quant_models'
   | 'equity_signals'
-  | 'academy'
-  | 'live_news'
-  | 'ai_recs';
+  | 'live_news';
 
 const MAIN_TABS: ReadonlyArray<SubTabDef<WorkspaceTabId>> = [
   { id: 'portfolio', label: 'Ce que j’ai', icon: 'portfolio' },
   { id: 'recommendations', label: 'Recommandés', icon: 'sparkles' },
   { id: 'ai_proof', label: 'Preuve IA', icon: 'clock' },
-  { id: 'dialogue', label: 'Discuter IA', icon: 'users' },
   { id: 'market', label: 'Marchés', icon: 'globe' },
-  { id: 'intelligence', label: 'Agents & Futur', icon: 'chart' },
+  { id: 'intelligence', label: 'Analyse & Futur', icon: 'chart' },
 ];
 
 const COMPLEMENTARY_LABS: ReadonlyArray<{
   id: ComplementaryLabId;
   label: string;
 }> = [
-  { id: 'unified', label: 'Vue Conseiller Unifiée (6 onglets)' },
+  { id: 'unified', label: 'Vue Conseiller Unifiée' },
   { id: 'backtest', label: 'Backtest historique ($ CAD)' },
-  { id: 'montecarlo', label: 'Monte Carlo (10 000 scénarios)' },
-  { id: 'simulator', label: 'Simulateur de portefeuille' },
-  { id: 'quant_models', label: 'Modèles Quant (Black-Litterman)' },
-  { id: 'equity_signals', label: 'Signaux Actions (22 ratios)' },
-  { id: 'academy', label: 'Académie interactive' },
-  { id: 'live_news', label: 'Actus & Catalyseurs en direct' },
-  { id: 'ai_recs', label: 'Recommandations IA structurées' },
+  { id: 'equity_signals', label: 'Signaux Actions' },
+  { id: 'live_news', label: 'Actualités en direct' },
 ];
 
 export interface ValoriaWorkspaceProps {
@@ -123,10 +105,11 @@ export const ValoriaWorkspace: React.FC<ValoriaWorkspaceProps> = ({
       return;
     }
     if (target.lab) {
-      setActiveLab(target.lab);
+      const validLabs = new Set<ComplementaryLabId>(['unified', 'backtest', 'equity_signals', 'live_news']);
+      setActiveLab(validLabs.has(target.lab as ComplementaryLabId) ? (target.lab as ComplementaryLabId) : 'unified');
     }
     if (target.tab) {
-      setActiveMainTab(target.tab);
+      setActiveMainTab(target.tab === 'dialogue' ? 'portfolio' : target.tab);
     }
     if (target.assetId) {
       setExternalInspectedAssetId(target.assetId);
@@ -134,22 +117,15 @@ export const ValoriaWorkspace: React.FC<ValoriaWorkspaceProps> = ({
     clearPendingFocus();
   }, [pendingFocus, clearPendingFocus]);
 
-  // États partagés avec les 8 laboratoires complémentaires
   const [backtestAssetId, setBacktestAssetId] = useState<string>('XEQT');
   const [backtestStartYm, setBacktestStartYm] = useState<string>('2020-01');
   const [backtestAmount, setBacktestAmount] = useState<number>(5000);
-  const [simGoal, setSimGoal] = useState<InvestmentGoal>('croissance_long_terme');
   const [customMacro, setCustomMacro] = useState<MacroIndicators | null>(null);
-  const [tickPricesOverlay, setTickPricesOverlay] = useState<Record<string, number> | null>(
-    null
-  );
-  const [tickStep, setTickStep] = useState<number>(0);
-  const [completedQuestionIds, setCompletedQuestionIds] = useState<string[]>([]);
   const [quickAddAssetId, setQuickAddAssetId] = useState<string>('XEQT');
   const [quickAddAmount, setQuickAddAmount] = useState<string>('5000');
 
   const activeMacro = customMacro ?? bridge.macro;
-  const activeLivePrices = tickPricesOverlay ?? bridge.livePrices;
+  const activeLivePrices = bridge.livePrices;
 
   const isEmptyPortfolio = bridge.lots.length === 0;
 
@@ -183,12 +159,8 @@ export const ValoriaWorkspace: React.FC<ValoriaWorkspaceProps> = ({
     );
   }, [isEmptyPortfolio, externalInspectedAssetId, activeLivePrices, activeMacro, bridge.riskProfile]);
 
-  // Données dérivées uniquement lorsqu'un des 8 laboratoires complémentaires en a besoin
   const labAdvisory = useMemo(() => {
-    if (
-      isEmptyPortfolio ||
-      (activeLab !== 'quant_models' && activeLab !== 'live_news')
-    ) {
+    if (isEmptyPortfolio || activeLab !== 'live_news') {
       return null;
     }
     return buildProAnalystAdvisory({
@@ -552,63 +524,6 @@ export const ValoriaWorkspace: React.FC<ValoriaWorkspaceProps> = ({
                 />
               )}
 
-              {activeLab === 'montecarlo' && (
-                <D3MonteCarloModule
-                  lots={bridge.lots}
-                  livePrices={activeLivePrices}
-                />
-              )}
-
-              {activeLab === 'simulator' && (
-                <PortfolioSimulatorView
-                  lots={bridge.lots}
-                  summary={bridge.portfolioSummary}
-                  livePrices={activeLivePrices}
-                  macro={activeMacro}
-                  riskProfile={bridge.riskProfile as RiskProfile}
-                  goal={simGoal}
-                  isLiveStreaming={false}
-                  onToggleLiveStream={() => {}}
-                  onStepMarketTick={() => {
-                    const nextStep = tickStep + 1;
-                    setTickStep(nextStep);
-                    setTickPricesOverlay(
-                      applyLiveMarketTick(activeLivePrices, nextStep, activeMacro)
-                    );
-                  }}
-                  onAddLot={bridge.addSimLot}
-                  onRemoveLot={(lotId) => {
-                    const lot = bridge.lots.find((l) => l.id === lotId);
-                    if (lot) bridge.removeSimAssetHoldings(lot.assetId);
-                  }}
-                  onExecuteRebalanceOrder={bridge.executeSimSingleOrder}
-                  onResetDemoLots={bridge.loadDemoSimPortfolio}
-                  onOpenBacktestForAsset={handleOpenBacktestForAsset}
-                  onNavigateToAI={() => setActiveLab('ai_recs')}
-                />
-              )}
-
-              {activeLab === 'quant_models' && labAdvisory && (
-                <DeepQuantModelsView
-                  institutionalQuant={labAdvisory.institutionalQuant}
-                  xray={labAdvisory.xray}
-                  lots={bridge.lots}
-                  portfolioSummary={bridge.portfolioSummary}
-                  livePrices={activeLivePrices}
-                  macro={activeMacro}
-                  watchlistIds={bridge.watchlistIds}
-                  marketUniverseVersion={bridge.marketUniverseVersion}
-                  onAddWatchlistAsset={bridge.addWatchlistAsset}
-                  onRemoveWatchlistAsset={bridge.removeWatchlistAsset}
-                  onQuickInvestFromWatchlist={bridge.executeSimSingleOrder}
-                  onInspectAsset={(id) => {
-                    setActiveLab('unified');
-                    setActiveMainTab('portfolio');
-                    setFocusedAssetId(id);
-                  }}
-                />
-              )}
-
               {activeLab === 'equity_signals' && (
                 <EquitySignalsView
                   livePrices={activeLivePrices}
@@ -627,18 +542,6 @@ export const ValoriaWorkspace: React.FC<ValoriaWorkspaceProps> = ({
                 />
               )}
 
-              {activeLab === 'academy' && (
-                <InteractiveAcademyView
-                  completedQuestionIds={completedQuestionIds}
-                  onMarkQuestionCompleted={(qId) =>
-                    setCompletedQuestionIds((prev) =>
-                      prev.includes(qId) ? prev : [...prev, qId]
-                    )
-                  }
-                  onResetProgress={() => setCompletedQuestionIds([])}
-                />
-              )}
-
               {activeLab === 'live_news' && labAdvisory && (
                 <LiveNewsCatalystView
                   newsIntelligence={labAdvisory.newsIntelligence}
@@ -653,41 +556,6 @@ export const ValoriaWorkspace: React.FC<ValoriaWorkspaceProps> = ({
                     setActiveMainTab('portfolio');
                     setFocusedAssetId(id);
                   }}
-                />
-              )}
-
-              {activeLab === 'ai_recs' && (
-                <AIRecommendationsView
-                  regimeId={bridge.regimeId}
-                  macro={activeMacro}
-                  riskProfile={bridge.riskProfile as RiskProfile}
-                  goal={simGoal}
-                  livePrices={activeLivePrices}
-                  portfolioSummary={bridge.portfolioSummary}
-                  syncedMonthlySavings={bridge.budgetSync.monthlySavingsCapacityEur}
-                  geminiApiKey={bridge.geminiApiKey}
-                  onSelectRegime={(id: RegimeId) => {
-                    setCustomMacro(null);
-                    bridge.selectRegime(id);
-                  }}
-                  onUpdateMacro={(next) => setCustomMacro(next)}
-                  onSelectRiskProfile={bridge.setRiskProfile}
-                  onSelectGoal={setSimGoal}
-                  onAddLot={bridge.addSimLot}
-                  onExecuteRebalanceOrder={bridge.executeSimSingleOrder}
-                  onApplyRecommendedAllocation={(totalBudget, slices) => {
-                    for (const slice of slices) {
-                      const amount = Math.round((totalBudget * slice.weightPct) / 100);
-                      if (amount >= 25) {
-                        bridge.addSimLot({
-                          assetId: slice.assetId,
-                          investedAmount: amount,
-                          purchaseYearMonth: '2026-11',
-                        });
-                      }
-                    }
-                  }}
-                  onOpenBacktestForAsset={handleOpenBacktestForAsset}
                 />
               )}
             </section>

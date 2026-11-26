@@ -10,7 +10,7 @@
   1. **Code source & architecture (R1, R2, R3, R4A)** : inventaire des `1 471` fichiers du dépôt (`components/`, `hooks/`, `services/`, `store/`, `utils/`, `server/`, `cloudrun/`, `tests/`, `e2e/`, `scripts/`, `qualite/`), analyses statiques en lecture seule (`depcruise`, `knip`, `npm audit --omit=dev`), graphes d'imports depuis les points d'entrée de production et comptages directs.
   2. **Navigateur local — Ordinateur (`1440×900`, R4B)** : serveur local `NODE_ENV=production PORT=3010 npx tsx server.ts` sur le build `dist/` du commit `9275a29b`, parcours de 13 onglets + `Valoria (Outils experts)` + scénario `jeune-couple-dink` (`?nogate=1`).
   3. **Navigateur local — Mobile (`390×844`, R4B)** : parcours de 8 écrans principaux avec personas fictifs (`?nogate=1`).
-  4. **Site en ligne (`https://financeai-497112.web.app`, R4B)** : inspection de la porte de connexion Google/Firebase, des en-têtes HTTP/CSP, de `/api/sante`, du Service Worker `sw.js`, et comparaison de parité ordinateur/mobile avec les données fictives isolées (`?nogate=1`).
+  4. **Site en ligne (déploiement Firebase Hosting, R4B)** : inspection de la porte de connexion Google/Firebase, des en-têtes HTTP/CSP, de `/api/sante`, du Service Worker `sw.js`, et comparaison de parité ordinateur/mobile avec les données fictives isolées (`?nogate=1`).
 
 ---
 
@@ -93,7 +93,7 @@ Les 20 fichiers source les plus volumineux dépassent chacun 1 100 lignes :
    - `utils/zodSansEval.ts:10-12` : désactive le JIT Zod 4 (`config({ jitless: true })`) pour éviter `new Function` sous CSP.
    - `public/sw.js:13-116` (`CACHE_NAME = 'financeai-v47'`) : ne met jamais en cache `/api/*` ni `/__*` (`:70-71`), ignore les réponses HTML sur `/assets/*` (`:85-87`), force `cache: 'no-store'` sur la navigation (`:104-105`), et ne cache que `status === 200 && type === 'basic' && !redirected` (`:19-21`).
    - `firebase.json:13-23` : redirige `/api/**` vers Cloud Run `financeai-proxy` (`us-central1`) et `/**` vers `/index.html`.
-   - `services/firebase/firebaseClient.ts:14-28` & `firebase-applet-config.json:2` : le fichier de config commité indique `projectId: "financeai-demo-public"`, réécrit à l'exécution (hors mode test) vers `financeai-497112` via `['financeai', '497', '112'].join('-').replace('-112', '112')` en conservant la même `apiKey`, `appId` et `firestoreDatabaseId`.
+   - `services/firebase/firebaseClient.ts:14-28` & `firebase-applet-config.json:2` : le fichier de config commité indique `projectId: "financeai-demo-public"`, réécrit à l'exécution (hors mode test) vers le `projectId` de production en conservant la même `apiKey`, `appId` et `firestoreDatabaseId`.
 
 ### 3.3 Stockage navigateur, chiffrement local et synchronisation Cloud Firestore
 
@@ -291,7 +291,7 @@ Mesuré sur l'ensemble des **234** fichiers `.tsx`/`.ts` de `components/` :
   - `Immobilier` (`local_mobile_immobilier.png`) : sous-barre `Planification` rogne `Pr...` (`Projets de vie`) à droite ; onglets `Biens détenus` / `Projets d'achat` à `40 px` (`< 44 px`).
   - `Transactions` : `<select>` en ligne mesurés à **`26×16` à `64×16` px** (`16 px` de haut sur écran tactile !). `Budget` (`h=28`, flèches `31×36`), bannière sauvegarde (`h=24`), boutons zoom (`28×44`).
 
-#### (d) Site en ligne (`https://financeai-497112.web.app`, R4B)
+#### (d) Site en ligne (production Firebase Hosting, R4B)
 - **Porte de connexion (`live_desktop_gate.png`, `live_mobile_gate.png`)** : rendu propre en mode sombre (`Continuer avec Google` + `Accéder directement à mon dossier local`), zéro débordement (`gateOverflow: false`), `0` erreur console/réseau. Chargement initial léger : `9` ressources, `3` chunks JS, `371 907` octets transférés (note : `networkidle` Playwright expire à 30 s à cause du canal persistant Firebase ; `domcontentloaded` est immédiat).
 - **Parité exacte avec `main` local** : avec `?nogate=1` et le même dossier fictif `couple-confort`, `live_desktop_accueil.png`, `live_desktop_futur.png`, `live_mobile_accueil.png` et `live_mobile_futur.png` donnent une **télémétrie DOM identique à l'octet près** (`scrollHeight` `2304`/`3996`/`3895`/`6289`, `608` `$` sur `Futur`, `0` erreur console/HTTP, `/api/sante` `200`, `sw.js` en `no-cache, no-store, must-revalidate`). Seule différence mineure d'en-tête HTML : `livePreloadCount: 0` sur `/`.
 - **En-têtes HTTP de sécurité en production** : `strict-transport-security` (`max-age=31556926; includeSubDomains; preload`), `x-frame-options: DENY`, `x-content-type-options: nosniff`, `referrer-policy: strict-origin-when-cross-origin`, `permissions-policy` strict, et `content-security-policy` conforme à `firebase.json:31` (avec les assouplissements `style-src 'self' 'unsafe-inline'` et `img-src 'self' data: blob: https:` déjà relevés en S7).

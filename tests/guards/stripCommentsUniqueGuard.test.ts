@@ -104,7 +104,7 @@ describe('[GUARD-STRIPCOMMENTS-DUPLIQUE] la source unique du décommentage', () 
         // gardes avaient cessé de décommenter du tout — ce qui les rendrait toutes vacueuses.
         const MIGRES = [
             'tests/a11y/chartHintEquivalents.test.tsx', 'tests/a11y/focusTrap.test.tsx',
-            'tests/aiTools/specFiniteGuard.test.ts', 'tests/components/PatrimoineExtended.privacy.test.tsx',
+            'tests/aiTools/specFiniteGuard.test.ts',
             'tests/components/TaxCenter.applyGate.test.ts', 'tests/components/chartTooltipTheme.test.ts',
             'tests/components/subTabsAria.test.tsx', 'tests/components/taxBracketVizAnnee.test.tsx',
             'tests/gateTestsHomonymes.test.ts', 'tests/services/assetFxGuard.test.ts',

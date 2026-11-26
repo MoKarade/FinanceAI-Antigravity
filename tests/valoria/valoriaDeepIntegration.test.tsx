@@ -81,6 +81,14 @@ describe('Valoria × FinanceAI — Intégration profonde', () => {
     expect(suggestOptimalCanadianAccount('VFV.TO')).toBe('CELI');
     expect(suggestOptimalCanadianAccount('BTC-CAD')).toBe('CRYPTO');
     expect(suggestOptimalCanadianAccount('RY.TO', undefined, 'CA')).toBe('CELI');
+    // XBB.PA (actions monde EUR), XEQT.TO et VEQT.TO sont des ETF actions, JAMAIS des obligations REER
+    expect(suggestOptimalCanadianAccount('XBB.PA', undefined, 'EUROPE')).toBe('NON-ENREG');
+    expect(suggestOptimalCanadianAccount('XBB.PA', undefined, 'EUROPE')).not.toBe('REER');
+    expect(suggestOptimalCanadianAccount('XEQT.TO')).toBe('CELI');
+    expect(suggestOptimalCanadianAccount('VEQT.TO')).toBe('CELI');
+    // Véritables FNB obligataires canadiens -> REER prioritaire
+    expect(suggestOptimalCanadianAccount('XBB.TO')).toBe('REER');
+    expect(suggestOptimalCanadianAccount('ZAG.TO')).toBe('REER');
   });
 
   it('buildValoriaFiscalAndFutureContext respecte salaires × 12 et no-fake-data si projection absente', () => {

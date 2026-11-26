@@ -44,9 +44,7 @@ import {
 } from './MotionPrimitives';
 import { D3BenchmarkChart } from './D3BenchmarkChart';
 import { MultiAgentSwarmView } from './MultiAgentSwarmView';
-import { VisualFutureProjectionsView } from './VisualFutureProjectionsView';
 import { GlobalMarketExplorerSection } from './GlobalMarketExplorerSection';
-import { AgentConsultationChatView } from './AgentConsultationChatView';
 import { AssetTearSheetModal } from './AssetTearSheetModal';
 import { D3InflationPurchasingPowerWidget } from './D3InflationPurchasingPowerWidget';
 import { D3PriceSparkline30d } from './D3PriceSparkline30d';
@@ -71,7 +69,13 @@ import {
   buildDeepAiNewsIntelligenceLab,
   buildPortfolioDonutAllocation,
 } from '../../services/valoria/portfolioOrbitalIntelligence';
-import { formatCompactEur, formatEur, formatPct, formatSignedEur, formatSignedPct } from '../../services/valoria/valoriaFormatters';
+import {
+  formatCompactCad as formatCompactEur,
+  formatCad as formatEur,
+  formatPct,
+  formatSignedCad as formatSignedEur,
+  formatSignedPct,
+} from '../../services/valoria/valoriaFormatters';
 import {
   fetchValoriaDeepIntelligenceLab,
   fetchValoriaDeepResearch,
@@ -214,7 +218,6 @@ export const ProAdvisorUnifiedView: React.FC<ProAdvisorUnifiedViewProps> = ({
   >('orbit');
   const [showRecCharts, setShowRecCharts] = useState<boolean>(false);
   const [expandedCotKey, setExpandedCotKey] = useState<string | null>(null);
-  const [chatFocusAssetId, setChatFocusAssetId] = useState<string | null>(null);
   const [selectedDonutSliceId, setSelectedDonutSliceId] =
     useState<PortfolioSliceId | null>(null);
 
@@ -233,7 +236,7 @@ export const ProAdvisorUnifiedView: React.FC<ProAdvisorUnifiedViewProps> = ({
     [onChangeFocusedAssetId]
   );
   const [intelSubView, setIntelSubView] = useState<
-    'causal_ia' | 'inflation' | 'agents' | 'future'
+    'causal_ia' | 'inflation' | 'agents'
   >('causal_ia');
   const [liveDeepSynthesis, setLiveDeepSynthesis] =
     useState<LiveGeminiDeepSynthesisPayload | null>(null);
@@ -616,10 +619,9 @@ export const ProAdvisorUnifiedView: React.FC<ProAdvisorUnifiedViewProps> = ({
 
   const openAssetInDialogue = useCallback(
     (assetId: string) => {
-      setChatFocusAssetId(assetId);
-      onSelectTab('dialogue');
+      setInspectedAssetId(assetId);
     },
-    [onSelectTab]
+    []
   );
 
   const openDeepAiNewsLabFromPortfolio = useCallback(
@@ -1287,7 +1289,7 @@ export const ProAdvisorUnifiedView: React.FC<ProAdvisorUnifiedViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setIntelSubView('future');
+                  setIntelSubView('causal_ia');
                   onSelectTab('intelligence');
                 }}
                 className="min-h-11 py-4 md:py-1 md:px-6 flex items-center justify-between gap-4 text-left hover:opacity-90 transition-opacity cursor-pointer"
@@ -1534,36 +1536,6 @@ export const ProAdvisorUnifiedView: React.FC<ProAdvisorUnifiedViewProps> = ({
           </motion.div>
         )}
 
-        {/* TAB 3: INTERACTIVE 7-AGENT & AI CONSULTATION + TRADE IMPACT SIMULATOR */}
-        {activeTab === 'dialogue' && (
-          <motion.div
-            key="tab-dialogue"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.18 }}
-          >
-            <AgentConsultationChatView
-              lots={lots}
-              livePrices={livePrices}
-              macro={macro}
-              riskProfile={riskProfile}
-              advisory={advisory}
-              universe={fullUniverse}
-              geminiApiKey={geminiApiKey}
-              initialFocusAssetId={chatFocusAssetId}
-              onInspectAsset={(id) => setInspectedAssetId(id)}
-              onExecuteSingleOrder={(assetId, deltaCad) => {
-                onExecuteSingleOrder(assetId, deltaCad);
-                setExecutionNotice(
-                  `Ordre exécuté : ${assetId} (${formatSignedEur(deltaCad, 0)})`
-                );
-              }}
-              onApplyFullAdvisoryPlan={onApplyFullAdvisoryPlan}
-            />
-          </motion.div>
-        )}
-
         {/* TAB 4: GLOBAL MARKET EXPLORER & D3 SECTOR HEATMAP */}
         {activeTab === 'market' && (
           <motion.div
@@ -1624,11 +1596,6 @@ export const ProAdvisorUnifiedView: React.FC<ProAdvisorUnifiedViewProps> = ({
                       id: 'agents',
                       mobile: '7 Agents',
                       desktop: 'Comité 7 Agents',
-                    },
-                    {
-                      id: 'future',
-                      mobile: 'Futur 2031',
-                      desktop: 'Trajectoire 2031',
                     },
                   ] as const
                 ).map((sub) => {
@@ -1735,26 +1702,6 @@ export const ProAdvisorUnifiedView: React.FC<ProAdvisorUnifiedViewProps> = ({
                 }}
                 onAddWatchlistAsset={onAddWatchlistAsset}
                 onRemoveWatchlistAsset={onRemoveWatchlistAsset}
-              />
-            )}
-
-            {intelSubView === 'future' && (
-              <VisualFutureProjectionsView
-                advisory={advisory}
-                lots={lots}
-                livePrices={livePrices}
-                macro={macro}
-                watchlistIds={watchlistIds}
-                marketUniverseVersion={marketUniverseVersion}
-                onInspectAsset={(id) => setInspectedAssetId(id)}
-                onAddWatchlistAsset={onAddWatchlistAsset}
-                onRemoveWatchlistAsset={onRemoveWatchlistAsset}
-                onQuickInvestAsset={(assetId, amountCad) => {
-                  onExecuteSingleOrder(assetId, amountCad);
-                  setExecutionNotice(
-                    `Ordre exécuté : +${formatEur(amountCad, 0)} sur ${assetId}`
-                  );
-                }}
               />
             )}
           </motion.div>

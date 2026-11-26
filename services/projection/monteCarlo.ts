@@ -6,6 +6,8 @@
 import { lifetimeTaxTotal } from './lifetimeTax';
 import type { SimulationParams, AllocationStrategy, FutureScenarioType } from './types';
 import type { EngineOverrides } from './strategyConfig';
+import { computeRawNetWorth } from './netWorth';
+import { presentTermesOfGoal, monthsSince } from './pastPurchaseInit';
 import { logErrorThrottled } from '../errorLogger';
 
 type RunScenarioFn = (
@@ -283,7 +285,38 @@ export function runMonteCarlo(
     const reerStart = useManual ? (params.projection.manualREER ?? params.liveCSVBalances.REER) : params.liveCSVBalances.REER;
     const nonRegStart = useManual ? (params.projection.manualNonReg ?? params.liveCSVBalances.NON_ENREG) : params.liveCSVBalances.NON_ENREG;
     const cryptoStart = useManual ? (params.projection.manualCrypto ?? params.liveCSVBalances.CRYPTO) : params.liveCSVBalances.CRYPTO;
-    const startNW = (cashStart + celiStart + params.liveCSVBalances.CELIAPP + reerStart + nonRegStart + cryptoStart + params.liveCSVBalances.REEE);
+    const startRealEstateEquity = (params.realEstateGoals ?? []).reduce((sum, g) => {
+        if (!g?.isActive) return sum;
+        const isOwnedNow = g.isOwned === true || (g.isOwned !== false && typeof g.purchaseDate === 'string' && g.purchaseDate <= new Date().toISOString().slice(0, 10));
+        if (!isOwnedNow) return sum;
+        const termes = presentTermesOfGoal(g, monthsSince(g.purchaseDate));
+        return sum + (termes.valeur - termes.hypotheque);
+    }, 0) + (params.rentalProperties ?? []).reduce(
+        (sum, rp) => sum + ((Number.isFinite(rp.currentValue) ? rp.currentValue : 0) - (Number.isFinite(rp.mortgageBalance) ? rp.mortgageBalance : 0)),
+        0,
+    );
+    const startBusinessValue = (params.privateBusinesses ?? []).reduce(
+        (sum, pb) => sum + ((Number.isFinite(pb.estimatedValue) ? pb.estimatedValue : 0) * ((Number.isFinite(pb.ownershipPct) ? pb.ownershipPct : 100) / 100)),
+        0,
+    );
+    const startActiveDebts = (params.debts ?? []).reduce(
+        (sum, d) => sum + (Number.isFinite(d.balance) ? Math.max(0, d.balance) : 0),
+        0,
+    );
+    const startNW = computeRawNetWorth({
+        liquid: cashStart,
+        celi: celiStart,
+        celiapp: params.liveCSVBalances.CELIAPP,
+        reer: reerStart,
+        nonReg: nonRegStart,
+        crypto: cryptoStart,
+        reee: params.liveCSVBalances.REEE,
+        realEstateEquity: startRealEstateEquity,
+        privateBusinessValue: startBusinessValue,
+        liquidDebt: 0,
+        smithManoeuvreDebt: 0,
+        activeDebtsTotal: startActiveDebts,
+    });
 
     const survivalScore = successRate / 100;
     const safetyScore = allRuns.filter(r => r.minNetWorth > startNW * 0.1).length / iterations;

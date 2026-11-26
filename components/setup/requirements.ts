@@ -185,7 +185,7 @@ export const REQUIREMENTS: Record<RequirementId, Requirement> = {
         manque: 'clé API manquante',
         help: 'Nécessaire pour les fonctions IA Gemini. Se saisit dans Réglages · Clés API (jamais stockée dans les sauvegardes).',
         icon: 'sparkles',
-        isMet: (s) => Boolean(s.apiKeys?.gemini?.trim() || s.apiKeys?.anthropic?.trim()),
+        isMet: (s) => Boolean(s.apiKeys?.gemini?.trim()),
         focus: { tab: Tab.SETTINGS, section: 'apiKeys-gemini' },
     },
     anthropicKey: {
@@ -194,7 +194,97 @@ export const REQUIREMENTS: Record<RequirementId, Requirement> = {
         manque: 'clé API manquante',
         help: 'Nécessaire pour les fonctions IA Gemini. Se saisit dans Réglages · Clés API (jamais stockée dans les sauvegardes).',
         icon: 'sparkles',
-        isMet: (s) => Boolean(s.apiKeys?.gemini?.trim() || s.apiKeys?.anthropic?.trim()),
+        isMet: (s) => Boolean(s.apiKeys?.gemini?.trim()),
         focus: { tab: Tab.SETTINGS, section: 'apiKeys-gemini' },
+    },
+};
+
+export interface PageSetup {
+    mode: 'hard' | 'soft';
+    title: string;
+    intro: string;
+    requirementIds: RequirementId[];
+    optOut?: { key: string; label: string };
+    allowCreateInPage?: boolean;
+}
+
+export const PAGE_SETUP: Partial<Record<Tab, PageSetup>> = {
+    [Tab.TAX]: {
+        mode: 'hard',
+        title: 'Impôts & Docs',
+        intro: "Pour calculer ton impôt fédéral + Québec, il me faut au moins ton salaire brut.",
+        requirementIds: ['salary'],
+    },
+    [Tab.RETIREMENT]: {
+        mode: 'hard',
+        title: 'Retraite',
+        intro: "Pour projeter ta retraite, il me faut ton salaire et ton profil retraite.",
+        requirementIds: ['salary', 'retirementProfile'],
+    },
+    [Tab.REAL_ESTATE]: {
+        mode: 'hard',
+        title: 'Immobilier',
+        intro: "Cette page suit les biens immobiliers détenus.",
+        requirementIds: ['realEstate'],
+        optOut: { key: 'realEstate', label: "Je ne suis pas propriétaire et n'ai pas de projet immobilier" },
+        allowCreateInPage: true,
+    },
+    [Tab.REAL_ESTATE_PROJECTS]: {
+        mode: 'hard',
+        title: 'Projets immo',
+        intro: "Cette page planifie un projet immobilier futur.",
+        requirementIds: ['realEstate'],
+        optOut: { key: 'realEstate', label: "Je n'ai pas de projet immobilier" },
+        allowCreateInPage: true,
+    },
+    [Tab.CHILD]: {
+        mode: 'hard',
+        title: 'Enfant',
+        intro: "Cette page planifie les coûts d'un enfant.",
+        requirementIds: ['children'],
+        optOut: { key: 'children', label: 'Je ne suis pas concerné' },
+        allowCreateInPage: true,
+    },
+    [Tab.FUTURE]: {
+        mode: 'hard',
+        title: 'Projection Future',
+        intro: "Pour une projection fiable, il me faut ton salaire, tes placements et ton profil retraite.",
+        requirementIds: ['salary', 'assets', 'retirementProfile'],
+    },
+    [Tab.TRANSACTIONS]: {
+        mode: 'hard',
+        title: 'Transactions',
+        intro: 'Importe un relevé bancaire (CSV) ou ajoute une transaction pour démarrer.',
+        requirementIds: ['transactions'],
+        allowCreateInPage: true,
+    },
+    [Tab.BUDGET]: {
+        mode: 'hard',
+        title: 'Budget',
+        intro: 'Pour bâtir ton budget, il me faut ton salaire.',
+        requirementIds: ['salary'],
+    },
+    [Tab.INVESTMENTS]: {
+        mode: 'hard',
+        title: 'Placements',
+        intro: 'Ajoute au moins un placement pour suivre et projeter ton portefeuille.',
+        requirementIds: ['assets'],
+        allowCreateInPage: true,
+    },
+    [Tab.DEBT]: {
+        mode: 'hard',
+        title: 'Dettes',
+        intro: "Ajoute tes dettes pour planifier leur remboursement.",
+        requirementIds: ['debts'],
+        optOut: { key: 'debts', label: "Je n'ai pas de dettes" },
+        allowCreateInPage: true,
+    },
+    [Tab.LIFE_PROJECTS]: {
+        mode: 'hard',
+        title: 'Projets de vie',
+        intro: 'Planifie un projet ou un voyage.',
+        requirementIds: ['lifeProjects'],
+        optOut: { key: 'lifeProjects', label: "Aucun projet pour l'instant" },
+        allowCreateInPage: true,
     },
 };

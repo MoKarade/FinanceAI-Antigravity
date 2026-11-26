@@ -45,10 +45,6 @@ const EXEMPTIONS: ReadonlyArray<{ fichier: string; jeton: string; raison: string
         raison: 'le champ de recherche est couvert par le `focus-within:border-primary/50` de sa barre.',
     },
     {
-        fichier: 'PageSetupGate.tsx', jeton: 'flex-1 min-w-0 bg-transparent',
-        raison: 'le conteneur du champ porte déjà `focus-within:border-primary/4x` (préexistant).',
-    },
-    {
         fichier: 'FutureProjection.tsx', jeton: 'tabIndex={-1}',
         raison: 'conteneur de RÉGION ciblé par un focus PROGRAMMATIQUE (annonce au lecteur d\'écran), '
             + 'jamais atteint par tabulation : un anneau y serait du bruit visuel sans utilisateur.',

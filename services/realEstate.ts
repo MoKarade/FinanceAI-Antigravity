@@ -111,19 +111,39 @@ export const calculateWelcomeTax = (price: number, municipality?: Municipality):
 };
 
 /**
- * Calcule le paiement hypothecaire mensuel par la formule standard
- * d'amortissement constant : P = (r * L * (1+r)^n) / ((1+r)^n - 1)
+ * Loi sur l'intérêt canadienne : taux périodique mensuel effectif (capitalisation semi-annuelle).
+ * im = (1 + r/2)^(1/6) - 1
+ */
+export function computeCanadianMonthlyMortgageRate(annualNominalRatePct: number): number {
+  const rNominal = annualNominalRatePct / 100;
+  return rNominal > 0 ? Math.pow(1 + rNominal / 2, 1 / 6) - 1 : 0;
+}
+
+/**
+ * Calcul de la mensualité canadienne semi-annuelle pour un prêt amorti sur totalMonths mois.
+ */
+export function computeCanadianMortgagePayment(
+  principal: number,
+  annualNominalRatePct: number,
+  totalMonths: number,
+): number {
+  if (totalMonths <= 0 || principal <= 0) return 0;
+  const im = computeCanadianMonthlyMortgageRate(annualNominalRatePct);
+  if (im <= 0) return principal / totalMonths;
+  return (principal * im * Math.pow(1 + im, totalMonths)) / (Math.pow(1 + im, totalMonths) - 1);
+}
+
+/**
+ * Calcule le paiement hypothecaire mensuel selon la capitalisation semi-annuelle canadienne.
  * Si le taux est 0, on retombe sur une division lineaire.
  */
 export const calculateMortgagePayment = ({
   price, downPayment, rate, amortization,
 }: MortgageInput): MortgagePayment => {
   const totalMortgage = Math.max(0, price - downPayment);
-  const monthlyRate = rate / 100 / 12;
+  const monthlyRate = computeCanadianMonthlyMortgageRate(rate);
   const n = amortization * 12;
-  const monthlyMortgage = monthlyRate > 0
-    ? (monthlyRate * totalMortgage * Math.pow(1 + monthlyRate, n)) / (Math.pow(1 + monthlyRate, n) - 1)
-    : (n > 0 ? totalMortgage / n : 0);
+  const monthlyMortgage = computeCanadianMortgagePayment(totalMortgage, rate, n);
   return {
     totalMortgage,
     monthlyMortgage,
@@ -171,8 +191,9 @@ export const runAmortization = (input: AmortizationInput): AmortizationResult =>
   let balance = totalMortgage;
   let totalInterestPaid = 0;
   let totalPrincipalPaid = 0;
+  let currentNominalRatePct = rate;
   let currentMonthlyPayment = initialPayment;
-  let currentRate = rate / 100 / 12;
+  let currentRate = computeCanadianMonthlyMortgageRate(currentNominalRatePct);
   let propertyValue = price + initialRenovations;
 
   for (let year = 1; year <= amortization; year++) {
@@ -181,7 +202,8 @@ export const runAmortization = (input: AmortizationInput): AmortizationResult =>
 
     // Renouvellement tous les 5 ans (debut annee 6, 11, 16, ...)
     if (year > 1 && (year - 1) % 5 === 0) {
-      currentRate = renewalRate / 100 / 12;
+      currentNominalRatePct = renewalRate;
+      currentRate = computeCanadianMonthlyMortgageRate(currentNominalRatePct);
       const remainingMonths = (amortization - year + 1) * 12;
       if (currentRate > 0) {
         currentMonthlyPayment = (currentRate * balance * Math.pow(1 + currentRate, remainingMonths))
@@ -223,7 +245,7 @@ export const runAmortization = (input: AmortizationInput): AmortizationResult =>
       PrincipalCumul: Math.round(totalPrincipalPaid),
       PartInteretAnnuelle: Math.round(yearInterest),
       PartPrincipalAnnuelle: Math.round(yearPrincipal),
-      TauxEnVigueur: (currentRate * 12 * 100).toFixed(1) + '%',
+      TauxEnVigueur: currentNominalRatePct.toFixed(1) + '%',
       RenosCumul: Math.round(yearlyRenovations * year),
     });
   }

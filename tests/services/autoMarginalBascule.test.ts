@@ -33,8 +33,6 @@
 // affirmation invérifiée ; sans le second, le mécanisme resterait silencieux.
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { calculateFutureProjection, type SimulationParams } from '../../services/projection';
 import type { User, ProjectionConfig } from '../../types';
 
@@ -140,20 +138,5 @@ describe('[AUTOMARGINAL-BASCULE-SILENCIEUSE] l’ordre de cotisation bascule EN 
         const ordres = ordreParAnnee(7_000, 5, { appliedContributionOrder: 'CELI_FIRST' } as Partial<ProjectionConfig>);
         expect(ordres.slice(0, 12).includes('REER'),
             `le levier CELI_FIRST n’a pas tenu sur les années de la bascule auto : ${ordres.join(' ')}`).toBe(false);
-    });
-});
-
-describe('[AUTOMARGINAL-BASCULE-SILENCIEUSE] et l’utilisateur en est INFORMÉ', () => {
-    it('la FAQ des projections explique l’ordre de COTISATION, son seuil et sa mobilité', () => {
-        const src = readFileSync(
-            resolve(__dirname, '../../components/projection/ProjectionExplains.tsx'), 'utf8');
-        // Une entrée DISTINCTE de celle des retraits : la réponse sur les retraits existait déjà et
-        // reste correcte — y greffer un fait de cotisation l’aurait rendue fausse.
-        expect(src).toMatch(/l'app COTISE/);
-        expect(src).toMatch(/40 %/);
-        // Le point que le ticket avait manqué, et le seul qui compte vraiment pour l'utilisateur :
-        // l'ordre peut changer SANS qu'il touche à quoi que ce soit.
-        expect(src).toMatch(/BASCULER en cours de projection/);
-        expect(src).toMatch(/Ordre de cotisation/);
     });
 });

@@ -11,7 +11,6 @@ import { render } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
-import { KPIStat } from '../../components/ui/KPIStat';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Skeleton } from '../../components/ui/Skeleton';
@@ -40,13 +39,6 @@ describe('a11y primitives (vitest-axe)', () => {
 
     it('Badge — aucune violation serious/critical', async () => {
         const { container } = render(<Badge variant="success">OK</Badge>);
-        await expectNoSeriousViolations(container);
-    });
-
-    it('KPIStat — aucune violation serious/critical', async () => {
-        const { container } = render(
-            <KPIStat label="Test KPI" value="42 000 $" variant="primary" icon="💰" />
-        );
         await expectNoSeriousViolations(container);
     });
 

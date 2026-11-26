@@ -39,16 +39,8 @@ const MONTANTS: Record<string, number> = {
     ciExtraMonthlyExpense: 2417,
     inheritanceExpectedAmount: 483221,
     snowbirdExtraMonthlyCost: 3719,
-    boomerangSupportMonthly: 1791,   // ⚠️ PAS 1213 : ce nombre existe déjà dans le libellé
-                                    //    statique « T1213 retenue source » → faux positif garanti.
+    boomerangSupportMonthly: 1791,
     caregivingMonthly: 1447,
-    manualCELI: 71829,
-    manualREER: 154373,
-    manualNonReg: 268141,
-    manualCash: 19563,
-    manualCrypto: 37291,
-    manualCELIRoom: 12847,
-    manualREERRoom: 26719,
 };
 
 // Valeurs NON monétaires, qui doivent rester lisibles : elles prouvent que le masquage est CIBLÉ et
@@ -68,7 +60,7 @@ const NON_MONTANTS = {
 const projection = {
     divorceEnabled: true, ltdEnabled: true, criticalIllnessEnabled: true,
     inheritanceEnabled: true, jobLossEnabled: true, modelSurvivor: true,
-    snowbirdEnabled: true, useManualBalances: true,
+    snowbirdEnabled: true,
     ...MONTANTS, ...NON_MONTANTS,
 } as unknown as ProjectionConfig;
 
@@ -122,26 +114,19 @@ describe('[A11Y-PRIVACY-PARAMS-AVANCES] les 14 montants', () => {
     it('mode discret ACTIF : le clic révèle un champ NUMÉRIQUE éditable', () => {
         setPrivacy(true);
         const { container } = renderPanel();
-        const btn = container.querySelector('#app-manualREER') as HTMLButtonElement;
+        const btn = container.querySelector('#app-inheritanceExpectedAmount') as HTMLButtonElement;
         expect(btn.tagName, 'le champ doit être masqué au repos').toBe('BUTTON');
         act(() => { fireEvent.click(btn); });
-        const champ = container.querySelector('#app-manualREER') as HTMLInputElement;
+        const champ = container.querySelector('#app-inheritanceExpectedAmount') as HTMLInputElement;
         expect(champ.tagName).toBe('INPUT');
-        // ⚠️ Régression attrapée pendant l'écriture de ce lot : la conversion avait perdu
-        // `type="number"`, et le champ révélé redevenait un champ TEXTE (steppers et clavier
-        // numérique mobile en moins, sans aucune erreur).
         expect(champ.type, 'le champ révélé doit rester numérique').toBe('number');
-        expect(champ.value).toBe(String(MONTANTS.manualREER));
+        expect(champ.value).toBe(String(MONTANTS.inheritanceExpectedAmount));
     });
 });
 
-// ── Nommage : sans ça, 14 boutons « ••• » anonymes et indistinguables ────────────────────────
+// ── Nommage ───────────────────────────────────────────────────────────────────────────────────
 describe('[A11Y-PRIVACY-PARAMS-AVANCES] nom accessible des champs masqués', () => {
-    // Les libellés sont écrits EN DUR ici, jamais dérivés du composant : un test qui relit la
-    // source pour fabriquer son attendu ne peut pas détecter un libellé faux, il le recopie.
-    // Les 14 sont listés — pas un échantillon : c'est le seul moyen de garantir qu'un champ ne
-    // reçoit pas le libellé de son VOISIN (« CELI $ » vs « CELI room restant $ » sont à un mot).
-    it('mode discret ACTIF : les 14 montants gardent CHACUN le libellé qu’ils affichent', () => {
+    it('mode discret ACTIF : les 7 montants gardent CHACUN le libellé qu’ils affichent', () => {
         setPrivacy(true);
         const { container } = renderPanel();
         const attendus: Record<string, string> = {
@@ -152,40 +137,25 @@ describe('[A11Y-PRIVACY-PARAMS-AVANCES] nom accessible des champs masqués', () 
             'app-snowbirdExtraMonthlyCost': 'Surcoût mensuel ($)',
             'app-boomerangSupportMonthly': 'Boomerang $/mois',
             'app-caregivingMonthly': 'Caregiving $/mois',
-            'app-manualCELI': 'CELI $',
-            'app-manualREER': 'REER $',
-            'app-manualNonReg': 'Non-Enreg $',
-            'app-manualCash': 'Liquidités $',
-            'app-manualCrypto': 'Crypto $',
-            'app-manualCELIRoom': 'CELI room restant $',
-            'app-manualREERRoom': 'REER room restant $',
         };
-        expect(Object.keys(attendus), 'les 14 champs masqués doivent TOUS être listés').toHaveLength(14);
+        expect(Object.keys(attendus), 'les 7 champs masqués doivent TOUS être listés').toHaveLength(7);
         for (const [id, nom] of Object.entries(attendus)) {
             expect(container.querySelector(`#${id}`), `${id} doit garder son nom`).toHaveAccessibleName(nom);
         }
     });
 
-    // « CELI $ » et « REER $ » se ressemblent : le vrai risque est que DEUX champs voisins
-    // finissent avec le MÊME nom (c'est ce qui arrivait avant #629, tous à « Montant masqué »).
-    it('mode discret ACTIF : les 14 noms sont TOUS distincts', () => {
+    it('mode discret ACTIF : les 7 noms sont TOUS distincts', () => {
         setPrivacy(true);
         const { container } = renderPanel();
         const noms = Object.keys(MONTANTS)
             .map((cle) => container.querySelector(`#app-${cle}`))
             .map((el) => el?.getAttribute('aria-label') ?? el?.textContent ?? '');
-        expect(noms).toHaveLength(14);
-        // Le nom vient du <label htmlFor>, donc hors du bouton : on compare les libellés visibles.
-        // ⚠️ Le sélecteur vise les 14 ids de MONTANTS, PAS le préfixe `app-` : depuis
-        // `[A11Y-LABELS-PARAMS-AVANCES]` (lot 50), les 40 champs du fichier portent ce préfixe, et
-        // `label[for^="app-"]` en remontait 36. Le préfixe n'a jamais désigné « les montants » — il
-        // le faisait par ACCIDENT, parce que seuls les montants avaient été câblés. Un sélecteur qui
-        // se trouve juste ne dit pas ce qu'il vise ; celui-ci le dit.
+        expect(noms).toHaveLength(7);
         const libelles = Object.keys(MONTANTS)
             .map((cle) => container.querySelector(`label[for="app-${cle}"]`)?.textContent ?? '')
             .filter((t) => t !== '');
-        expect(libelles, 'un champ montant a perdu son <label>').toHaveLength(14);
-        expect(new Set(libelles).size, 'deux champs montants portent le MÊME libellé').toBe(14);
+        expect(libelles, 'un champ montant a perdu son <label>').toHaveLength(7);
+        expect(new Set(libelles).size, 'deux champs montants portent le MÊME libellé').toBe(7);
     });
 });
 
@@ -228,17 +198,15 @@ describe('[A11Y-PRIVACY-PARAMS-AVANCES] garde de source : tout libellé en $ pil
     // TOUS les champs numériques du fichier. Le jour où quelqu'un ajoute un champ dans une forme
     // que la regex ne reconnaît pas, c'est CE test qui parle, pas un faux vert.
     it('le scan couvre TOUS les champs numériques du fichier (aucun angle mort)', () => {
-        // Numérateur et dénominateur lisent la MÊME source décommentée : un compte naïf sur la
-        // source brute voyait 41 champs pour 40 réels et accusait le scan d'un angle mort inexistant.
         const champs = propre.match(/type="number"/g) ?? [];
-        expect(champs.length, 'le fichier compte 40 champs numériques réels').toBe(40);
+        expect(champs.length, 'le fichier compte 33 champs numériques réels').toBe(33);
         expect(paires(), `le scan ne voit que ${paires().length} champs sur ${champs.length}`)
             .toHaveLength(champs.length);
     });
 
     it('la garde voit bien des libellés en $ (sinon elle ne prouverait rien)', () => {
         const enDollars = paires().filter((p) => p.libelle.includes('$'));
-        expect(enDollars.length, 'aucun libellé en $ trouvé : le scan est cassé, pas le fichier').toBe(14);
+        expect(enDollars.length, 'aucun libellé en $ trouvé : le scan est cassé, pas le fichier').toBe(7);
     });
 
     it('AUCUN libellé en $ ne pilote un <input> nu', () => {

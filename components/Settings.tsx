@@ -12,18 +12,16 @@
 // Deep-link cross-tab : si une bannière d'un autre onglet pointe vers un champ
 // de Configuration (data-focus-section), on ouvre d'office le bon sous-onglet
 // pour que usePendingFocus trouve l'élément et scrolle dessus.
+// Convention formatage : utiliser formatCAD, jamais toLocaleString nu sur des montants.
 
 import React, { useState } from 'react';
 import { PageHeader } from './ui/PageHeader';
-import { Icon, type IconName } from './ui/Icon';
+import { type IconName } from './ui/Icon';
 import { SubTabs, TabPanel } from './ui/SubTabs';
-import { CollapsibleSection } from './ui/CollapsibleSection';
-import { AppState, Transaction, Tab } from '../types';
+import { AppState, Tab } from '../types';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { usePendingFocus } from '../utils/usePendingFocus';
 import { useViewportXl } from '../hooks/useViewportXl';
-import { AccountsSection } from './settings/sections/AccountsSection';
-import { PatrimoineSection } from './settings/sections/PatrimoineSection';
 import { IntegrationsSection } from './settings/sections/IntegrationsSection';
 import { FintableSyncCard } from './settings/FintableSyncCard';
 import { FxRatesCard } from './settings/FxRatesCard';
@@ -34,16 +32,11 @@ interface SettingsProps {
   setApiKeys: (keys: AppState['apiKeys']) => void;
   config: AppState['config'];
   setConfig: (c: AppState['config']) => void;
-  onImportData: (data: string) => void;
-  initialBalances: Record<string, number>;
-  setInitialBalances: (balances: Record<string, number>) => void;
-  transactions: Transaction[];
 }
 
-type SubTab = 'compte' | 'banque' | 'ia' | 'sauvegarde';
+type SubTab = 'banque' | 'ia' | 'sauvegarde';
 
 const SUB_TABS: ReadonlyArray<{ id: SubTab; label: string; icon: IconName }> = [
-  { id: 'compte', label: 'Compte', icon: 'bank' },
   { id: 'banque', label: 'Banque auto', icon: 'link' },
   { id: 'ia', label: 'Clé IA', icon: 'sparkles' },
   { id: 'sauvegarde', label: 'Sauvegarde', icon: 'cloud' },
@@ -64,10 +57,6 @@ export const Settings: React.FC<SettingsProps> = ({
   setApiKeys,
   config: _config,
   setConfig: _setConfig,
-  initialBalances,
-  setInitialBalances,
-  transactions,
-  onImportData,
 }) => {
   const pendingFocus = useFinanceStore(s => s.pendingFocus);
 
@@ -82,7 +71,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
   const large = useViewportXl();
   const setActiveTab = useFinanceStore(s => s.setActiveTab);
-  const aFaire = (id: SubTab) => id === 'ia' && !(apiKeys.gemini || apiKeys.anthropic);
+  const aFaire = (id: SubTab) => id === 'ia' && !apiKeys.gemini;
   const onglets = SUB_TABS.map((t) => ({
     ...t,
     badge: aFaire(t.id) ? <span className="text-alerte-texte">à faire</span> : undefined,
@@ -90,27 +79,6 @@ export const Settings: React.FC<SettingsProps> = ({
 
   const contenu = (id: SubTab): React.ReactNode => {
     switch (id) {
-      case 'compte':
-        return (
-          <div className="space-y-6">
-            <AccountsSection
-              initialBalances={initialBalances}
-              setInitialBalances={setInitialBalances}
-              transactions={transactions}
-              onImportData={onImportData}
-              apiKey={apiKeys.gemini || apiKeys.anthropic || ''}
-            />
-            <CollapsibleSection
-              title="Patrimoine étendu (optionnel)"
-              subtitle="Assurances, immeubles locatifs, entreprises privées et biens cycliques"
-              icon={<Icon name="real-estate" size={16} />}
-              headingLevel={3}
-              defaultOpen={false}
-            >
-              <PatrimoineSection />
-            </CollapsibleSection>
-          </div>
-        );
       case 'banque':
         return (
           <div className="space-y-6">
@@ -131,7 +99,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
   // [S5-REFONTE-REGLAGES] Bureau large (≥ xl) : menu à gauche (onglets verticaux), section à droite.
   if (large) {
-    const actif = sub ?? 'compte';
+    const actif = sub ?? 'banque';
     return (
       <div className="space-y-6 stagger-in">
         {enTete}

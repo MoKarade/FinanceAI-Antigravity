@@ -23,13 +23,6 @@ const PRIMITIVE = 'components/ui/Modal.tsx';
 
 const EXEMPTIONS: ReadonlyArray<{ fichier: string; jeton: string; raison: string }> = [
     {
-        fichier: 'Onboarding.tsx',
-        jeton: 'z-9999 bg-dark', // [S5-TAILWIND4] z-[9999] → z-9999 ; [S5-REFONTE-R3] fond uni bg-dark
-        raison: 'ce n\'est pas un dialogue mais une PRISE DE CONTRÔLE de l\'écran : rien ne subsiste '
-            + 'derrière, il n\'y a donc aucun contenu à rendre inerte. Un `aria-modal` y affirmerait '
-            + 'qu\'on masque quelque chose — c\'est le contraire d\'une information utile.',
-    },
-    {
         fichier: 'Layout.tsx',
         jeton: 'role="navigation"',
         raison: 'menu « Plus » (mobile), pas un dialogue : il porte `role="navigation"` et son '
@@ -70,20 +63,13 @@ describe('[A11Y-MODAL-GUIDE-NODIALOG] toute surface qui recouvre l\'app se décl
         const vus = surfacesRecouvrantes().map((s) => s.chemin);
         expect(vus).toContain(PRIMITIVE);
         expect(vus).toContain('components/Transactions.tsx');
-        // Et les deux exemptions, sinon le test qui les vérifie serait le seul à les voir.
-        expect(vus).toContain('components/Onboarding.tsx');
         expect(vus).toContain('components/Layout.tsx');
-        expect(vus.length).toBeGreaterThanOrEqual(6);
+        expect(vus.length).toBeGreaterThanOrEqual(5);
     });
 
     it('les écrans MIGRÉS ne sont plus des surfaces brutes — ils consomment la primitive', () => {
-        // ⚠️ Contre-témoin, et c'est lui qui mesure le lot : `GuideModal` et `BackupPanel` posaient
-        // leur propre `fixed inset-0`. Migrés, ils DISPARAISSENT du scan — un test de présence
-        // n'aurait donc rien dit d'eux. On vérifie l'autre moitié : ils passent par `ui/Modal`, et
-        // ils n'ont plus de recouvrement à eux. Ré-inliner un overlay dans l'un des deux le ferait
-        // réapparaître dans le scan ci-dessus, et rougir ici.
         const vus = surfacesRecouvrantes().map((s) => s.chemin);
-        for (const f of ['components/GuideModal.tsx', 'components/settings/BackupPanel.tsx']) {
+        for (const f of ['components/settings/BackupPanel.tsx']) {
             expect(vus, `${f} a repris un recouvrement à lui`).not.toContain(f);
             const code = readFileSync(resolve(process.cwd(), f), 'utf8');
             expect(/from\s+'[^']*ui\/Modal'/.test(code), `${f} ne consomme plus la primitive`).toBe(true);

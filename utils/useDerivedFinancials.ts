@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import type { AppState, Transaction } from '../types';
-import { assetValueCad, computePresentTermes } from '../services/portfolio';
+import type { AppState } from '../types';
+import { computeAssetBreakdown, computeCurrentLiquidity, computePresentTermes } from '../services/portfolio';
 import { placementsFaisantAutorite } from '../services/fintable/placementsAutorite';
 import { useTodayIsoLocal } from '../hooks/useTodayIsoLocal';
 import { isSavingsNature } from './budget';
@@ -80,33 +80,14 @@ export function useDerivedFinancials(state: AppState): DerivedFinancials {
     }, [state.config, state.budgetItems]);
 
     const assetBreakdown = useMemo(() => {
-        let reer = 0;
-        let celi = 0;
-        let reee = 0;
-        let nonReg = 0;
-        state.assets.forEach(a => {
-            // [DETTE-PDF-FX-BYPASS] source unique : FX (prix stocké en devise NATIVE) + garde NaN/Infinity
-            // + devise absente signalée, TOUT dans assetValueCad — jamais `quantity × currentPrice × (fx||1)`
-            // à la main (le repli 1:1 muet sous-affiche le patrimoine, incident ASSET-FX-DISPLAY).
-            const val = assetValueCad(a, state.fxRates);
-            if (a.accountType === 'REER') reer += val;
-            else if (a.accountType === 'CELI' || a.accountType === 'CELIAPP') celi += val;
-            else if (a.accountType === 'REEE') reee += val;
-            else nonReg += val;
-        });
-        return { reer, celi, reee, nonReg };
+        const b = computeAssetBreakdown(state.assets, state.fxRates);
+        return { reer: b.reer, celi: b.celi, reee: b.reee, nonReg: b.nonReg + b.crypto };
     }, [state.assets, state.fxRates]);
 
-    const currentLiquidity = useMemo(() => {
-        let cash = 0;
-        (Object.values(state.initialBalances) as number[]).forEach(v => {
-            if (Number.isFinite(v)) cash += v;
-        });
-        state.transactions.forEach((t: Transaction) => {
-            if (!t.isDuplicate && !t.isTransfer && Number.isFinite(t.amount)) cash += t.amount;
-        });
-        return cash;
-    }, [state.initialBalances, state.transactions]);
+    const currentLiquidity = useMemo(
+        () => computeCurrentLiquidity(state.initialBalances, state.transactions),
+        [state.initialBalances, state.transactions],
+    );
 
     return { globalNetWorth, avoirsHorsImmo: termes.avoirs, dettesHorsImmo: termes.dettes, ecartCourtier: autoritePlacements.ecart, baseGrossAnnual, calculatedMonthlySavings, assetBreakdown, currentLiquidity };
 }

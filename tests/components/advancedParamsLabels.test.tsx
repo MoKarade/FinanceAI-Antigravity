@@ -36,7 +36,6 @@ const monter = () => render(
             modelSurvivor: true,
             snowbirdEnabled: true,
             vehicleReplacementEnabled: true,
-            useManualBalances: true,
         } as ProjectionConfig}
         updateProj={vi.fn()}
     />,
@@ -47,13 +46,7 @@ describe('[A11Y-LABELS-PARAMS-AVANCES] nom accessible des champs', () => {
         const { container } = monter();
         const champs = [...container.querySelectorAll('input, select, textarea')];
 
-        // Anti-vacuité : un rendu qui n'afficherait aucun champ passerait tout le reste.
-        // ⚠️ Le seuil est MESURÉ, pas choisi : ce montage (toutes les sections conditionnelles
-        // activées) rend exactement 40 champs — le fichier en porte 40, donc la fixture les couvre
-        // TOUS. Un `> 20` posé au jugé faisait échouer le test sur son propre garde-fou, et un
-        // montage partiel (première version : 33 champs, les 7 balances manuelles absentes) laissait
-        // l'assertion d'unicité aveugle à un septième de la surface.
-        expect(champs.length, 'aucun champ rendu → le test ne mesure rien').toBeGreaterThanOrEqual(40);
+        expect(champs.length, 'aucun champ rendu → le test ne mesure rien').toBeGreaterThanOrEqual(33);
 
         const anonymes = champs
             .filter((c) => {

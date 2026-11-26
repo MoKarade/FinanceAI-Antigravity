@@ -278,49 +278,6 @@ export const AdvancedProjectionParams: React.FC<AdvancedProjectionParamsProps> =
 
                 {/* ─────────────────────────────────────────────────────────── */}
                 <div className="pt-3 border-t border-bordure">
-                    <h4 className="text-meta font-bold uppercase tracking-widest text-info-400 mb-2">Soldes initiaux manuels</h4>
-                    <button
-                        onClick={() => updateProj('useManualBalances', !projection.useManualBalances)}
-                        className={`px-3 py-2 text-meta font-bold rounded-md border transition-all mb-2 ${projection.useManualBalances ? 'bg-surface-douce border-accent text-texte' : 'bg-surfaceHighlight border-bordure text-ink-300'}`}
-                    >
-                        Outrepasser balances live {projection.useManualBalances ? 'ON' : 'OFF'}
-                    </button>
-                    {projection.useManualBalances && (
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                            <div>
-                                <label htmlFor="app-manualCELI" className="text-tiny text-ink-300">CELI $</label>
-                                <PrivateNumberInput type="number" id="app-manualCELI" value={projection.manualCELI ?? 0} onChange={e => updateProj('manualCELI', Number(e.target.value))} className="w-full bg-dark border border-info-500/20 rounded-sm px-2 py-1 text-meta text-texte" />
-                            </div>
-                            <div>
-                                <label htmlFor="app-manualREER" className="text-tiny text-ink-300">REER $</label>
-                                <PrivateNumberInput type="number" id="app-manualREER" value={projection.manualREER ?? 0} onChange={e => updateProj('manualREER', Number(e.target.value))} className="w-full bg-dark border border-info-500/20 rounded-sm px-2 py-1 text-meta text-texte" />
-                            </div>
-                            <div>
-                                <label htmlFor="app-manualNonReg" className="text-tiny text-ink-300">Non-Enreg $</label>
-                                <PrivateNumberInput type="number" id="app-manualNonReg" value={projection.manualNonReg ?? 0} onChange={e => updateProj('manualNonReg', Number(e.target.value))} className="w-full bg-dark border border-info-500/20 rounded-sm px-2 py-1 text-meta text-texte" />
-                            </div>
-                            <div>
-                                <label htmlFor="app-manualCash" className="text-tiny text-ink-300">Liquidités $</label>
-                                <PrivateNumberInput type="number" id="app-manualCash" value={projection.manualCash ?? 0} onChange={e => updateProj('manualCash', Number(e.target.value))} className="w-full bg-dark border border-info-500/20 rounded-sm px-2 py-1 text-meta text-texte" />
-                            </div>
-                            <div>
-                                <label htmlFor="app-manualCrypto" className="text-tiny text-ink-300">Crypto $</label>
-                                <PrivateNumberInput type="number" id="app-manualCrypto" value={projection.manualCrypto ?? 0} onChange={e => updateProj('manualCrypto', Number(e.target.value))} className="w-full bg-dark border border-info-500/20 rounded-sm px-2 py-1 text-meta text-texte" />
-                            </div>
-                            <div>
-                                <label htmlFor="app-manualCELIRoom" className="text-tiny text-ink-300">CELI room restant $</label>
-                                <PrivateNumberInput type="number" id="app-manualCELIRoom" value={projection.manualCELIRoom ?? 0} onChange={e => updateProj('manualCELIRoom', Number(e.target.value))} className="w-full bg-dark border border-info-500/20 rounded-sm px-2 py-1 text-meta text-texte" />
-                            </div>
-                            <div>
-                                <label htmlFor="app-manualREERRoom" className="text-tiny text-ink-300">REER room restant $</label>
-                                <PrivateNumberInput type="number" id="app-manualREERRoom" value={projection.manualREERRoom ?? 0} onChange={e => updateProj('manualREERRoom', Number(e.target.value))} className="w-full bg-dark border border-info-500/20 rounded-sm px-2 py-1 text-meta text-texte" />
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* ─────────────────────────────────────────────────────────── */}
-                <div className="pt-3 border-t border-bordure">
                     <h4 className="text-meta font-bold uppercase tracking-widest text-ink-200 mb-2">Rendements affinés</h4>
                     <p className="text-tiny text-ink-400 mb-2 italic">Override des taux par défaut (crypto/cash absents de la grille principale).</p>
                     <div className="grid grid-cols-2 gap-3">

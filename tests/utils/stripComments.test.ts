@@ -187,7 +187,7 @@ describe('[GUARD-STRIPCOMMENTS-DUPLIQUE] stripCommentsJsx', () => {
         expect((stripCommentsJsx(src).match(/\{\/\*/g) ?? []).length).toBe(0);
 
         // …mais `stripComments` laisse les accolades VIDES, et une paire label/champ y disparaît.
-        expect(paires(stripComments(src)), 'stripComments seul devrait perdre une paire').toBe(39);
-        expect(paires(stripCommentsJsx(src)), 'stripCommentsJsx doit les retrouver toutes').toBe(40);
+        expect(paires(stripComments(src)), 'stripComments seul devrait perdre une paire').toBe(32);
+        expect(paires(stripCommentsJsx(src)), 'stripCommentsJsx doit les retrouver toutes').toBe(33);
     });
 });

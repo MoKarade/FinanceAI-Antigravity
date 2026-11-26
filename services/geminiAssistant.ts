@@ -119,7 +119,19 @@ export function extraireContextePatrimonial(state: AppState): ContextePatrimonia
         immobilierValeur += termes.valeur;
         immobilierHypotheque += termes.hypotheque;
     }
-    const immobilierNet = Math.max(0, immobilierValeur - immobilierHypotheque);
+    for (const rp of state.rentalProperties ?? []) {
+        const val = Number.isFinite(rp.currentValue) ? rp.currentValue : 0;
+        const mort = Number.isFinite(rp.mortgageBalance) ? rp.mortgageBalance : 0;
+        immobilierValeur += val;
+        immobilierHypotheque += mort;
+    }
+    let entreprisesValeur = 0;
+    for (const pb of state.privateBusinesses ?? []) {
+        const val = Number.isFinite(pb.estimatedValue) ? pb.estimatedValue : 0;
+        const pct = Number.isFinite(pb.ownershipPct) ? pb.ownershipPct / 100 : 1;
+        entreprisesValeur += val * pct;
+    }
+    const immobilierNet = immobilierValeur - immobilierHypotheque;
 
     const budgetAgg = computeMonthlyBudgetAggregates(
         state.config ?? { users: [] },
@@ -128,7 +140,7 @@ export function extraireContextePatrimonial(state: AppState): ContextePatrimonia
     const revenuNetMensuel = revenuNetMensuelFiscal > 0 ? revenuNetMensuelFiscal : budgetAgg.income;
     const epargneMensuelle = Math.max(0, revenuNetMensuel - budgetAgg.expenses);
 
-    const patrimoineNet = nwHorsImmo + immobilierNet;
+    const patrimoineNet = nwHorsImmo + immobilierNet + entreprisesValeur;
 
     const ageActuel = Number(u0?.age) || 35;
     const ageRetraiteCible = Number(state.retirementGoal?.targetAge) || 65;

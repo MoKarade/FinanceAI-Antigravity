@@ -163,7 +163,11 @@ function classifyForFiscalLocation(
   const sec = (sector ?? '').toLowerCase();
   const reg = (region ?? '').toUpperCase();
 
-  if (sec.includes('oblig') || sec.includes('bond') || ['XBB', 'XGB', 'ZAG', 'BND'].some((t) => sym.includes(t))) {
+  const isCanadianBondTicker =
+    sym === 'XBB.TO' ||
+    (sym === 'XBB' && reg === 'CANADA') ||
+    /^(XGB|ZAG|BND|VAB|ZDB|CLF)(\.|$)/.test(sym);
+  if (sec.includes('oblig') || sec.includes('bond') || sec.includes('revenu fixe') || isCanadianBondTicker) {
     return 'bonds';
   }
   if (sym === 'CASH' || sym.startsWith('CASH.') || sec.includes('liquid')) {

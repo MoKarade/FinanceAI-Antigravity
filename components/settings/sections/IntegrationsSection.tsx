@@ -21,7 +21,7 @@ export const IntegrationsSection: React.FC<IntegrationsSectionProps> = ({ apiKey
   const [afficherCle, setAfficherCle] = useState(false);
   const [testEnCours, setTestEnCours] = useState(false);
   const [resultatTest, setResultatTest] = useState<TestCleGeminiResult | null>(null);
-  const cleIa = (apiKeys?.gemini || apiKeys?.anthropic || '').replace(/^["'\s]+|["'\s]+$/g, '');
+  const cleIa = (apiKeys?.gemini || '').replace(/^["'\s]+|["'\s]+$/g, '');
   const formatValide = cleIa.startsWith('AIza') && cleIa.length >= 20;
 
   const lancerTestCle = async () => {

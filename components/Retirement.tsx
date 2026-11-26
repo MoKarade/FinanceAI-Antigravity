@@ -22,6 +22,7 @@ import { FluxRetraite } from './retirement/FluxRetraite';
 import { ageOptsForSalaryInversion, calculateGrossFromNet } from '../services/tax';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { formatCAD, formatSigned, formatCompactCAD } from '../utils/format';
+import { computeCurrentLiquidity } from '../services/portfolio';
 import { useShallow } from 'zustand/shallow';
 import { ProjectionRequired } from './ui/ProjectionRequired';
 
@@ -82,6 +83,7 @@ export const Retirement: React.FC<RetirementProps> = ({
     // Configuration (Phase C.1) sera l'endroit canonique pour le modifier ; le
     // slider local reste pour rétrocompat et exploration rapide.
     const retirementGoalStore = useFinanceStore(s => s.retirementGoal);
+    const transactions = useFinanceStore(s => s.transactions ?? EMPTY_ARRAY);
     const navigateWithFocus = useFinanceStore(s => s.navigateWithFocus);
     const lifeExpectancy = retirementGoalStore?.lifeExpectancy ?? DEFAULT_LIFE_EXPECTANCY;
     // States Goal Seeker / Asset Location déplacés dans leurs sous-composants
@@ -129,11 +131,10 @@ export const Retirement: React.FC<RetirementProps> = ({
         return rentItem ? (rentItem.frequency === 'Yearly' ? rentItem.target / 12 : rentItem.target) : 1600;
     }, [budgetItems]);
 
-    const calculatedStartingCash = useMemo(() => {
-        let cash = 0;
-        (Object.values(initialBalances) as number[]).forEach(v => cash += v);
-        return cash;
-    }, [initialBalances]);
+    const calculatedStartingCash = useMemo(
+        () => computeCurrentLiquidity(initialBalances, transactions),
+        [initialBalances, transactions],
+    );
 
     // 2026-05-21 — Mode strict centralisation :
     // Retirement consomme EXCLUSIVEMENT `store.lastProjection.chartData`

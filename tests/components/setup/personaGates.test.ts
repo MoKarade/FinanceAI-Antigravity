@@ -8,8 +8,7 @@
 // persona, un prérequis ou une page, ce test attrape toute régression de gating.
 import { describe, it, expect } from 'vitest';
 import { TEST_PERSONAS } from '../../fixtures/testPersonas';
-import { PAGE_SETUP } from '../../../components/setup/PageSetupGate';
-import { REQUIREMENTS } from '../../../components/setup/requirements';
+import { PAGE_SETUP, REQUIREMENTS } from '../../../components/setup/requirements';
 import type { FinanceState } from '../../../store/useFinanceStore';
 
 // Pages dont le gate dépend des données (hors prérequis `anthropicKey`).

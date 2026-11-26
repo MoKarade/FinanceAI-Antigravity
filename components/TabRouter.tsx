@@ -4,6 +4,7 @@ import { TAB_LABELS } from '../constants';
 import { isPlanningTab } from './navDestinations';
 import { PlanningHubBar } from './PlanningHubBar';
 import { ErrorBoundary } from './ui/ErrorBoundary';
+import { registerTabLoaders } from '../utils/tabPrefetch';
 // P1 fix — wrap React.lazy avec retry + reload sur chunk-load-error
 // (cf hubperso.com regression : "Failed to fetch dynamically imported module")
 import { lazyWithRetry } from '../utils/lazyWithRetry';
@@ -35,6 +36,27 @@ const Settings = lazyWithRetry(() => import('./Settings').then(m => ({ default: 
 const Profile = lazyWithRetry(() => import('./Profile').then(m => ({ default: m.Profile })), 'Profile');
 const FutureProjection = lazyWithRetry(() => import('./FutureProjection').then(m => ({ default: m.FutureProjection })), 'FutureProjection');
 const DebtManager = lazyWithRetry(() => import('./DebtManager').then(m => ({ default: m.DebtManager })), 'DebtManager');
+
+registerTabLoaders({
+    [Tab.DASHBOARD]: () => import('./AccueilGoogle'),
+    [Tab.FUTURE]: () => Promise.all([
+        import('./FutureProjection'),
+        import('./FutureKpiStrip'),
+    ]),
+    [Tab.TRANSACTIONS]: () => import('./Transactions'),
+    [Tab.BUDGET]: () => import('./budget/BudgetWorkspace'),
+    [Tab.DEBT]: () => import('./DebtManager'),
+    [Tab.INVESTMENTS]: () => import('./Investments'),
+    [Tab.VALORIA]: () => import('./Investments'),
+    [Tab.RETIREMENT]: () => import('./Retirement'),
+    [Tab.REAL_ESTATE]: () => import('./RealEstate'),
+    [Tab.REAL_ESTATE_PROJECTS]: () => import('./life/RealEstateProjects'),
+    [Tab.CHILD]: () => import('./ChildPlanning'),
+    [Tab.LIFE_PROJECTS]: () => import('./LifeProjects'),
+    [Tab.TAX]: () => import('./TaxCenter'),
+    [Tab.SETTINGS]: () => import('./Settings'),
+    [Tab.PROFILE]: () => import('./Profile'),
+});
 
 /** Squelette de page instantané à géométrie stable (zéro saut de mise en page pendant un éventuel chargement). */
 const TabLoader: React.FC = () => (
@@ -252,9 +274,6 @@ export const TabRouter: React.FC<TabRouterProps> = ({
                     <Settings
                         apiKeys={state.apiKeys} setApiKeys={onUpdateApiKeys}
                         config={state.config} setConfig={(c) => setAppState({ config: c })}
-                        onImportData={onManualImport}
-                        initialBalances={state.initialBalances} setInitialBalances={(b) => setAppState({ initialBalances: b })}
-                        transactions={state.transactions}
                     />
                 )}
 

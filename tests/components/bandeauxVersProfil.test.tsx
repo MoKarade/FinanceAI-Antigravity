@@ -20,7 +20,7 @@ import { Profile } from '../../components/Profile';
 import { Tab } from '../../types';
 
 const ROOT = path.resolve(__dirname, '../..');
-const SOURCES = ['components/ui/MissingDataBanner.tsx', 'components/setup/requirements.ts', 'components/ui/EmptyDataPrompt.tsx'];
+const SOURCES = ['components/setup/requirements.ts', 'components/ui/EmptyDataPrompt.tsx'];
 const lire = (rel: string) => readFileSync(path.join(ROOT, rel), 'utf8');
 
 describe('[BANDEAUX-VERS-PROFIL] les deep-links des champs profil', () => {
@@ -39,8 +39,8 @@ describe('[BANDEAUX-VERS-PROFIL] les deep-links des champs profil', () => {
     it('chaque section `profile-*` visée existe comme `data-focus-section` quelque part', () => {
         const visees = new Set<string>();
         for (const rel of SOURCES) for (const m of lire(rel).matchAll(/'(profile-[A-Za-z0-9-]+)'/g)) visees.add(m[1]);
-        // Anti-vacuité : les trois sources portent bien des deep-links profil.
-        expect(visees.size).toBeGreaterThanOrEqual(8);
+        // Anti-vacuité : les sources actives portent bien des deep-links profil.
+        expect(visees.size).toBeGreaterThanOrEqual(3);
 
         const composants = readdirSync(path.join(ROOT, 'components'), { recursive: true, encoding: 'utf8' })
             .filter((f) => f.endsWith('.tsx'))

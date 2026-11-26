@@ -28,7 +28,7 @@
 // mois de traitement près (~1 mois de croissance + 1 versement, écart mesuré 1 695 $, documenté).
 
 import type { RealEstateGoal } from '../../types';
-import { calculateSchlPremium, SCHL_AMORT_MAX_INSURED_STANDARD } from '../realEstate';
+import { calculateSchlPremium, computeCanadianMonthlyMortgageRate, SCHL_AMORT_MAX_INSURED_STANDARD } from '../realEstate';
 import { logErrorThrottled } from '../errorLogger';
 
 interface PastPurchaseState {
@@ -70,7 +70,7 @@ export function initPastPurchase(goal: RealEstateGoal, monthsSincePurchase: numb
         if (schl.required) principal += schl.premium;
     }
 
-    const r = Math.max(0, fin(goal.mortgageRate)) / 100 / 12;
+    const r = computeCanadianMonthlyMortgageRate(Math.max(0, fin(goal.mortgageRate)));
     // Défaut = la SOURCE des 25 ans (SCHL), pas un littéral re-codé (panel #552, F-10).
     const amortYears = fin(goal.amortization, SCHL_AMORT_MAX_INSURED_STANDARD) > 0
         ? fin(goal.amortization, SCHL_AMORT_MAX_INSURED_STANDARD)

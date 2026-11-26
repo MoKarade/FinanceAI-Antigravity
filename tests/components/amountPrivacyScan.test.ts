@@ -339,7 +339,7 @@ describe('[A11Y-PRIVACY-SCAN-GLOBAL] aucun montant rendu n\'échappe au mode dis
         const lire = (rel: string) => stripCommentsJsx(readFileSync(path.join(ROOT, rel), 'utf8')).split('\n');
         expect(lire('components/Investments.tsx').some((l) => SCORE_BASE.test(l))).toBe(true);
         expect(lire('components/budget/DualKPIStat.tsx').some((l) => BARRE_BASE.test(l))).toBe(true);
-        expect(lire('components/projection/StrategyOptimizerPanel.tsx').some((l) => DUREE_BASE.test(l))).toBe(true);
+        expect(lire('components/Retirement.tsx').some((l) => DUREE_BASE.test(l))).toBe(true);
     });
 
     it('le jeton de dette `MONTANT-CHAINE-A-DECOUPER` a bien disparu du dépôt', () => {

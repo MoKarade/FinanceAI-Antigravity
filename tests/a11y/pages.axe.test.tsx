@@ -53,12 +53,6 @@ async function expectNoSeriousViolations(container: HTMLElement) {
 }
 
 describe('a11y pages (vitest-axe)', () => {
-    it('Onboarding — aucune violation serious/critical', async () => {
-        const { Onboarding } = await import('../../components/Onboarding');
-        const { container } = render(<Onboarding onComplete={() => {}} />);
-        await expectNoSeriousViolations(container);
-    });
-
     it('TaxBracketViz — aucune violation serious/critical', async () => {
         const { TaxBracketViz } = await import('../../components/TaxBracketViz');
         const { container } = render(

@@ -41,22 +41,37 @@ export function useAccueilPresentFigures({
     currentLiquidity,
     lentilleHero,
 }: AccueilPresentFiguresInput) {
-    const { realEstateEquity, realEstateValeur, realEstateHypotheque } = useMemo(() => {
+    const { realEstateEquity, realEstateValeur, realEstateHypotheque, privateBusinessValue } = useMemo(() => {
         const termes = (state.realEstateGoals ?? []).map((g) =>
             presentTermesOfGoal(g, monthsSince(g.purchaseDate)),
         );
         const somme = (f: (t: { valeur: number; hypotheque: number }) => number) =>
             termes.reduce((sum, t) => sum + f(t), 0);
+        const rentalValeur = (state.rentalProperties ?? []).reduce(
+            (sum, rp) => sum + (Number.isFinite(rp.currentValue) ? rp.currentValue : 0),
+            0,
+        );
+        const rentalHypotheque = (state.rentalProperties ?? []).reduce(
+            (sum, rp) => sum + (Number.isFinite(rp.mortgageBalance) ? rp.mortgageBalance : 0),
+            0,
+        );
+        const bizVal = (state.privateBusinesses ?? []).reduce(
+            (sum, pb) => sum + (Number.isFinite(pb.estimatedValue) ? pb.estimatedValue : 0) * ((Number.isFinite(pb.ownershipPct) ? pb.ownershipPct : 100) / 100),
+            0,
+        );
+        const valTot = somme((t) => t.valeur) + rentalValeur;
+        const hypTot = somme((t) => t.hypotheque) + rentalHypotheque;
         return {
-            realEstateEquity: somme((t) => t.valeur - t.hypotheque),
-            realEstateValeur: somme((t) => t.valeur),
-            realEstateHypotheque: somme((t) => t.hypotheque),
+            realEstateEquity: valTot - hypTot,
+            realEstateValeur: valTot,
+            realEstateHypotheque: hypTot,
+            privateBusinessValue: bizVal,
         };
-    }, [state.realEstateGoals]);
+    }, [state.realEstateGoals, state.rentalProperties, state.privateBusinesses]);
 
-    const totalAvoirs = Math.max(0, (Number.isFinite(avoirsHorsImmo) ? avoirsHorsImmo : 0) + realEstateValeur);
+    const totalAvoirs = Math.max(0, (Number.isFinite(avoirsHorsImmo) ? avoirsHorsImmo : 0) + realEstateValeur + privateBusinessValue);
     const totalDettes = Math.max(0, (Number.isFinite(dettesHorsImmo) ? dettesHorsImmo : 0) + realEstateHypotheque);
-    const patrimoineNet = (Number.isFinite(globalNetWorth) ? globalNetWorth : 0) + realEstateEquity;
+    const patrimoineNet = (Number.isFinite(globalNetWorth) ? globalNetWorth : 0) + realEstateEquity + privateBusinessValue;
     const epargneMensuelle = Number.isFinite(calculatedMonthlySavings) ? calculatedMonthlySavings : 0;
     const liquidites = Number.isFinite(currentLiquidity) ? Math.max(0, currentLiquidity) : 0;
     const portefeuillePlacements = Math.max(

@@ -54,36 +54,3 @@ describe('[A11Y-CHART-HINT-HIDDEN] le graphe Futur annonce ce qui est ATTEIGNABL
         }
     });
 });
-
-describe('[A11Y-CHART-HINT-HIDDEN] la bifurcation « ou importer » est annoncée', () => {
-    const brut = lire('components/setup/PageSetupGate.tsx');
-    const src = sansCommentaires(brut);
-
-    it('le libellé n’est plus masqué, mais les filets décoratifs le restent', () => {
-        const i = src.indexOf('ou importer');
-        expect(i).toBeGreaterThan(-1);
-        // Le conteneur du libellé : plus d'`aria-hidden` sur la BALISE elle-même. On borne au
-        // premier `>` — sinon le slice avale le filet décoratif qui suit, qui lui EST masqué à bon
-        // droit, et la garde se déclarerait rouge sur le correctif (`GARDE-BORNEE-PAR-CLASSE-NEGATIVE`).
-        const ouvrante = src.slice(src.lastIndexOf('<div', i));
-        const balise = ouvrante.slice(0, ouvrante.indexOf('>') + 1);
-        expect(balise, 'le libellé est de nouveau masqué').not.toMatch(/aria-hidden/);
-        // …mais les deux filets, eux, n'ont rien à annoncer.
-        expect(src.slice(i - 200, i + 200).match(/h-px flex-1 bg-white\/10" aria-hidden="true"/g) ?? [])
-            .toHaveLength(2);
-    });
-
-    it('le bloc d’import porte un nom accessible', () => {
-        expect(src).toMatch(/role="group" aria-label="Ou importer"/);
-    });
-
-    it('le compteur « N/N prêts » reste masqué — un vrai progressbar le porte déjà', () => {
-        // Le troisième site du même motif, VÉRIFIÉ CONFORME. Sans cette garde, un prochain passage
-        // « corrigerait » un masquage légitime et ferait annoncer le compte deux fois.
-        expect(src).toMatch(/role="progressbar"/);
-        expect(src).toMatch(/aria-valuenow=\{done\}/);
-        const i = src.indexOf('{done}/{total} prêt');
-        expect(i).toBeGreaterThan(-1);
-        expect(src.slice(Math.max(0, i - 200), i)).toMatch(/aria-hidden="true"/);
-    });
-});

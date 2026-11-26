@@ -193,7 +193,7 @@ export const App: React.FC = () => {
         return importerReleveManuel(rawData, {
             transactions: state.transactions,
             budgetItems: state.budgetItems,
-            apiKeyAnthropic: state.apiKeys.gemini || state.apiKeys.anthropic,
+            apiKeyAnthropic: state.apiKeys.gemini,
             setAppState,
         });
     };

@@ -4,6 +4,8 @@
 // `services/projection` (runAmortization / lastProjection.chartData). Fonctions PURES : aucune
 // lecture de store, aucune horloge — `targetDate` arrive en argument.
 
+import { computeCanadianMonthlyMortgageRate } from '../../services/realEstate';
+
 export interface ParamsAmortissement {
     totalMortgage: number;
     /** Taux hypothécaire initial, en % annuel (ex. 4.5). */
@@ -51,8 +53,9 @@ export const construireAmortissement = (p: ParamsAmortissement): ResultatAmortis
     let balance = totalMortgage;
     let totalInterestPaid = 0;
     let totalPrincipalPaid = 0;
+    let currentNominalRatePct = rate;
     let currentMonthlyPayment = monthlyMortgage;
-    let currentRate = rate / 100 / 12;
+    let currentRate = computeCanadianMonthlyMortgageRate(currentNominalRatePct);
     let propertyValue = price + initialRenovations;
     const purchaseYear = new Date(targetDate || new Date()).getFullYear();
 
@@ -60,7 +63,8 @@ export const construireAmortissement = (p: ParamsAmortissement): ResultatAmortis
         let yearInterest = 0;
         let yearPrincipal = 0;
         if (year > 1 && (year - 1) % 5 === 0) {
-            currentRate = renewalRate / 100 / 12;
+            currentNominalRatePct = renewalRate;
+            currentRate = computeCanadianMonthlyMortgageRate(currentNominalRatePct);
             const remainingMonths = (amortization - year + 1) * 12;
             if (currentRate > 0)
                 currentMonthlyPayment = (currentRate * balance * Math.pow(1 + currentRate, remainingMonths)) / (Math.pow(1 + currentRate, remainingMonths) - 1);
@@ -89,7 +93,7 @@ export const construireAmortissement = (p: ParamsAmortissement): ResultatAmortis
             PrincipalCumul: Math.round(totalPrincipalPaid),
             PartInteretAnnuelle: Math.round(yearInterest),
             PartPrincipalAnnuelle: Math.round(yearPrincipal),
-            TauxEnVigueur: (currentRate * 12 * 100).toFixed(1) + '%',
+            TauxEnVigueur: currentNominalRatePct.toFixed(1) + '%',
             RenosCumul: Math.round(yearlyRenovations * year),
         });
     }

@@ -56,10 +56,10 @@ describe('[IMMO-3-FORMULES] la prime SCHL est financée par le prêt', () => {
 
     it('mise de fonds CONVENTIONNELLE (≥ 20 %) : bit-identique, aucune prime inventée', () => {
         const d = amort(420_000, 84_000).data;
-        // Valeurs de la version d'AVANT le correctif, relevées avant de coder.
-        expect(Number(d[0]?.Solde)).toBe(329_072);
-        expect(Number(d[4]?.Solde)).toBe(297_629);
-        expect(Number(d[9]?.Solde)).toBe(248_386);
+        // Capitalisation semi-annuelle canadienne (Loi sur l'intérêt art. 6), 420 k$ / 84 k$ à 5 % sur 25 ans.
+        expect(Number(d[0]?.Solde)).toBe(329_020);
+        expect(Number(d[4]?.Solde)).toBe(297_385);
+        expect(Number(d[9]?.Solde)).toBe(247_955);
     });
 
     it('la prime n\'ajoute AUCUNE valeur au bien — elle ne fait que gonfler la dette', () => {

@@ -17,9 +17,9 @@ import type {
 import { classifyAssetAllocationSlice } from '../../services/valoria/portfolioOrbitalIntelligence';
 import { D3PriceSparkline30d } from './D3PriceSparkline30d';
 import {
-  formatCompactEur,
-  formatEur,
-  formatSignedEur,
+  formatCompactCad,
+  formatCad,
+  formatSignedCad,
   formatSignedPct,
 } from '../../services/valoria/valoriaFormatters';
 import { safeExternalHttpUrl } from '../../utils/safeExternalUrl';
@@ -310,7 +310,7 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
                       opacity={isDimmed ? 0.35 : 1}
                     >
                       <title>
-                        {`${item.node.ticker} (${item.node.sliceLabel}) · Conviction Bayésienne ${item.node.bayesianConvictionPct} % · ${item.node.regimeLabel}`}
+                        {`${item.node.ticker} (${item.node.sliceLabel}) · Score de confiance ${item.node.bayesianConvictionPct} % · ${item.node.regimeLabel}`}
                       </title>
                     </circle>
 
@@ -370,7 +370,7 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
                 fontSize="8.5"
                 fontWeight="600"
               >
-                {activeNode ? activeNode.ticker : 'Noyau Bayésien'}
+                {activeNode ? activeNode.ticker : 'Noyau marché'}
               </text>
 
               <text
@@ -407,8 +407,8 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
                 fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               >
                 {activeNode
-                  ? `DCF ${formatSignedPct(activeNode.dcfUpsidePct, 0)}`
-                  : formatSignedEur(lab.netExpectedShockCad, 0)}
+                  ? `Écart val. ${formatSignedPct(activeNode.dcfUpsidePct, 0)}`
+                  : formatSignedCad(lab.netExpectedShockCad, 0)}
               </text>
 
               <text
@@ -519,7 +519,7 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
                       }`}
                     >
                       {chain.estimatedShockCad >= 0 ? '▲ ' : '▼ '}
-                      {formatSignedEur(chain.estimatedShockCad, 0)}
+                      {formatSignedCad(chain.estimatedShockCad, 0)}
                     </span>
                   </div>
 
@@ -549,7 +549,7 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
                   : 'text-erreur-texte'
               }
             >
-              {formatSignedEur(lab.netExpectedShockCad, 0)}
+              {formatSignedCad(lab.netExpectedShockCad, 0)}
             </strong>
           </div>
         </div>
@@ -583,10 +583,10 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-baseline justify-between gap-2 text-[11px] font-mono tabular-nums">
                 <span className="text-succes-texte">
-                  Aligné : {formatCompactEur(lab.capitalBullishAlignedCad)}
+                  Aligné : {formatCompactCad(lab.capitalBullishAlignedCad)}
                 </span>
                 <span className="text-erreur-texte">
-                  Exposé chocs : {formatCompactEur(lab.capitalVulnerableToShocksCad)}
+                  Exposé chocs : {formatCompactCad(lab.capitalVulnerableToShocksCad)}
                 </span>
               </div>
               <svg
@@ -698,7 +698,7 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-sm sm:text-base font-bold text-texte">
-              Matrice de Divergence Bayésienne (Actu ↔ Prix 30j ↔ Vraie Valeur DCF)
+              Écart entre actualités, cours récent (30j) et valeur estimée
             </h3>
             <p className="text-xs text-texte-doux">
               Détecte quand le marché sur-réagit à une nouvelle court terme sur un
@@ -787,7 +787,7 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
                         {row.ticker}
                       </span>
                       <span className="text-xs text-texte-doux ml-1.5">
-                        · {row.isHeld ? `Détenu ${formatCompactEur(row.heldValueCad)}` : row.name}
+                        · {row.isHeld ? `Détenu ${formatCompactCad(row.heldValueCad)}` : row.name}
                       </span>
                     </button>
 
@@ -812,7 +812,7 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
                       {row.regimeLabel}
                     </span>
                     <span className="text-texte">
-                      Bayésien {row.priorFundamentalPct} →{' '}
+                      Confiance {row.priorFundamentalPct} →{' '}
                       <strong>{row.posteriorBayesianConvictionPct}%</strong>
                     </span>
                   </div>
@@ -823,15 +823,15 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
 
                   <div className="flex items-center justify-between gap-2 pt-1 text-[11px] font-mono tabular-nums text-texte-doux">
                     <span>
-                      Spot {formatEur(row.spotCad, 0)} · Vraie val.{' '}
-                      {formatEur(row.fairValueCad, 0)}
+                      Spot {formatCad(row.spotCad, 0)} · Vraie val.{' '}
+                      {formatCad(row.fairValueCad, 0)}
                     </span>
                     <button
                       type="button"
                       onClick={() => onOpenAssetInDialogue(row.assetId)}
                       className="min-h-11 font-sans text-texte hover:text-texte underline cursor-pointer"
                     >
-                      Discuter IA
+                      Voir fiche
                     </button>
                   </div>
                 </div>
@@ -849,10 +849,10 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
                       Spot vs Vraie Valeur
                     </th>
                     <th className="py-2.5 px-3 font-medium text-right">
-                      Actu / CAR
+                      Impact actus
                     </th>
                     <th className="py-2.5 px-3 font-medium">
-                      Conviction Bayésienne
+                      Confiance révisée
                     </th>
                     <th className="py-2.5 px-3 font-medium">
                       Régime &amp; Diagnostic Causal
@@ -877,7 +877,7 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
                           </span>
                           {row.isHeld && (
                             <span className="text-[11px] text-succes-texte font-mono ml-1.5">
-                              · {formatCompactEur(row.heldValueCad)}
+                              · {formatCompactCad(row.heldValueCad)}
                             </span>
                           )}
                           <span className="block text-[11px] text-texte-doux truncate">
@@ -897,9 +897,9 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
 
                       <td className="py-3 px-3 text-right font-mono tabular-nums whitespace-nowrap">
                         <div className="text-texte font-semibold">
-                          {formatEur(row.spotCad, 0)}{' '}
+                          {formatCad(row.spotCad, 0)}{' '}
                           <span className="text-texte-doux">→</span>{' '}
-                          {formatEur(row.fairValueCad, 0)}
+                          {formatCad(row.fairValueCad, 0)}
                         </div>
                         <div
                           className={`text-[11px] ${
@@ -908,7 +908,7 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
                               : 'text-erreur-texte'
                           }`}
                         >
-                          {formatSignedPct(row.dcfUpsidePct, 1)} DCF
+                          {formatSignedPct(row.dcfUpsidePct, 1)} écart
                         </div>
                       </td>
 
@@ -926,7 +926,7 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
                           {row.newsImpulseScore}
                         </div>
                         <div className="text-[11px] text-texte-doux">
-                          CAR {formatSignedPct(row.abnormalCarPct, 1)}
+                          Effet {formatSignedPct(row.abnormalCarPct, 1)}
                         </div>
                       </td>
 

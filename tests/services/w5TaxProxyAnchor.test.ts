@@ -20,7 +20,7 @@ import { stripComments, partDeCodeRestante } from '../../utils/stripComments';
 const lire = (rel: string): string => readFileSync(resolve(__dirname, '../../', rel), 'utf8');
 const pct = (r: number): string => `${Math.round(r * 100)} %`;
 
-describe('[W5-PROXY-NON-SOURCE] les proxys d\'impôt W5 sont ancrés, et les 3 sites concordent', () => {
+describe('[W5-PROXY-NON-SOURCE] les proxys d\'impôt W5 sont ancrés, et doc + calcul concordent', () => {
     it('les deux taux ont une valeur PLAUSIBLE — sinon la garde protégerait n\'importe quoi', () => {
         // Anti-vacuité : sans ça, une constante mise à 0 laisserait tout le reste passer (la doc
         // contiendrait « 0 % » et l'écran aussi, cohérents dans l'erreur).
@@ -48,26 +48,6 @@ describe('[W5-PROXY-NON-SOURCE] les proxys d\'impôt W5 sont ancrés, et les 3 s
             .toContain(pct(CCPC_DIVIDEND_TAX_PROXY));
         // Et elle doit dire que ce ne sont PAS des règles fiscales — c'est tout l'objet du lot.
         expect(section).toMatch(/hypothèses? de MODÈLE/);
-    });
-
-    it('l\'écran ANNONCE les taux, et les lit depuis le moteur (pas de valeur recopiée)', () => {
-        const ui = lire('components/PatrimoineExtended.tsx');
-        // Les deux mentions existent…
-        expect(ui).toContain('RENTAL_NOI_TAX_PROXY');
-        expect(ui).toContain('CCPC_DIVIDEND_TAX_PROXY');
-        // …et elles sont RENDUES, pas seulement importées.
-        // ⚠️ Motif EXACT (`× 100, 0`) : perturbation mesurée — `RENTAL_NOI_TAX_PROXY * 100 + 5`
-        // passait le motif lâche `formatPercent\(RENTAL_NOI_TAX_PROXY` en affichant 50 %.
-        expect(ui).toMatch(/formatPercent\(RENTAL_NOI_TAX_PROXY \* 100, 0\)/);
-        expect(ui).toMatch(/formatPercent\(CCPC_DIVIDEND_TAX_PROXY \* 100, 0\)/);
-        // ⚠️ DISCRIMINANT du recopiage : aucun littéral « 45 % » / « 36 % » en dur dans le composant.
-        // C'est ce qui empêcherait la mention de survivre à un changement de constante.
-        const code = stripComments(ui);
-        // ⚠️ PAS `code.length` : la source unique BLANCHIT, la longueur est donc INCHANGÉE et
-        // l'assertion serait vraie par construction. On compte les caractères NON BLANCS restants.
-        expect(partDeCodeRestante(ui, code), 'anti-vacuité du décommentage').toBeGreaterThan(0.5);
-        expect(code, 'taux recopié en dur dans l\'écran').not.toMatch(/\b45\s*%/);
-        expect(code, 'taux recopié en dur dans l\'écran').not.toMatch(/\b36\s*%/);
     });
 
     it('le CALCUL applique chaque constante à SON flux — échanger les deux doit rougir', () => {

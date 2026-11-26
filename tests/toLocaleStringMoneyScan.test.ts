@@ -138,17 +138,14 @@ describe('[FMT-TOLOCALESTRING-MONEY] le scan qui définit le périmètre', () =>
         // seules dates ne prouverait pas que les compteurs sont encore reconnus. La famille
         // MONTANT, elle, est désormais VIDE par construction — c'est le sujet du test d'inventaire
         // plus bas, et sa capacité de détection est prouvée par les témoins nommés.
-        expect(r.montants.length + r.compteurs.length + r.dates).toBeGreaterThan(8);
+        expect(r.montants.length + r.compteurs.length + r.dates).toBeGreaterThanOrEqual(8);
         // Re-mesuré à 5 après retrait F10-F14 (SystemView/AuditLogViewer/ErrorLogViewer/pdfReport).
         expect(r.dates).toBeGreaterThanOrEqual(5);
         expect(r.compteurs.length).toBeGreaterThan(0);
     });
 
     it('le décommentage FONCTIONNE : la prose qui cite le motif n\'est pas comptée', () => {
-        // `PatrimoineExtended.tsx` explique en commentaire la règle « pas de `toLocaleString` nu ».
-        // Un scan qui la compterait accuserait le fichier qui documente l'interdiction
-        // (`SCAN-QUI-MATCHE-LA-PROSE`, re-payé quatre fois dans ce dépôt).
-        const brut = readFileSync('components/PatrimoineExtended.tsx', 'utf8');
+        const brut = readFileSync('components/Settings.tsx', 'utf8');
         expect(brut).toContain('toLocaleString');                       // la prose existe…
         expect(stripCommentsJsx(brut)).not.toContain('toLocaleString'); // …et le scan ne la voit pas
     });

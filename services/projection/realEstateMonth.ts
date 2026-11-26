@@ -11,34 +11,13 @@ import { formatCAD } from '../../utils/format';
 import type { RealEstateGoal, Municipality } from '../../types';
 import { ajouterParProprietaire, type MontantsParProprietaire } from './revenuGagnePartage';
 import { RAP_LIMIT_PER_USER, calculateGrossWithholdingRRSP, withholdingForGrossRRSP } from '../../utils/tax';
-import { calculateB20StressTest, validateMortgageParameters, calculateSchlPremium, calculateNewHomeRebateTotal } from '../realEstate';
+import { calculateB20StressTest, validateMortgageParameters, calculateSchlPremium, calculateNewHomeRebateTotal, computeCanadianMonthlyMortgageRate, computeCanadianMortgagePayment } from '../realEstate';
+
+export { computeCanadianMonthlyMortgageRate, computeCanadianMortgagePayment };
 
 type GetMonthOffsetFn = (dateStr: string) => number;
 // FISC-WELCOME-UNIFY — la fonction injectée porte la municipalité du bien (welcome tax MTL vs reste QC).
 type WelcomeTaxFn = (price: number, municipality?: Municipality) => number;
-
-/**
- * Loi sur l'intérêt canadienne : calcul du taux périodique mensuel effectif pour une capitalisation semi-annuelle.
- * im = (1 + r/2)^(1/6) - 1
- */
-export function computeCanadianMonthlyMortgageRate(annualNominalRatePct: number): number {
-    const rNominal = (annualNominalRatePct / 100);
-    return rNominal > 0 ? Math.pow(1 + rNominal / 2, 1 / 6) - 1 : 0;
-}
-
-/**
- * Calcul de la mensualité canadienne semi-annuelle pour un prêt amorti sur n mois.
- */
-export function computeCanadianMortgagePayment(
-    principal: number,
-    annualNominalRatePct: number,
-    totalMonths: number,
-): number {
-    if (totalMonths <= 0 || principal <= 0) return 0;
-    const im = computeCanadianMonthlyMortgageRate(annualNominalRatePct);
-    if (im <= 0) return principal / totalMonths;
-    return (principal * im * Math.pow(1 + im, totalMonths)) / (Math.pow(1 + im, totalMonths) - 1);
-}
 
 export interface PropertyStateMutable {
     id: string;

@@ -118,7 +118,7 @@ export const computeAssetBreakdown = (
     const valCad = assetValueCad(a, fxRates); // source unique (FX + garde NaN/Infinity)
     const type = (a.accountType || '').toUpperCase();
     if (type === 'REER') breakdown.reer += valCad;
-    else if (type === 'CELI') breakdown.celi += valCad;
+    else if (type === 'CELI' || type === 'CELIAPP') breakdown.celi += valCad;
     else if (type === 'REEE') breakdown.reee += valCad;
     else if (type === 'CRYPTO') breakdown.crypto += valCad;
     else breakdown.nonReg += valCad;

@@ -170,7 +170,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
 }) => {
     void onOpenValoria;
     // Phase E.7 — apiKey du store (fallback prop pour rétrocompat) pour appeler Gemini
-    const geminiKeyFromStore = useFinanceStore(s => s.apiKeys.gemini || s.apiKeys.anthropic);
+    const geminiKeyFromStore = useFinanceStore(s => s.apiKeys.gemini);
     const geminiKey = geminiKeyFromStore || apiKey || '';
 
     // [A11Y-CHARTS] tables de données sr-only pour les donuts d'allocation (Recharts opaque aux

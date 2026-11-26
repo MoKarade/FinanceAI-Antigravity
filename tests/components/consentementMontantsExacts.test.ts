@@ -20,21 +20,11 @@ const lire = (rel: string) => readFileSync(path.join(ROOT, rel), 'utf8');
 /** La forme de l'ancien arrondi : `… / 100) * 100`. */
 const ARRONDI_100 = /\/\s*100\s*\)\s*\*\s*100/;
 
-describe('[FMT-PROMPT-MIGRER] le consentement dit ce que l\'app fait', () => {
-    it('le texte de consentement promet des montants EXACTS, plus aucun arrondi', () => {
-        // Source DÉCOMMENTÉE : une mention historique en commentaire ne doit ni satisfaire ni
-        // faire rougir (`SCAN-QUI-MATCHE-LA-PROSE`).
-        const code = stripCommentsJsx(lire('components/Onboarding.tsx'));
-        expect(code).toContain('montants exacts');
-        expect(code, 'le consentement re-promet un arrondi : soit c\'est une erreur, soit l\'arrondi '
-            + 'revient — dans les DEUX cas, mécanisme et promesse se livrent ensemble').not.toContain('arrondis à 100');
-    });
-
+describe('[FMT-PROMPT-MIGRER] aucun arrondi à 100 $ dans les clients IA actifs', () => {
     it('le mécanisme d\'arrondi a disparu des deux fichiers qui le portaient', () => {
         for (const f of ['services/gemini.ts', 'components/budget/BudgetAiModal.tsx']) {
             const code = f.endsWith('.tsx') ? stripCommentsJsx(lire(f)) : stripComments(lire(f));
-            expect(ARRONDI_100.test(code), `${f} ré-arrondit à 100 $ : le texte de consentement `
-                + '(Onboarding) doit alors re-promettre l\'arrondi DANS LE MÊME LOT').toBe(false);
+            expect(ARRONDI_100.test(code), `${f} ré-arrondit à 100 $`).toBe(false);
         }
     });
 

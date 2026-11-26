@@ -3,10 +3,9 @@
 // peignait déjà (l'ordre des classes dans l'attribut est indifférent au CSS — on compare des
 // ensembles, pas des chaînes).
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
-import { Field } from '../../../components/ui/Field';
 
 const classes = (el: Element | null) => new Set((el?.className ?? '').split(/\s+/).filter(Boolean));
 
@@ -41,29 +40,5 @@ describe('[DETTE-UI-PRIMITIVES] Select', () => {
             'bg-dark border border-border rounded-sm px-2 py-1 text-meta text-ink-100' /* [S5-TAILWIND4] rounded → rounded-sm */.split(' '),
         ));
         expect(container.querySelectorAll('option')).toHaveLength(1);
-    });
-});
-
-describe('[DETTE-UI-PRIMITIVES] Field', () => {
-    it('écrit la paire label↔id UNE fois : le contrôle reçoit l\'id et son NOM ACCESSIBLE', () => {
-        render(
-            <Field id="mon-champ" label="Salaire brut annuel ($)">
-                <Input variant="large" type="number" />
-            </Field>,
-        );
-        // Le nom ACCESSIBLE (pas l'attribut) : c'est la propriété que la paire garantit
-        // (UN-ATTRIBUT-PRESENT-NE-PROUVE-PAS-QU-IL-DESIGNE-LA-BONNE-CHOSE).
-        const champ = screen.getByLabelText('Salaire brut annuel ($)') as HTMLInputElement;
-        expect(champ.id).toBe('mon-champ');
-        expect(champ.type).toBe('number');
-    });
-
-    it('le libellé par défaut porte la forme la plus courante des formulaires du dépôt', () => {
-        const { container } = render(
-            <Field id="f2" label="Prénom"><Input /></Field>,
-        );
-        const label = container.querySelector('label') as HTMLLabelElement;
-        expect(label.htmlFor).toBe('f2');
-        expect(classes(label)).toEqual(new Set(['text-meta', 'text-ink-400']));
     });
 });

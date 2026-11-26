@@ -25,10 +25,6 @@ const baseProps = {
     setApiKeys: vi.fn(),
     config: defaultConfig,
     setConfig: vi.fn(),
-    onImportData: vi.fn(),
-    initialBalances: {},
-    setInitialBalances: vi.fn(),
-    transactions: [],
 };
 
 describe('Settings', () => {
@@ -53,12 +49,12 @@ describe('Settings', () => {
 
     afterEach(() => { vi.unstubAllGlobals(); _resetViewportXlMqlForTests(); });
 
-    it('mobile : liste des 4 besoins essentiels + Profil ; une section s\'ouvre et se referme', () => {
+    it('mobile : liste des 3 besoins essentiels + Profil ; une section s\'ouvre et se referme', () => {
         render(<Settings {...baseProps} />);
         expect(screen.queryByRole('heading', { name: /Mode test/ })).toBeNull();
         const nav = screen.getByRole('navigation', { name: 'Sections des réglages' });
         const lignes = within(nav).getAllByRole('button').map((b) => b.textContent?.replace(/[›\s]+$/, '').trim());
-        expect(lignes).toEqual(['Profil', 'Compte', 'Banque auto', 'Clé IA', 'Sauvegarde']);
+        expect(lignes).toEqual(['Profil', 'Banque auto', 'Clé IA', 'Sauvegarde']);
         expect(screen.queryByRole('tab')).toBeNull();
 
         ouvrirSection('Sauvegarde');
@@ -74,16 +70,15 @@ describe('Settings', () => {
         expect(within(nav).getByRole('button', { name: /^Clé IA/ }).textContent).toContain('à faire');
     });
 
-    it('bureau large (≥ xl) : menu vertical aux 4 besoins, « Compte » ouvert par défaut avec Patrimoine étendu repliable', () => {
+    it('bureau large (≥ xl) : menu vertical aux 3 besoins, « Banque auto » ouvert par défaut', () => {
         vi.stubGlobal('matchMedia', (q: string) => ({
             media: q, matches: true, addEventListener: () => {}, removeEventListener: () => {},
         }));
         render(<Settings {...baseProps} />);
         const menu = screen.getByRole('tablist', { name: 'Sections des réglages' });
         expect(menu).toHaveAttribute('aria-orientation', 'vertical');
-        expect(within(menu).getAllByRole('tab')).toHaveLength(4);
-        expect(within(menu).getByRole('tab', { name: 'Compte' })).toHaveAttribute('aria-selected', 'true');
-        expect(screen.getByRole('button', { name: /Patrimoine étendu/i })).toBeInTheDocument();
+        expect(within(menu).getAllByRole('tab')).toHaveLength(3);
+        expect(within(menu).getByRole('tab', { name: 'Banque auto' })).toHaveAttribute('aria-selected', 'true');
         fireEvent.click(within(menu).getByRole('tab', { name: 'Sauvegarde' }));
         expect(within(menu).getByRole('tab', { name: 'Sauvegarde' })).toHaveAttribute('aria-selected', 'true');
     });

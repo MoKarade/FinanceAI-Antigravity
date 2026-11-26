@@ -139,12 +139,12 @@ export const ValoriaFinanceAiHubCard: React.FC<ValoriaFinanceAiHubCardProps> = (
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-texte-doux shrink-0" aria-hidden="true" />
             <h3 className="text-sm font-semibold text-texte">
-              Pont Projection Futur &amp; Black-Litterman
+              Pont Projection Futur &amp; Répartition optimisée
             </h3>
           </div>
           <span className="font-mono text-xs text-succes-texte font-semibold tabular-nums">
-            {/* NOMBRE-NON-MONETAIRE : rendement attendu du modèle Black-Litterman */}
-            BL {formatPct(expectedCagrBeforePct, 1)} → {formatPct(expectedCagrAfterPct, 1)}/an
+            {/* NOMBRE-NON-MONETAIRE : rendement attendu estimé du portefeuille */}
+            Rendement {formatPct(expectedCagrBeforePct, 1)} → {formatPct(expectedCagrAfterPct, 1)}/an
           </span>
         </div>
 
