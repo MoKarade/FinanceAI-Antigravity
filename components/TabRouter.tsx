@@ -1,6 +1,8 @@
 import React, { Suspense } from 'react';
 import { Tab, AppState, Transaction } from '../types';
 import { TAB_LABELS } from '../constants';
+import { isPlanningTab } from './navDestinations';
+import { PlanningHubBar } from './PlanningHubBar';
 import { ErrorBoundary } from './ui/ErrorBoundary';
 // P1 fix — wrap React.lazy avec retry + reload sur chunk-load-error
 // (cf hubperso.com regression : "Failed to fetch dynamically imported module")
@@ -88,6 +90,11 @@ export const TabRouter: React.FC<TabRouterProps> = ({
                     data-active-tab={activeTab}
                     className="motion-reduce:animate-none"
                 >
+                {isPlanningTab(activeTab) && (
+                    <div className="mb-4">
+                        <PlanningHubBar activeTab={activeTab} onSelectTab={setActiveTab} />
+                    </div>
+                )}
                 {activeTab === Tab.DASHBOARD && (
                     <>
                         <SyncStaleBanner />

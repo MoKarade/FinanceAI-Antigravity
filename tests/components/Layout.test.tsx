@@ -1,8 +1,15 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { Layout } from '../../components/Layout';
+import { useFinanceStore } from '../../store/useFinanceStore';
 import { Tab } from '../../types';
 import { TAB_LABELS } from '../../constants';
+
+const initialState = useFinanceStore.getState();
+
+beforeEach(() => {
+    useFinanceStore.setState(initialState, true);
+});
 
 const baseProps = {
     activeTab: Tab.FUTURE,
@@ -36,36 +43,27 @@ describe('Layout', () => {
     });
 
     it('[A11Y-ROUTE-FOCUS] changer d\'onglet déplace le focus vers le contenu ET l\'annonce', () => {
-        // ⚠️ Le défaut : cliquer une destination ne produisait AUCUN signal non visuel. Le focus
-        // restait sur le bouton de nav, donc atteindre le nouveau contenu demandait de re-tabuler
-        // tout le rail — pour une navigation que l'utilisateur venait justement de demander.
         const { container, rerender } = render(<Layout {...baseProps} activeTab={Tab.FUTURE} />);
         const main = container.querySelector('main#main') as HTMLElement;
         const region = container.querySelector('[role="status"][aria-live="polite"]') as HTMLElement;
 
-        // ⚠️ La région est montée AVANT d'avoir quoi que ce soit à dire : montée au moment de parler,
-        // elle raterait la première transition — la seule qui compte.
-        expect(region, 'région d\'annonce absente au repos : la 1re transition serait muette').toBeTruthy();
-        expect(region.textContent, 'arriver sur l\'app n\'est pas un changement de destination').toBe('');
-        expect(document.activeElement, 'le focus ne doit PAS être volé au premier rendu').not.toBe(main);
+        expect(region).toBeTruthy();
+        expect(region.textContent).toBe('');
+        expect(document.activeElement).not.toBe(main);
 
         rerender(<Layout {...baseProps} activeTab={Tab.BUDGET} />);
-        expect(document.activeElement, 'le focus n\'a pas suivi le changement d\'onglet').toBe(main);
-        expect(region.textContent, 'la destination n\'est pas annoncée').toBe(TAB_LABELS[Tab.BUDGET]);
+        expect(document.activeElement).toBe(main);
+        expect(region.textContent).toBe(TAB_LABELS[Tab.BUDGET]);
 
-        // ⚠️ Contrôle : un re-rendu SANS changement d'onglet ne doit rien refaire — sinon la région
-        // répéterait la même annonce à chaque frappe, et le focus sauterait pendant une saisie.
         const boutonNav = screen.getAllByRole('button')[0];
         boutonNav.focus();
         rerender(<Layout {...baseProps} activeTab={Tab.BUDGET} />);
-        expect(document.activeElement, 'le focus a été repris sans changement de destination').toBe(boutonNav);
+        expect(document.activeElement).toBe(boutonNav);
     });
 
     it('a11y — le brand « FinanceAI » n\'est PAS un titre (le <h1> est réservé au titre de page)', () => {
         render(<Layout {...baseProps} />);
-        // le texte du brand reste présent (sidebar + barre mobile)...
         expect(screen.getAllByText('FinanceAI').length).toBeGreaterThan(0);
-        // ...mais ce n'est plus un heading → fin du double <h1> (brand + PageHeader) par page.
         expect(screen.queryByRole('heading', { name: 'FinanceAI' })).toBeNull();
     });
 
@@ -96,7 +94,6 @@ describe('Layout', () => {
         render(<Layout {...baseProps} activeTab={Tab.FUTURE} />);
         const buttons = screen.getAllByRole('button');
         const activeButtons = buttons.filter(b => b.getAttribute('aria-current') === 'page');
-        // Au moins 1 bouton actif (Futur : sidebar + barre mobile)
         expect(activeButtons.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -106,31 +103,29 @@ describe('Layout', () => {
     });
 
     it('§B.1 (révisé audit #598) — l’aside n’a PLUS aria-expanded (non conforme au rôle complementary)', () => {
-        // aria-expanded n'est pas une propriété supportée du rôle implicite complementary
-        // (axe aria-allowed-attr) — l'état est purement visuel, chaque groupe expose le sien.
         const { container } = render(<Layout {...baseProps} />);
         const sidebar = container.querySelector('aside');
         expect(sidebar?.hasAttribute('aria-expanded')).toBe(false);
     });
 
-    it('[S5-REFONTE-R1] barre latérale TEXTE toujours dépliée : trois groupes, items dans l\'ordre des maquettes', () => {
+    it('[ETAPE-4] barre latérale courte : 2 groupes (Essentiel / Plus) et 8 destinations claires', () => {
         const { container } = render(<Layout {...baseProps} />);
         const aside = container.querySelector('aside')!;
-        expect(aside.className, 'largeur fixe, plus de rail au survol').toContain('w-[232px]');
+        expect(aside.className).toContain('w-[232px]');
         const nav = within(aside).getByRole('navigation', { name: 'Navigation principale' });
         const textes = within(nav).getAllByRole('button').map((b) => b.textContent?.trim());
-        expect(textes).toEqual(['Accueil', 'Futur', 'Transactions', 'Budget', 'Dettes', 'Placements', 'Retraite', 'Immobilier', 'Enfants', 'Projets de vie', 'Impôts', 'Réglages']);
-        for (const titre of ['Vue', 'Planifier', 'Outils']) expect(within(nav).getByText(titre)).toBeInTheDocument();
-        expect(within(nav).queryAllByRole('button').some((b) => b.hasAttribute('aria-expanded')), 'plus d\'accordéon').toBe(false);
+        expect(textes).toEqual(['Accueil', 'Futur', 'Transactions', 'Budget', 'Dettes', 'Placements', 'Planification', 'Réglages']);
+        for (const titre of ['Essentiel', 'Plus']) expect(within(nav).getByText(titre)).toBeInTheDocument();
+        expect(within(nav).queryAllByRole('button').some((b) => b.hasAttribute('aria-expanded'))).toBe(false);
     });
 
-    it('[S5-REFONTE-R1] Immobilier réunit biens et projets : item courant sur les DEUX onglets', () => {
+    it('[ETAPE-4] tous les onglets Planification activent « Planification » dans le menu latéral', () => {
         const { container } = render(<Layout {...baseProps} activeTab={Tab.REAL_ESTATE_PROJECTS} />);
         const nav = within(container.querySelector('aside')!).getByRole('navigation', { name: 'Navigation principale' });
-        expect(within(nav).getByText('Immobilier').getAttribute('aria-current')).toBe('page');
+        expect(within(nav).getByText('Planification').getAttribute('aria-current')).toBe('page');
     });
 
-    it('[S5-REFONTE-R1] la carte Profil (pied de barre) ouvre le Profil', () => {
+    it('la carte Profil (pied de barre) ouvre le Profil', () => {
         const setActiveTab = vi.fn();
         const { container } = render(<Layout {...baseProps} setActiveTab={setActiveTab} />);
         const aside = container.querySelector('aside')!;
@@ -139,13 +134,10 @@ describe('Layout', () => {
     });
 
     it('non-perte mobile : chaque onglet est atteignable via la barre OU le menu « Plus » — scoped AU menu', () => {
-        // ⚠️ (finding code-reviewer #600) : interroger le DOCUMENT entier laisserait la barre latérale
-        // (présente dans jsdom malgré `hidden lg:flex`) satisfaire l'assertion. On interroge LE menu.
         const setActiveTab = vi.fn();
         render(<Layout {...baseProps} setActiveTab={setActiveTab} />);
         const mobileNav = screen.getByRole('navigation', { name: 'Navigation mobile' });
-        // 3e bouton : Budget (choix de Marc, 28/10/2026, à la place de l'ancien Assistant ; LIA répond par son menu et son orbe)
-        for (const label of ['Futur', 'Transactions', 'Budget']) {
+        for (const label of ['Accueil', 'Futur', 'Transactions', 'Budget']) {
             expect(within(mobileNav).getByText(label)).toBeInTheDocument();
         }
         fireEvent.click(within(mobileNav).getByRole('button', { name: "Plus d'options" }));
@@ -158,7 +150,7 @@ describe('Layout', () => {
         expect(setActiveTab).toHaveBeenCalledWith(Tab.DEBT);
     });
 
-    it('[S5-REFONTE-R1] menu « Plus » : le Profil y est, Échap le referme', () => {
+    it('menu « Plus » : le Profil y est, Échap le referme', () => {
         const setActiveTab = vi.fn();
         render(<Layout {...baseProps} setActiveTab={setActiveTab} />);
         fireEvent.click(screen.getByRole('button', { name: "Plus d'options" }));
@@ -167,7 +159,7 @@ describe('Layout', () => {
         expect(screen.queryByRole('navigation', { name: 'Autres destinations' })).toBeNull();
     });
 
-    it('[S5-REFONTE-R1] mobile : les pages hors barre du bas remontent vers « Plus »', () => {
+    it('mobile : les pages hors barre du bas remontent vers « Plus »', () => {
         const { rerender } = render(<Layout {...baseProps} activeTab={Tab.FUTURE} />);
         expect(screen.queryByText('‹ Plus')).toBeNull();
         rerender(<Layout {...baseProps} activeTab={Tab.DEBT} />);
@@ -180,5 +172,33 @@ describe('Layout', () => {
         const aside = container.querySelector('aside')!;
         expect(within(aside).getByRole('button', { name: 'Accueil' })).toBeInTheDocument();
         expect(screen.getAllByText('Accueil').length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('[ETAPE-4] mode solo par défaut (badge couple masqué en solo, visible quand conjoint défini)', () => {
+        useFinanceStore.setState({
+            config: {
+                ...initialState.config,
+                users: [
+                    { ...initialState.config.users[0], name: 'Marc' },
+                    { ...initialState.config.users[1], name: '' },
+                ],
+            },
+        });
+        const { container, rerender } = render(<Layout {...baseProps} />);
+        const aside = container.querySelector('aside')!;
+        expect(within(aside).queryByLabelText(/Mode Couple actif/)).toBeNull();
+        expect(within(aside).queryByLabelText(/Mode Individuel actif/)).toBeNull();
+
+        useFinanceStore.setState({
+            config: {
+                ...initialState.config,
+                users: [
+                    { ...initialState.config.users[0], name: 'Marc' },
+                    { ...initialState.config.users[1], name: 'Sam' },
+                ],
+            },
+        });
+        rerender(<Layout {...baseProps} />);
+        expect(within(aside).getByLabelText('Mode Couple actif')).toBeInTheDocument();
     });
 });

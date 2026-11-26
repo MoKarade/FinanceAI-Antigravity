@@ -1,5 +1,5 @@
 import { Tab } from '../types';
-import { NAV_GROUPS, PROFILE_TAB } from '../components/navDestinations';
+import { NAV_GROUPS, PLANNING_SUBTABS, PROFILE_TAB } from '../components/navDestinations';
 import { apresPremierAffichage } from './apresPremierAffichage';
 
 const prefetchedTabs = new Set<Tab>();
@@ -60,9 +60,11 @@ export function prefetchTab(tab: Tab): void {
     }
 }
 
-/** Liste ordonnée des onglets principaux de la barre latérale + Profil. */
+/** Liste ordonnée des onglets principaux + Planification + Profil. */
 export const ORDERED_NAV_TABS: Tab[] = [
-    ...NAV_GROUPS.flatMap((g) => g.items.map((it) => it.tab)),
+    ...NAV_GROUPS[0].items.map((it) => it.tab),
+    ...PLANNING_SUBTABS.map((it) => it.tab),
+    ...NAV_GROUPS[1].items.filter((it) => it.tab !== Tab.RETIREMENT).map((it) => it.tab),
     PROFILE_TAB,
 ];
 

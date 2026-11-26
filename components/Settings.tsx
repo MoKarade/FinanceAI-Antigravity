@@ -15,8 +15,9 @@
 
 import React, { useState } from 'react';
 import { PageHeader } from './ui/PageHeader';
-import { type IconName } from './ui/Icon';
+import { Icon, type IconName } from './ui/Icon';
 import { SubTabs, TabPanel } from './ui/SubTabs';
+import { CollapsibleSection } from './ui/CollapsibleSection';
 import { AppState, Transaction, Tab } from '../types';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { usePendingFocus } from '../utils/usePendingFocus';
@@ -39,24 +40,22 @@ interface SettingsProps {
   transactions: Transaction[];
 }
 
-type SubTab = 'accounts' | 'patrimoine' | 'integrations' | 'backup';
+type SubTab = 'compte' | 'banque' | 'ia' | 'sauvegarde';
 
 const SUB_TABS: ReadonlyArray<{ id: SubTab; label: string; icon: IconName }> = [
-  { id: 'accounts', label: 'Comptes et soldes', icon: 'bank' },
-  { id: 'patrimoine', label: 'Patrimoine', icon: 'real-estate' },
-  { id: 'integrations', label: 'Clés API', icon: 'link' },
-  { id: 'backup', label: 'Sauvegarde', icon: 'cloud' },
+  { id: 'compte', label: 'Compte', icon: 'bank' },
+  { id: 'banque', label: 'Banque auto', icon: 'link' },
+  { id: 'ia', label: 'Clé IA', icon: 'sparkles' },
+  { id: 'sauvegarde', label: 'Sauvegarde', icon: 'cloud' },
 ];
 
 /** Mappe un data-focus-section (deep-link) vers le sous-onglet qui le contient. */
 function subTabForSection(section: string | null | undefined): SubTab | null {
   if (!section) return null;
-  if (section.startsWith('apiKeys-')) return 'integrations';
-  // [FINTABLE-STALE-ALERT] La bannière « import figé » de l'Accueil pointe ici. Sans cette
-  // entrée, le deep-link ouvrait Réglages sur le sous-onglet courant sans rien focaliser :
-  // un bouton d'apparence fonctionnelle qui ne mène nulle part (panne silencieuse).
-  if (section.startsWith('fintable-')) return 'integrations';
-  if (section.startsWith('fx-')) return 'integrations';
+  if (section.startsWith('apiKeys-')) return 'ia';
+  // [FINTABLE-STALE-ALERT] La bannière « import figé » de l'Accueil pointe ici.
+  if (section.startsWith('fintable-')) return 'banque';
+  if (section.startsWith('fx-')) return 'banque';
   return null;
 }
 
@@ -72,9 +71,6 @@ export const Settings: React.FC<SettingsProps> = ({
 }) => {
   const pendingFocus = useFinanceStore(s => s.pendingFocus);
 
-  // Deep-link : on démarre sur le sous-onglet ciblé pour que le champ soit
-  // monté quand usePendingFocus tente le scroll.
-  // `null` = accueil des Réglages : « Comptes et soldes » sur bureau, liste des sections sur mobile.
   const [sub, setSub] = useState<SubTab | null>(() => {
     if (pendingFocus && pendingFocus.tab === Tab.SETTINGS && Date.now() <= pendingFocus.expiresAt) {
       return subTabForSection(pendingFocus.section);
@@ -82,54 +78,60 @@ export const Settings: React.FC<SettingsProps> = ({
     return null;
   });
 
-  // Consomme pendingFocus + scroll vers le champ (one-shot).
   usePendingFocus(Tab.SETTINGS);
 
   const large = useViewportXl();
   const setActiveTab = useFinanceStore(s => s.setActiveTab);
-  const aFaire = (id: SubTab) => id === 'integrations' && !(apiKeys.gemini || apiKeys.anthropic);
+  const aFaire = (id: SubTab) => id === 'ia' && !(apiKeys.gemini || apiKeys.anthropic);
   const onglets = SUB_TABS.map((t) => ({
     ...t,
     badge: aFaire(t.id) ? <span className="text-alerte-texte">à faire</span> : undefined,
   }));
 
-  // Contenu d'une section — partagé par les deux mises en page.
   const contenu = (id: SubTab): React.ReactNode => {
     switch (id) {
-      case 'accounts':
-        return (
-          <AccountsSection
-            initialBalances={initialBalances}
-            setInitialBalances={setInitialBalances}
-            transactions={transactions}
-            onImportData={onImportData}
-            apiKey={apiKeys.gemini || apiKeys.anthropic || ''}
-          />
-        );
-      case 'patrimoine':
-        return <PatrimoineSection />;
-      case 'integrations':
+      case 'compte':
         return (
           <div className="space-y-6">
-            <IntegrationsSection apiKeys={apiKeys} setApiKeys={setApiKeys} />
-            {/* [FINTABLE-7] Sync bancaire in-app : jeton + rôles de comptes, sans aucune config externe. */}
+            <AccountsSection
+              initialBalances={initialBalances}
+              setInitialBalances={setInitialBalances}
+              transactions={transactions}
+              onImportData={onImportData}
+              apiKey={apiKeys.gemini || apiKeys.anthropic || ''}
+            />
+            <CollapsibleSection
+              title="Patrimoine étendu (optionnel)"
+              subtitle="Assurances, immeubles locatifs, entreprises privées et biens cycliques"
+              icon={<Icon name="real-estate" size={16} />}
+              headingLevel={3}
+              defaultOpen={false}
+            >
+              <PatrimoineSection />
+            </CollapsibleSection>
+          </div>
+        );
+      case 'banque':
+        return (
+          <div className="space-y-6">
             <FintableSyncCard />
             <div data-focus-section="fx-rates">
               <FxRatesCard />
             </div>
           </div>
         );
-      case 'backup':
+      case 'ia':
+        return <IntegrationsSection apiKeys={apiKeys} setApiKeys={setApiKeys} />;
+      case 'sauvegarde':
         return <BackupSection />;
     }
   };
 
   const enTete = <PageHeader title="Réglages" />;
 
-  // [S5-REFONTE-REGLAGES] Bureau large (≥ xl, maquette E-reglages) : menu à gauche (onglets verticaux),
-  // section à droite.
+  // [S5-REFONTE-REGLAGES] Bureau large (≥ xl) : menu à gauche (onglets verticaux), section à droite.
   if (large) {
-    const actif = sub ?? 'accounts';
+    const actif = sub ?? 'compte';
     return (
       <div className="space-y-6 stagger-in">
         {enTete}

@@ -1,7 +1,15 @@
 import React, { Suspense } from 'react';
 import { Tab, FinancialGoal, User } from '../types';
 import { TAB_LABELS } from '../constants';
-import { NAV_GROUPS, MOBILE_BAR_TABS, PROFILE_TAB, navItemOfTab } from './navDestinations';
+import {
+  NAV_GROUPS,
+  MOBILE_BAR_TABS,
+  MOBILE_PLUS_GROUPS,
+  SEARCHABLE_NAV_ITEMS,
+  PROFILE_TAB,
+  navItemOfTab,
+  isPlanningTab,
+} from './navDestinations';
 import { CoupleModeBadge } from './ui/CoupleModeBadge';
 import { showToast } from './ui/Toast';
 import { Icon } from './ui/Icon';
@@ -55,6 +63,7 @@ export const Layout: React.FC<LayoutProps> = ({
     const precedent = ongletPrecedent.current;
     ongletPrecedent.current = activeTab;
     if (precedent === null || precedent === activeTab) return;
+    setShowMobileDrawer(false);
     if (typeof window !== 'undefined' && typeof window.scrollTo === 'function' && !/jsdom/i.test(navigator.userAgent)) {
       try {
         window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
@@ -89,14 +98,14 @@ export const Layout: React.FC<LayoutProps> = ({
   }, [searchOpen]);
 
   const isNavActive = (tab: Tab) => navItemOfTab(activeTab)?.tab === tab;
-  const itemsMobilePlus = NAV_GROUPS
-    .map((g) => ({ ...g, items: g.items.filter((it) => !MOBILE_BAR_TABS.includes(it.tab)) }))
-    .filter((g) => g.items.length > 0);
+  const itemsMobilePlus = MOBILE_PLUS_GROUPS;
   const surPagePlus = !MOBILE_BAR_TABS.includes(activeTab);
 
-  const groupeActif = NAV_GROUPS.find((g) =>
-    g.items.some((it) => it.tab === activeTab || it.alsoActiveFor?.includes(activeTab)),
-  );
+  const groupeActif = isPlanningTab(activeTab)
+    ? { label: 'Planification' }
+    : NAV_GROUPS.find((g) =>
+        g.items.some((it) => it.tab === activeTab || it.alsoActiveFor?.includes(activeTab)),
+      );
 
   const panneauPlusRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
@@ -130,13 +139,9 @@ export const Layout: React.FC<LayoutProps> = ({
 
   const resultatsRecherche = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    const destinations = [
-      ...NAV_GROUPS.flatMap((g) => g.items.map((it) => ({ tab: it.tab, label: it.label, group: g.label, icon: it.icon }))),
-      { tab: PROFILE_TAB, label: 'Profil', group: 'Dossier', icon: 'users' as const },
-    ];
     const pagesFiltrees = q
-      ? destinations.filter((d) => d.label.toLowerCase().includes(q) || d.group.toLowerCase().includes(q))
-      : destinations.slice(0, 6);
+      ? SEARCHABLE_NAV_ITEMS.filter((d) => d.label.toLowerCase().includes(q) || d.group.toLowerCase().includes(q))
+      : SEARCHABLE_NAV_ITEMS.slice(0, 6);
     const titresFiltres = q
       ? (assets ?? [])
           .filter((a) => (a.symbol && a.symbol.toLowerCase().includes(q)) || a.name.toLowerCase().includes(q))
@@ -291,15 +296,17 @@ export const Layout: React.FC<LayoutProps> = ({
               <Icon name={isPrivacyMode ? 'eye-off' : 'eye'} size={16} className="shrink-0" />
               <span className={isSidebarCollapsed ? 'sr-only' : ''}>{isPrivacyMode ? 'Quitter discret' : 'Discret'}</span>
             </button>
-            <button
-              type="button"
-              onClick={toggleCoupleMode}
-              aria-pressed={isCouple}
-              title={isCouple ? 'Mode Couple actif — cliquer pour repasser en Individuel' : 'Mode Individuel — cliquer pour passer en Couple'}
-              className="touch-target inline-flex items-center justify-center rounded-full hover:opacity-80 transition-opacity focus-ring"
-            >
-              <CoupleModeBadge compact />
-            </button>
+            {isCouple && (
+              <button
+                type="button"
+                onClick={toggleCoupleMode}
+                aria-pressed={isCouple}
+                title="Mode Couple actif — cliquer pour repasser en Individuel"
+                className="touch-target inline-flex items-center justify-center rounded-full hover:opacity-80 transition-opacity focus-ring"
+              >
+                <CoupleModeBadge compact />
+              </button>
+            )}
           </div>
         </div>
       </aside>
@@ -510,15 +517,26 @@ export const Layout: React.FC<LayoutProps> = ({
                 <span className="flex items-center gap-1.5 truncate"><Icon name={isPrivacyMode ? 'eye-off' : 'eye'} size={16} aria-hidden="true" />Mode discret</span>
                 <span className="text-[11px] text-ink-400">{isPrivacyMode ? 'actif' : 'inactif'}</span>
               </button>
-              <button
-                type="button"
-                onClick={toggleCoupleMode}
-                aria-pressed={isCouple}
-                className="touch-target w-full h-[48px] px-3 rounded-xl bg-surface border border-bordure flex items-center justify-between text-xs text-ink-100 focus-ring"
-              >
-                <span>Ménage</span>
-                <CoupleModeBadge compact />
-              </button>
+              {isCouple ? (
+                <button
+                  type="button"
+                  onClick={toggleCoupleMode}
+                  aria-pressed={isCouple}
+                  className="touch-target w-full h-[48px] px-3 rounded-xl bg-surface border border-bordure flex items-center justify-between text-xs text-ink-100 focus-ring"
+                >
+                  <span>Ménage</span>
+                  <CoupleModeBadge compact />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab(Tab.PROFILE); setShowMobileDrawer(false); }}
+                  className="touch-target w-full h-[48px] px-3 rounded-xl bg-surface border border-bordure flex items-center justify-between text-xs text-ink-100 hover:bg-surface-douce focus-ring"
+                >
+                  <span>Option couple</span>
+                  <span className="text-[11px] text-ink-400">Solo ›</span>
+                </button>
+              )}
             </div>
           </section>
         </div>

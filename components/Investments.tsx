@@ -453,7 +453,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                 onClick={() => setExpertToolsOpen(true)}
                                 aria-label="Outils experts · Quant IA"
                                 aria-expanded={expertToolsOpen}
-                                className="touch-target min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-bordure-champ bg-surface hover:bg-surface-douce text-xs font-semibold text-texte transition-colors whitespace-nowrap focus-ring"
+                                className="touch-target min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-bordure bg-transparent hover:bg-surface-douce text-xs font-medium text-ink-300 hover:text-ink-50 transition-colors whitespace-nowrap focus-ring"
                             >
                                 <Icon name="flask" size={14} aria-hidden="true" />
                                 <span>Outils experts</span>
@@ -483,7 +483,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                                 className="touch-target min-h-11 gf-chip px-4 py-2 rounded-full border border-bordure-champ bg-surface-douce text-meta font-semibold text-texte hover:bg-bordure transition-colors focus-ring inline-flex items-center gap-1.5"
                             >
                                 <Icon name="sparkles" size={14} aria-hidden="true" />
-                                <span>Analyser un titre ou Anthropic (IA)</span>
+                                <span>Analyser un titre (IA)</span>
                             </button>
                         </div>
                     </div>
@@ -546,6 +546,14 @@ export const Investments: React.FC<InvestmentsProps> = ({
         .filter((l) => l.valeur > 0)
         .map((l) => ({ ...l, poids: valeurPortefeuille > 0 ? (l.valeur / valeurPortefeuille) * 100 : 0 }))
         .sort((x, y) => y.valeur - x.valeur);
+    const lignesAvecGain = lignesTitres.filter((l) => typeof l.gainCad === 'number' && Number.isFinite(l.gainCad));
+    const totalGainCad = lignesAvecGain.length > 0
+        ? lignesAvecGain.reduce((s, l) => s + (l.gainCad ?? 0), 0)
+        : null;
+    const coutTotalCad = lignesAvecGain.length > 0
+        ? lignesAvecGain.reduce((s, l) => s + (l.valeur - (l.gainCad ?? 0)), 0)
+        : 0;
+    const totalGainPct = totalGainCad !== null && coutTotalCad > 0 ? (totalGainCad / coutTotalCad) * 100 : null;
     const enveloppesAlloc = [
         {
             id: 'celi',
@@ -642,7 +650,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
                             onClick={() => setExpertToolsOpen((prev) => !prev)}
                             aria-label="Outils experts · Quant IA"
                             aria-expanded={expertToolsOpen}
-                            className="touch-target min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-bordure-champ bg-surface hover:bg-surface-douce text-xs font-semibold text-texte transition-colors whitespace-nowrap focus-ring"
+                            className="touch-target min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-bordure bg-transparent hover:bg-surface-douce text-xs font-medium text-ink-300 hover:text-ink-50 transition-colors whitespace-nowrap focus-ring"
                         >
                             <Icon name="flask" size={14} aria-hidden="true" />
                             <span>Outils experts</span>
@@ -753,6 +761,14 @@ export const Investments: React.FC<InvestmentsProps> = ({
                         </div>
                         <div className="flex items-baseline gap-2.5 flex-wrap">
                             <PrivateAmount as="div" className="font-mono text-[22px] font-bold text-ink-50">{formatCAD(valeurPortefeuille)}</PrivateAmount>
+                            {totalGainCad !== null && (
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-semibold ${pillVariation(totalGainCad)}`}>
+                                    {'Gain total : '}
+                                    <PrivateAmount>
+                                        {`${totalGainCad >= 0 ? '+' : ''}${formatCAD(totalGainCad)}${totalGainPct !== null ? ` (${formatVariationPct(totalGainPct, 1)})` : ''}`}
+                                    </PrivateAmount>
+                                </span>
+                            )}
                             <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-semibold ${pillVariation(variation24h)}`}>
                                 <PrivateAmount>{formatVariationPct(variation24h, 2)}</PrivateAmount> (24h)
                             </span>
