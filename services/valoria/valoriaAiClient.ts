@@ -15,6 +15,7 @@ import {
   sanitizePromptText,
   wrapUserData,
 } from '../../utils/promptSafety';
+import { safeExternalHttpUrl } from '../../utils/safeExternalUrl';
 
 // ----------------------------------------------------------------------------
 // Contrats d'entrée et de sortie (consommés par les vues Valoria)
@@ -587,12 +588,20 @@ Pour chaque titre principal, indique en 1 ou 2 phrases l'impact pour un investis
       { tickers: cleanTickers, regimeName },
     );
     if (serverRes?.ok && serverRes.markdownBrief) {
+      const safeSources = Array.isArray(serverRes.sources)
+        ? serverRes.sources
+            .map((s) => {
+              const safeUri = safeExternalHttpUrl(s?.uri);
+              return safeUri ? { uri: safeUri, title: String(s?.title ?? safeUri) } : null;
+            })
+            .filter((x): x is { uri: string; title: string } => Boolean(x))
+        : [];
       return {
         ok: true,
         source: serverRes.source === 'gemini' ? 'gemini' : 'fallback',
         generatedAt: serverRes.generatedAt ?? new Date().toISOString(),
         markdownBrief: serverRes.markdownBrief,
-        sources: Array.isArray(serverRes.sources) ? serverRes.sources : [],
+        sources: safeSources,
       };
     }
   }
@@ -824,15 +833,25 @@ RÉPONDS UNIQUEMENT avec un JSON Array strict :
       { ...payload, tickers: targetList },
     );
     if (serverRes?.ok) {
+      const safeArticles = (serverRes.liveArticles ?? []).map((a) => ({
+        ...a,
+        url: safeExternalHttpUrl(a.url),
+      }));
+      const safeGrounding = (serverRes.groundingSources ?? [])
+        .map((s) => {
+          const safeUri = safeExternalHttpUrl(s?.uri);
+          return safeUri ? { uri: safeUri, title: String(s?.title ?? safeUri) } : null;
+        })
+        .filter((x): x is { uri: string; title: string } => Boolean(x));
       return {
         ok: true,
         source: serverRes.source === 'gemini' ? 'gemini' : 'fallback',
         mode: serverRes.mode ?? 'live_market_quant',
         elapsedMs: serverRes.elapsedMs ?? Date.now() - startedAt,
         scannedTickersCount: serverRes.scannedTickersCount ?? targetList.length,
-        liveArticles: serverRes.liveArticles ?? [],
+        liveArticles: safeArticles,
         overrides: serverRes.overrides ?? {},
-        groundingSources: serverRes.groundingSources ?? [],
+        groundingSources: safeGrounding,
         geminiNotice: serverRes.geminiNotice ?? null,
       };
     }
@@ -1046,11 +1065,20 @@ RÉPONDS UNIQUEMENT avec un JSON strict conforme à :
       { ...payload, tickers: cleanTickers },
     );
     if (serverRes?.ok && serverRes.synthesis) {
+      const safeWebSources = (serverRes.synthesis.webSources ?? [])
+        .map((s) => {
+          const safeUri = safeExternalHttpUrl(s?.uri);
+          return safeUri ? { uri: safeUri, title: String(s?.title ?? safeUri) } : null;
+        })
+        .filter((x): x is { uri: string; title: string } => Boolean(x));
       return {
         ok: true,
         source: serverRes.source === 'gemini' ? 'gemini' : 'fallback',
         liveArticlesCount: serverRes.liveArticlesCount ?? 0,
-        synthesis: serverRes.synthesis,
+        synthesis: {
+          ...serverRes.synthesis,
+          webSources: safeWebSources,
+        },
       };
     }
   }

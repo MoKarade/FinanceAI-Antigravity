@@ -60,7 +60,7 @@ describe('IP du client : la plateforme d\'abord', () => {
         const h = new Headers({ 'x-forwarded-for': '1.2.3.4, 203.0.113.50', 'x-vercel-forwarded-for': '203.0.113.50' });
         expect(ipClient(h)).toBe('203.0.113.50');
         expect(ipClient(new Headers({ 'x-forwarded-for': '1.2.3.4', 'x-real-ip': '203.0.113.51' }))).toBe('203.0.113.51');
-        expect(ipClient(new Headers({ 'x-forwarded-for': '198.51.100.9, 10.0.0.1' }))).toBe('198.51.100.9');
+        expect(ipClient(new Headers({ 'x-forwarded-for': '198.51.100.9, 203.0.113.52' }))).toBe('203.0.113.52');
         expect(ipClient(new Headers())).toBe('inconnue');
     });
 });

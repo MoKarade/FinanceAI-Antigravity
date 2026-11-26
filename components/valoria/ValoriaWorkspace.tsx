@@ -35,7 +35,6 @@ import { EquitySignalsView } from './EquitySignalsView';
 import { InteractiveAcademyView } from './InteractiveAcademyView';
 import { LiveNewsCatalystView } from './LiveNewsCatalystView';
 import { AIRecommendationsView } from './AIRecommendationsView';
-import { FinanceAIBridgeModal } from './FinanceAIBridgeModal';
 import { ApplyValoriaToPortfolioModal } from './ApplyValoriaToPortfolioModal';
 import { AssetTearSheetModal } from './AssetTearSheetModal';
 
@@ -94,7 +93,6 @@ export const ValoriaWorkspace: React.FC<ValoriaWorkspaceProps> = ({
   });
   const [activeLab, setActiveLab] = useState<ComplementaryLabId>('unified');
   const [isControlHubOpen, setIsControlHubOpen] = useState<boolean>(false);
-  const [isBridgeModalOpen, setIsBridgeModalOpen] = useState<boolean>(false);
   const [focusedAssetId, setFocusedAssetId] = useState<string | null>(null);
   const [externalInspectedAssetId, setExternalInspectedAssetId] = useState<string | null>(null);
   const [applyRealOrders, setApplyRealOrders] = useState<ValoriaApplyOrderCandidate[] | null>(null);
@@ -527,7 +525,6 @@ export const ValoriaWorkspace: React.FC<ValoriaWorkspaceProps> = ({
                 isControlHubOpen={isControlHubOpen}
                 onOpenControlHub={() => setIsControlHubOpen(true)}
                 onCloseControlHub={() => setIsControlHubOpen(false)}
-                onOpenFinanceAIBridge={() => setIsBridgeModalOpen(true)}
                 onAddWatchlistAsset={bridge.addWatchlistAsset}
                 onRemoveWatchlistAsset={bridge.removeWatchlistAsset}
                 onRegisterCustomOrLiveAsset={bridge.registerCustomOrLiveAsset}
@@ -627,7 +624,6 @@ export const ValoriaWorkspace: React.FC<ValoriaWorkspaceProps> = ({
                   onAddLot={bridge.addSimLot}
                   onExecuteRebalanceOrder={bridge.executeSimSingleOrder}
                   onOpenBacktestForAsset={handleOpenBacktestForAsset}
-                  onOpenFinanceAIBridge={() => setIsBridgeModalOpen(true)}
                 />
               )}
 
@@ -698,32 +694,6 @@ export const ValoriaWorkspace: React.FC<ValoriaWorkspaceProps> = ({
           )}
         </>
       )}
-
-      {/* PONT JSON / CSV FINANCEAI (ISOLÉ EN SIMULATION) */}
-      <FinanceAIBridgeModal
-        isOpen={isBridgeModalOpen}
-        onClose={() => setIsBridgeModalOpen(false)}
-        portfolioSummary={bridge.portfolioSummary}
-        livePrices={activeLivePrices}
-        macro={activeMacro}
-        riskProfile={bridge.riskProfile as RiskProfile}
-        syncedBudget={bridge.budgetSync}
-        onImportFinanceAI={({ lots, mode, budgetSync, detectedRiskProfile, watchlistAssetIds }) => {
-          bridge.importExternalLotsToSim({ lots, mode, budgetSync });
-          if (detectedRiskProfile) {
-            bridge.setRiskProfile(detectedRiskProfile);
-          }
-          if (watchlistAssetIds.length > 0) {
-            bridge.setWatchlistIds((prev) =>
-              Array.from(new Set([...prev, ...watchlistAssetIds]))
-            );
-          }
-        }}
-        onNavigateToSignals={() => {
-          setIsBridgeModalOpen(false);
-          setActiveLab('equity_signals');
-        }}
-      />
 
       {/* MODALE DE CONFIRMATION VERS PLACEMENTS RÉELS (ZÉRO ÉCRITURE SANS VALIDATION) */}
       <ApplyValoriaToPortfolioModal

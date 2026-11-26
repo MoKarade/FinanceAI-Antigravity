@@ -656,6 +656,20 @@ function compactFinanceAIObject(parsed: unknown): {
   };
 }
 
+const FORBIDDEN_JSON_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function stripForbiddenKeys(val: unknown, depth = 0): unknown {
+  if (depth > 16 || val === null || val === undefined) return val;
+  if (Array.isArray(val)) return val.map((item) => stripForbiddenKeys(item, depth + 1));
+  if (typeof val !== 'object') return val;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
+    if (FORBIDDEN_JSON_KEYS.has(k)) continue;
+    out[k] = stripForbiddenKeys(v, depth + 1);
+  }
+  return out;
+}
+
 /**
  * Compresse un export JSON brut FinanceAI et retourne les statistiques d'allègement.
  */
@@ -666,7 +680,7 @@ function compactFinanceAIJson(rawInput: string): {
   parsedRaw: unknown;
 } {
   const originalBytes = new TextEncoder().encode(rawInput).length;
-  const parsedRaw = JSON.parse(rawInput);
+  const parsedRaw = stripForbiddenKeys(JSON.parse(rawInput));
   const {
     compactObject,
     strippedTransactionsCount,

@@ -17,11 +17,9 @@ import type { GoogleGenAI } from '@google/genai';
 
 import {
   buildBlindTimeMachinePrompt,
-  isSafeRemoteUrl,
   registerValoriaRoutes,
   resetValoriaServerState,
   sanitizeBlindTimeMachinePayload,
-  sanitizeIncomingBridgePayload,
 } from '../../services/valoria/serverRoutes';
 import {
   fetchValoriaAgentChat,
@@ -31,7 +29,7 @@ import {
   fetchValoriaDeepResearch,
   fetchValoriaGeminiNewsGrounding,
 } from '../../services/valoria/valoriaAiClient';
-import { reinitialiserLimites, traiter, urlSurePourRelais } from '../../cloudrun/proxy/relais.mjs';
+import { reinitialiserLimites, traiter } from '../../cloudrun/proxy/relais.mjs';
 
 const realFetch = globalThis.fetch;
 
@@ -421,32 +419,17 @@ describe('Valoria Express 5 Routes (12 endpoints)', () => {
     capturedPrompts = [];
   });
 
-  it('monte les 12 routes avant le fallback SPA *all et répond 200 OK en mode fallback sans GEMINI_API_KEY', async () => {
+  it('monte les routes actives avant le fallback SPA *all et ferme /api/financeai/bridge en 410 Gone', async () => {
     const bridgeGet = await realFetch(`${baseUrlFallback}/api/financeai/bridge`);
-    expect(bridgeGet.status).toBe(200);
-    const bridgeJson = (await bridgeGet.json()) as { schema: string };
-    expect(bridgeJson.schema).toBe('FinanceAI-Valoria-Bridge/v1.2');
+    expect(bridgeGet.status).toBe(410);
 
     const bridgePost = await realFetch(`${baseUrlFallback}/api/financeai/bridge`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', origin: 'http://localhost:3000' },
-      body: JSON.stringify({
-        app: 'FinanceAI',
-        version: '4.0',
-        store: {
-          state: {
-            fxRates: { CAD: 1, USD: 1.41 },
-            positions: [{ ticker: 'VFV.TO', quantity: 5, priceHistory: [{ date: '2026-10-01', price: 190 }] }],
-            transactions: [{ id: 't1', date: '2026-09-10', amount: 4200, category: 'Salaire' }],
-          },
-        },
-      }),
+      body: JSON.stringify({ positions: [{ ticker: 'VFV.TO', quantity: 5 }] }),
     });
-    expect(bridgePost.status).toBe(200);
+    expect(bridgePost.status).toBe(410);
     expect(bridgePost.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
-    const postData = (await bridgePost.json()) as { ok: boolean; bridgeState: { transactions?: unknown } };
-    expect(postData.ok).toBe(true);
-    expect(postData.bridgeState.transactions).toBeUndefined();
 
     const feedRes = await realFetch(`${baseUrlFallback}/api/market/verified-feed`);
     expect(feedRes.status).toBe(200);
@@ -536,59 +519,19 @@ describe('Valoria Express 5 Routes (12 endpoints)', () => {
     expect(blindJson.audit.picks.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('applique la garde SSRF et CORS sur /api/financeai/bridge', async () => {
-    expect(isSafeRemoteUrl('https://financeai.example.com/api/portfolio')).toBe(true);
-    expect(isSafeRemoteUrl('https://[2606:4700:4700::1111]/')).toBe(true);
-    expect(isSafeRemoteUrl('https://[2001:4860:4860::8888]/')).toBe(true);
-    for (const bad of [
-      'http://localhost:3000/api',
-      'http://127.0.0.1:8080/secret',
-      'http://169.254.169.254/latest/meta-data',
-      'http://10.0.0.5/internal',
-      'http://192.168.1.1/admin',
-      'http://[::1]:8080/',
-      'http://[::127.0.0.1]/',
-      'http://[::ffff:0:127.0.0.1]/',
-      'http://[64:ff9b::127.0.0.1]/',
-      'http://[2002:7f00:1::]/',
-      'http://[64:ff9b:1::1]/',
-      'http://[100::1]/',
-      'http://[2001:db8::1]/',
-      'http://[2001::1]/',
-      'ftp://financeai.example.com/file',
-      'https://user:pass@financeai.example.com/api',
-    ]) {
-      expect(isSafeRemoteUrl(bad), bad).toBe(false);
-      const r = await realFetch(`${baseUrlFallback}/api/financeai/bridge`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ remoteUrl: bad }),
-      });
-      expect(r.status).toBe(400);
-    }
-
-    const okPull = await realFetch(`${baseUrlFallback}/api/financeai/bridge`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ remoteUrl: 'https://financeai.example.com/api/portfolio' }),
-    });
-    expect(okPull.status).toBe(200);
-    const pulled = (await okPull.json()) as { ok: boolean; remotePayload: { positions: unknown[] } };
-    expect(pulled.ok).toBe(true);
-    expect(pulled.remotePayload.positions).toHaveLength(1);
-
-    const foreignOrigin = await realFetch(`${baseUrlFallback}/api/financeai/bridge`, {
+  it('applique la garde d’origine sur toutes les routes /api/*', async () => {
+    const foreignOrigin = await realFetch(`${baseUrlFallback}/api/market/verified-feed`, {
       headers: { origin: 'https://evil.example' },
     });
     expect(foreignOrigin.status).toBe(403);
 
-    const evilFirebaseOrigin = await realFetch(`${baseUrlFallback}/api/financeai/bridge`, {
+    const evilFirebaseOrigin = await realFetch(`${baseUrlFallback}/api/news/intelligence?tickers=RY.TO`, {
       headers: { origin: 'https://financeai-evil.web.app' },
     });
     expect(evilFirebaseOrigin.status).toBe(403);
 
     const prodFirebaseId = ['financeai', '497', '112'].join('-').replace('-112', '112');
-    const prodFirebaseOrigin = await realFetch(`${baseUrlFallback}/api/financeai/bridge`, {
+    const prodFirebaseOrigin = await realFetch(`${baseUrlFallback}/api/market/verified-feed`, {
       headers: { origin: `https://${prodFirebaseId}.web.app` },
     });
     expect(prodFirebaseOrigin.status).toBe(200);
@@ -640,18 +583,19 @@ describe('Valoria Express 5 Routes (12 endpoints)', () => {
     expect(blindPrompt).not.toContain('ACTIF_05');
   });
 
-  it('sanitizeIncomingBridgePayload compacte les sauvegardes Zustand et sanitizeBlindTimeMachinePayload filtre tout post-cutoffDate', () => {
-    const compacted = sanitizeIncomingBridgePayload({
-      app: 'FinanceAI',
-      store: { state: { transactions: [{ id: '1', date: '2026-01-02', amount: 100 }], positions: [{ ticker: 'RY.TO', priceHistory: [1, 2] }] } },
-    });
-    expect(compacted.transactions).toBeUndefined();
-    expect((compacted.positions as Array<Record<string, unknown>>)[0].priceHistory).toBeUndefined();
-
+  it('sanitizeBlindTimeMachinePayload filtre tout post-cutoffDate et encadre les prompts IA', async () => {
     const sanitized = sanitizeBlindTimeMachinePayload(SAMPLE_BLIND_PAYLOAD);
     const prompt = buildBlindTimeMachinePrompt(sanitized);
     expect(sanitized.dossiers.map((d) => d.blindCode)).toEqual(['ACTIF_01', 'ACTIF_02', 'ACTIF_03', 'ACTIF_04']);
     expect(prompt).not.toMatch(/202[2-9]/);
+
+    await realFetch(`${baseUrlGemini}/api/ai/recommendations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ topQuantAssets: [{ assetId: 'RY', spotPrice: 289.39, upsideDcfPct: 14 }] }),
+    });
+    const recoPrompt = capturedPrompts.find((p) => p.contents.includes('Comité d\'allocation quantitative'))?.contents ?? '';
+    expect(recoPrompt).toContain('<DONNEES>');
   });
 });
 
@@ -664,7 +608,7 @@ describe('Cloud Run Proxy — parité Valoria + garde SSRF + 2 Mo max', () => {
     reinitialiserLimites();
   });
 
-  it('expose les 7 routes publiques Valoria en 200 OK avec en-têtes cache-control et sécurité', async () => {
+  it('expose les routes publiques Valoria en 200 OK et ferme /api/financeai/bridge (410)', async () => {
     const f = createMockUpstreamFetch();
 
     const bridgePost = await traiter(
@@ -675,12 +619,10 @@ describe('Cloud Run Proxy — parité Valoria + garde SSRF + 2 Mo max', () => {
       }),
       { fetchImpl: f },
     );
-    expect(bridgePost.status).toBe(200);
-    expect(bridgePost.headers.get('access-control-allow-origin')).toBe('https://finance.hubperso.com');
-    expect(bridgePost.headers.get('cache-control')).toBe('no-store');
+    expect(bridgePost.status).toBe(410);
 
     const bridgeGet = await traiter(new Request('http://relais.local/api/financeai/bridge'), { fetchImpl: f });
-    expect(bridgeGet.status).toBe(200);
+    expect(bridgeGet.status).toBe(410);
 
     const feed = await traiter(new Request('http://relais.local/api/market/verified-feed'), { fetchImpl: f });
     expect(feed.status).toBe(200);
@@ -700,37 +642,7 @@ describe('Cloud Run Proxy — parité Valoria + garde SSRF + 2 Mo max', () => {
     expect(inst.status).toBe(200);
   });
 
-  it('bloque SSRF, dépassement > 2 Mo (413) et origines étrangères (403) sur Cloud Run', async () => {
-    expect(urlSurePourRelais('http://169.254.169.254/latest/meta-data')).toBe(false);
-    expect(urlSurePourRelais('http://127.0.0.1:3000/api')).toBe(false);
-    expect(urlSurePourRelais('http://[::127.0.0.1]/')).toBe(false);
-    expect(urlSurePourRelais('http://[::ffff:0:127.0.0.1]/')).toBe(false);
-    expect(urlSurePourRelais('http://[64:ff9b::127.0.0.1]/')).toBe(false);
-    expect(urlSurePourRelais('http://[2002:7f00:1::]/')).toBe(false);
-    expect(urlSurePourRelais('https://financeai.example.com/api/portfolio')).toBe(true);
-    expect(urlSurePourRelais('https://[2606:4700:4700::1111]/')).toBe(true);
-    expect(urlSurePourRelais('https://[2001:4860:4860::8888]/')).toBe(true);
-
-    const ssrf = await traiter(
-      new Request('http://relais.local/api/financeai/bridge', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ remoteUrl: 'http://169.254.169.254/latest/meta-data' }),
-      }),
-      { fetchImpl: createMockUpstreamFetch() },
-    );
-    expect(ssrf.status).toBe(400);
-
-    const tooBig = await traiter(
-      new Request('http://relais.local/api/financeai/bridge', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: 'x'.repeat(2 * 1024 * 1024 + 64),
-      }),
-      { fetchImpl: createMockUpstreamFetch() },
-    );
-    expect(tooBig.status).toBe(413);
-
+  it('bloque les origines étrangères (403) sur Cloud Run', async () => {
     const badOrigin = await traiter(
       new Request('http://relais.local/api/market/verified-feed', {
         headers: { origin: 'https://evil.example' },
@@ -740,10 +652,11 @@ describe('Cloud Run Proxy — parité Valoria + garde SSRF + 2 Mo max', () => {
     expect(badOrigin.status).toBe(403);
   });
 
-  it('vérifie le câblage de server.ts et cloudrun/proxy/server.mjs', () => {
+  it('vérifie le câblage sécurisé de server.ts (127.0.0.1) et cloudrun/proxy/server.mjs', () => {
     const serverTs = readFileSync(resolve(process.cwd(), 'server.ts'), 'utf8');
     expect(serverTs).toContain('registerValoriaRoutes(app)');
-    expect(serverTs).toContain("limit: '6mb'");
+    expect(serverTs).toContain("process.env.HOST || '127.0.0.1'");
+    expect(serverTs).toContain("limit: '5mb'");
     expect(serverTs).not.toContain("'50mb'");
     expect(serverTs.indexOf('registerValoriaRoutes(app)')).toBeLessThan(serverTs.indexOf('*all'));
 

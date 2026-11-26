@@ -370,4 +370,71 @@ describe('workspaceSync — transactions par mois dans Cloud Firestore', () => {
         expect(sync.hasFirestoreSyncedThisSession()).toBe(true);
         stop();
     });
+
+    it('conflit hors ligne : crée une sauvegarde locale, émet conflictAlert et restaure les saisies locales sur demande', async () => {
+        const baseTx = buildTransactions(8, 2);
+        setLocalState(baseTx);
+        await sync.pushWorkspaceToFirestore(user);
+
+        // Appareil B pousse une révision plus récente pendant qu'appareil A est hors ligne.
+        vi.resetModules();
+        const syncB = await import('../../services/firebase/workspaceSync');
+        const storeB = (await import('../../store/useFinanceStore')).useFinanceStore;
+        const remoteTx = buildTransactions(12, 3);
+        const cfgB = storeB.getState().config;
+        storeB.setState({
+            config: {
+                ...cfgB,
+                users: [{ ...(cfgB.users?.[0] ?? {}), name: 'Camille B' }, ...(cfgB.users ?? []).slice(1)],
+            },
+            transactions: remoteTx as never,
+            lastUpdate: Date.now() + 10_000,
+        } as never);
+        await syncB.pushWorkspaceToFirestore(user);
+        const mainDoc = fake.docs.get(MAIN_PATH) as Record<string, unknown>;
+        mainDoc.updatedAt = { seconds: Math.floor((Date.now() + 20_000) / 1000) };
+
+        // Appareil A avait des saisies locales plus anciennes que le serveur mais non synchronisées.
+        vi.resetModules();
+        sync = await import('../../services/firebase/workspaceSync');
+        store = (await import('../../store/useFinanceStore')).useFinanceStore;
+        const localOfflineTx = buildTransactions(15, 2);
+        localStorage.setItem(`financeai:last_synced_revision:v1:${UID}`, 'rev_ancienne_appareil_a');
+        localStorage.setItem(`financeai:dirty_since_sync:v1:${UID}`, String(Date.now() - 5_000));
+        setLocalState(localOfflineTx);
+
+        const stop = sync.startWorkspaceRealtimeSync(user);
+        await vi.waitFor(() => {
+            expect(sync.getFirebaseSyncStatus().conflictAlert?.backupSaved).toBe(true);
+        });
+        expect(store.getState().transactions).toHaveLength(12);
+
+        const restored = await sync.resolveSyncConflict('restore_local_backup');
+        expect(restored).toBe(true);
+        expect(sync.getFirebaseSyncStatus().conflictAlert).toBeNull();
+        expect(store.getState().transactions).toHaveLength(15);
+        stop();
+    });
+
+    it('rejette un instantané Cloud dont les types sont corrompus via verifierTypesRestaures', async () => {
+        const localTx = buildTransactions(10, 2);
+        setLocalState(localTx);
+        await sync.pushWorkspaceToFirestore(user);
+
+        // Corrompt netSalary (attendu nombre, reçu string non autorisée) dans le Cloud
+        const corruptedDoc = fake.docs.get(MAIN_PATH) as { statePayload: { jsonChunks: string[] } };
+        const unpacked = JSON.parse(corruptedDoc.statePayload.jsonChunks.join('')) as Record<string, unknown>;
+        (unpacked.config as { users: Array<Record<string, unknown>> }).users[0].netSalary = 'INVALIDE_TEXTE';
+        corruptedDoc.statePayload.jsonChunks = [JSON.stringify(unpacked)];
+
+        vi.resetModules();
+        sync = await import('../../services/firebase/workspaceSync');
+        store = (await import('../../store/useFinanceStore')).useFinanceStore;
+        setLocalState(localTx);
+
+        const pulled = await sync.pullWorkspaceFromFirestoreNow(user);
+        expect(pulled.restored).toBe(false);
+        expect(sync.getFirebaseSyncStatus().state).toBe('error');
+        expect(store.getState().transactions).toHaveLength(10);
+    });
 });

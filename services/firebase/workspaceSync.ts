@@ -19,7 +19,8 @@ import {
     recoverUser230kData,
     saveProtectedDossierSnapshot,
 } from '../dataRecovery';
-import { listBackups, readStoredPayload } from '../backupAuto';
+import { createBackupNow, listBackups, readStoredPayload } from '../backupAuto';
+import { verifierTypesRestaures } from '../verifierTypesRestaures';
 import {
     commitWorkspaceWithTransactionMonths,
     fingerprintsOfRemoteMonths,
@@ -106,11 +107,19 @@ export const PERSISTED_WORKSPACE_KEYS = [
     'coupleSplitMode',
 ] as const;
 
+export interface SyncConflictAlert {
+    detectedAt: number;
+    remoteUpdatedAtMs: number | null;
+    localDirtySinceMs: number;
+    backupSaved: boolean;
+}
+
 export interface FirebaseWorkspaceSyncStatus {
     state: 'idle' | 'connecting' | 'synced' | 'syncing' | 'error';
     lastSyncedAt: number | null;
     errorMessage: string | null;
     initialSyncSettled: boolean;
+    conflictAlert?: SyncConflictAlert | null;
 }
 
 let currentSyncStatus: FirebaseWorkspaceSyncStatus = {
@@ -118,6 +127,7 @@ let currentSyncStatus: FirebaseWorkspaceSyncStatus = {
     lastSyncedAt: null,
     errorMessage: null,
     initialSyncSettled: false,
+    conflictAlert: null,
 };
 
 const statusListeners = new Set<(status: FirebaseWorkspaceSyncStatus) => void>();
@@ -460,6 +470,15 @@ export async function pullWorkspaceFromFirestoreNow(user: FirebaseUser): Promise
             return { restored: false, netWorth: 0, assetsCount: 0, transactionsCount: 0 };
         }
         const sanitizedRemote = cleanCandidateState(remotePayload);
+        const typeErrors = verifierTypesRestaures(sanitizedRemote);
+        if (typeErrors.length > 0) {
+            notifySyncStatus({
+                state: 'error',
+                errorMessage: 'Données Cloud incompatibles détectées — dossier local préservé',
+                initialSyncSettled: true,
+            });
+            return { restored: false, netWorth: 0, assetsCount: 0, transactionsCount: 0 };
+        }
         const remoteUpdatedAtMs = extractRemoteTimestampMs(data, remotePayload);
         applyingRemoteSnapshot = true;
         try {
@@ -655,6 +674,123 @@ const FIRESTORE_MAIN_DOC_MAX_UTF8_BYTES = 1_000_000;
 const LAST_SYNCED_REV_PREFIX = 'financeai:last_synced_revision:v1:';
 const LAST_SYNCED_TX_COUNT_PREFIX = 'financeai:last_synced_tx_count:v1:';
 const DIRTY_SINCE_SYNC_PREFIX = 'financeai:dirty_since_sync:v1:';
+const SYNC_CONFLICT_BACKUP_PREFIX = 'financeai:sync_conflict_backup:v1:';
+
+let lastConflictBackup: { uid: string; state: Partial<AppState>; savedAt: number } | null = null;
+
+function capturePersistedRefs(state: AppState): unknown[] {
+    const rec = state as unknown as Record<string, unknown>;
+    return PERSISTED_WORKSPACE_KEYS.map((k) => rec[k]);
+}
+
+function haveSamePersistedRefs(prev: unknown[] | null, next: unknown[]): boolean {
+    if (!prev || prev.length !== next.length) return false;
+    for (let i = 0; i < prev.length; i += 1) {
+        if (!Object.is(prev[i], next[i])) return false;
+    }
+    return true;
+}
+
+function saveSyncConflictBackup(uid: string, localState: AppState): boolean {
+    const cleanedLocal = cleanCandidateState(localState);
+    const savedAt = Date.now();
+    lastConflictBackup = { uid, state: cleanedLocal, savedAt };
+    void createBackupNow('auto', {
+        intent: 'filet',
+        donneesFictives: isStarterTemplateState(localState),
+    }).catch(() => {});
+    if (typeof localStorage !== 'undefined') {
+        try {
+            localStorage.setItem(
+                `${SYNC_CONFLICT_BACKUP_PREFIX}${uid}`,
+                JSON.stringify({ savedAt, state: cleanedLocal }),
+            );
+        } catch {
+            try {
+                const compactAssets = Array.isArray(cleanedLocal.assets)
+                    ? cleanedLocal.assets.map(({ priceHistory: _ph, ...rest }) => rest)
+                    : undefined;
+                localStorage.setItem(
+                    `${SYNC_CONFLICT_BACKUP_PREFIX}${uid}`,
+                    JSON.stringify({
+                        savedAt,
+                        state: { ...cleanedLocal, ...(compactAssets ? { assets: compactAssets } : {}) },
+                    }),
+                );
+            } catch {
+                // La copie en mémoire et IndexedDB demeurent actives
+            }
+        }
+    }
+    return true;
+}
+
+function clearSyncConflictBackup(uid?: string): void {
+    if (!uid || lastConflictBackup?.uid === uid) {
+        lastConflictBackup = null;
+    }
+    if (uid && typeof localStorage !== 'undefined') {
+        try {
+            localStorage.removeItem(`${SYNC_CONFLICT_BACKUP_PREFIX}${uid}`);
+        } catch {
+            // Ignorer
+        }
+    }
+}
+
+/**
+ * Résout une alerte de conflit hors ligne détectée lors de l'application d'une version Cloud.
+ */
+export async function resolveSyncConflict(
+    choice: 'keep_remote' | 'restore_local_backup',
+): Promise<boolean> {
+    const activeUid = auth.currentUser?.uid?.slice(0, MAX_UID_LENGTH) ?? lastConflictBackup?.uid ?? '';
+    if (choice === 'keep_remote') {
+        clearSyncConflictBackup(activeUid || undefined);
+        notifySyncStatus({ conflictAlert: null });
+        return true;
+    }
+
+    let backupState: Partial<AppState> | null =
+        lastConflictBackup && (!activeUid || lastConflictBackup.uid === activeUid)
+            ? lastConflictBackup.state
+            : null;
+    if (!backupState && activeUid && typeof localStorage !== 'undefined') {
+        try {
+            const raw = localStorage.getItem(`${SYNC_CONFLICT_BACKUP_PREFIX}${activeUid}`);
+            if (raw) {
+                const parsed = JSON.parse(raw) as { state?: Partial<AppState> };
+                if (parsed?.state && typeof parsed.state === 'object') {
+                    backupState = parsed.state;
+                }
+            }
+        } catch {
+            backupState = null;
+        }
+    }
+    if (!backupState) {
+        notifySyncStatus({ conflictAlert: null });
+        return false;
+    }
+
+    const cleaned = cleanCandidateState(backupState);
+    if (verifierTypesRestaures(cleaned).length > 0) {
+        return false;
+    }
+    useFinanceStore.getState().setAppState({
+        ...cleaned,
+        lastUpdate: Date.now(),
+    });
+    if (activeUid) {
+        markDirtySinceLastSync(activeUid, Date.now());
+    }
+    clearSyncConflictBackup(activeUid || undefined);
+    notifySyncStatus({ conflictAlert: null });
+    if (auth.currentUser) {
+        void pushWorkspaceToFirestore(auth.currentUser).catch(() => {});
+    }
+    return true;
+}
 
 function saveLastSyncedRevisionId(uid: string, revisionId: string, txCount?: number): void {
     if (!revisionId || typeof localStorage === 'undefined') return;
@@ -858,6 +994,7 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
     let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
     let reconcileInFlight = false;
     let snapshotSequence = 0;
+    let lastPersistedRefs: unknown[] | null = null;
 
     notifySyncStatus({ state: 'connecting', errorMessage: null, initialSyncSettled: false });
 
@@ -926,9 +1063,23 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
             !isLocalExplicitlyNewer &&
             !sameRevisionAlreadyComplete
         ) {
+            const sanitizedRemote = cleanCandidateState(remotePayload);
+            const typeErrors = verifierTypesRestaures(sanitizedRemote);
+            if (typeErrors.length > 0) {
+                initialSnapshotHandled = true;
+                activeSessionHandledInitial = true;
+                notifySyncStatus({
+                    state: 'error',
+                    errorMessage: 'Données Cloud incompatibles détectées — dossier local préservé',
+                    initialSyncSettled: true,
+                });
+                return;
+            }
+            const isOfflineConflict = dirtySinceMs > 0 && remoteChangedByOtherDevice && localHasMeaningfulData;
+            const backupSaved = isOfflineConflict ? saveSyncConflictBackup(uid, currentLocalState) : false;
+
             applyingRemoteSnapshot = true;
             try {
-                const sanitizedRemote = cleanCandidateState(remotePayload);
                 lastKnownRevisionId = remoteRevision;
                 saveLastSyncedRevisionId(
                     uid,
@@ -941,8 +1092,10 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                     ...sanitizedRemote,
                     lastUpdate: remoteUpdatedAtMs ?? Date.now(),
                 });
+                const updatedState = useFinanceStore.getState();
+                lastPersistedRefs = capturePersistedRefs(updatedState);
                 lastSerializedPayload = JSON.stringify(
-                    extractSanitizedWorkspacePayload(useFinanceStore.getState()),
+                    extractSanitizedWorkspacePayload(updatedState),
                 );
                 saveProtectedDossierSnapshot({
                     ...sanitizedRemote,
@@ -958,6 +1111,14 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                 lastSyncedAt: Date.now(),
                 errorMessage: null,
                 initialSyncSettled: true,
+                conflictAlert: isOfflineConflict
+                    ? {
+                          detectedAt: Date.now(),
+                          remoteUpdatedAtMs,
+                          localDirtySinceMs: dirtySinceMs,
+                          backupSaved,
+                      }
+                    : null,
             });
         } else if (isLocalExplicitlyNewer) {
             initialSnapshotHandled = true;
@@ -988,8 +1149,10 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
             initialSnapshotHandled = true;
             activeSessionHandledInitial = true;
             firestoreSessionSynced = true;
+            const currentRefState = useFinanceStore.getState();
+            lastPersistedRefs = capturePersistedRefs(currentRefState);
             lastSerializedPayload = JSON.stringify(
-                extractSanitizedWorkspacePayload(useFinanceStore.getState()),
+                extractSanitizedWorkspacePayload(currentRefState),
             );
             notifySyncStatus({
                 state: 'synced',
@@ -1070,6 +1233,7 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
                         initialSnapshotHandled = true;
                         activeSessionHandledInitial = true;
                         firestoreSessionSynced = true;
+                        lastPersistedRefs = capturePersistedRefs(local);
                         lastSerializedPayload = JSON.stringify(extractSanitizedWorkspacePayload(local));
                         notifySyncStatus({
                             state: 'synced',
@@ -1138,6 +1302,9 @@ export function startWorkspaceRealtimeSync(user: FirebaseUser): () => void {
 
     const unsubscribeStore = useFinanceStore.subscribe((state) => {
         if (!initialSnapshotHandled || applyingRemoteSnapshot) return;
+        const nextRefs = capturePersistedRefs(state);
+        if (haveSamePersistedRefs(lastPersistedRefs, nextRefs)) return;
+        lastPersistedRefs = nextRefs;
         if (isStarterTemplateState(state)) return;
         if (!hasMeaningfulData(state)) return;
         const nextPayload = extractSanitizedWorkspacePayload(state);

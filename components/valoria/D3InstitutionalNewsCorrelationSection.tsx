@@ -9,6 +9,7 @@ import {
 } from '../../services/valoria/institutionalCurveAndNewsEngine';
 import { ScrollReveal } from './MotionPrimitives';
 import { formatEur, formatSignedPct } from '../../services/valoria/valoriaFormatters';
+import { safeExternalHttpUrl } from '../../utils/safeExternalUrl';
 
 interface D3InstitutionalNewsCorrelationSectionProps {
   institutionalNews: PortfolioInstitutionalNewsSummary;
@@ -673,19 +674,22 @@ export const D3InstitutionalNewsCorrelationSection: React.FC<
                     </div>
 
                     <div className="text-xs text-texte font-medium leading-snug">
-                      {ev.url ? (
-                        <a
-                          href={ev.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:text-texte inline-flex items-start gap-1"
-                        >
+                      {(() => {
+                        const safeUrl = safeExternalHttpUrl(ev.url);
+                        return safeUrl ? (
+                          <a
+                            href={safeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-texte inline-flex items-start gap-1"
+                          >
+                            <span className="line-clamp-2">{ev.headline}</span>
+                            <ExternalLink className="w-3 h-3 shrink-0 mt-0.5 text-texte-doux" />
+                          </a>
+                        ) : (
                           <span className="line-clamp-2">{ev.headline}</span>
-                          <ExternalLink className="w-3 h-3 shrink-0 mt-0.5 text-texte-doux" />
-                        </a>
-                      ) : (
-                        <span className="line-clamp-2">{ev.headline}</span>
-                      )}
+                        );
+                      })()}
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono tabular-nums pt-0.5">

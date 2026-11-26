@@ -30,6 +30,9 @@ import {
 import { isLocalMirrorCompacted } from '../../services/unlimitedStateStorage';
 import { Icon } from '../ui/Icon';
 import { showToast } from '../ui/Toast';
+import { useFinanceStore } from '../../store/useFinanceStore';
+import { hasMeaningfulData } from '../../utils/onboarding';
+import { isStarterTemplateState } from '../../utils/starterData';
 
 interface FirebaseAuthContextValue {
     user: FirebaseUser | null;
@@ -48,18 +51,48 @@ const DEFAULT_SYNC_STATUS: FirebaseWorkspaceSyncStatus = {
     lastSyncedAt: null,
     errorMessage: null,
     initialSyncSettled: false,
+    conflictAlert: null,
 };
 
 const IDB_BOOT_MAX_WAIT_MS = 400;
 const CLOUD_SYNC_BOOT_MAX_WAIT_MS = 2200;
 
+function isLocalhostOrigin(): boolean {
+    if (typeof window === 'undefined') return false;
+    const host = (window.location?.hostname ?? '').toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '';
+}
+
+function isDevRuntime(): boolean {
+    if (typeof import.meta === 'undefined') return false;
+    return (
+        import.meta.env?.MODE !== 'production' &&
+        !import.meta.env?.PROD &&
+        Boolean(import.meta.env?.DEV)
+    );
+}
+
+function isOfflineRuntime(): boolean {
+    return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
+function isOfflineAccessPermitted(): boolean {
+    return isOfflineRuntime() || isDevRuntime() || isLocalhostOrigin();
+}
+
 function isBootSyncBypassed(isTestEnv: boolean, forceAuthGate: boolean): boolean {
     if (isTestEnv || forceAuthGate) return true;
-    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_AUDIT_HORS_RESEAU === '1') {
+    const isLocalOrDev = isDevRuntime() || isLocalhostOrigin();
+    if (
+        isLocalOrDev &&
+        typeof import.meta !== 'undefined' &&
+        import.meta.env?.VITE_AUDIT_HORS_RESEAU === '1'
+    ) {
         return true;
     }
     try {
         if (
+            isOfflineAccessPermitted() &&
             typeof sessionStorage !== 'undefined' &&
             sessionStorage.getItem('financeai:offline_bypass') === '1'
         ) {
@@ -69,14 +102,14 @@ function isBootSyncBypassed(isTestEnv: boolean, forceAuthGate: boolean): boolean
         /* sessionStorage inaccessible */
     }
     try {
-        if (typeof window !== 'undefined' && window.location?.search) {
+        if (isLocalOrDev && typeof window !== 'undefined' && window.location?.search) {
             const params = new URLSearchParams(window.location.search);
             if (params.has('nogate') || params.has('skipgate')) return true;
         }
     } catch {
         /* URL inaccessible */
     }
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    if (isOfflineRuntime()) {
         return true;
     }
     return false;
@@ -125,7 +158,36 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
     const [requireGateScreen, setRequireGateScreen] = useState<boolean>(forceAuthGate);
     const [idbReady, setIdbReady] = useState<boolean>(() => isTestEnv || !needsBlockingIdbHydration());
     const [syncBootTimedOut, setSyncBootTimedOut] = useState<boolean>(false);
+    const [isOfflineState, setIsOfflineState] = useState<boolean>(() => isOfflineRuntime());
     const bootSyncBypassed = isBootSyncBypassed(isTestEnv, forceAuthGate);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const syncOnline = () => setIsOfflineState(isOfflineRuntime());
+        window.addEventListener('online', syncOnline);
+        window.addEventListener('offline', syncOnline);
+        return () => {
+            window.removeEventListener('online', syncOnline);
+            window.removeEventListener('offline', syncOnline);
+        };
+    }, []);
+
+    const storeConfig = useFinanceStore((s) => s.config);
+    const storeAssets = useFinanceStore((s) => s.assets);
+    const storeTransactions = useFinanceStore((s) => s.transactions);
+    const storeBudgetItems = useFinanceStore((s) => s.budgetItems);
+    const storeRealEstateGoals = useFinanceStore((s) => s.realEstateGoals);
+    const hasLocalRealData = React.useMemo(() => {
+        const snapshot = {
+            config: storeConfig,
+            assets: storeAssets,
+            transactions: storeTransactions,
+            budgetItems: storeBudgetItems,
+            realEstateGoals: storeRealEstateGoals,
+        };
+        return hasMeaningfulData(snapshot) && !isStarterTemplateState(snapshot);
+    }, [storeConfig, storeAssets, storeTransactions, storeBudgetItems, storeRealEstateGoals]);
+    const allowOfflineButton = !forceAuthGate && (isOfflineState || isDevRuntime() || isLocalhostOrigin());
 
     useEffect(() => subscribeFirebaseSyncStatus(setSyncStatus), []);
 
@@ -195,6 +257,7 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                 } else {
                     void recoverOrEnsureInitialWorkspace(false);
                     const bypassOffline =
+                        isOfflineAccessPermitted() &&
                         typeof sessionStorage !== 'undefined' &&
                         sessionStorage.getItem('financeai:offline_bypass') === '1';
                     if (!bypassOffline) {
@@ -447,20 +510,30 @@ export const FirebaseAuthGate: React.FC<FirebaseAuthGateProps> = ({
                                 </span>
                             </button>
 
-                            {!forceAuthGate && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (typeof sessionStorage !== 'undefined') {
-                                            sessionStorage.setItem('financeai:offline_bypass', '1');
-                                        }
-                                        void recoverOrEnsureInitialWorkspace(false);
-                                        setRequireGateScreen(false);
-                                    }}
-                                    className="touch-target w-full py-2.5 px-5 rounded-full bg-fond border border-bordure text-xs font-semibold text-ink-300 hover:text-ink-50 hover:bg-surface-douce transition-colors focus-ring"
-                                >
-                                    Accéder directement à mon dossier local
-                                </button>
+                            {allowOfflineButton && (
+                                <div className="space-y-2 pt-1">
+                                    {hasLocalRealData && (
+                                        <p
+                                            role="note"
+                                            className="rounded-xl border border-alerte-texte/30 bg-alerte-fond px-3.5 py-2.5 text-xs text-alerte-texte leading-relaxed"
+                                        >
+                                            Attention : des données personnelles sont déjà enregistrées sur cet appareil. Sans connexion Google, elles s&apos;ouvrent sans verrou de compte.
+                                        </p>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (typeof sessionStorage !== 'undefined') {
+                                                sessionStorage.setItem('financeai:offline_bypass', '1');
+                                            }
+                                            void recoverOrEnsureInitialWorkspace(false);
+                                            setRequireGateScreen(false);
+                                        }}
+                                        className="touch-target w-full min-h-11 py-2.5 px-5 rounded-full bg-fond border border-bordure text-xs font-semibold text-ink-300 hover:text-ink-50 hover:bg-surface-douce transition-colors focus-ring"
+                                    >
+                                        Accéder directement à mon dossier local
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </section>

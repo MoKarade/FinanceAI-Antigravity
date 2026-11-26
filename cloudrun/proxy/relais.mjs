@@ -9,7 +9,6 @@ import { createPublicKey, createVerify } from 'node:crypto';
 
 const DELAI_AMONT_MS = 15_000;
 const DEBIT_PROXY_PAR_MIN = 120;
-const BRIDGE_MAX_OCTETS = 2 * 1024 * 1024;
 const UA = 'Mozilla/5.0 (compatible; FinanceAI/1.0)';
 const FENETRE_MS = 60_000;
 const COMPTEURS_MAX = 2_000;
@@ -167,12 +166,6 @@ const compteurs = new Map();
 const newsCache = new Map();
 let cachedVerifiedFeed = null;
 let cachedInstitutionalCorrelated = null;
-let latestBridgeState = {
-    schema: 'FinanceAI-Valoria-Bridge/v1.2',
-    status: 'ready',
-    updatedAt: new Date().toISOString(),
-    note: 'Synchronisez depuis Valoria ou envoyez un POST JSON (max 2 Mo).',
-};
 let hubCertCache = null;
 let hubAdcCache = null;
 let cachedOwnerUid = null;
@@ -191,12 +184,6 @@ export function reinitialiserLimites() {
     cachedOwnerUid = null;
     hubLivePortfolioCache = null;
     hubLiveBankCache = { fetchedAt: 0, value: null };
-    latestBridgeState = {
-        schema: 'FinanceAI-Valoria-Bridge/v1.2',
-        status: 'ready',
-        updatedAt: new Date().toISOString(),
-        note: 'Synchronisez depuis Valoria ou envoyez un POST JSON (max 2 Mo).',
-    };
 }
 
 function poser(cle, valeur, maintenant) {
@@ -298,214 +285,18 @@ async function relayer(url, headers, request, opts) {
     return new Response(amont.body, { status: amont.status, headers: h });
 }
 
-class CorpsTropGros extends Error {}
-
-async function lireCorpsBorne(request, max = BRIDGE_MAX_OCTETS) {
-    const annonce = Number(request.headers.get('content-length'));
-    if (Number.isFinite(annonce) && annonce > max) throw new CorpsTropGros();
-    if (!request.body) return '';
-    const lecteur = request.body.getReader();
-    const morceaux = [];
-    let total = 0;
-    for (;;) {
-        const { done, value } = await lecteur.read();
-        if (done) break;
-        total += value.byteLength;
-        if (total > max) {
-            await lecteur.cancel().catch(() => undefined);
-            throw new CorpsTropGros();
-        }
-        morceaux.push(value);
+function safeHttpUrl(raw) {
+    if (typeof raw !== 'string') return undefined;
+    const trimmed = raw.trim();
+    if (!trimmed) return undefined;
+    try {
+        const parsed = new URL(trimmed);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
+        if (parsed.username || parsed.password) return undefined;
+        return parsed.href;
+    } catch {
+        return undefined;
     }
-    const tout = new Uint8Array(total);
-    let pos = 0;
-    for (const m of morceaux) { tout.set(m, pos); pos += m.byteLength; }
-    return new TextDecoder().decode(tout);
-}
-
-// ─── Garde SSRF stricte & compaction bridge ───────────────────────────────────────────────────────────────
-
-function ipv4Privee(octets) {
-    const [a, b] = octets;
-    if (a === 0 || a === 10 || a === 127) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 192 && b === 0) return true;
-    if (a === 198 && (b === 18 || b === 19)) return true;
-    return a >= 224;
-}
-
-function parserIpv4(host) {
-    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return null;
-    const parts = host.split('.').map(Number);
-    return parts.every((n) => Number.isInteger(n) && n >= 0 && n <= 255) ? parts : null;
-}
-
-function parseIpv6Groups(rawHost) {
-    const clean = rawHost.replace(/^\[|\]$/g, '').toLowerCase().split('%')[0];
-    if (!clean || !clean.includes(':')) return null;
-    if (/[^0-9a-f:.]/.test(clean)) return null;
-
-    const doubleColonParts = clean.split('::');
-    if (doubleColonParts.length > 2) return null;
-    const hasCompression = doubleColonParts.length === 2;
-
-    const leftRaw = doubleColonParts[0];
-    const rightRaw = hasCompression ? doubleColonParts[1] : '';
-
-    if (hasCompression && leftRaw.includes('.')) return null;
-
-    const parseHexPart = (str, allowIpv4Tail) => {
-        if (str === '') return [];
-        const segs = str.split(':');
-        const out = [];
-        for (let i = 0; i < segs.length; i += 1) {
-            const seg = segs[i];
-            if (!seg) return null;
-            if (seg.includes('.')) {
-                if (!allowIpv4Tail || i !== segs.length - 1) return null;
-                const octets = parserIpv4(seg);
-                if (!octets) return null;
-                out.push(((octets[0] << 8) | octets[1]) >>> 0, ((octets[2] << 8) | octets[3]) >>> 0);
-            } else {
-                if (!/^[0-9a-f]{1,4}$/.test(seg)) return null;
-                out.push(parseInt(seg, 16));
-            }
-        }
-        return out;
-    };
-
-    const leftGroups = parseHexPart(leftRaw, !hasCompression);
-    if (!leftGroups) return null;
-    const rightGroups = hasCompression ? parseHexPart(rightRaw, true) : [];
-    if (!rightGroups) return null;
-
-    if (hasCompression) {
-        const total = leftGroups.length + rightGroups.length;
-        if (total >= 8) return null;
-        return [...leftGroups, ...new Array(8 - total).fill(0), ...rightGroups];
-    }
-    return leftGroups.length === 8 ? leftGroups : null;
-}
-
-function ipv4From16BitGroups(hi, lo) {
-    return [(hi >> 8) & 255, hi & 255, (lo >> 8) & 255, lo & 255];
-}
-
-function ipv6Privee(rawHost) {
-    const g = parseIpv6Groups(rawHost);
-    if (!g) return true;
-
-    // ::/96 (couvre ::, ::1 et IPv4-compatible ::d.d.d.d)
-    if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0) {
-        return true;
-    }
-    // ::ffff:0:0/96 (IPv4-mapped)
-    if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0xffff) {
-        return ipv4Privee(ipv4From16BitGroups(g[6], g[7]));
-    }
-    // ::ffff:0:0:0/96 (IPv4-translated RFC 2765)
-    if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0xffff && g[5] === 0) {
-        return ipv4Privee(ipv4From16BitGroups(g[6], g[7]));
-    }
-    // NAT64 : 64:ff9b::/96 et 64:ff9b:1::/48 (usage local)
-    if (g[0] === 0x0064 && g[1] === 0xff9b) {
-        if (g[2] === 0x0001) return true;
-        if (g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0) {
-            return ipv4Privee(ipv4From16BitGroups(g[6], g[7]));
-        }
-    }
-    // 6to4 : 2002::/16 (IPv4 encodée dans les groupes 1 et 2)
-    if (g[0] === 0x2002) {
-        return ipv4Privee(ipv4From16BitGroups(g[1], g[2]));
-    }
-    // Discard prefix : 100::/64 (RFC 6666)
-    if (g[0] === 0x0100 && g[1] === 0 && g[2] === 0 && g[3] === 0) return true;
-    // Documentation : 2001:db8::/32 (RFC 3849)
-    if (g[0] === 0x2001 && g[1] === 0x0db8) return true;
-    // Teredo : 2001::/32 (RFC 4380)
-    if (g[0] === 0x2001 && g[1] === 0) return true;
-    // Link-local fe80::/10, ULA fc00::/7, Multicast ff00::/8
-    if ((g[0] & 0xffc0) === 0xfe80) return true;
-    if ((g[0] & 0xfe00) === 0xfc00) return true;
-    if ((g[0] & 0xff00) === 0xff00) return true;
-
-    return false;
-}
-
-export function urlSurePourRelais(rawUrl) {
-    let parsed;
-    try { parsed = new URL(String(rawUrl).trim()); } catch { return false; }
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-    if (parsed.username || parsed.password) return false;
-    const host = parsed.hostname.toLowerCase().replace(/\.+$/, '');
-    if (!host) return false;
-    if (
-        host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
-        host.endsWith('.internal') || host.endsWith('.localdomain') ||
-        host === 'metadata' || host === 'metadata.google.internal'
-    ) return false;
-    if (/^\d+$/.test(host) || /^0x[0-9a-f]+$/i.test(host)) return false;
-    const ipv4 = parserIpv4(host);
-    if (ipv4) return !ipv4Privee(ipv4);
-    if (host.startsWith('[') || host.includes(':')) return !ipv6Privee(host);
-    return host.includes('.');
-}
-
-const CLES_INTERDITES = new Set(['__proto__', 'constructor', 'prototype']);
-
-function nettoyerObjet(val, prof = 0) {
-    if (prof > 16 || val === null || val === undefined) return val;
-    if (Array.isArray(val)) return val.map((x) => nettoyerObjet(x, prof + 1));
-    if (typeof val !== 'object') return val;
-    const out = {};
-    for (const [k, v] of Object.entries(val)) {
-        if (!CLES_INTERDITES.has(k)) out[k] = nettoyerObjet(v, prof + 1);
-    }
-    return out;
-}
-
-function compacterBridgePayload(raw) {
-    const safe = nettoyerObjet(raw);
-    if (!safe || typeof safe !== 'object' || Array.isArray(safe)) {
-        return { positions: Array.isArray(safe) ? safe.slice(0, 500) : [] };
-    }
-    if (safe.schema === 'FinanceAI-Valoria-Bridge/v1.2' || safe.schema === 'FinanceAI-Valoria-Bridge/v1.3-CAD') {
-        return safe;
-    }
-    const outer = safe.payload && typeof safe.payload === 'object' && !Array.isArray(safe.payload) ? safe.payload : safe;
-    const stateObj = outer.store?.state && typeof outer.store.state === 'object'
-        ? outer.store.state
-        : (outer.state && typeof outer.state === 'object' && !Array.isArray(outer.state) ? outer.state : outer);
-
-    if (!safe.store && !safe.transactions && !safe.state && !safe.assets && !safe.positions) return safe;
-
-    const rawList =
-        (Array.isArray(stateObj.positions) && stateObj.positions) ||
-        (Array.isArray(stateObj.holdings) && stateObj.holdings) ||
-        (Array.isArray(stateObj.portfolio) && stateObj.portfolio) ||
-        (Array.isArray(stateObj.lots) && stateObj.lots) ||
-        (Array.isArray(stateObj.assets) && stateObj.assets) ||
-        null;
-
-    const compactObject = { app: outer.app ?? 'FinanceAI' };
-    if (typeof outer.version === 'string') compactObject.version = outer.version;
-    if (stateObj.fxRates ?? outer.fxRates) compactObject.fxRates = stateObj.fxRates ?? outer.fxRates;
-    if (stateObj.profile) compactObject.profile = stateObj.profile;
-    if (stateObj.investorProfile) compactObject.investorProfile = stateObj.investorProfile;
-    if (stateObj.budget) compactObject.budget = stateObj.budget;
-    if (stateObj.initialBalances) compactObject.initialBalances = stateObj.initialBalances;
-    if (Array.isArray(stateObj.watchlist)) compactObject.watchlist = stateObj.watchlist.slice(0, 100);
-    if (rawList) {
-        compactObject.positions = rawList.slice(0, 500).map((item) => {
-            if (!item || typeof item !== 'object') return item;
-            const { priceHistory: _ph, purchases: _pur, owner: _own, lastHistorySync: _lhs, priceUpdatedAt: _pua, ...essential } = item;
-            return essential;
-        });
-    }
-    return compactObject;
 }
 
 // ─── Paramètres : validés un à un ─────────────────────────────────────────────────────────────────────────
@@ -627,84 +418,6 @@ function infererSousClasse(symbol, quoteType) {
     if (sym.endsWith('.TO') || sym.endsWith('.V')) return { category: 'actions', subClass: 'action_ca' };
     if (/\.(PA|DE|AS|SW|MI|CO|L|T|HK)$/.test(sym)) return { category: 'actions', subClass: 'action_eu_asia' };
     return { category: 'actions', subClass: 'action_us' };
-}
-
-function corsHeaders(request, opts = {}) {
-    const origin = request.headers.get('origin');
-    const h = {
-        'access-control-allow-methods': 'GET, POST, OPTIONS',
-        'access-control-allow-headers': 'Content-Type, Authorization',
-    };
-    if (origin && origineAutorisee(request.headers, opts)) {
-        h['access-control-allow-origin'] = origin;
-        h.vary = 'Origin';
-    }
-    return h;
-}
-
-export async function bridgeFinanceAI(request, opts = {}) {
-    const refus = garder(request, ['GET', 'POST', 'OPTIONS'], opts);
-    if (refus) return refus;
-    const ch = corsHeaders(request, opts);
-    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...ch, 'cache-control': 'no-store' } });
-    if (request.method === 'GET') return jsonReponse(latestBridgeState, 200, 'no-store', ch);
-
-    let brut;
-    try {
-        brut = await lireCorpsBorne(request, BRIDGE_MAX_OCTETS);
-    } catch (e) {
-        if (e instanceof CorpsTropGros) return erreur(413, 'Corps de requête limité à 2 Mo.', 'payload_too_large');
-        return erreur(400, 'Corps de requête illisible.');
-    }
-
-    let body;
-    try {
-        body = brut.trim() ? JSON.parse(brut) : {};
-    } catch {
-        return erreur(400, 'JSON invalide.');
-    }
-    if (!body || typeof body !== 'object') return erreur(400, 'Objet JSON attendu.');
-
-    if (typeof body.remoteUrl === 'string' && body.remoteUrl.trim()) {
-        const targetUrl = body.remoteUrl.trim();
-        if (!urlSurePourRelais(targetUrl)) {
-            return erreur(400, 'URL FinanceAI invalide ou hôte privé interdit (garde SSRF).', 'ssrf_blocked');
-        }
-        const signal = AbortSignal.any([request.signal, AbortSignal.timeout(DELAI_AMONT_MS)]);
-        let amont;
-        try {
-            amont = await (opts.fetchImpl ?? fetch)(targetUrl, {
-                method: 'GET', headers: { accept: 'application/json' }, signal, redirect: 'error',
-            });
-        } catch {
-            return erreur(502, 'FinanceAI distant injoignable.');
-        }
-        if (!amont.ok) return erreur(502, `FinanceAI distant a répondu avec le statut ${amont.status}.`);
-        let remoteText;
-        try {
-            remoteText = await lireCorpsBorne(amont, BRIDGE_MAX_OCTETS);
-        } catch (e) {
-            if (e instanceof CorpsTropGros) return erreur(413, 'Réponse distante supérieure à 2 Mo.');
-            return erreur(502, 'Réponse distante illisible.');
-        }
-        let remoteJson;
-        try { remoteJson = JSON.parse(remoteText); } catch { return erreur(502, 'Réponse distante non JSON.'); }
-        const slimRemote = compacterBridgePayload(remoteJson);
-        latestBridgeState = {
-            schema: 'FinanceAI-Valoria-Bridge/v1.2',
-            syncedFromUrl: targetUrl,
-            updatedAt: new Date().toISOString(),
-            payload: slimRemote,
-        };
-        return jsonReponse({ ok: true, remotePayload: slimRemote, bridgeState: latestBridgeState }, 200, 'no-store', ch);
-    }
-
-    const slimBody = compacterBridgePayload(body);
-    if (new TextEncoder().encode(JSON.stringify(slimBody)).length > BRIDGE_MAX_OCTETS) {
-        return erreur(413, 'État compacté supérieur à 2 Mo.', 'payload_too_large');
-    }
-    latestBridgeState = { ...slimBody, updatedAt: new Date().toISOString() };
-    return jsonReponse({ ok: true, bridgeState: latestBridgeState }, 200, 'no-store', ch);
 }
 
 export async function proxyMarketVerifiedFeed(request, opts = {}) {
@@ -927,7 +640,7 @@ async function fetchNewsPourTicker(ticker, fetchFn, signal) {
                     id: `yf-${n.uuid ?? `${key}-${collected.length}`}`,
                     ticker: querySymbol, assetId: matched?.id, title,
                     publisher: String(n.publisher ?? 'Yahoo Finance'), publishedAt: dt,
-                    url: n.link ? String(n.link) : undefined, isLiveWeb: true,
+                    url: safeHttpUrl(n.link), isLiveWeb: true,
                 });
             }
         }
@@ -2151,7 +1864,9 @@ export async function traiter(request, opts = {}) {
         if (pathname === '/api/proxy/fintable' || pathname.startsWith('/api/fintable/')) return await proxyFintable(request, opts);
         if (pathname === '/api/yahoo/history' || pathname.startsWith('/api/history/yahoo/')) return await proxyYahooHistorique(request, opts);
         if (pathname === '/api/yahoo/search' || pathname === '/api/search/yahoo') return await proxyYahooRecherche(request, opts);
-        if (pathname === '/api/financeai/bridge') return await bridgeFinanceAI(request, opts);
+        if (pathname === '/api/financeai/bridge' || pathname.startsWith('/api/financeai/')) {
+            return erreur(410, 'Pont de partage supprimé.', 'gone');
+        }
         if (pathname === '/api/market/verified-feed') return await proxyMarketVerifiedFeed(request, opts);
         if (pathname === '/api/market/search') return await proxyMarketSearch(request, opts);
         if (pathname === '/api/market/quote') return await proxyMarketQuote(request, opts);

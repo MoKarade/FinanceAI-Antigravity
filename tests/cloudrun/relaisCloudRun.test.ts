@@ -3,7 +3,7 @@
 // garde d'origine, jeton Fintable relayé sans être conservé. Aucun appel réseau : `fetchImpl` injecté.
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { reinitialiserLimites, traiter, urlSurePourRelais } from '../../cloudrun/proxy/relais.mjs';
+import { reinitialiserLimites, traiter } from '../../cloudrun/proxy/relais.mjs';
 
 const PROD_FIREBASE_ID = ['financeai', '497', '112'].join('-').replace('-112', '112');
 const JETON_FICTIF = 'Bearer jeton-fictif-123';
@@ -134,27 +134,19 @@ describe('relais Cloud Run', () => {
         expect(source).not.toMatch(/console\.\w+\([^)]*auth/i);
     });
 
-    it('bloque les contournements SSRF IPv6 (::/96, ::ffff:0:0:0/96, NAT64, 6to4, spéciaux) et autorise les IPv6 publiques', () => {
-        for (const blockedUrl of [
-            'http://[::127.0.0.1]/',
-            'http://[::ffff:0:127.0.0.1]/',
-            'http://[64:ff9b::127.0.0.1]/',
-            'http://[2002:7f00:1::]/',
-            'http://[64:ff9b:1::1]/',
-            'http://[100::1]/',
-            'http://[2001:db8::1]/',
-            'http://[2001::1]/',
-            'http://[::ffff:169.254.169.254]/',
-            'http://[2002:a9fe:a9fe::]/',
-        ]) {
-            expect(urlSurePourRelais(blockedUrl), blockedUrl).toBe(false);
-        }
-
-        for (const publicUrl of [
-            'https://[2606:4700:4700::1111]/',
-            'https://[2001:4860:4860::8888]/',
-        ]) {
-            expect(urlSurePourRelais(publicUrl), publicUrl).toBe(true);
-        }
+    it('ferme définitivement /api/financeai/bridge en 410 Gone sans appel amont', async () => {
+        const f = faux();
+        const rGet = await traiter(get('/api/financeai/bridge'), { fetchImpl: f });
+        expect(rGet.status).toBe(410);
+        const rPost = await traiter(
+            new Request('http://relais.local/api/financeai/bridge', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ remoteUrl: 'https://example.com/secret.json' }),
+            }),
+            { fetchImpl: f },
+        );
+        expect(rPost.status).toBe(410);
+        expect(f).not.toHaveBeenCalled();
     });
 });

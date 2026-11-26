@@ -1,5 +1,5 @@
 // cloudrun/proxy/server.mjs — adaptateur `node:http` ↔ Request/Response Web du relais (cf. relais.mjs).
-// Cloud Run fournit PORT. Lecture du corps bornée à 2 Mo max pour `POST /api/financeai/bridge`.
+// Cloud Run fournit PORT. Lecture du corps bornée à 2 Mo max.
 import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
 import { traiter } from './relais.mjs';

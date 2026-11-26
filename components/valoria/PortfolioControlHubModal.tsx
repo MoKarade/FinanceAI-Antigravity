@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Link2, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import {
   ASSETS,
@@ -32,7 +32,6 @@ interface PortfolioControlHubModalProps {
   onRemoveAssetHoldings: (assetId: string) => void;
   onResetDemoPortfolio: () => void;
   onClearPortfolio: () => void;
-  onOpenFinanceAIBridge: () => void;
   onRefreshVerifiedPrices?: () => void;
 }
 
@@ -62,7 +61,6 @@ export const PortfolioControlHubModal: React.FC<PortfolioControlHubModalProps> =
   onRemoveAssetHoldings,
   onResetDemoPortfolio,
   onClearPortfolio,
-  onOpenFinanceAIBridge,
   onRefreshVerifiedPrices,
 }) => {
   const [section, setSection] = useState<'positions' | 'settings'>('positions');
@@ -183,18 +181,6 @@ export const PortfolioControlHubModal: React.FC<PortfolioControlHubModalProps> =
               <span className="hidden sm:inline">Profil, Liquidités &amp; Climat</span>
             </button>
           </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onOpenFinanceAIBridge();
-            }}
-            className="min-w-11 inline-flex items-center gap-1.5 min-h-11 px-3 py-1.5 text-xs font-semibold text-sur-accent bg-accent hover:bg-accent-fonce rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            <Link2 className="w-3.5 h-3.5" />
-            <span>Pont FinanceAI</span>
-          </button>
         </div>
 
         {/* Scrollable Content */}

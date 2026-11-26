@@ -51,14 +51,22 @@ export function tailleCompteurs(): number {
 
 /**
  * IP du client. Ordre de confiance : `x-vercel-forwarded-for` puis `x-real-ip` (posés par la plateforme, non
- * falsifiables par l'appelant), enfin le PREMIER saut de `x-forwarded-for` (Vercel l'écrase par l'IP réelle ; hors
- * Vercel — dev, autre hébergeur — il est falsifiable, d'où sa place en dernier). Absente → 'inconnue'.
+ * falsifiables par l'appelant), enfin le DERNIER saut de `x-forwarded-for` (posé par le dernier proxy de confiance
+ * tel que Cloud Run — parité avec `cloudrun/proxy/relais.mjs`). Absente → 'inconnue'.
  */
 export function ipClient(headers: Headers): string {
+    const xff = headers.get('x-forwarded-for');
+    const dernierSaut = xff
+        ? xff
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+              .pop()
+        : undefined;
     const candidats = [
         headers.get('x-vercel-forwarded-for'),
         headers.get('x-real-ip'),
-        headers.get('x-forwarded-for')?.split(',')[0],
+        dernierSaut,
     ];
     const ip = candidats.map((c) => c?.trim()).find((c) => c);
     return (ip || 'inconnue').slice(0, 64);

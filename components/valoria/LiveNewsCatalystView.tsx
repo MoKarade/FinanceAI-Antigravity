@@ -9,6 +9,7 @@ import { AnalystTradeRecommendation, HeldLineDiagnostic } from '../../services/v
 import { formatSignedPct } from '../../services/valoria/valoriaFormatters';
 import { fetchValoriaGeminiNewsGrounding } from '../../services/valoria/valoriaAiClient';
 import { PrivateAmount } from '../ui/PrivateAmount';
+import { safeExternalHttpUrl } from '../../utils/safeExternalUrl';
 
 interface LiveNewsCatalystViewProps {
   newsIntelligence: PortfolioNewsIntelligence;
@@ -246,18 +247,22 @@ export const LiveNewsCatalystView: React.FC<LiveNewsCatalystViewProps> = ({
             {groundingResult.sources.length > 0 && (
               <div className="pt-2 border-t border-bordure flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-texte-doux">
                 <span className="font-medium text-texte">Sources Web vérifiées :</span>
-                {groundingResult.sources.map((src, i) => (
-                  <a
-                    key={`${src.uri}-${i}`}
-                    href={src.uri}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-succes-texte hover:underline"
-                  >
-                    <span className="truncate max-w-[220px]">{src.title}</span>
-                    <ExternalLink className="w-3 h-3 shrink-0" />
-                  </a>
-                ))}
+                {groundingResult.sources.map((src, i) => {
+                  const safeUri = safeExternalHttpUrl(src.uri);
+                  if (!safeUri) return null;
+                  return (
+                    <a
+                      key={`${safeUri}-${i}`}
+                      href={safeUri}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-succes-texte hover:underline"
+                    >
+                      <span className="truncate max-w-[220px]">{src.title}</span>
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                    </a>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -410,19 +415,22 @@ export const LiveNewsCatalystView: React.FC<LiveNewsCatalystViewProps> = ({
                         </span>
                       </div>
                       <div className="text-xs font-medium text-texte leading-snug">
-                        {art.url ? (
-                          <a
-                            href={art.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="hover:text-succes-texte inline-flex items-baseline gap-1"
-                          >
-                            <span>{art.title}</span>
-                            <ExternalLink className="w-3 h-3 shrink-0 self-center text-texte-doux" />
-                          </a>
-                        ) : (
-                          art.title
-                        )}
+                        {(() => {
+                          const safeUrl = safeExternalHttpUrl(art.url);
+                          return safeUrl ? (
+                            <a
+                              href={safeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:text-succes-texte inline-flex items-baseline gap-1"
+                            >
+                              <span>{art.title}</span>
+                              <ExternalLink className="w-3 h-3 shrink-0 self-center text-texte-doux" />
+                            </a>
+                          ) : (
+                            art.title
+                          );
+                        })()}
                       </div>
                     </article>
                   ))}

@@ -193,7 +193,7 @@ describe('FirebaseAuthGate — attente propre de la synchronisation avant premie
         expect(screen.getByTestId('child-app')).toHaveTextContent('OK');
     });
 
-    it('contourne l’attente Cloud immédiatement lorsque financeai:offline_bypass vaut 1', () => {
+    it('contourne l’attente Cloud immédiatement lorsque financeai:offline_bypass vaut 1 en local', () => {
         sessionStorage.setItem('financeai:offline_bypass', '1');
 
         render(
@@ -204,5 +204,62 @@ describe('FirebaseAuthGate — attente propre de la synchronisation avant premie
 
         expect(screen.queryByTestId('firebase-boot-hydrating')).toBeNull();
         expect(screen.getByTestId('child-app')).toHaveTextContent('Direct');
+    });
+
+    it('ignore ?nogate=1 et masque l’accès hors ligne sur un domaine de production en ligne', () => {
+        const originalLocation = window.location;
+        Object.defineProperty(window, 'location', {
+            configurable: true,
+            value: new URL('https://app.example.com/?nogate=1'),
+        });
+        try {
+            render(
+                <FirebaseAuthGate>
+                    <div data-testid="child-app">App</div>
+                </FirebaseAuthGate>,
+            );
+            expect(screen.getByTestId('firebase-boot-hydrating')).toBeInTheDocument();
+            act(() => {
+                mocks.emitAuth(null);
+            });
+            expect(screen.getByTestId('firebase-auth-gate')).toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: /dossier local/i })).toBeNull();
+        } finally {
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                value: originalLocation,
+            });
+        }
+    });
+
+    it('affiche un avertissement clair sur l’accès local lorsque de vraies données sont présentes', () => {
+        useFinanceStore.setState({
+            initialBalances: { 'Chèque': 42_000 },
+            assets: [
+                {
+                    name: 'FNB Test',
+                    symbol: 'XEQT.TO',
+                    accountType: 'CELI',
+                    quantity: 10,
+                    buyPrice: 30,
+                    currentPrice: 32,
+                    performance: 6.67,
+                    dateBought: '2025-01-15',
+                    currency: 'CAD',
+                },
+            ],
+        });
+
+        render(
+            <FirebaseAuthGate>
+                <div data-testid="child-app">App</div>
+            </FirebaseAuthGate>,
+        );
+        act(() => {
+            mocks.emitAuth(null);
+        });
+        expect(screen.getByTestId('firebase-auth-gate')).toBeInTheDocument();
+        expect(screen.getByRole('note')).toHaveTextContent(/données personnelles/i);
+        expect(screen.getByRole('button', { name: /dossier local/i })).toBeInTheDocument();
     });
 });

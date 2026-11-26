@@ -22,6 +22,7 @@ import {
   formatSignedEur,
   formatSignedPct,
 } from '../../services/valoria/valoriaFormatters';
+import { safeExternalHttpUrl } from '../../utils/safeExternalUrl';
 
 interface D3DeepAiNewsCausalHubProps {
   lab: DeepAiNewsIntelligenceLab;
@@ -654,18 +655,22 @@ export const D3DeepAiNewsCausalHub: React.FC<D3DeepAiNewsCausalHubProps> = ({
                   Sources Web &amp; Réglementaires Vérifiées
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
-                  {liveSynthesis.webSources.slice(0, 4).map((src, idx) => (
-                    <a
-                      key={`${src.uri}-${idx}`}
-                      href={src.uri}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] text-succes-texte hover:underline max-w-[180px] truncate"
-                    >
-                      <ExternalLink className="w-2.5 h-2.5 shrink-0" />
-                      <span className="truncate">{src.title}</span>
-                    </a>
-                  ))}
+                  {liveSynthesis.webSources.slice(0, 4).map((src, idx) => {
+                    const safeUri = safeExternalHttpUrl(src.uri);
+                    if (!safeUri) return null;
+                    return (
+                      <a
+                        key={`${safeUri}-${idx}`}
+                        href={safeUri}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] text-succes-texte hover:underline max-w-[180px] truncate"
+                      >
+                        <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                        <span className="truncate">{src.title}</span>
+                      </a>
+                    );
+                  })}
                 </div>
               </div>
             )}

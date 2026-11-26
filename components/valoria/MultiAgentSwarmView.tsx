@@ -25,6 +25,7 @@ import {
 } from './VisualPrimitives';
 import { D3WatchlistSentimentDials } from './D3WatchlistSentimentDials';
 import { D3InstitutionalNewsCorrelationSection } from './D3InstitutionalNewsCorrelationSection';
+import { safeExternalHttpUrl } from '../../utils/safeExternalUrl';
 import {
   AnimatedMeterBar,
   HoverLiftCard,
@@ -495,18 +496,22 @@ export const MultiAgentSwarmView: React.FC<MultiAgentSwarmViewProps> = ({
         {groundingSources.length > 0 && (
           <div className="pt-3 border-t border-bordure flex flex-wrap items-center gap-3 text-[11px]">
             <span className="text-texte-doux font-mono">SOURCES WEB :</span>
-            {groundingSources.map((src) => (
-              <a
-                key={src.uri}
-                href={src.uri}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-texte hover:underline truncate max-w-[220px]"
-              >
-                <span className="truncate">{src.title}</span>
-                <ExternalLink className="w-3 h-3 shrink-0" />
-              </a>
-            ))}
+            {groundingSources.map((src) => {
+              const safeUri = safeExternalHttpUrl(src.uri);
+              if (!safeUri) return null;
+              return (
+                <a
+                  key={safeUri}
+                  href={safeUri}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-texte hover:underline truncate max-w-[220px]"
+                >
+                  <span className="truncate">{src.title}</span>
+                  <ExternalLink className="w-3 h-3 shrink-0" />
+                </a>
+              );
+            })}
           </div>
         )}
       </ScrollReveal>
@@ -1338,19 +1343,22 @@ export const MultiAgentSwarmView: React.FC<MultiAgentSwarmViewProps> = ({
                 </span>
               </div>
               <div className="text-texte font-medium line-clamp-2 leading-snug">
-                {hoveredNews.url ? (
-                  <a
-                    href={hoveredNews.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-texte inline-flex items-center gap-1"
-                  >
-                    <span>{hoveredNews.title}</span>
-                    <ExternalLink className="w-3 h-3 shrink-0" />
-                  </a>
-                ) : (
-                  hoveredNews.title
-                )}
+                {(() => {
+                  const safeUrl = safeExternalHttpUrl(hoveredNews.url);
+                  return safeUrl ? (
+                    <a
+                      href={safeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-texte inline-flex items-center gap-1"
+                    >
+                      <span>{hoveredNews.title}</span>
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                    </a>
+                  ) : (
+                    hoveredNews.title
+                  );
+                })()}
               </div>
             </div>
           )}

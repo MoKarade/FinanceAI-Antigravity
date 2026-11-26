@@ -5,10 +5,8 @@ import type { Server } from 'node:http';
 import type { GoogleGenAI } from '@google/genai';
 
 import {
-  isSafeRemoteUrl,
   registerValoriaRoutes,
   resetValoriaServerState,
-  sanitizeIncomingBridgePayload,
 } from '../../services/valoria/serverRoutes';
 import {
   fetchValoriaAgentChat,
@@ -65,78 +63,15 @@ const LOTS_FIXTURE: PortfolioLot[] = [
   { id: 'l5', assetId: 'CASH', investedAmount: 4000, purchaseYearMonth: '2026-01' },
 ];
 
-describe('Valoria Deep Coverage — serverRoutes SSRF, variantes & replis', () => {
+describe('Valoria Deep Coverage — serverRoutes gardes, variantes & replis', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     resetValoriaServerState();
   });
 
-  it('couvre toutes les règles IPv4/IPv6/hôte de isSafeRemoteUrl', () => {
-    const blocked = [
-      'not-a-url',
-      'ftp://example.com/data.json',
-      'https://user:pass@example.com/data.json',
-      'https://localhost/export.json',
-      'https://app.localhost/export.json',
-      'https://nas.local/export.json',
-      'https://db.internal/export.json',
-      'https://box.localdomain/export.json',
-      'http://metadata/computeMetadata',
-      'http://metadata.google.internal/computeMetadata',
-      'http://2130706433/',
-      'http://0x7f000001/',
-      'http://0.0.0.1/',
-      'http://10.0.0.5/',
-      'http://100.64.1.2/',
-      'http://127.0.0.1:8080/',
-      'http://169.254.169.254/latest',
-      'http://172.16.0.10/',
-      'http://192.168.1.20/',
-      'http://192.0.2.10/',
-      'http://198.18.0.5/',
-      'http://224.0.0.1/',
-      'http://999.1.1.1/',
-      'http://[::1]/',
-      'http://[::]/',
-      'http://[fe80::1]/',
-      'http://[fc00::1]/',
-      'http://[::ffff:127.0.0.1]/',
-      'http://[::ffff:7f00:1]/',
-      'https://intranet/',
-    ];
-    for (const u of blocked) expect(isSafeRemoteUrl(u), u).toBe(false);
-
-    expect(isSafeRemoteUrl('https://8.8.8.8/data.json')).toBe(true);
-    expect(isSafeRemoteUrl('https://[2001:4860:4860::8888]/data.json')).toBe(true);
-    expect(isSafeRemoteUrl('https://public-api.example.com/portfolio.json')).toBe(true);
-  });
-
-  it('couvre sanitizeIncomingBridgePayload, routes SSRF/erreurs, quote multi-devises et Gemini erreurs/validés', async () => {
+  it('couvre routes /api/* erreurs/replis, quote multi-devises, fermeture pont 410 et Gemini erreurs/validés', async () => {
     resetValoriaServerState();
-
-    // sanitizeIncomingBridgePayload branches variées
-    expect(sanitizeIncomingBridgePayload([{ ticker: 'RY.TO' }])).toEqual({ positions: [{ ticker: 'RY.TO' }] });
-    expect(
-      sanitizeIncomingBridgePayload({ schema: 'FinanceAI-Valoria-Bridge/v1.3-CAD', extra: 1 }),
-    ).toEqual({ schema: 'FinanceAI-Valoria-Bridge/v1.3-CAD', extra: 1 });
-    expect(sanitizeIncomingBridgePayload({ hello: 'world' })).toEqual({ hello: 'world' });
-
-    const compactedUsd = sanitizeIncomingBridgePayload({
-      state: {
-        fxRates: { USD: 1, CAD: 0.72 },
-        transactions: [
-          { date: '2026-01-10', amount: 4000, category: 'Revenu' },
-          { date: '2026-02-10', amount: -1200, category: 'Loyer' },
-          { date: '2026-03-10', amount: 500, category: 'Transfert', isTransfer: true },
-          { date: 'invalid', amount: 100, category: 'Autre' },
-        ],
-        holdings: [{ ticker: 'RY.TO', priceHistory: [1], purchases: [2], __proto__: { bad: true } }],
-        projection: { returnRate: 7, inflationRate: 2.1, theoreticalIncome: 5000, useTheoretical: true },
-      },
-    });
-    expect(compactedUsd.positions).toHaveLength(1);
-    expect((compactedUsd.cashflowSummary as Record<string, unknown>).currency).toBe('USD');
 
     const failFetch = vi.fn(async () => {
       throw new Error('network down');
@@ -310,26 +245,13 @@ describe('Valoria Deep Coverage — serverRoutes SSRF, variantes & replis', () =
       expect(inst.ok).toBe(true);
       expect(Array.isArray(inst.dispatches)).toBe(true);
 
-      const okRemote = await fetch(`${base}/api/financeai/bridge`, {
+      const closedBridge = await fetch(`${base}/api/financeai/bridge`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ remoteUrl: 'https://remote-ok.example.com/a.json' }),
       });
-      expect(okRemote.status).toBe(200);
-
-      const badRemote = await fetch(`${base}/api/financeai/bridge`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ remoteUrl: 'https://remote-bad.example.com/a.json' }),
-      });
-      expect(badRemote.status).toBe(502);
-
-      const hugeRemote = await fetch(`${base}/api/financeai/bridge`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ remoteUrl: 'https://remote-huge.example.com/a.json' }),
-      });
-      expect(hugeRemote.status).toBe(413);
+      expect(closedBridge.status).toBe(410);
+      expect(multiFetch).not.toHaveBeenCalledWith('https://remote-ok.example.com/a.json', expect.anything());
     } finally {
       await new Promise<void>((r) => srv.close(() => r()));
     }
@@ -846,12 +768,12 @@ describe('Valoria Deep Coverage — valoriaAiClient, financeAiBridge & Quant Eng
     try {
       const base = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
 
-      // Origine autorisée vs refusée
-      const okOrigin = await fetch(`${base}/api/financeai/bridge`, {
+      // Origine autorisée vs refusée sur les routes actives
+      const okOrigin = await fetch(`${base}/api/market/search?q=RY`, {
         headers: { origin: 'https://allowed.example.com' },
       });
       expect(okOrigin.status).toBe(200);
-      const koOrigin = await fetch(`${base}/api/financeai/bridge`, {
+      const koOrigin = await fetch(`${base}/api/market/search?q=RY`, {
         headers: { origin: 'https://blocked.example.com' },
       });
       expect(koOrigin.status).toBe(403);

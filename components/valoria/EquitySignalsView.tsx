@@ -5,7 +5,6 @@ import {
   ArrowUpDown,
   Check,
   History,
-  Link2,
   Search,
   SlidersHorizontal,
   TrendingDown,
@@ -43,7 +42,6 @@ interface EquitySignalsViewProps {
   onAddLot: (lot: Omit<PortfolioLot, 'id'>) => void;
   onExecuteRebalanceOrder: (assetId: string, deltaEuro: number) => void;
   onOpenBacktestForAsset: (assetId: string, purchaseYm: string, amount: number) => void;
-  onOpenFinanceAIBridge: () => void;
 }
 
 type SignalFilter = 'all' | 'buy_only' | 'hold_only' | 'sell_only' | 'held' | 'watchlist';
@@ -116,7 +114,6 @@ export const EquitySignalsView: React.FC<EquitySignalsViewProps> = ({
   onAddLot,
   onExecuteRebalanceOrder,
   onOpenBacktestForAsset,
-  onOpenFinanceAIBridge,
 }) => {
   const [signalFilter, setSignalFilter] = useState<SignalFilter>('all');
   const [regionFilter, setRegionFilter] = useState<RegionFilter>('all');
@@ -509,15 +506,6 @@ export const EquitySignalsView: React.FC<EquitySignalsViewProps> = ({
               ))}
             </select>
           </div>
-
-          <button
-            type="button"
-            onClick={onOpenFinanceAIBridge}
-            className="min-h-11 min-w-11 inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-sur-accent bg-accent hover:bg-accent-fonce rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            <Link2 className="w-3.5 h-3.5" />
-            <span>Combiner avec FinanceAI</span>
-          </button>
         </div>
       </div>
 

@@ -114,7 +114,6 @@ interface ProAdvisorUnifiedViewProps {
   isControlHubOpen: boolean;
   onOpenControlHub: () => void;
   onCloseControlHub: () => void;
-  onOpenFinanceAIBridge: () => void;
   onAddWatchlistAsset: (assetId: string) => void;
   onRemoveWatchlistAsset: (assetId: string) => void;
   onRegisterCustomOrLiveAsset: (spec: DynamicMarketAssetRegistration) => string;
@@ -189,7 +188,6 @@ export const ProAdvisorUnifiedView: React.FC<ProAdvisorUnifiedViewProps> = ({
   isControlHubOpen,
   onOpenControlHub,
   onCloseControlHub,
-  onOpenFinanceAIBridge,
   onAddWatchlistAsset,
   onRemoveWatchlistAsset,
   onRegisterCustomOrLiveAsset,
@@ -1788,7 +1786,6 @@ export const ProAdvisorUnifiedView: React.FC<ProAdvisorUnifiedViewProps> = ({
         onRemoveAssetHoldings={onRemoveAssetHoldings}
         onResetDemoPortfolio={onResetDemoPortfolio}
         onClearPortfolio={onClearPortfolio}
-        onOpenFinanceAIBridge={onOpenFinanceAIBridge}
         onRefreshVerifiedPrices={onRefreshVerifiedPrices}
       />
 

@@ -16,6 +16,8 @@ import {
   sanitizePromptText,
   wrapUserData,
 } from '../../utils/promptSafety';
+import { safeExternalHttpUrl } from '../../utils/safeExternalUrl';
+import { essayerDebit, ipClient, reinitialiserLimites } from '../../server/garde';
 
 interface ValoriaAssetDirectoryEntry {
   id: string;
@@ -468,7 +470,6 @@ const GECKO_CRYPTO_MAP: Record<string, string> = {
 };
 
 const SYMBOL_REGEX = /^[A-Za-z0-9.^=\-]{1,24}$/;
-const MAX_BRIDGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_DEFAULT_ORIGINS = new Set([
   'https://finance.hubperso.com',
   'https://financeai-f5382.web.app',
@@ -517,308 +518,6 @@ const LONG_TICKER_REGEX = new RegExp(
   `\\b(${LONG_TICKERS_TO_REDACT.map(escapeRegExp).join('|')})\\b`,
   'gi',
 );
-
-// ----------------------------------------------------------------------------
-// SSRF Guard & Bridge Sanitization / Compaction
-// ----------------------------------------------------------------------------
-
-function isPrivateOrReservedIpv4(octets: number[]): boolean {
-  const [a, b] = octets;
-  if (a === 0 || a === 10 || a === 127) return true;
-  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
-  if (a === 169 && b === 254) return true; // Link-local & cloud metadata
-  if (a === 172 && b >= 16 && b <= 31) return true; // RFC1918
-  if (a === 192 && b === 168) return true; // RFC1918
-  if (a === 192 && b === 0) return true; // IETF protocol assignments
-  if (a === 198 && (b === 18 || b === 19)) return true; // Benchmarking
-  if (a >= 224) return true; // Multicast & reserved
-  return false;
-}
-
-function parseIpv4Dotted(host: string): number[] | null {
-  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return null;
-  const parts = host.split('.').map(Number);
-  return parts.every((n) => Number.isInteger(n) && n >= 0 && n <= 255) ? parts : null;
-}
-
-function parseIpv6Groups(rawHost: string): number[] | null {
-  const clean = rawHost.replace(/^\[|\]$/g, '').toLowerCase().split('%')[0];
-  if (!clean || !clean.includes(':')) return null;
-  if (/[^0-9a-f:.]/.test(clean)) return null;
-
-  const doubleColonParts = clean.split('::');
-  if (doubleColonParts.length > 2) return null;
-  const hasCompression = doubleColonParts.length === 2;
-
-  const leftRaw = doubleColonParts[0];
-  const rightRaw = hasCompression ? doubleColonParts[1] : '';
-
-  if (hasCompression && leftRaw.includes('.')) return null;
-
-  const parseHexPart = (str: string, allowIpv4Tail: boolean): number[] | null => {
-    if (str === '') return [];
-    const segs = str.split(':');
-    const out: number[] = [];
-    for (let i = 0; i < segs.length; i += 1) {
-      const seg = segs[i];
-      if (!seg) return null;
-      if (seg.includes('.')) {
-        if (!allowIpv4Tail || i !== segs.length - 1) return null;
-        const octets = parseIpv4Dotted(seg);
-        if (!octets) return null;
-        out.push(((octets[0] << 8) | octets[1]) >>> 0, ((octets[2] << 8) | octets[3]) >>> 0);
-      } else {
-        if (!/^[0-9a-f]{1,4}$/.test(seg)) return null;
-        out.push(parseInt(seg, 16));
-      }
-    }
-    return out;
-  };
-
-  const leftGroups = parseHexPart(leftRaw, !hasCompression);
-  if (!leftGroups) return null;
-  const rightGroups = hasCompression ? parseHexPart(rightRaw, true) : [];
-  if (!rightGroups) return null;
-
-  if (hasCompression) {
-    const total = leftGroups.length + rightGroups.length;
-    if (total >= 8) return null;
-    return [...leftGroups, ...new Array<number>(8 - total).fill(0), ...rightGroups];
-  }
-  return leftGroups.length === 8 ? leftGroups : null;
-}
-
-function ipv4From16BitGroups(hi: number, lo: number): number[] {
-  return [(hi >> 8) & 255, hi & 255, (lo >> 8) & 255, lo & 255];
-}
-
-function isPrivateOrReservedIpv6(rawHost: string): boolean {
-  const g = parseIpv6Groups(rawHost);
-  if (!g) return true;
-
-  // ::/96 (couvre ::, ::1 et IPv4-compatible ::d.d.d.d)
-  if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0) {
-    return true;
-  }
-  // ::ffff:0:0/96 (IPv4-mapped)
-  if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0xffff) {
-    return isPrivateOrReservedIpv4(ipv4From16BitGroups(g[6], g[7]));
-  }
-  // ::ffff:0:0:0/96 (IPv4-translated RFC 2765)
-  if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0xffff && g[5] === 0) {
-    return isPrivateOrReservedIpv4(ipv4From16BitGroups(g[6], g[7]));
-  }
-  // NAT64 : 64:ff9b::/96 et 64:ff9b:1::/48 (usage local)
-  if (g[0] === 0x0064 && g[1] === 0xff9b) {
-    if (g[2] === 0x0001) return true;
-    if (g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0) {
-      return isPrivateOrReservedIpv4(ipv4From16BitGroups(g[6], g[7]));
-    }
-  }
-  // 6to4 : 2002::/16 (IPv4 encodée dans les groupes 1 et 2)
-  if (g[0] === 0x2002) {
-    return isPrivateOrReservedIpv4(ipv4From16BitGroups(g[1], g[2]));
-  }
-  // Discard prefix : 100::/64 (RFC 6666)
-  if (g[0] === 0x0100 && g[1] === 0 && g[2] === 0 && g[3] === 0) return true;
-  // Documentation : 2001:db8::/32 (RFC 3849)
-  if (g[0] === 0x2001 && g[1] === 0x0db8) return true;
-  // Teredo : 2001::/32 (RFC 4380)
-  if (g[0] === 0x2001 && g[1] === 0) return true;
-  // Link-local fe80::/10, ULA fc00::/7, Multicast ff00::/8
-  if ((g[0] & 0xffc0) === 0xfe80) return true;
-  if ((g[0] & 0xfe00) === 0xfc00) return true;
-  if ((g[0] & 0xff00) === 0xff00) return true;
-
-  return false;
-}
-
-export function isSafeRemoteUrl(rawUrl: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(rawUrl.trim());
-  } catch {
-    return false;
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-  if (parsed.username || parsed.password) return false;
-  const host = parsed.hostname.toLowerCase().replace(/\.+$/, '');
-  if (!host) return false;
-  if (
-    host === 'localhost' ||
-    host.endsWith('.localhost') ||
-    host.endsWith('.local') ||
-    host.endsWith('.internal') ||
-    host.endsWith('.localdomain') ||
-    host === 'metadata' ||
-    host === 'metadata.google.internal'
-  ) {
-    return false;
-  }
-  if (/^\d+$/.test(host) || /^0x[0-9a-f]+$/i.test(host)) return false;
-  const ipv4 = parseIpv4Dotted(host);
-  if (ipv4) return !isPrivateOrReservedIpv4(ipv4);
-  if (host.startsWith('[') || host.includes(':')) return !isPrivateOrReservedIpv6(host);
-  if (!host.includes('.')) return false;
-  return true;
-}
-
-const FORBIDDEN_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-
-function stripUnsafeKeys(val: unknown, depth = 0): unknown {
-  if (depth > 16 || val === null || val === undefined) return val;
-  if (Array.isArray(val)) return val.map((item) => stripUnsafeKeys(item, depth + 1));
-  if (typeof val !== 'object') return val;
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
-    if (FORBIDDEN_OBJECT_KEYS.has(k)) continue;
-    out[k] = stripUnsafeKeys(v, depth + 1);
-  }
-  return out;
-}
-
-function detectBaseCurrency(fxRates?: Record<string, unknown>): string {
-  if (!fxRates || typeof fxRates !== 'object') return 'CAD';
-  if (Number(fxRates.CAD) === 1) return 'CAD';
-  if (Number(fxRates.USD) === 1) return 'USD';
-  if (Number(fxRates.EUR) === 1) return 'EUR';
-  return 'CAD';
-}
-
-function summarizeRecentTransactions(
-  transactions: unknown[],
-  baseCurrency: string,
-): Record<string, unknown> | null {
-  if (!Array.isArray(transactions) || transactions.length === 0) return null;
-  const byMonth = new Map<string, { inc: number; exp: number }>();
-  for (const item of transactions) {
-    if (!item || typeof item !== 'object') continue;
-    const tx = item as Record<string, unknown>;
-    if (tx.isTransfer === true || tx.isDuplicate === true) continue;
-    const cat = String(tx.category ?? '').toLowerCase();
-    if (cat === 'transfert' || cat === 'transfer' || cat === 'virement') continue;
-    const amt = Number(tx.amount ?? 0);
-    if (!Number.isFinite(amt) || amt === 0) continue;
-    const ym = String(tx.date ?? '').slice(0, 7);
-    if (!/^\d{4}-\d{2}$/.test(ym)) continue;
-    const bucket = byMonth.get(ym) ?? { inc: 0, exp: 0 };
-    if (amt > 0) bucket.inc += amt;
-    else bucket.exp += Math.abs(amt);
-    byMonth.set(ym, bucket);
-  }
-  const sortedMonths = Array.from(byMonth.keys()).sort();
-  const completeMonths = sortedMonths.length >= 3 ? sortedMonths.slice(0, -1) : sortedMonths;
-  const recentMonths = completeMonths.slice(-6);
-  if (recentMonths.length === 0) return null;
-  const avgInc = recentMonths.reduce((s, m) => s + (byMonth.get(m)?.inc ?? 0), 0) / recentMonths.length;
-  const avgExp = recentMonths.reduce((s, m) => s + (byMonth.get(m)?.exp ?? 0), 0) / recentMonths.length;
-  return {
-    transactionCount: transactions.length,
-    monthlyIncomeNative: Math.round(avgInc),
-    monthlyExpensesNative: Math.round(avgExp),
-    currency: baseCurrency,
-  };
-}
-
-export function sanitizeIncomingBridgePayload(raw: unknown): Record<string, unknown> {
-  const safeRaw = stripUnsafeKeys(raw);
-  if (!safeRaw || typeof safeRaw !== 'object' || Array.isArray(safeRaw)) {
-    return { positions: Array.isArray(safeRaw) ? safeRaw.slice(0, 500) : [] };
-  }
-  const obj = safeRaw as Record<string, unknown>;
-  if (
-    obj.schema === 'FinanceAI-Valoria-Bridge/v1.2' ||
-    obj.schema === 'FinanceAI-Valoria-Bridge/v1.3-CAD'
-  ) {
-    return obj;
-  }
-  let outer = obj;
-  if (outer.payload && typeof outer.payload === 'object' && !Array.isArray(outer.payload)) {
-    outer = outer.payload as Record<string, unknown>;
-  }
-  let stateObj: Record<string, unknown> = outer;
-  if (
-    outer.store &&
-    typeof outer.store === 'object' &&
-    (outer.store as Record<string, unknown>).state &&
-    typeof (outer.store as Record<string, unknown>).state === 'object'
-  ) {
-    stateObj = (outer.store as Record<string, unknown>).state as Record<string, unknown>;
-  } else if (outer.state && typeof outer.state === 'object' && !Array.isArray(outer.state)) {
-    stateObj = outer.state as Record<string, unknown>;
-  }
-
-  if (!obj.store && !obj.transactions && !obj.state && !obj.assets && !obj.positions) {
-    return obj;
-  }
-
-  const fxRates =
-    (stateObj.fxRates as Record<string, unknown> | undefined) ??
-    (outer.fxRates as Record<string, unknown> | undefined);
-  const baseCurrency = detectBaseCurrency(fxRates);
-  const rawList =
-    (Array.isArray(stateObj.positions) && stateObj.positions) ||
-    (Array.isArray(stateObj.holdings) && stateObj.holdings) ||
-    (Array.isArray(stateObj.portfolio) && stateObj.portfolio) ||
-    (Array.isArray(stateObj.lots) && stateObj.lots) ||
-    (Array.isArray(stateObj.assets) && stateObj.assets) ||
-    null;
-
-  const compactAssets = rawList
-    ? rawList.slice(0, 500).map((item) => {
-        if (!item || typeof item !== 'object') return item;
-        const rec = item as Record<string, unknown>;
-        const {
-          priceHistory: _ph,
-          purchases: _pur,
-          owner: _own,
-          lastHistorySync: _lhs,
-          priceUpdatedAt: _pua,
-          ...essential
-        } = rec;
-        return essential;
-      })
-    : undefined;
-
-  const rawTx = Array.isArray(stateObj.transactions) ? stateObj.transactions : null;
-  const cashflowSummary = rawTx
-    ? summarizeRecentTransactions(rawTx, baseCurrency)
-    : (stateObj.cashflowSummary as Record<string, unknown> | undefined) ?? null;
-
-  const compactObject: Record<string, unknown> = {
-    app: outer.app ?? 'FinanceAI',
-    ...(typeof outer.version === 'string' ? { version: outer.version } : {}),
-  };
-  if (fxRates) compactObject.fxRates = fxRates;
-  if (stateObj.profile) compactObject.profile = stateObj.profile;
-  if (stateObj.investorProfile) compactObject.investorProfile = stateObj.investorProfile;
-  if (stateObj.budget) compactObject.budget = stateObj.budget;
-  if (stateObj.projection && typeof stateObj.projection === 'object') {
-    const proj = stateObj.projection as Record<string, unknown>;
-    compactObject.projection = {
-      years: proj.years,
-      returnRate: proj.returnRate,
-      inflationRate: proj.inflationRate,
-      theoreticalIncome: proj.theoreticalIncome,
-      theoreticalExpenses: proj.theoreticalExpenses,
-      useTheoretical: proj.useTheoretical,
-      manualContribution: proj.manualContribution,
-      appliedReturnProfile: proj.appliedReturnProfile,
-      emergencyFundMonths: proj.emergencyFundMonths,
-    };
-  }
-  if (Array.isArray(stateObj.budgetItems) && stateObj.budgetItems.length > 0) {
-    compactObject.budgetItems = stateObj.budgetItems.slice(0, 200);
-  }
-  if (stateObj.initialBalances) compactObject.initialBalances = stateObj.initialBalances;
-  if (Array.isArray(stateObj.fintableBrokerBalances) && stateObj.fintableBrokerBalances.length > 0) {
-    compactObject.fintableBrokerBalances = stateObj.fintableBrokerBalances.slice(0, 100);
-  }
-  if (cashflowSummary) compactObject.cashflowSummary = cashflowSummary;
-  if (compactAssets) compactObject.positions = compactAssets;
-  if (Array.isArray(stateObj.watchlist)) compactObject.watchlist = stateObj.watchlist.slice(0, 100);
-  return compactObject;
-}
 
 // ----------------------------------------------------------------------------
 // Market & News Pure Helpers
@@ -907,12 +606,29 @@ function classifyPublisherToInstitutionalTier(
   return { tier: 'SELL_SIDE_CONSENSUS', code: publisher.slice(0, 14) || 'Consensus' };
 }
 
+function isLoopbackRemoteAddress(addr: string | undefined): boolean {
+  if (!addr) return true;
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+}
+
 function isOriginAllowed(req: Request, extraOrigins?: Set<string>): boolean {
   if (req.headers['sec-fetch-site'] === 'cross-site') return false;
   const origin = req.headers.origin;
-  if (!origin) return true;
+  if (!origin) return isLoopbackRemoteAddress(req.socket?.remoteAddress ?? req.ip);
   if (ALLOWED_DEFAULT_ORIGINS.has(origin) || extraOrigins?.has(origin)) return true;
   return FIREBASE_ORIGIN_REGEX.test(origin) || LOCAL_ORIGIN_REGEX.test(origin);
+}
+
+function buildRequestHeaders(req: Request): Headers {
+  const h = new Headers();
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (typeof v === 'string') h.set(k, v);
+    else if (Array.isArray(v)) h.set(k, v.join(', '));
+  }
+  if (!h.has('x-forwarded-for') && (req.ip || req.socket?.remoteAddress)) {
+    h.set('x-forwarded-for', String(req.ip || req.socket?.remoteAddress));
+  }
+  return h;
 }
 
 // ----------------------------------------------------------------------------
@@ -1141,12 +857,6 @@ interface InstitutionalCorrelatedPayload {
   dispatches: RawInstitutionalDispatch[];
 }
 
-let latestFinanceAISyncState: Record<string, unknown> = {
-  schema: 'FinanceAI-Valoria-Bridge/v1.2',
-  status: 'ready',
-  updatedAt: new Date().toISOString(),
-  note: 'Synchronisez depuis Valoria ou envoyez un POST JSON depuis votre application FinanceAI.',
-};
 let cachedVerifiedFeed: { expiresAt: number; payload: VerifiedFeedPayload } | null = null;
 const newsCache = new Map<string, { expiresAt: number; articles: ValoriaRawNewsFeedItem[] }>();
 let cachedInstitutionalCorrelated: {
@@ -1156,12 +866,7 @@ let cachedInstitutionalCorrelated: {
 } | null = null;
 
 export function resetValoriaServerState(): void {
-  latestFinanceAISyncState = {
-    schema: 'FinanceAI-Valoria-Bridge/v1.2',
-    status: 'ready',
-    updatedAt: new Date().toISOString(),
-    note: 'Synchronisez depuis Valoria ou envoyez un POST JSON depuis votre application FinanceAI.',
-  };
+  reinitialiserLimites();
   cachedVerifiedFeed = null;
   newsCache.clear();
   cachedInstitutionalCorrelated = null;
@@ -1218,7 +923,7 @@ async function fetchLiveTickerNews(
           title,
           publisher: String(n.publisher ?? 'Yahoo Finance'),
           publishedAt: dt,
-          url: n.link ? String(n.link) : undefined,
+          url: safeExternalHttpUrl(n.link),
           isLiveWeb: true,
         });
       }
@@ -1256,7 +961,7 @@ async function fetchLiveTickerNews(
             title: cleanTitle,
             publisher: decodeXmlEntities(source),
             publishedAt: isoDate,
-            url: link,
+            url: safeExternalHttpUrl(link),
             isLiveWeb: true,
           });
         }
@@ -1371,7 +1076,8 @@ function extractGroundingSources(
   return rawChunks
     .map((c) => {
       const web = (c as { web?: { uri?: string; title?: string } }).web;
-      return web?.uri ? { uri: web.uri, title: web.title ?? web.uri } : null;
+      const safeUri = safeExternalHttpUrl(web?.uri);
+      return safeUri ? { uri: safeUri, title: web?.title ?? safeUri } : null;
     })
     .filter((x): x is { uri: string; title: string } => Boolean(x))
     .slice(0, limit);
@@ -1565,8 +1271,13 @@ function buildFallbackBlindAudit(sanitized: SanitizedBlindTimeMachineInput, noti
 export function registerValoriaRoutes(app: Express, options: ValoriaRoutesOptions = {}): void {
   const fetchFn: typeof fetch = options.fetchImpl ?? fetch;
 
-  // CORS same-app / localhost sur /api/financeai/*
-  app.use('/api/financeai', (req: Request, res: Response, next: NextFunction) => {
+  // Garde commune locale : origine / loopback + limiteur de débit sur /api/*
+  app.use('/api', (req: Request, res: Response, next: NextFunction) => {
+    const path = req.path || '/';
+    if (path === '/sante') {
+      next();
+      return;
+    }
     const origin = req.headers.origin;
     if (!isOriginAllowed(req, options.allowedOrigins)) {
       res.status(403).json({ error: 'Origine non autorisée.' });
@@ -1578,71 +1289,30 @@ export function registerValoriaRoutes(app: Express, options: ValoriaRoutesOption
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Cache-Control', 'no-store');
     if (req.method === 'OPTIONS') {
       res.status(204).end();
       return;
     }
+    const isAiRoute = path.startsWith('/ai/') || path.startsWith('/agents/');
+    const isFeedRoute = path.startsWith('/market/') || path.startsWith('/news/');
+    if (isAiRoute || isFeedRoute) {
+      const bucket = isAiRoute ? 'ai' : 'px';
+      const limit = isAiRoute ? 30 : 120;
+      const debit = essayerDebit(`${bucket}:${ipClient(buildRequestHeaders(req))}`, limit);
+      if (!debit.ok) {
+        res.setHeader('Retry-After', String(debit.retryApresSec));
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(429).json({ error: { type: 'rate_limited', message: 'Trop de requêtes.' } });
+        return;
+      }
+    }
     next();
   });
 
-  // 1 & 2. GET & POST /api/financeai/bridge
-  app.get('/api/financeai/bridge', (_req: Request, res: Response) => {
+  // 1. Endpoint /api/financeai/bridge fermé (410 Gone)
+  app.all('/api/financeai/bridge', (_req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.json(latestFinanceAISyncState);
-  });
-
-  app.post('/api/financeai/bridge', async (req: Request, res: Response) => {
-    res.setHeader('Cache-Control', 'no-store');
-    try {
-      const body = (req.body ?? {}) as Record<string, unknown>;
-      if (typeof body.remoteUrl === 'string' && body.remoteUrl.trim()) {
-        const targetUrl = body.remoteUrl.trim();
-        if (!isSafeRemoteUrl(targetUrl)) {
-          res.status(400).json({ error: 'URL FinanceAI invalide ou hôte privé interdit (garde SSRF).' });
-          return;
-        }
-        const upstream = await fetchFn(targetUrl, {
-          headers: { Accept: 'application/json' },
-          redirect: 'error',
-          signal: AbortSignal.timeout(8000),
-        });
-        if (!upstream.ok) {
-          res.status(502).json({ error: `FinanceAI distant a répondu avec le statut ${upstream.status}.` });
-          return;
-        }
-        const rawText = await upstream.text();
-        if (new TextEncoder().encode(rawText).length > MAX_BRIDGE_BYTES) {
-          res.status(413).json({ error: 'Réponse FinanceAI distante trop volumineuse (max 5 Mo).' });
-          return;
-        }
-        const remoteJson = JSON.parse(rawText) as unknown;
-        const slimRemote = sanitizeIncomingBridgePayload(remoteJson);
-        latestFinanceAISyncState = {
-          schema: 'FinanceAI-Valoria-Bridge/v1.2',
-          syncedFromUrl: targetUrl,
-          updatedAt: new Date().toISOString(),
-          payload: slimRemote,
-        };
-        res.json({ ok: true, remotePayload: slimRemote, bridgeState: latestFinanceAISyncState });
-        return;
-      }
-
-      const slimBody = sanitizeIncomingBridgePayload(body);
-      const serializedSize = new TextEncoder().encode(JSON.stringify(slimBody)).length;
-      if (serializedSize > MAX_BRIDGE_BYTES) {
-        res.status(413).json({ error: 'Payload compacté supérieur à la limite de 5 Mo.' });
-        return;
-      }
-      latestFinanceAISyncState = {
-        ...slimBody,
-        updatedAt: new Date().toISOString(),
-      };
-      res.json({ ok: true, bridgeState: latestFinanceAISyncState });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erreur lors de la synchronisation FinanceAI.';
-      res.status(400).json({ error: msg });
-    }
+    res.status(410).json({ error: 'Pont de partage supprimé pour sécurité.' });
   });
 
   // 3. GET /api/market/verified-feed
@@ -2170,7 +1840,7 @@ export function registerValoriaRoutes(app: Express, options: ValoriaRoutesOption
             sourceTier: tierInfo.tier,
             filingOrEventCode: tierInfo.code,
             headline: rawTitle,
-            url: link,
+            url: safeExternalHttpUrl(link),
             fundamentalImpulseScore: impulse,
             isLiveFetched: true,
           });
@@ -2299,15 +1969,17 @@ Pour chaque actif principal, explique en 1 ou 2 phrases simples :
         ? `-${formatCad(Math.abs(riskMetrics.var95MonthlyEur))} CAD`
         : '(non disponible)';
 
+    const safeHoldingsBrief = wrapUserData(JSON.stringify(portfolioSummary.holdingsBrief ?? []));
+    const safeTopQuantAssets = wrapUserData(JSON.stringify(topQuantAssets));
     const prompt = `Comité d'allocation quantitative & Stock-Picking — applique un raisonnement chaîné strict (Chain-of-Thought en 3 étapes : 1. Vérification Prix Live vs DCF, 2. Solidité Bilan ROIC-WACC, 3. Catalyseur & Risque) AVANT d'émettre chaque ordre en français. Zéro hallucination : interdiction absolue de recommander ACHETER/RENFORCER un actif dont la décote DCF est négative.
 
 PROFIL : ${sanitizePromptText(profile.goalLabel ?? 'Valorisation', 40)} · Risque ${sanitizePromptText(profile.riskProfile ?? 'equilibre', 20)} · Horizon ${Number(profile.horizonYears ?? 10)} ans · Épargne ${budgetPromptStr}.
 MACRO : ${sanitizePromptText(macro.regimeName ?? 'Désinflation', 60)} · IPC ${Number(macro.inflationPct ?? 2.1)}% · Taux directeur ${Number(macro.centralBankRatePct ?? 2.5)}% · PIB ${Number(macro.gdpGrowthPct ?? 1.6)}% · VIX ${Number(macro.vixLevel ?? 15.5)}.
 PORTEFEUILLE ACTUEL ($ CAD) : ${currentValPromptStr} (Investi ${investedValPromptStr}, P&L ${Number(portfolioSummary.totalGainLossPct ?? 0)}%) · Poids Actions ${Number(catWeights.actions ?? 0)}% / Oblig ${Number(catWeights.obligations ?? 0)}% / Crypto ${Number(catWeights.crypto ?? 0)}% / Refuge ${Number(catWeights.refuge ?? 0)}%.
 MÉTRIQUES DE RISQUE : Sharpe ${Number(riskMetrics.sharpeRatio ?? 0)} · Sortino ${Number(riskMetrics.sortinoRatio ?? 0)} · Bêta MSCI World ${Number(riskMetrics.betaVsWorld ?? 1)} · Alpha ${Number(riskMetrics.jensenAlphaPct ?? 0)}% · VaR 95% (1M) ${varPromptStr} · HHI ${Number(riskMetrics.concentrationHhi ?? 2500)}.
-POSITIONS DÉTENUES : ${JSON.stringify(portfolioSummary.holdingsBrief ?? [])}
+POSITIONS DÉTENUES : ${safeHoldingsBrief}
 UNIVERS QUANTITATIF & COURS TEMPS RÉEL VÉRIFIÉS ($ CAD, identifiants autorisés : ${allowedIds.join(', ')}) :
-${JSON.stringify(topQuantAssets)}
+${safeTopQuantAssets}
 
 Fournis jusqu'à 4 arbitrages concrets en $ CAD (ACHETER, RENFORCER, ALLÉGER ou VENDRE) vérifiés par rapport aux cours en temps réel.`;
 
@@ -2315,7 +1987,7 @@ Fournis jusqu'à 4 arbitrages concrets en $ CAD (ACHETER, RENFORCER, ALLÉGER ou
       options,
       contents: prompt,
       config: {
-        systemInstruction: `Tu es stratégiste quantitatif senior (gestion institutionnelle en $ CAD & stock-picking). Raisonne toujours par étapes vérifiables (Prix Temps Réel -> Bilan DCF/ROIC -> Risque Portefeuille) avant de conclure. Maximum 18 mots par champ texte. N'utilise aucun autre assetId que ceux fournis (${allowedIds.join(', ')}).`,
+        systemInstruction: `Tu es stratégiste quantitatif senior (gestion institutionnelle en $ CAD & stock-picking). Raisonne toujours par étapes vérifiables (Prix Temps Réel -> Bilan DCF/ROIC -> Risque Portefeuille) avant de conclure. Maximum 18 mots par champ texte. N'utilise aucun autre assetId que ceux fournis (${allowedIds.join(', ')}).\n${PROMPT_DATA_ISOLATION_NOTE}`,
         thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
         responseMimeType: 'application/json',
         responseSchema: {
@@ -2421,12 +2093,17 @@ Fournis jusqu'à 4 arbitrages concrets en $ CAD (ACHETER, RENFORCER, ALLÉGER ou
       riskProfile?: string;
     };
 
-    const rawList =
-      Array.isArray(tickers) && tickers.length > 0
-        ? tickers.map((t) => String(t).trim()).filter(Boolean)
-        : ['ADP', 'GOOGL', 'INTC', 'PAYX', 'RY.TO', 'XBB.PA'];
-    const focusClean = focusTicker ? String(focusTicker).trim() : '';
-    const targetList = Array.from(new Set(focusClean ? [focusClean, ...rawList] : rawList)).slice(0, 8);
+    const sanitizeTickerToken = (raw: unknown): string | null => {
+      const cleaned = sanitizePromptText(raw ?? '', 24).toUpperCase();
+      return cleaned && SYMBOL_REGEX.test(cleaned) && !/^\.+$/.test(cleaned) ? cleaned : null;
+    };
+    const defaultTickers = ['ADP', 'GOOGL', 'INTC', 'PAYX', 'RY.TO', 'XBB.PA'];
+    const rawList = Array.isArray(tickers)
+      ? tickers.map(sanitizeTickerToken).filter((t): t is string => Boolean(t))
+      : [];
+    const safeRawList = rawList.length > 0 ? rawList : defaultTickers;
+    const focusClean = sanitizeTickerToken(focusTicker) ?? '';
+    const targetList = Array.from(new Set(focusClean ? [focusClean, ...safeRawList] : safeRawList)).slice(0, 8);
 
     const [newsBatches, chartSnaps] = await Promise.all([
       Promise.all(targetList.map((t) => fetchLiveTickerNews(t, fetchFn))),
@@ -2865,9 +2542,9 @@ ${headlinesDigest || 'Publications SEC EDGAR / SEDAR+ / Banque du Canada'}`,
 
     const topHeadline = liveArticles[0];
     const fallbackSources = liveArticles
-      .filter((a) => Boolean(a.url))
-      .slice(0, 4)
-      .map((a) => ({ uri: a.url as string, title: `${a.ticker} · ${a.publisher}` }));
+      .map((a) => ({ uri: safeExternalHttpUrl(a.url), title: `${a.ticker} · ${a.publisher}` }))
+      .filter((s): s is { uri: string; title: string } => Boolean(s.uri))
+      .slice(0, 4);
 
     res.json({
       ok: true,

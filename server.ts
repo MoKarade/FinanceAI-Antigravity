@@ -51,6 +51,7 @@ function mountWebProxy(
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
+  const HOST = process.env.HOST || '127.0.0.1';
 
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
@@ -60,7 +61,6 @@ async function startServer() {
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
     next();
   });
-  app.use('/api/financeai', express.json({ limit: '6mb' }));
   app.use(express.json({ limit: '5mb' }));
 
   app.get('/api/sante', (_req, res) => {
@@ -109,8 +109,8 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.warn(`Server running on http://localhost:${PORT}`);
+  app.listen(PORT, HOST, () => {
+    console.warn(`Server running on http://${HOST}:${PORT}`);
   });
 }
 
