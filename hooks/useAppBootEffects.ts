@@ -17,6 +17,7 @@ import { loadApiKeysDetailed, saveApiKeys } from '../services/secureKeyStore';
 // mémoïsée de lazy.ts, qui préserve aussi l'ordre configure→quote (voir son en-tête).
 import { loadMarketData } from '../services/marketData/lazy';
 import { installGlobalErrorHandlers, logError } from '../services/errorLogger';
+import { hydrateProtectedDossierCacheFromIdb } from '../services/dataRecovery';
 import { initAutoBackup, createBackupNow } from '../services/backupAuto';
 import { sanitizePersonaArtifacts } from '../services/personaSanitizer';
 import { loadLockedProjection } from '../services/lockedProjectionStore';
@@ -134,9 +135,7 @@ export function useAppBootEffects(): void {
         // Stockage illimité : réhydrate l'état complet depuis IndexedDB si le miroir localStorage
         // a été compacté, et charge l'empreinte protégée hors localStorage.
         void hydrateStoreFromIdbOnce();
-        void import('../services/dataRecovery')
-            .then((m) => m.hydrateProtectedDossierCacheFromIdb())
-            .catch(() => {});
+        void hydrateProtectedDossierCacheFromIdb().catch(() => {});
 
         return () => {
             clearTimeout(timer);

@@ -88,8 +88,9 @@ async function getRequestAls(): Promise<RequestAls | null> {
     if (_requestAls !== undefined) return _requestAls;
     if (typeof window !== 'undefined') { _requestAls = null; return null; }
     try {
-        const { AsyncLocalStorage } = await import('node:async_hooks');
-        _requestAls = new AsyncLocalStorage<object>() as unknown as RequestAls;
+        const asyncHooksModule = 'node:async_hooks';
+        const alsMod = (await import(/* @vite-ignore */ asyncHooksModule)) as typeof import('node:async_hooks');
+        _requestAls = new alsMod.AsyncLocalStorage<object>() as unknown as RequestAls;
     } catch {
         _requestAls = null; // runtime sans async_hooks → repli non scopé (comportement séquentiel sûr)
     }

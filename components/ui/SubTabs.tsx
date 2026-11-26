@@ -70,7 +70,7 @@ export const panelId = (idPrefix: string, id: string): string => `${idPrefix}-pa
  * c'est le comportement par défaut du motif, et le seul cohérent avec des panneaux dont un seul est
  * monté — un focus sans sélection laisserait l'utilisateur devant le panneau d'un autre onglet.
  */
-export function clavierTablist<Id extends string>(
+function clavierTablist<Id extends string>(
     idPrefix: string,
     ids: ReadonlyArray<Id>,
     actif: Id,

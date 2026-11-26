@@ -1,28 +1,24 @@
 /**
- * Tests E2E — Navigation et smoke par onglet
+ * Tests E2E — Navigation et smoke par onglet (menu Étape 4)
  *
  * Pour chaque onglet principal, vérifie :
  * - Aucune erreur JavaScript non-gérée (pageerror)
- * - L'onglet affiche au moins un titre visible (pas d'écran blanc/crash)
- *
- * Prérequis : mode test activé (fixtures Alex/Sam) pour avoir du contenu stable.
+ * - L'onglet affiche un titre visible correspondant à la page
  */
 import { test, expect } from '@playwright/test';
 import { scriptBypassOnboarding, activateTestMode } from './helpers/setup';
 
-/** Onglets à valider avec le texte attendu dans le titre de page.
- *  [REFONTE-NAV Lot 1] #DASHBOARD reste dans la liste VOLONTAIREMENT : l'Accueil est retiré
- *  et ce hash legacy doit atterrir sur le Futur (redirect App.tsx) — le smoke vérifie donc
- *  le titre du Futur, pas « Vue d'ensemble ». */
 const ONGLETS: Array<{ hash: string; nomAttendu: string }> = [
-  { hash: 'DASHBOARD',     nomAttendu: 'Projection' }, // redirigé → Futur
+  { hash: 'DASHBOARD',     nomAttendu: 'Patrimoine net' },
+  { hash: 'FUTURE',        nomAttendu: 'Projection' },
   { hash: 'TRANSACTIONS',  nomAttendu: 'Transactions' },
   { hash: 'BUDGET',        nomAttendu: 'Budget' },
   { hash: 'DEBT',          nomAttendu: 'Dette' },
   { hash: 'INVESTMENTS',   nomAttendu: 'Placements' },
-  { hash: 'FUTURE',        nomAttendu: 'Projection' }, // [S5-REFONTE-FUTUR] titre des maquettes F-*
   { hash: 'RETIREMENT',    nomAttendu: 'Retraite' },
+  { hash: 'LIFE_PROJECTS', nomAttendu: 'Projets de vie' },
   { hash: 'TAX',           nomAttendu: 'Impôts' },
+  { hash: 'SETTINGS',      nomAttendu: 'Réglages' },
 ];
 
 test.describe('Navigation — smoke par onglet (mode test)', () => {
@@ -41,16 +37,11 @@ test.describe('Navigation — smoke par onglet (mode test)', () => {
       await page.goto(`/#${hash}`);
       await page.waitForLoadState('domcontentloaded');
 
-      // Attendre qu'un h1 visible dans le contenu principal (#main) apparaisse.
-      // La sidebar a aussi un h1 masqué (CSS hidden) — on cible #main pour l'éviter.
       const titre = page.locator('#main h1').first();
       await expect(titre).toBeVisible({ timeout: 10_000 });
 
-      // Le titre doit contenir le texte attendu (insensible à la casse)
       const texte = await titre.innerText();
       expect(texte.toLowerCase()).toContain(nomAttendu.toLowerCase());
-
-      // Aucune erreur JavaScript non-gérée
       expect(erreurs, `Erreurs JS sur l'onglet ${hash}`).toHaveLength(0);
     });
   }
