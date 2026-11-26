@@ -168,7 +168,7 @@ describe('Sous-titre « Équité présente » — no-fake-data sur les biens ina
             />,
         );
         expect(screen.getByText('Bien inactif — exclu du patrimoine')).toBeInTheDocument();
-        expect(screen.getByText('—')).toBeInTheDocument();
+        expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(1);
     });
 });
 

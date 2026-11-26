@@ -1674,6 +1674,7 @@ const runScenario = (params: SimulationParams, strategy: AllocationStrategy, ena
               bootPrimaryHousingOffset,
               skipRapForPurchase: overrides.skipRapForPurchase ?? (strategy === 'PRIO_CELI_NO_RAP'),
               downsizeThisMonth: effProj.appliedDownsize === true && m === Math.max(0, retirementMonthIndex),
+              otherDebtMonthly: debtPayments,
               skipLogs: pointAllege },
             activeRE,
             propertiesState,

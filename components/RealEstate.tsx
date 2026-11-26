@@ -16,14 +16,15 @@ interface RealEstateProps {
 }
 
 export const RealEstate: React.FC<RealEstateProps> = ({ availableCash, goals, setGoals }) => {
-    const { actual } = useMemo(() => partitionRealEstateGoals(goals), [goals]);
+    const { actual, future } = useMemo(() => partitionRealEstateGoals(goals), [goals]);
+    const showProjectsDirectly = actual.length === 0 && future.length > 0;
 
     return (
         <RealEstateWorkspace
-            variant="actuel"
+            variant={showProjectsDirectly ? 'projet' : 'actuel'}
             availableCash={availableCash}
             allGoals={goals}
-            visibleGoals={actual}
+            visibleGoals={showProjectsDirectly ? future : actual}
             setAllGoals={setGoals}
         />
     );

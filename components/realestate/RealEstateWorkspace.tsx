@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { formatCAD, formatNumber } from '../../utils/format';
+import { formatCAD, formatNumber, formatPercent } from '../../utils/format';
 import { CollapsibleSection } from '../ui/CollapsibleSection';
 import { useViewportBelowLg } from '../../hooks/useViewportBelowLg';
-import { RealEstateGoal, Municipality, Tab as TabEnum } from '../../types';
+import { RealEstateGoal, Municipality, Tab as TabEnum, Debt } from '../../types';
 import { INITIAL_REAL_ESTATE_GOAL, TAB_LABELS } from '../../constants';
 import { VieCurveLink } from '../vie/VieCurveLink';
 import { ConfirmModal } from '../ui/ConfirmModal';
@@ -13,7 +13,12 @@ import { RealEstateAdviceCard } from './RealEstateAdviceCard';
 import { construireAmortissement, construireComparaisonScenarios } from './calculsImmoLocaux';
 import { ScenariosAchatLocation } from './ScenariosAchatLocation';
 import { AmortissementCards } from './AmortissementCards';
-import { calculateWelcomeTax } from '../../services/realEstate';
+import {
+    calculateWelcomeTax,
+    computeCanadianMonthlyMortgageRate,
+    computeCanadianMortgagePayment,
+} from '../../services/realEstate';
+import { evaluateRealEstateDecision } from '../../services/realEstateDecider';
 import { presentEquityOfGoal, monthsSince } from '../../services/projection/pastPurchaseInit';
 import { firstDayOfCurrentMonthIso } from '../../services/realEstatePartition';
 import { useFinanceStore } from '../../store/useFinanceStore';
@@ -34,6 +39,8 @@ import { PrivateNumberInput } from '../ui/PrivateNumberInput';
  * SOUS-ENSEMBLE à afficher (`visibleGoals`) mais toute écriture repasse par la
  * liste COMPLÈTE (`allGoals`) pour ne jamais perdre l'autre moitié.
  */
+
+const EMPTY_DEBTS: Debt[] = [];
 
 interface RealEstateWorkspaceProps {
     variant: 'actuel' | 'projet';
@@ -168,6 +175,10 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
     // confirmation AVANT le geste : supprimer un bien + ses ventes est irréversible.
     const lifeEvents = useFinanceStore(s => s.lifeEvents);
     const setAppState = useFinanceStore(s => s.setAppState);
+    const debts = useFinanceStore(s => s.debts) ?? EMPTY_DEBTS;
+    const lastProjection = useFinanceStore(s => s.lastProjection);
+    const users = useFinanceStore(s => s.config?.users);
+    const retirementGoal = useFinanceStore(s => s.retirementGoal);
     const ventesLieesA = (goalId: string | null) =>
         goalId ? (lifeEvents ?? []).filter(e => e.propertyId === goalId) : [];
 
@@ -244,13 +255,9 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
     const inspectionFees = 800;
     const totalCashNeeded = downPayment + welcomeTax + notaryFees + inspectionFees + initialRenovations;
 
-    const monthlyRate = rate / 100 / 12;
+    const monthlyRate = computeCanadianMonthlyMortgageRate(rate);
     const numberOfPayments = amortization * 12;
-    // Facteur d'amortissement calculé une seule fois (évitait 2 Math.pow par render).
-    const mortgagePowFactor = monthlyRate > 0 ? Math.pow(1 + monthlyRate, numberOfPayments) : 0;
-    const monthlyMortgage = monthlyRate > 0
-        ? (monthlyRate * totalMortgage * mortgagePowFactor) / (mortgagePowFactor - 1)
-        : totalMortgage / numberOfPayments;
+    const monthlyMortgage = computeCanadianMortgagePayment(totalMortgage, rate, numberOfPayments);
 
     // [GODFILE-REALESTATE-CMP] Corps extrait tel quel vers calculsImmoLocaux.ts (lot 153) —
     // mêmes entrées, mêmes dépendances de memo.
@@ -292,8 +299,52 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
     const combinedData = useMemo(() => construireComparaisonScenarios({
         amortization, totalCashNeeded, currentRent, netMonthlyCost, maintenanceMonthly,
         marketReturn, price, localRentalAppreciation, localStockReturn, netAnnualIncome,
-        amortissement: amortizationData.data,
-    }), [amortization, totalCashNeeded, currentRent, netMonthlyCost, maintenanceMonthly, marketReturn, price, localRentalAppreciation, localStockReturn, netAnnualIncome, amortizationData.data]);
+        amortissement: amortizationData.data, targetDate,
+    }), [amortization, totalCashNeeded, currentRent, netMonthlyCost, maintenanceMonthly, marketReturn, price, localRentalAppreciation, localStockReturn, netAnnualIncome, amortizationData.data, targetDate]);
+
+    const monthlyGrossIncome = useMemo(() => {
+        if (!users) return null;
+        const total = users.reduce((sum, u) => sum + Math.max(0, Number(u?.grossSalary) || 0), 0);
+        return total > 0 ? total : null;
+    }, [users]);
+
+    const decision = useMemo(
+        () =>
+            evaluateRealEstateDecision({
+                goal: {
+                    ...activeGoal,
+                    price,
+                    downPayment,
+                    mortgageRate: rate,
+                    amortization,
+                    purchaseDate: targetDate,
+                    taxesYearly,
+                    heatingMonthly,
+                    condoFees,
+                },
+                lastProjection,
+                debts,
+                monthlyGrossIncome,
+                currentRentMonthly: currentRent,
+                retirementGoal,
+            }),
+        [
+            activeGoal,
+            price,
+            downPayment,
+            rate,
+            amortization,
+            targetDate,
+            taxesYearly,
+            heatingMonthly,
+            condoFees,
+            lastProjection,
+            debts,
+            monthlyGrossIncome,
+            currentRent,
+            retirementGoal,
+        ],
+    );
 
     // [S5-REFONTE-IMMOBILIER] Maquettes E-immobilier / M-immobilier : UNE page « Immobilier », deux
     // onglets d'en-tête (Biens détenus · N / Projets d'achat · N) qui basculent entre les deux vues du
@@ -479,6 +530,116 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
                 {/* [UX-ISACTIVE-BADGE] (A5) : l'amputation du patrimoine doit être VISIBLE. */}
                 {!activeGoal.isActive && <p className="text-meta text-warning-400 lg:hidden">Non compté dans la simulation.</p>}
                 <p className="sr-only text-[13px] text-ink-400">{activeGoal.isPrimaryResidence ? 'Le loyer actuel disparaît de la simulation à l\'achat.' : activeGoal.isRented ? 'Les loyers perçus entrent dans la simulation.' : 'Aucun loyer : le bien pèse par sa mensualité et son équité.'}</p>
+            </section>
+
+            {/* Édition directe Prix & Date + Verdict d'achat */}
+            <section
+                data-testid="real-estate-verdict-card"
+                aria-label="Décideur d'achat immobilier"
+                className="rounded-2xl bg-surface border border-bordure p-4 sm:px-5 sm:py-4 space-y-4"
+            >
+                <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:max-w-lg w-full">
+                        <div>
+                            <label htmlFor="rew-quick-price" className="text-meta font-semibold text-ink-300 block mb-1">
+                                Prix d’achat ($ CAD)
+                            </label>
+                            <PrivateNumberInput
+                                id="rew-quick-price"
+                                step="5000"
+                                min={0}
+                                value={price}
+                                onChange={(e) => {
+                                    const v = Number(e.target.value);
+                                    if (Number.isFinite(v) && v >= 0) {
+                                        updateActiveGoal({ price: v });
+                                    }
+                                }}
+                                className="w-full min-h-11 px-3 font-mono text-ink-50 rounded-xl border border-bordure-champ bg-surface-douce focus-ring"
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="rew-quick-date" className="text-meta font-semibold text-ink-300 block mb-1">
+                                Date d’achat visée
+                            </label>
+                            <input
+                                id="rew-quick-date"
+                                type="date"
+                                value={targetDate}
+                                onChange={(e) => updateActiveGoal({ purchaseDate: e.target.value })}
+                                className="w-full min-h-11 px-3 font-mono text-ink-50 rounded-xl border border-bordure-champ bg-surface-douce focus-ring"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2.5">
+                        <Badge
+                            variant={
+                                decision.verdict === 'feu_vert'
+                                    ? 'success'
+                                    : decision.verdict === 'tendu'
+                                      ? 'warning'
+                                      : 'danger'
+                            }
+                            size="md"
+                        >
+                            {decision.verdictLabel}
+                        </Badge>
+                        {decision.retirementAgeDeltaYears !== null && (
+                            <span className="text-tiny text-ink-300">
+                                Effet retraite :{' '}
+                                <strong className="font-mono text-ink-50">
+                                    <PrivateAmount>
+                                        {decision.retirementAgeDeltaYears === 0
+                                            ? 'Neutre (0 an)'
+                                            : `${decision.retirementAgeDeltaYears > 0 ? '+' : ''}${formatNumber(decision.retirementAgeDeltaYears, { decimals: 1 })} an(s)`}
+                                    </PrivateAmount>
+                                </strong>
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                {decision.reasonsFr.length > 0 && (
+                    <ul className="space-y-1 text-tiny text-ink-300 list-disc pl-5">
+                        {decision.reasonsFr.map((r, i) => (
+                            <li key={i}>
+                                <PrivateAmount>{r}</PrivateAmount>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="rounded-xl border border-bordure bg-surface-douce p-3 min-w-0">
+                        <div className="text-tiny text-ink-400">
+                            {decision.isAlreadyOwned ? 'Liquidités actuelles' : 'Trésorerie prévue à la date'}
+                        </div>
+                        <div className="text-body font-mono font-bold text-ink-50 tabular-nums mt-0.5">
+                            <PrivateAmount>
+                                {decision.projectedCashAtDate !== null ? formatCAD(decision.projectedCashAtDate) : '—'}
+                            </PrivateAmount>
+                        </div>
+                    </div>
+                    <div className="rounded-xl border border-bordure bg-surface-douce p-3 min-w-0">
+                        <div className="text-tiny text-ink-400">Budget mensuel logement</div>
+                        <div className="text-body font-mono font-bold text-ink-50 tabular-nums mt-0.5">
+                            <PrivateAmount>{`${formatCAD(decision.monthlyHousingTotal)}/mois`}</PrivateAmount>
+                        </div>
+                    </div>
+                    <div className="rounded-xl border border-bordure bg-surface-douce p-3 min-w-0">
+                        <div className="text-tiny text-ink-400">Test bancaire (ABD / ATD)</div>
+                        <div className="text-body font-mono font-bold text-ink-50 tabular-nums mt-0.5">
+                            {decision.b20GdsPct !== null && decision.b20TdsPct !== null ? (
+                                <PrivateAmount>
+                                    {`${formatPercent(decision.b20GdsPct, 0)} / ${formatPercent(decision.b20TdsPct, 0)}`}
+                                </PrivateAmount>
+                            ) : (
+                                '—'
+                            )}
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <section aria-label="Chiffres clés" className="grid grid-cols-2 xl:grid-cols-5 gap-2.5 xl:gap-3.5 gf-spring-grid">

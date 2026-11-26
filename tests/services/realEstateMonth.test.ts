@@ -503,4 +503,51 @@ describe('realEstateMonth — B-20 et ré-avancement Smith Manoeuvre', () => {
         expect(state.smithManoeuvreDebt).toBeGreaterThan(smithDebtBefore);
         expect(state.smithManoeuvreDebt).toBeLessThan(smithDebtBefore + 1000); // Uniquement l'intérêt capitalisé
     });
+
+    it('intègre ctx.otherDebtMonthly dans le stress test B-20 à l’achat', () => {
+        const goal = makeGoal({
+            id: 'b20-debt',
+            purchaseDate: '2026-07-01',
+            price: 400_000,
+            downPayment: 80_000,
+            mortgageRate: 5.0,
+            amortization: 25,
+            taxesYearly: 3_600,
+            heatingMonthly: 150,
+            totalClosingCosts: 3_000,
+        });
+        const stateNoDebt = makeState({ liquid: 150_000 });
+        const propNoDebt = makeProp({ id: 'b20-debt', isBought: false, mortgage: 320_000, currentValue: 400_000 });
+        processRealEstate(
+            stateNoDebt,
+            makeCtx({
+                m: 0,
+                grossMarcBaseAnnual: 108_000,
+                grossAnnaBaseAnnual: 0,
+                otherDebtMonthly: 0,
+            }),
+            [goal],
+            [propNoDebt],
+            offset0,
+            noWelcomeTax,
+        );
+        expect(stateNoDebt.lifeEventLogs.some((l) => l.includes('Hypothèque risquée'))).toBe(false);
+
+        const stateWithDebt = makeState({ liquid: 150_000 });
+        const propWithDebt = makeProp({ id: 'b20-debt', isBought: false, mortgage: 320_000, currentValue: 400_000 });
+        processRealEstate(
+            stateWithDebt,
+            makeCtx({
+                m: 0,
+                grossMarcBaseAnnual: 108_000,
+                grossAnnaBaseAnnual: 0,
+                otherDebtMonthly: 2_000,
+            }),
+            [goal],
+            [propWithDebt],
+            offset0,
+            noWelcomeTax,
+        );
+        expect(stateWithDebt.lifeEventLogs.some((l) => l.includes('Hypothèque risquée'))).toBe(true);
+    });
 });

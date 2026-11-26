@@ -125,4 +125,10 @@ describe('construireComparaisonScenarios — relations des quatre scénarios', (
         const plusHaut = construireComparaisonScenarios({ ...params, marketReturn: 10 });
         expect(plusHaut[10]['Louer + Investir Reste']).toBeGreaterThan(rows[10]['Louer + Investir Reste']);
     });
+
+    it('propague targetDate en calendarYear cohérent sur les scénarios comparés', () => {
+        const dated = construireComparaisonScenarios({ ...params, targetDate: '2029-05-01' });
+        expect(dated[0].calendarYear).toBe(2030);
+        expect(dated[4].calendarYear).toBe(2034);
+    });
 });

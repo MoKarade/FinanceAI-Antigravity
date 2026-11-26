@@ -130,6 +130,8 @@ export interface RealEstateCtx {
     /** PH4-FUT-B-4 — true UNIQUEMENT au mois exact de la retraite si le levier downsizing est actif :
      *  déclenche la vente+rachat-plus-petit de la résidence principale (cf. DOWNSIZE_RELEASE_PCT). */
     downsizeThisMonth?: boolean;
+    /** Paiements mensuels des autres dettes non hypothécaires actives ce mois-ci (pour TDS OSFI B-20). */
+    otherDebtMonthly?: number;
     /** Saute la génération de messages texte (mode MC allégé). */
     skipLogs?: boolean;
 }
@@ -381,13 +383,8 @@ export function processRealEstate(
                 // pas une qualification réelle. L'achat est tout de même autorisé
                 // dans la simulation (la décision finale appartient à l'utilisateur).
                 //
-                // Limitations connues (à améliorer dans futures PRs) :
-                //  - `otherDebtMonthly = 0` : on n'a pas accès aux dettes (ctx.debts).
-                //    Sous-estime TDS — un user avec dette auto/cartes pourrait échouer
-                //    en réalité alors qu'on logue "passes" ici.
-                //  - Composition mensuelle simple (`rate / 12`) vs semi-annuelle
-                //    canadienne légale : biais conservateur léger (~0.05% sur PMT),
-                //    cohérent avec le reste du moteur.
+                // Note : `otherDebtMonthly` reçoit désormais les paiements mensuels réels
+                // des dettes non hypothécaires actives du mois courant (via RealEstateCtx).
                 if (Number.isFinite(goal.mortgageRate) && goal.mortgageRate > 0) {
                     const monthlyGross = ctx.isRetired
                         ? ctx.incomeRetirement
@@ -408,7 +405,7 @@ export function processRealEstate(
                         amortization: goal.amortization,
                         monthlyHousingChargesExclMortgage: monthlyHousingExcl,
                         monthlyGrossIncome: monthlyGross,
-                        otherDebtMonthly: 0,
+                        otherDebtMonthly: ctx.otherDebtMonthly ?? 0,
                     });
                     if (!stress.passes) {
                         state.lifeEventLogs.push(

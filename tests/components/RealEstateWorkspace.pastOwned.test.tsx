@@ -96,11 +96,14 @@ describe('popup « est-ce acheté ? » — apparition et les TROIS issues', () =
 });
 
 describe('badge « Date passée — non acheté » et checkbox — le cycle de correction', () => {
-    it('un bien « Pas encore » QUITTE la page Immobilier et vit sur Projets, badge visible', () => {
+    it('un bien « Pas encore » QUITTE la page Immobilier (si un bien détenu existe) et vit sur Projets, badge visible', () => {
         // Revue #684 (5e registre) : `isOwnedToday` ignorait `isOwned` — le bien restait affiché
         // dans « ce que je POSSÈDE » après que l'utilisateur a déclaré ne PAS le posséder.
+        // Quand un bien détenu existe, la vue « Biens détenus » exclut `notYet` ; sans bien détenu,
+        // `RealEstate` bascule directement sur l'onglet Projets d'achat.
+        const owned = goal({ id: 'o1', name: 'Maison Détenue', isOwned: true });
         const { unmount } = render(
-            <RealEstate availableCash={50_000} goals={[notYet, project]} setGoals={newSetGoals()} />);
+            <RealEstate availableCash={50_000} goals={[owned, notYet, project]} setGoals={newSetGoals()} />);
         expect(screen.queryByText(/Condo Pas Encore/)).toBeNull();
         unmount();
         render(<RealEstateProjects availableCash={50_000} goals={[notYet, project]} setGoals={newSetGoals()} />);

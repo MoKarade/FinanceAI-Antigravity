@@ -53,9 +53,15 @@ describe('RealEstate — vue Config (biens ACTUELS seulement, [REFONTE-NAV-L3])'
         expect(screen.getByRole('button', { name: "Projets d'achat · 1" })).toBeInTheDocument();
     });
 
-    it('sans bien détenu : état vide honnête (aucun éditeur sur un goal placeholder)', () => {
+    it('sans bien détenu mais avec projet : ouvre directement les projets d’achat (avec verdict)', () => {
         render(<RealEstate availableCash={50_000} goals={[project]} setGoals={vi.fn()} />);
+        expect(screen.getAllByText(/Chalet Projet 2099/).length).toBeGreaterThan(0);
+        expect(screen.getByTestId('real-estate-verdict-card')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: "Projets d'achat · 1" })).toHaveAttribute('aria-current', 'page');
+    });
+
+    it('sans bien détenu ni projet : état vide honnête', () => {
+        render(<RealEstate availableCash={50_000} goals={[]} setGoals={vi.fn()} />);
         expect(screen.getByText(/Tu ne possèdes aucun bien immobilier/)).toBeInTheDocument();
-        expect(screen.queryByText(/Chalet Projet 2099/)).toBeNull();
     });
 });

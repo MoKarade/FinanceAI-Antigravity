@@ -114,12 +114,15 @@ interface ParamsComparaisonScenarios {
     localStockReturn: number;
     netAnnualIncome: number;
     amortissement: LigneAmortissement[];
+    /** Date d'achat ISO visée (fixe le repère calendrier sur la comparaison). */
+    targetDate?: string;
 }
 
 // Alias de TYPE (pas une interface) : `ChartDataTable` attend `Record<string, unknown>[]`, et
 // seuls les alias reçoivent l'index implicite de TypeScript — une interface serait refusée.
 export type LigneScenario = {
     year: number;
+    calendarYear?: number;
     'Acheter (Résidence)': number;
     'Louer + Investir Reste': number;
     'Investissement Locatif (Équité+Loyer)': number;
@@ -130,7 +133,9 @@ export type LigneScenario = {
 export const construireComparaisonScenarios = (p: ParamsComparaisonScenarios): LigneScenario[] => {
     const { amortization, totalCashNeeded, currentRent, netMonthlyCost, maintenanceMonthly,
         marketReturn, price, localRentalAppreciation, localStockReturn, netAnnualIncome,
-        amortissement } = p;
+        amortissement, targetDate } = p;
+    const parsedYear = targetDate ? Number(/^\d{4}/.exec(targetDate)?.[0]) : NaN;
+    const baseYear = Number.isFinite(parsedYear) ? parsedYear : undefined;
     return Array.from({ length: amortization }, (_, i) => {
         const yr = i + 1;
         let rentScenarioNetWorth = totalCashNeeded;
@@ -150,6 +155,7 @@ export const construireComparaisonScenarios = (p: ParamsComparaisonScenarios): L
         const stockInvestment = totalCashNeeded * Math.pow(1 + localStockReturn / 100, yr);
         return {
             year: yr,
+            ...(baseYear !== undefined ? { calendarYear: baseYear + yr } : {}),
             'Acheter (Résidence)': Math.round(buyPrimaryNetWorth),
             'Louer + Investir Reste': Math.round(rentScenarioNetWorth),
             'Investissement Locatif (Équité+Loyer)': Math.round(equity + cumulativeRentalIncome),
