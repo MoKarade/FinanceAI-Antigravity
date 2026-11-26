@@ -337,4 +337,5 @@ export const TRANCHES_EXCLUES: Record<string, string> = {
     // Valoria : préférences pilotées directement dans l'onglet Valoria.
     valoriaWatchlist: 'liste de suivi Valoria pilotée directement dans l onglet Valoria',
     valoriaRiskProfile: 'profil de risque Valoria piloté directement dans l onglet Valoria',
+    completedAiActionIds: 'actions IA cochées directement dans l onglet Futur',
 };

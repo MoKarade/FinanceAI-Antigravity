@@ -1,4 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Tab } from '../types';
 import type { ProjectionChartPoint } from '../services/projection/types';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { useNetWorthVariation } from '../hooks/useNetWorthVariation';
@@ -55,6 +56,8 @@ import { AccueilOmniboxBar } from './accueil/AccueilOmniboxBar';
 import { AccueilHeroTrajectoire } from './accueil/AccueilHeroTrajectoire';
 import { AccueilRepereBandeau } from './accueil/AccueilRepereBandeau';
 import { AccueilColonnesPatrimoine } from './accueil/AccueilColonnesPatrimoine';
+import { computeMarketImpactSummary } from '../services/marketImpactSummary';
+import { MarketImpactCard } from './future/MarketImpactCard';
 
 const GeminiAssistantModal = lazyWithRetry(
     () => import('./aiChat/GeminiAssistantModal').then((m) => ({ default: m.GeminiAssistantModal })),
@@ -240,6 +243,25 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
     const rawDebtNonImmo = chartDataMoteur[0]?.DettesNonImmo;
     const currentDebtNonImmo = Number(rawDebtNonImmo) || Math.max(0, Math.round(Number.isFinite(dettesHorsImmo) ? dettesHorsImmo : 0));
     const storeDebts = useMemo(() => state.debts ?? [], [state.debts]);
+    const marketImpact = useMemo(
+        () =>
+            computeMarketImpactSummary({
+                assets: state.assets ?? [],
+                fxRates: state.fxRates ?? {},
+                lastProjection,
+                pastCalibration: pastCurveCalibration,
+                retirementGoal: state.retirementGoal,
+                baseReturnRatePct: state.projection?.returnRate,
+            }),
+        [
+            state.assets,
+            state.fxRates,
+            lastProjection,
+            pastCurveCalibration,
+            state.retirementGoal,
+            state.projection?.returnRate,
+        ],
+    );
     const privateBusinessValue = useMemo(
         () => computePrivateBusinessValue(state.privateBusinesses),
         [state.privateBusinesses],
@@ -970,6 +992,12 @@ export const AccueilGoogle: React.FC<AccueilGoogleProps> = ({
                     projectionStatus={projectionStatus}
                     dernierPoint={dernierPoint}
                     patrimoineKpiValue={patrimoineKpi?.value}
+                />
+
+                <MarketImpactCard
+                    summary={marketImpact}
+                    compact
+                    onOpenMarkets={() => setActiveTab(Tab.INVESTMENTS)}
                 />
 
                 <AccueilColonnesPatrimoine

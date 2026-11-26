@@ -13,6 +13,7 @@ import { formatCAD, formatCompactCAD, formatIsoDay, formatPercent } from '../../
 import { Icon } from '../ui/Icon';
 import { PrivateAmount } from '../ui/PrivateAmount';
 import { PrivateText } from '../ui/PrivateText';
+import { useFinanceStore } from '../../store/useFinanceStore';
 
 export interface FutureCoreMilestonesGridProps {
     report: DeepForecastReport;
@@ -55,6 +56,7 @@ export const FutureCoreMilestonesGrid: React.FC<FutureCoreMilestonesGridProps> =
     report,
     scenario,
 }) => {
+    const isPrivacyMode = useFinanceStore((s) => s.isPrivacyMode);
     const ms = scenario.milestones;
     const fiAgeOk = ms.fiAge !== null && Number.isFinite(ms.fiAge);
     const fiProbOk = ms.fiProbabilityPct !== null && Number.isFinite(ms.fiProbabilityPct);
@@ -72,6 +74,26 @@ export const FutureCoreMilestonesGrid: React.FC<FutureCoreMilestonesGridProps> =
     const onTrackCount = goals.filter((g) => g.status === 'achieved' || g.status === 'on_track').length;
     const priorityGoal = pickPriorityGoal(goals);
     const priorityMeta = priorityGoal ? goalStatusBadge(priorityGoal.status) : null;
+    const survivalChancePct =
+        ms.ruinProbabilityPct !== null && Number.isFinite(ms.ruinProbabilityPct)
+            ? Math.max(0, Math.min(100, Math.round(100 - ms.ruinProbabilityPct)))
+            : null;
+    const survivalBarCls =
+        survivalChancePct === null
+            ? 'bg-bordure-champ'
+            : survivalChancePct >= 85
+              ? 'bg-succes-texte'
+              : survivalChancePct >= 65
+                ? 'bg-alerte-texte'
+                : 'bg-erreur-texte';
+    const survivalTextCls =
+        survivalChancePct === null
+            ? 'text-texte-doux'
+            : survivalChancePct >= 85
+              ? 'text-succes-texte'
+              : survivalChancePct >= 65
+                ? 'text-alerte-texte'
+                : 'text-erreur-texte';
 
     return (
         <section
@@ -83,9 +105,40 @@ export const FutureCoreMilestonesGrid: React.FC<FutureCoreMilestonesGridProps> =
                     Repères clés de vie · {scenario.label}
                 </h2>
                 <span className="text-tiny text-texte-doux">
-                    {report.isDeepRun ? 'Simulation Monte Carlo profonde' : 'Aperçu rapide instantané'}
+                    {report.isDeepRun ? 'Simulation approfondie' : 'Aperçu instantané'}
                 </span>
             </div>
+
+            {survivalChancePct !== null && (
+                <div
+                    data-testid="retirement-success-gauge"
+                    className="rounded-2xl border border-bordure bg-surface p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                >
+                    <div className="space-y-1 min-w-0">
+                        <div className="text-tiny font-bold uppercase tracking-wider text-texte-doux">
+                            Solidité du plan retraite
+                        </div>
+                        <p className="text-body font-semibold text-texte">
+                            <span className={`font-mono font-extrabold ${survivalTextCls}`}>
+                                <PrivateAmount>{`${survivalChancePct} chances sur 100`}</PrivateAmount>
+                            </span>{' '}
+                            de tenir jusqu’à la fin de l’horizon sans manquer de liquidités.
+                        </p>
+                    </div>
+                    <div className="w-full sm:w-56 shrink-0 space-y-1">
+                        <div className="h-2.5 w-full rounded-full bg-surface-douce overflow-hidden border border-bordure">
+                            <div
+                                className={`h-full rounded-full transition-all duration-300 ${survivalBarCls}`}
+                                style={{ width: isPrivacyMode ? '50%' : `${survivalChancePct}%` }}
+                            />
+                        </div>
+                        <div className="flex justify-between text-[11px] text-texte-doux">
+                            <span>Prudent</span>
+                            <span>Confiant</span>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 lg:gap-4 items-stretch">
                 {/* 1. Indépendance financière */}
@@ -132,7 +185,7 @@ export const FutureCoreMilestonesGrid: React.FC<FutureCoreMilestonesGridProps> =
                             {sustOk && <span className="text-meta font-semibold text-texte-doux"> / mois</span>}
                         </div>
                         <p className="text-tiny text-texte-doux break-words">
-                            Repère prudent (P90) :{' '}
+                            Niveau sûr (9 chances sur 10) :{' '}
                             <strong className="font-mono text-texte tabular-nums">
                                 <PrivateAmount>
                                     {sustP90Ok ? `${formatCAD(Math.round(ms.sustainableMonthlyNetP90Cad as number))}/mois` : '—'}
@@ -236,7 +289,7 @@ export const FutureCoreMilestonesGrid: React.FC<FutureCoreMilestonesGridProps> =
                         </div>
                     </div>
                     <p className="text-tiny text-texte-doux border-t border-bordure pt-2 break-words">
-                        Médiane P50 en fin d&apos;horizon et legs net après liquidation fiscale.
+                        Scénario central en fin d&apos;horizon et legs net après impôts au décès.
                     </p>
                 </article>
             </div>

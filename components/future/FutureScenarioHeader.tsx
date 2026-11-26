@@ -156,7 +156,7 @@ export const FutureScenarioHeader: React.FC<FutureScenarioHeaderProps> = ({
                             <span className="grid grid-cols-2 gap-2 pt-2 border-t border-bordure w-full min-w-0">
                                 <span className="block min-w-0">
                                     <span className="block text-tiny uppercase tracking-wider text-texte-doux">
-                                        Patrimoine P50
+                                        Patrimoine central
                                     </span>
                                     <PrivateAmount className="block font-mono text-body font-bold text-texte truncate">
                                         {typeof finalP50 === 'number' && Number.isFinite(finalP50)

@@ -211,7 +211,7 @@ export const CHAMPS_TEXTE: ReadonlySet<string> = new Set([
     'splitMode', 'startDate', 'status', 'symbol',
     'targetAccount', 'taxRegime', 'termEndDate', 'text',
     'timestamp', 'title', 'toolsUsed', 'type',
-    'universityType', 'updatedAt', 'uploadedAt', 'valoriaRiskProfile', 'valoriaWatchlist',
+    'universityType', 'updatedAt', 'uploadedAt', 'valoriaRiskProfile', 'valoriaWatchlist', 'completedAiActionIds',
     'warnings', 'withdrawalStrategy',
 ]);
 

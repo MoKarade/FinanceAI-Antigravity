@@ -17,6 +17,13 @@ import { FutureScenarioHeader } from './future/FutureScenarioHeader';
 import { FutureRichTooltip } from './future/FutureRichTooltip';
 import { FutureCoreMilestonesGrid } from './future/FutureCoreMilestonesGrid';
 import { FutureUnifiedInsightsPanel } from './future/FutureUnifiedInsightsPanel';
+import { MarketImpactCard } from './future/MarketImpactCard';
+import { showToast } from './ui/Toast';
+import {
+    buildReconciledAiActionPlan,
+    type ReconciledAiAction,
+} from '../services/projection/aiActionPlan';
+import { computeMarketImpactSummary } from '../services/marketImpactSummary';
 import { prefetchTab } from '../utils/tabPrefetch';
 import { PageHeader } from './ui/PageHeader';
 import { FUTURE_REQ_IDS } from './ProjectionEngine';
@@ -101,6 +108,7 @@ const EMPTY_ASSETS: FinanceStoreState['assets'] = [];
 const EMPTY_RECURRING: NonNullable<FinanceStoreState['subscriptions']> = [];
 const EMPTY_FX: Record<string, number> = {};
 const EMPTY_DEBTS: NonNullable<FinanceStoreState['debts']> = [];
+const EMPTY_ACTION_IDS: string[] = [];
 
 const X_AXIS_DOMAIN: ['dataMin', 'dataMax'] = ['dataMin', 'dataMax'];
 const RENDER_MAX_POINTS = 700;
@@ -128,6 +136,7 @@ const CURVE_FIELDS: ReadonlySet<string> = new Set([
     'NetWorth',
     'lockedNetWorth',
     'mcRange',
+    'mcCoreRange',
     'DettesNonImmo',
     'DetteLevierSmith',
     'year',
@@ -180,7 +189,13 @@ function mergeScenarioIntoChartPoint(
     if (!scenPt) return next;
 
     next.P10 = scenPt.p10;
+    if (typeof scenPt.p25 === 'number' && Number.isFinite(scenPt.p25)) {
+        next.P25 = scenPt.p25;
+    }
     next.P50 = scenPt.p50;
+    if (typeof scenPt.p75 === 'number' && Number.isFinite(scenPt.p75)) {
+        next.P75 = scenPt.p75;
+    }
     next.P90 = scenPt.p90;
     next.NetWorth = scenPt.p50;
 
@@ -256,6 +271,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         startMonth,
         todayMonthIndex,
         mentionAutoriteCourtier,
+        pastCurveCalibration,
     } = useSimulationParams(calculatedMonthlySavings);
 
     const applyHistoricalRate = () => {
@@ -585,6 +601,74 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         return isoDate(d.getFullYear(), d.getMonth(), d.getDate());
     }, [fintableSyncAt]);
     const fxRates = useFinanceStore((s) => s.fxRates) ?? EMPTY_FX;
+    const completedAiActionIds = useFinanceStore((s) => s.completedAiActionIds) ?? EMPTY_ACTION_IDS;
+
+    const reconciledActions = useMemo(
+        () =>
+            buildReconciledAiActionPlan({
+                state: {
+                    projection,
+                    debts: storeDebts,
+                    budgetItems,
+                    assets: storeAssets,
+                    retirementGoal,
+                    config,
+                    fxRates,
+                },
+                report: deepForecast.activeReport,
+            }),
+        [
+            projection,
+            storeDebts,
+            budgetItems,
+            storeAssets,
+            retirementGoal,
+            config,
+            fxRates,
+            deepForecast.activeReport,
+        ],
+    );
+
+    const marketImpact = useMemo(
+        () =>
+            computeMarketImpactSummary({
+                assets: storeAssets,
+                fxRates,
+                lastProjection: results,
+                newsBundle: deepForecast.activeReport.newsBundle,
+                pastCalibration: pastCurveCalibration,
+                retirementGoal,
+                baseReturnRatePct: projection?.returnRate,
+            }),
+        [
+            storeAssets,
+            fxRates,
+            results,
+            deepForecast.activeReport.newsBundle,
+            pastCurveCalibration,
+            retirementGoal,
+            projection?.returnRate,
+        ],
+    );
+
+    const handleToggleActionCompleted = useCallback((actionId: string) => {
+        const cur = useFinanceStore.getState().completedAiActionIds ?? [];
+        const exists = cur.includes(actionId);
+        const next = exists ? cur.filter((id) => id !== actionId) : [...cur, actionId];
+        useFinanceStore.getState().setAppState({ completedAiActionIds: next });
+    }, []);
+
+    const handleApplyActionPatch = useCallback((action: ReconciledAiAction) => {
+        if (!action.applyPatch) return;
+        const cur = useFinanceStore.getState();
+        cur.setAppState({
+            ...action.applyPatch,
+            completedAiActionIds: cur.completedAiActionIds?.includes(action.id)
+                ? cur.completedAiActionIds
+                : [...(cur.completedAiActionIds ?? []), action.id],
+        });
+        showToast(`Appliqué à ton plan : ${action.title}`, 'success');
+    }, []);
     const storeRecurring = useFinanceStore((s) => s.subscriptions) ?? EMPTY_RECURRING;
     const dailyMonthlyNet = (config?.users ?? []).reduce((s, u) => s + (Number(u?.netSalary) || 0), 0);
     const dailyMonthlyDebt = useFinanceStore(
@@ -607,9 +691,9 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                 },
             },
             { key: 'NetWorth', label: 'Valeur nette', format: money },
-            { key: 'P10', label: 'Scénario prudent (P10)', format: money },
-            { key: 'P50', label: 'Médiane (P50)', format: money },
-            { key: 'P90', label: 'Scénario favorable (P90)', format: money },
+            { key: 'P10', label: 'Scénario prudent', format: money },
+            { key: 'P50', label: 'Scénario central', format: money },
+            { key: 'P90', label: 'Scénario favorable', format: money },
             { key: 'Liquidites', label: 'Cash', format: money },
             { key: 'CELI', label: 'CELI', format: money },
             { key: 'CELIAPP', label: 'CELIAPP (FHSA)', format: money },
@@ -862,6 +946,8 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
         return chartSeries.map((pt, idx) => {
             const p10 = pt.P10;
             const p90 = pt.P90;
+            const p25 = pt.P25;
+            const p75 = pt.P75;
             if (
                 typeof p10 === 'number' &&
                 Number.isFinite(p10) &&
@@ -870,9 +956,24 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             ) {
                 const lo = Math.min(p10, p90);
                 const hi = Math.max(p10, p90);
-                return { ...pt, P10: lo, P90: hi, mcRange: [lo, hi] as [number, number] };
+                const hasCore =
+                    typeof p25 === 'number' &&
+                    Number.isFinite(p25) &&
+                    typeof p75 === 'number' &&
+                    Number.isFinite(p75);
+                const coreLo = hasCore ? Math.min(p25, p75) : undefined;
+                const coreHi = hasCore ? Math.max(p25, p75) : undefined;
+                return {
+                    ...pt,
+                    P10: lo,
+                    P90: hi,
+                    mcRange: [lo, hi] as [number, number],
+                    ...(hasCore
+                        ? { P25: coreLo, P75: coreHi, mcCoreRange: [coreLo!, coreHi!] as [number, number] }
+                        : { mcCoreRange: null }),
+                };
             }
-            // Ancrage visuel uniquement : ouvre le cône et les courbes P10/P90 sans coupure depuis Aujourd'hui.
+            // Ancrage visuel uniquement : ouvre le cône et les courbes d'incertitude sans coupure depuis Aujourd'hui.
             const next = chartSeries[idx + 1];
             const prev = idx > 0 ? chartSeries[idx - 1] : undefined;
             const anchorsCone =
@@ -884,12 +985,15 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                 return {
                     ...pt,
                     P10: nw,
+                    P25: nw,
                     P50: nw,
+                    P75: nw,
                     P90: nw,
                     mcRange: [nw, nw] as [number, number],
+                    mcCoreRange: [nw, nw] as [number, number],
                 };
             }
-            return { ...pt, mcRange: null };
+            return { ...pt, mcRange: null, mcCoreRange: null };
         });
     }, [chartSeries]);
 
@@ -1485,7 +1589,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                 data-testid="futur-toggle-mc"
                                 aria-pressed={isVisible('montecarlo')}
                                 onClick={() => toggleSeries('montecarlo')}
-                                title={isVisible('montecarlo') ? 'Masquer les courbes Monte Carlo [P10, P90]' : 'Afficher les courbes Monte Carlo [P10, P90]'}
+                                title={isVisible('montecarlo') ? 'Masquer la zone d’incertitude' : 'Afficher la zone d’incertitude'}
                                 className={`touch-target min-h-11 inline-flex flex-wrap items-center gap-2 rounded-full border px-3 py-1 text-tiny transition-colors focus-ring ${
                                     isVisible('montecarlo')
                                         ? 'border-bordure-champ bg-surface-douce text-texte'
@@ -1497,10 +1601,10 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                     <span className="w-3.5 border-t-2 border-dashed" style={{ borderColor: 'var(--gf-rouge)' }} />
                                 </span>
                                 <span className="font-semibold">
-                                    {deepForecast.activeReport.isDeepRun ? 'Fourchette [P10, P90] profonde' : 'Fourchette [P10, P90] estimée'}
+                                    {deepForecast.activeReport.isDeepRun ? 'Fourchette possible approfondie' : 'Fourchette possible estimée'}
                                 </span>
                                 <span className="text-texte-doux">
-                                    P90 · P50 · P10
+                                    Favorable · Central · Prudent
                                     {deepForecast.activeReport.pastDiagnostic.pastCurveCalibration?.hasUsableCurve
                                         ? ' · calibrée depuis janv. 2025'
                                         : ''}
@@ -1699,6 +1803,10 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                                     <stop offset="0%" stopColor={couleurSerie('montecarlo')} stopOpacity={0.28} />
                                                     <stop offset="100%" stopColor={couleurSerie('montecarlo')} stopOpacity={0.09} />
                                                 </linearGradient>
+                                                <linearGradient id="gfConfidenceCoreGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor={couleurSerie('montecarlo')} stopOpacity={0.42} />
+                                                    <stop offset="100%" stopColor={couleurSerie('montecarlo')} stopOpacity={0.18} />
+                                                </linearGradient>
                                             </defs>
                                             <CartesianGrid stroke="var(--bordure)" strokeOpacity={0.6} vertical={false} />
 
@@ -1833,19 +1941,34 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                             {modeCourbe === 'nette' && (
                                                 <>
                                                     {isVisible('montecarlo') && (
-                                                        <Area
-                                                            type="monotone"
-                                                            dataKey="mcRange"
-                                                            stroke="none"
-                                                            fill="url(#gfConfidenceRibbonGrad)"
-                                                            fillOpacity={1}
-                                                            connectNulls={false}
-                                                            dot={false}
-                                                            activeDot={false}
-                                                            name="Fourchette P10–P90"
-                                                            isAnimationActive={!zoom.isPanning}
-                                                            animationDuration={280}
-                                                        />
+                                                        <>
+                                                            <Area
+                                                                type="monotone"
+                                                                dataKey="mcRange"
+                                                                stroke="none"
+                                                                fill="url(#gfConfidenceRibbonGrad)"
+                                                                fillOpacity={1}
+                                                                connectNulls={false}
+                                                                dot={false}
+                                                                activeDot={false}
+                                                                name="Fourchette possible"
+                                                                isAnimationActive={!zoom.isPanning}
+                                                                animationDuration={280}
+                                                            />
+                                                            <Area
+                                                                type="monotone"
+                                                                dataKey="mcCoreRange"
+                                                                stroke="none"
+                                                                fill="url(#gfConfidenceCoreGrad)"
+                                                                fillOpacity={1}
+                                                                connectNulls={false}
+                                                                dot={false}
+                                                                activeDot={false}
+                                                                name="Zone la plus probable (1 chance sur 2)"
+                                                                isAnimationActive={!zoom.isPanning}
+                                                                animationDuration={280}
+                                                            />
+                                                        </>
                                                     )}
                                                     <Area
                                                         type="monotone"
@@ -1873,7 +1996,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                                                 connectNulls={false}
                                                                 dot={false}
                                                                 activeDot={false}
-                                                                name="Scénario favorable (P90)"
+                                                                name="Scénario favorable"
                                                                 isAnimationActive={!zoom.isPanning}
                                                                 animationDuration={280}
                                                             />
@@ -1887,7 +2010,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                                                 connectNulls={false}
                                                                 dot={false}
                                                                 activeDot={false}
-                                                                name="Scénario prudent (P10)"
+                                                                name="Scénario prudent"
                                                                 isAnimationActive={!zoom.isPanning}
                                                                 animationDuration={280}
                                                             />
@@ -1923,7 +2046,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                                         connectNulls={false}
                                                         dot={false}
                                                         activeDot={false}
-                                                        name="Scénario favorable (P90)"
+                                                        name="Scénario favorable"
                                                         isAnimationActive={!zoom.isPanning}
                                                         animationDuration={280}
                                                     />
@@ -1937,7 +2060,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                                         connectNulls={false}
                                                         dot={false}
                                                         activeDot={false}
-                                                        name="Médiane Monte Carlo (P50)"
+                                                        name="Scénario central"
                                                         isAnimationActive={!zoom.isPanning}
                                                         animationDuration={280}
                                                     />
@@ -1951,7 +2074,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                                         connectNulls={false}
                                                         dot={false}
                                                         activeDot={false}
-                                                        name="Scénario prudent (P10)"
+                                                        name="Scénario prudent"
                                                         isAnimationActive={!zoom.isPanning}
                                                         animationDuration={280}
                                                     />
@@ -2150,6 +2273,12 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                         <div className="grid grid-cols-2 gap-2.5">{bandeauKpi('mobile-pied')}</div>
                     )}
 
+                    {/* Effet des marchés et analyses sur ton patrimoine */}
+                    <MarketImpactCard
+                        summary={marketImpact}
+                        onOpenMarkets={() => naviguerVers(TabEnum.INVESTMENTS)}
+                    />
+
                     {/* Bloc 3 : 4 repères clés pleine largeur */}
                     <FutureCoreMilestonesGrid
                         report={deepForecast.activeReport}
@@ -2160,6 +2289,10 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                     <FutureUnifiedInsightsPanel
                         report={deepForecast.activeReport}
                         scenario={activeScenarioOutput}
+                        reconciledActions={reconciledActions}
+                        completedActionIds={completedAiActionIds}
+                        onToggleActionCompleted={handleToggleActionCompleted}
+                        onApplyActionPatch={handleApplyActionPatch}
                         onFocusMonth={handleSelectExplanationMonth}
                         onSelectScenario={deepForecast.setSelectedScenario}
                         onNavigateTab={naviguerVers}

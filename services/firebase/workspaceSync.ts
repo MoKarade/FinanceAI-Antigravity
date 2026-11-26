@@ -105,6 +105,7 @@ export const PERSISTED_WORKSPACE_KEYS = [
     'annualSnapshots',
     'dismissedNudges',
     'coupleSplitMode',
+    'completedAiActionIds',
 ] as const;
 
 export interface SyncConflictAlert {

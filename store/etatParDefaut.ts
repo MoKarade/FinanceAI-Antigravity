@@ -143,6 +143,7 @@ export const DEFAULT_APP_STATE: AppState = {
     instruments: undefined,
     // [PTF-L1E-PASSERELLE] Même contrat, même raisons : `undefined` = aucun régime déclaré.
     brokerAccountRegimes: undefined,
+    completedAiActionIds: [],
 };
 
 /** [PTF-L1A] Relit un tableau optionnel écrit par la restauration d'un backup. Absent → `undefined`
@@ -308,6 +309,7 @@ export const getInitialStateWithMigration = (): AppState => {
             brokerLedger: lireLegacyOptionnel('app_broker_ledger'),
             instruments: lireLegacyOptionnel('app_instruments'),
             brokerAccountRegimes: lireLegacyOptionnel('app_broker_account_regimes'),
+            completedAiActionIds: [],
         };
     } catch (e) {
         const errorStr = String(e);

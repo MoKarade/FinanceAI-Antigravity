@@ -88,7 +88,7 @@ describe('FutureProjection — smoke (CA-04)', () => {
 
         const mcBtn = screen.getByTestId('futur-toggle-mc');
         expect(mcBtn).toHaveAttribute('aria-pressed', 'true');
-        expect(mcBtn.textContent).toMatch(/P90.*P50.*P10/);
+        expect(mcBtn.textContent).toMatch(/Favorable.*Central.*Prudent/);
 
         fireEvent.click(mcBtn);
         expect(mcBtn).toHaveAttribute('aria-pressed', 'false');

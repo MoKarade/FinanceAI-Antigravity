@@ -125,7 +125,7 @@ describe('FutureCoreMilestonesGrid (remplace GrandCalculPredictionsPanel — Fut
 
         const region = screen.getByRole('region', { name: /Repères clés de vie/i });
         expect(region).toBeInTheDocument();
-        expect(screen.getByText(/Simulation Monte Carlo profonde/i)).toBeInTheDocument();
+        expect(screen.getByText(/Simulation approfondie/i)).toBeInTheDocument();
 
         const articles = within(region).getAllByRole('article');
         expect(articles).toHaveLength(4);
@@ -166,7 +166,7 @@ describe('FutureCoreMilestonesGrid (remplace GrandCalculPredictionsPanel — Fut
             <FutureCoreMilestonesGrid report={report} scenario={emptyScenario} />,
         );
 
-        expect(screen.getByText(/Aperçu rapide instantané/i)).toBeInTheDocument();
+        expect(screen.getByText(/Aperçu instantané/i)).toBeInTheDocument();
         expect(screen.getByText(/Aucun objectif daté configuré/i)).toBeInTheDocument();
         expect(container.textContent).not.toMatch(/\b0\s*\$/);
         expect(screen.getAllByText('Pas de donnée').length).toBeGreaterThanOrEqual(7);

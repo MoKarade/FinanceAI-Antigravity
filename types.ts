@@ -1265,6 +1265,8 @@ export interface AppState {
   valoriaWatchlist?: string[];
   /** Profil de risque selectionne dans l'onglet Valoria (additif optionnel) */
   valoriaRiskProfile?: ValoriaRiskProfile;
+  /** Identifiants des actions IA marquées comme réalisées par l'utilisateur (additif optionnel). */
+  completedAiActionIds?: string[];
 }
 
 /**

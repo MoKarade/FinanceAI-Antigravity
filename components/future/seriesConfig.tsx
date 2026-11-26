@@ -43,7 +43,7 @@ export const FUTURE_LEGEND_ITEMS: FutureLegendItem[] = [
     // vers zéro, l’autre grossit par construction. Le libellé dit « dont » : c’est un sous-
     // ensemble tracé PAR-DESSUS, jamais un terme de plus. Détail : `detteSerie.ts`.
     { key: 'DetteLevierSmith', label: LIBELLE_LEVIER, color: COULEUR_LEVIER, shape: 'dashed' },
-    { key: 'montecarlo', label: 'Monte-Carlo P10–P90', color: '#c4b5fd', shape: 'dashed', mcOnly: true },
+    { key: 'montecarlo', label: 'Zone d’incertitude', color: '#c4b5fd', shape: 'dashed', mcOnly: true },
     { key: 'NetWorth', label: 'Valeur nette', color: '#f8fafc', shape: 'line' },
     { key: 'fire', label: 'Objectif FIRE', color: '#fbbf24', shape: 'dashed' },
     { key: 'FluxImpots', label: 'Paiement impôts', color: '#f87171', shape: 'bar' },

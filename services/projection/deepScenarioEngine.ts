@@ -418,20 +418,21 @@ function evaluateQuantilesFromSorted(
     weights: Uint32Array,
     exactFlags: Uint8Array,
     count: number,
-    quantiles: readonly [number, number, number],
-): [number, number, number] {
-    if (count === 0) return [0, 0, 0];
+    quantiles: readonly number[],
+): number[] {
+    const qLen = quantiles.length;
+    if (count === 0) return new Array<number>(qLen).fill(0);
     if (count === 1) {
         const v = round2(Number.isFinite(means[0]) ? means[0] : 0);
-        return [v, v, v];
+        return new Array<number>(qLen).fill(v);
     }
 
     let totalWeight = 0;
     for (let i = 0; i < count; i++) totalWeight += weights[i];
-    if (totalWeight <= 0) return [0, 0, 0];
+    if (totalWeight <= 0) return new Array<number>(qLen).fill(0);
 
-    const out: [number, number, number] = [0, 0, 0];
-    for (let qi = 0; qi < 3; qi++) {
+    const out = new Array<number>(qLen).fill(0);
+    for (let qi = 0; qi < qLen; qi++) {
         const q = quantiles[qi];
         const targetRank = q * totalWeight;
         const firstRight = exactFlags[0] === 1 ? weights[0] : weights[0] * 0.5;
@@ -472,7 +473,7 @@ function evaluateQuantilesFromSorted(
         out[qi] = resolved;
     }
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < qLen; i++) {
         out[i] = Number.isFinite(out[i]) ? round2(out[i]) : 0;
         if (i > 0 && out[i] < out[i - 1]) out[i] = out[i - 1];
     }
@@ -1919,12 +1920,12 @@ function mergeScenarioPoints(
             }
         }
 
-        const [p10, p50, p90] = evaluateQuantilesFromSorted(
+        const [p10, p25, p50, p75, p90] = evaluateQuantilesFromSorted(
             outMeans,
             outWeights,
             outExact,
             uniqueCount,
-            [0.10, 0.50, 0.90],
+            [0.10, 0.25, 0.50, 0.75, 0.90],
         );
 
         points[m] = {
@@ -1933,9 +1934,12 @@ function mergeScenarioPoints(
             age: baseline.currentAge + Math.floor(m / 12),
             netWorth: p50,
             p10,
+            p25,
             p50,
+            p75,
             p90,
             mcRange: [p10, p90],
+            mcCoreRange: [Math.min(p25, p50), Math.max(p75, p50)],
         };
     }
 
@@ -2598,6 +2602,12 @@ export function computeQuickFourScenarios(input: {
         const rP90 = hasBands
             ? round2(Math.max(baseP50, pt.P90 as number))
             : round2(baseP50 >= 0 ? baseP50 * Math.exp(spread) : baseP50 + Math.abs(baseP50) * 0.15 * Math.sqrt(t));
+        const rP25 = typeof pt.P25 === 'number' && Number.isFinite(pt.P25)
+            ? round2(Math.max(rP10, Math.min(baseP50, pt.P25)))
+            : round2(baseP50 - (baseP50 - rP10) * 0.5263);
+        const rP75 = typeof pt.P75 === 'number' && Number.isFinite(pt.P75)
+            ? round2(Math.min(rP90, Math.max(baseP50, pt.P75)))
+            : round2(baseP50 + (rP90 - baseP50) * 0.5263);
 
         realPoints.push({
             monthIndex: m,
@@ -2605,9 +2615,12 @@ export function computeQuickFourScenarios(input: {
             age,
             netWorth: baseP50,
             p10: Math.min(rP10, baseP50),
+            p25: Math.min(rP25, baseP50),
             p50: baseP50,
+            p75: Math.max(rP75, baseP50),
             p90: Math.max(rP90, baseP50),
             mcRange: [Math.min(rP10, baseP50), Math.max(rP90, baseP50)],
+            mcCoreRange: [Math.min(rP25, baseP50), Math.max(rP75, baseP50)],
         });
 
         // Prudent / Stress : facteur de décote composé prudent sur l'écart au capital de départ
@@ -2620,15 +2633,20 @@ export function computeQuickFourScenarios(input: {
         const prudentHalfSpread = Math.max(0, (rP90 - rP10) * 0.5 * 1.28);
         const prudentP10 = round2(prudentP50 - prudentHalfSpread * 1.05);
         const prudentP90 = round2(prudentP50 + prudentHalfSpread * 0.92);
+        const prudentP25 = round2(prudentP50 - (prudentP50 - Math.min(prudentP10, prudentP50)) * 0.5263);
+        const prudentP75 = round2(prudentP50 + (Math.max(prudentP90, prudentP50) - prudentP50) * 0.5263);
         prudentPoints.push({
             monthIndex: m,
             year: yr,
             age,
             netWorth: prudentP50,
             p10: Math.min(prudentP10, prudentP50),
+            p25: prudentP25,
             p50: prudentP50,
+            p75: prudentP75,
             p90: Math.max(prudentP90, prudentP50),
             mcRange: [Math.min(prudentP10, prudentP50), Math.max(prudentP90, prudentP50)],
+            mcCoreRange: [Math.min(prudentP25, prudentP50), Math.max(prudentP75, prudentP50)],
         });
 
         // Favorable : prime composée +1,5 %/an
@@ -2641,15 +2659,20 @@ export function computeQuickFourScenarios(input: {
         const favHalfSpread = Math.max(0, (rP90 - rP10) * 0.5 * 0.90);
         const favP10 = round2(favP50 - favHalfSpread * 0.90);
         const favP90 = round2(favP50 + favHalfSpread * 1.08);
+        const favP25 = round2(favP50 - (favP50 - Math.min(favP10, favP50)) * 0.5263);
+        const favP75 = round2(favP50 + (Math.max(favP90, favP50) - favP50) * 0.5263);
         favPoints.push({
             monthIndex: m,
             year: yr,
             age,
             netWorth: favP50,
             p10: Math.min(favP10, favP50),
+            p25: favP25,
             p50: favP50,
+            p75: favP75,
             p90: Math.max(favP90, favP50),
             mcRange: [Math.min(favP10, favP50), Math.max(favP90, favP50)],
+            mcCoreRange: [Math.min(favP25, favP50), Math.max(favP75, favP50)],
         });
 
         // Optimisé IA : gain localisation + RFG + récupération écart budgétaire
@@ -2664,15 +2687,20 @@ export function computeQuickFourScenarios(input: {
         const aiHalfSpread = Math.max(0, (rP90 - rP10) * 0.5 * 0.95);
         const aiP10 = round2(aiP50 - aiHalfSpread * 0.95);
         const aiP90 = round2(aiP50 + aiHalfSpread * 1.05);
+        const aiP25 = round2(aiP50 - (aiP50 - Math.min(aiP10, aiP50)) * 0.5263);
+        const aiP75 = round2(aiP50 + (Math.max(aiP90, aiP50) - aiP50) * 0.5263);
         aiPoints.push({
             monthIndex: m,
             year: yr,
             age,
             netWorth: aiP50,
             p10: Math.min(aiP10, aiP50),
+            p25: aiP25,
             p50: aiP50,
+            p75: aiP75,
             p90: Math.max(aiP90, aiP50),
             mcRange: [Math.min(aiP10, aiP50), Math.max(aiP90, aiP50)],
+            mcCoreRange: [Math.min(aiP25, aiP50), Math.max(aiP75, aiP50)],
         });
     }
 

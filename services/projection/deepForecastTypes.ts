@@ -107,10 +107,14 @@ export interface DeepScenarioPoint {
     /** Valeur nette médiane / attendue en $ CAD. */
     netWorth: number;
     p10: number;
+    p25?: number;
     p50: number;
+    p75?: number;
     p90: number;
-    /** Tuple borné [p10, p90] pour tracer le ruban unique dans Recharts. */
+    /** Tuple borné [p10, p90] pour tracer le ruban large dans Recharts. */
     mcRange: [number, number] | null;
+    /** Tuple borné [p25, p75] pour tracer la zone centrale la plus probable (1 chance sur 2). */
+    mcCoreRange?: [number, number] | null;
 }
 
 export interface DeepGoalMilestoneSummary {

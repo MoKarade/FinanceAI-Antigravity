@@ -105,13 +105,28 @@ export const FutureRichTooltip: React.FC<FutureRichTooltipProps> = ({
         && Number.isFinite(point.P10)
         && typeof point.P90 === 'number'
         && Number.isFinite(point.P90);
+    const hasCoreRange =
+        typeof point.P25 === 'number'
+        && Number.isFinite(point.P25)
+        && typeof point.P75 === 'number'
+        && Number.isFinite(point.P75);
 
     const rangeBlock = hasRange ? (
-        <div className="rounded-xl bg-surface-douce border border-bordure px-2.5 py-2 flex items-center justify-between gap-2 text-tiny">
-            <span className="text-texte-doux font-semibold">Fourchette [P10, P90]</span>
-            <PrivateAmount className="font-mono font-bold text-texte">
-                {formatCompactCAD(point.P10)} – {formatCompactCAD(point.P90)}
-            </PrivateAmount>
+        <div className="rounded-xl bg-surface-douce border border-bordure px-2.5 py-2 space-y-1 text-tiny">
+            <div className="flex items-center justify-between gap-2">
+                <span className="text-texte-doux font-semibold">Fourchette possible (prudent – favorable)</span>
+                <PrivateAmount className="font-mono font-bold text-texte">
+                    {formatCompactCAD(point.P10)} – {formatCompactCAD(point.P90)}
+                </PrivateAmount>
+            </div>
+            {hasCoreRange && (
+                <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="text-texte-doux">Zone la plus probable (1 chance sur 2)</span>
+                    <PrivateAmount className="font-mono font-semibold text-repere">
+                        {formatCompactCAD(point.P25)} – {formatCompactCAD(point.P75)}
+                    </PrivateAmount>
+                </div>
+            )}
         </div>
     ) : null;
 

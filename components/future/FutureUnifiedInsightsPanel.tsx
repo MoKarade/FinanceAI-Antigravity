@@ -13,6 +13,7 @@ import type {
     DeepTurningPointKind,
     MacroNewsSignalItem,
 } from '../../services/projection/deepForecastTypes';
+import type { ReconciledAiAction } from '../../services/projection/aiActionPlan';
 import { Tab } from '../../types';
 import { formatCAD, formatCompactCAD, formatPercent } from '../../utils/format';
 import { Icon } from '../ui/Icon';
@@ -25,6 +26,10 @@ export interface FutureUnifiedInsightsPanelProps {
     onFocusMonth: (monthIndex: number) => void;
     onSelectScenario: (id: DeepScenarioId) => void;
     onNavigateTab?: (tab: Tab) => void;
+    reconciledActions?: ReconciledAiAction[];
+    completedActionIds?: string[];
+    onToggleActionCompleted?: (actionId: string) => void;
+    onApplyActionPatch?: (action: ReconciledAiAction) => void;
 }
 
 const TURNING_KIND_META: Record<DeepTurningPointKind, { label: string; cls: string }> = {
@@ -71,6 +76,10 @@ export const FutureUnifiedInsightsPanel: React.FC<FutureUnifiedInsightsPanelProp
     onFocusMonth,
     onSelectScenario,
     onNavigateTab,
+    reconciledActions,
+    completedActionIds = [],
+    onToggleActionCompleted,
+    onApplyActionPatch,
 }) => {
     const [expandedTurningIds, setExpandedTurningIds] = useState<Record<string, boolean>>({});
     const past = report.pastDiagnostic;
@@ -407,82 +416,133 @@ export const FutureUnifiedInsightsPanel: React.FC<FutureUnifiedInsightsPanelProp
             <div className="space-y-3 border-t border-bordure pt-5">
                 <h3 className="text-meta font-bold uppercase tracking-wider text-succes-texte flex items-center gap-2">
                     <Icon name="sparkles" size={16} className="text-succes-texte shrink-0" />
-                    <span>C. Tes actions concrètes les plus payantes</span>
+                    <span>C. Ce qu’il faut faire pour atteindre la trajectoire IA</span>
                 </h3>
 
-                {report.concreteActions.length === 0 ? (
-                    <p className="rounded-xl border border-bordure bg-surface-douce p-3.5 text-tiny text-texte-doux">
-                        Aucune action prioritaire supplémentaire identifiée sur ce scénario.
-                    </p>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {report.concreteActions.slice(0, 4).map((action) => {
-                            const gainOk =
-                                action.gainCad !== null &&
-                                Number.isFinite(action.gainCad) &&
-                                action.gainCad > 0;
-                            const monthsOk =
-                                action.freedomMonthsGained !== null &&
-                                Number.isFinite(action.freedomMonthsGained) &&
-                                action.freedomMonthsGained > 0;
-                            const targetTab = resolveActionTab(action.targetTab);
+                {(() => {
+                    const listeActions: ReconciledAiAction[] =
+                        reconciledActions && reconciledActions.length > 0
+                            ? reconciledActions
+                            : report.concreteActions.slice(0, 4).map((ca, i) => ({
+                                  id: ca.id,
+                                  title: ca.title,
+                                  plainFrenchWhy: ca.plainFrenchWhy,
+                                  impactCad: ca.gainCad,
+                                  impactMonths: ca.freedomMonthsGained,
+                                  priority: i + 1,
+                                  isAlreadyApplied: false,
+                                  applyLabel: ca.appliesAiScenario ? 'Appliquer dans Optimisé IA' : undefined,
+                                  targetTab: resolveActionTab(ca.targetTab) ?? undefined,
+                              }));
+                    if (listeActions.length === 0) {
+                        return (
+                            <p className="rounded-xl border border-bordure bg-surface-douce p-3.5 text-tiny text-texte-doux">
+                                Aucune action prioritaire supplémentaire identifiée sur ce scénario.
+                            </p>
+                        );
+                    }
+                    return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {listeActions.map((action) => {
+                                const isDone = completedActionIds.includes(action.id);
+                                const gainOk =
+                                    action.impactCad !== null &&
+                                    Number.isFinite(action.impactCad) &&
+                                    action.impactCad > 0;
+                                const monthsOk =
+                                    action.impactMonths !== null &&
+                                    Number.isFinite(action.impactMonths) &&
+                                    action.impactMonths > 0;
+                                const targetTab = action.targetTab && action.targetTab !== Tab.FUTURE ? action.targetTab : null;
 
-                            return (
-                                <article
-                                    key={action.id}
-                                    className="rounded-xl border border-bordure bg-surface-douce p-4 flex flex-col justify-between gap-3 h-full min-w-0"
-                                >
-                                    <div className="space-y-2 min-w-0">
-                                        <h4 className="text-body font-bold text-texte break-words">
-                                            <PrivateText quoi="memo">{action.title}</PrivateText>
-                                        </h4>
-                                        <p className="text-tiny text-texte-doux break-words">
-                                            <PrivateText quoi="memo">{action.plainFrenchWhy}</PrivateText>
-                                        </p>
-                                        {(gainOk || monthsOk) && (
-                                            <div className="flex flex-wrap items-center gap-2 pt-1">
-                                                {gainOk && (
-                                                    <span className="px-2.5 py-0.5 rounded-full border border-succes-texte/30 bg-succes-fond text-succes-texte text-tiny font-mono font-bold tabular-nums">
-                                                        Gain estimé :{' '}
-                                                        <PrivateAmount>
-                                                            {`+${formatCompactCAD(action.gainCad as number)}`}
-                                                        </PrivateAmount>
-                                                    </span>
-                                                )}
-                                                {monthsOk && (
-                                                    <span className="px-2.5 py-0.5 rounded-full border border-repere/35 bg-repere-doux text-repere text-tiny font-mono font-bold tabular-nums">
-                                                        +<PrivateAmount>{`${Math.round(action.freedomMonthsGained as number)} mois`}</PrivateAmount> gagnés
-                                                    </span>
+                                return (
+                                    <article
+                                        key={action.id}
+                                        className={`rounded-xl border p-4 flex flex-col justify-between gap-3 h-full min-w-0 transition-colors ${
+                                            isDone
+                                                ? 'border-succes-texte/40 bg-succes-fond/40'
+                                                : 'border-bordure bg-surface-douce'
+                                        }`}
+                                    >
+                                        <div className="space-y-2 min-w-0">
+                                            <div className="flex items-start justify-between gap-2">
+                                                <h4 className={`text-body font-bold break-words ${isDone ? 'line-through text-texte-doux' : 'text-texte'}`}>
+                                                    <PrivateText quoi="memo">{action.title}</PrivateText>
+                                                </h4>
+                                                {onToggleActionCompleted && (
+                                                    <label className="touch-target min-h-11 min-w-11 inline-flex items-center justify-center shrink-0 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isDone}
+                                                            onChange={() => onToggleActionCompleted(action.id)}
+                                                            aria-label={`Marquer comme fait : ${action.title}`}
+                                                            className="w-5 h-5 accent-accent rounded-sm cursor-pointer"
+                                                        />
+                                                    </label>
                                                 )}
                                             </div>
-                                        )}
-                                    </div>
+                                            <p className="text-tiny text-texte-doux break-words">
+                                                <PrivateText quoi="memo">{action.plainFrenchWhy}</PrivateText>
+                                            </p>
+                                            {(gainOk || monthsOk || action.isAlreadyApplied) && (
+                                                <div className="flex flex-wrap items-center gap-2 pt-1">
+                                                    {action.isAlreadyApplied && (
+                                                        <span className="px-2.5 py-0.5 rounded-full border border-succes-texte/30 bg-succes-fond text-succes-texte text-tiny font-semibold">
+                                                            Déjà actif dans ton plan
+                                                        </span>
+                                                    )}
+                                                    {gainOk && (
+                                                        <span className="px-2.5 py-0.5 rounded-full border border-succes-texte/30 bg-succes-fond text-succes-texte text-tiny font-mono font-bold tabular-nums">
+                                                            Gain estimé :{' '}
+                                                            <PrivateAmount>
+                                                                {`+${formatCompactCAD(action.impactCad as number)}`}
+                                                            </PrivateAmount>
+                                                        </span>
+                                                    )}
+                                                    {monthsOk && (
+                                                        <span className="px-2.5 py-0.5 rounded-full border border-repere/35 bg-repere-doux text-repere text-tiny font-mono font-bold tabular-nums">
+                                                            +<PrivateAmount>{`${Math.round(action.impactMonths as number)} mois`}</PrivateAmount> gagnés
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
 
-                                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-bordure">
-                                        {action.appliesAiScenario && (
-                                            <button
-                                                type="button"
-                                                onClick={() => onSelectScenario('ai_optimized')}
-                                                className="touch-target min-h-11 px-3.5 py-2 rounded-xl bg-accent hover:bg-accent-fonce text-sur-accent text-tiny font-bold focus-ring transition-colors"
-                                            >
-                                                Appliquer dans Optimisé IA
-                                            </button>
-                                        )}
-                                        {targetTab && onNavigateTab && (
-                                            <button
-                                                type="button"
-                                                onClick={() => onNavigateTab(targetTab)}
-                                                className="touch-target min-h-11 px-3.5 py-2 rounded-xl border border-bordure-champ bg-fond hover:bg-surface text-texte text-tiny font-semibold focus-ring transition-colors"
-                                            >
-                                                Ouvrir {TAB_LABELS[targetTab] ?? targetTab} ↗
-                                            </button>
-                                        )}
-                                    </div>
-                                </article>
-                            );
-                        })}
-                    </div>
-                )}
+                                        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-bordure">
+                                            {!action.isAlreadyApplied && action.applyPatch && onApplyActionPatch && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onApplyActionPatch(action)}
+                                                    className="touch-target min-h-11 px-3.5 py-2 rounded-xl bg-accent hover:bg-accent-fonce text-sur-accent text-tiny font-bold focus-ring transition-colors"
+                                                >
+                                                    {action.applyLabel ?? 'Appliquer à mon plan'}
+                                                </button>
+                                            )}
+                                            {!action.applyPatch && action.applyLabel && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onSelectScenario('ai_optimized')}
+                                                    className="touch-target min-h-11 px-3.5 py-2 rounded-xl bg-accent hover:bg-accent-fonce text-sur-accent text-tiny font-bold focus-ring transition-colors"
+                                                >
+                                                    {action.applyLabel}
+                                                </button>
+                                            )}
+                                            {targetTab && onNavigateTab && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onNavigateTab(targetTab)}
+                                                    className="touch-target min-h-11 px-3.5 py-2 rounded-xl border border-bordure-champ bg-fond hover:bg-surface text-texte text-tiny font-semibold focus-ring transition-colors"
+                                                >
+                                                    Ouvrir {TAB_LABELS[targetTab] ?? targetTab} ↗
+                                                </button>
+                                            )}
+                                        </div>
+                                    </article>
+                                );
+                            })}
+                        </div>
+                    );
+                })()}
             </div>
         </section>
     );

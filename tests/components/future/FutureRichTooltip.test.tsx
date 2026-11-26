@@ -126,7 +126,7 @@ describe('FutureRichTooltip (Infobulle riche intégrée au graphique)', () => {
         expect(tooltip.textContent).toContain('18 novembre 2028');
         expect(tooltip.textContent).toContain('Âge 42');
         expect(tooltip.textContent).toContain('Trajectoire réelle');
-        expect(tooltip.textContent).toContain('Fourchette [P10, P90]');
+        expect(tooltip.textContent).toContain('Fourchette possible (prudent – favorable)');
         expect(tooltip.textContent).toContain('Cliquer pour épingler ce jour');
 
         rerender(<FutureRichTooltip {...makeProps({ isPinned: false, anchorXRatio: 0.8 })} />);

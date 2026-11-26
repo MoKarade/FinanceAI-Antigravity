@@ -175,7 +175,7 @@ const TrajectoireTooltip: React.FC<TrajectoireTooltipProps> = ({
                 Number.isFinite(enrichi.P10) &&
                 Number.isFinite(enrichi.P90) && (
                     <div className="pt-1.5 border-t border-bordure flex items-center justify-between gap-3 text-xs text-ink-400">
-                        <span>Monte-Carlo P10–P90</span>
+                        <span>Fourchette possible</span>
                         <span>
                             <PrivateAmount>
                                 {`${formatCompactCAD(enrichi.P10)} → ${formatCompactCAD(enrichi.P90)}`}

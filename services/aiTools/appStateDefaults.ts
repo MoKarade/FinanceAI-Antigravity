@@ -86,6 +86,7 @@ export function buildDefaultAppState(): AppState {
         brokerLedger: undefined,
         instruments: undefined,
         brokerAccountRegimes: undefined,
+        completedAiActionIds: [],
     };
 }
 

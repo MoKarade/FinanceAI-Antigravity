@@ -4,6 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { FutureUnifiedInsightsPanel } from '../../../components/future/FutureUnifiedInsightsPanel';
 import { FutureYearAnatomyModal } from '../../../components/future/FutureYearAnatomyModal';
+import { FutureCoreMilestonesGrid } from '../../../components/future/FutureCoreMilestonesGrid';
+import { MarketImpactCard } from '../../../components/future/MarketImpactCard';
+import { computeMarketImpactSummary } from '../../../services/marketImpactSummary';
 import { useFinanceStore } from '../../../store/useFinanceStore';
 import { Tab } from '../../../types';
 import type { ProjectionChartPoint } from '../../../services/projection/types';
@@ -308,5 +311,125 @@ describe('Futur 4.0 — FutureUnifiedInsightsPanel & FutureYearAnatomyModal', ()
 
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(onClose).toHaveBeenCalled();
+    });
+
+    it('FutureCoreMilestonesGrid affiche la jauge chances sur 100 et zéro sigle P90 cryptique', () => {
+        const report = makeReport();
+        const scenario = makeScenario();
+        const { container } = render(
+            <FutureCoreMilestonesGrid report={report} scenario={scenario} />,
+        );
+        expect(screen.getByTestId('retirement-success-gauge')).toBeInTheDocument();
+        expect(container.textContent).toContain('chances sur 100');
+        expect(container.textContent).toContain('Niveau sûr (9 chances sur 10)');
+        expect(container.textContent).not.toMatch(/\(P90\)/);
+    });
+
+    it('MarketImpactCard respecte mode discret et bouton marché >= 44px', () => {
+        const summary = computeMarketImpactSummary({
+            assets: [
+                {
+                    name: 'XEQT',
+                    symbol: 'XEQT.TO',
+                    accountType: 'CELI',
+                    quantity: 1000,
+                    currentPrice: 100,
+                    performance: 8,
+                    dateBought: '2025-01-01',
+                    currency: 'CAD',
+                },
+            ],
+            fxRates: { USD: 1.38, EUR: 1.5, CAD: 1 },
+            lastProjection: {
+                scenarioId: 'base',
+                scenarioName: 'Base',
+                chartData: [
+                    {
+                        name: '2026',
+                        monthIndex: 0,
+                        year: 2026,
+                        age: 40,
+                        NetWorth: 100_000,
+                        Liquidites: 10_000,
+                        CELI: 90_000,
+                        REER: 0,
+                        NonReg: 0,
+                        Immobilier: 0,
+                        DettesNonImmo: 0,
+                    },
+                    {
+                        name: '2046',
+                        monthIndex: 240,
+                        year: 2046,
+                        age: 60,
+                        isRetired: true,
+                        NetWorth: 400_000,
+                        Liquidites: 10_000,
+                        CELI: 390_000,
+                        REER: 0,
+                        NonReg: 0,
+                        Immobilier: 0,
+                        DettesNonImmo: 0,
+                    },
+                ],
+                finalNetWorth: 400_000,
+                fireNumber: 600_000,
+                fireAge: 60,
+                estateNetWorth: 350_000,
+                estateTax: 50_000,
+                finalLiquidAssets: 400_000,
+            },
+            newsBundle: makeReport().newsBundle,
+        });
+        const onOpenMarkets = vi.fn();
+        const { rerender, container } = render(
+            <MarketImpactCard summary={summary} onOpenMarkets={onOpenMarkets} />,
+        );
+        expect(screen.getByTestId('market-impact-card')).toBeInTheDocument();
+        const btn = screen.getByRole('button', { name: /Voir les marchés/i });
+        expect(btn.className).toContain('min-h-11');
+        fireEvent.click(btn);
+        expect(onOpenMarkets).toHaveBeenCalledTimes(1);
+
+        useFinanceStore.setState({ isPrivacyMode: true });
+        rerender(<MarketImpactCard summary={summary} onOpenMarkets={onOpenMarkets} />);
+        expect(container.textContent).not.toContain('0,3');
+    });
+
+    it('FutureUnifiedInsightsPanel permet de cocher et appliquer une action réconciliée', () => {
+        const onToggle = vi.fn();
+        const onApply = vi.fn();
+        const report = makeReport();
+        const reconciledAction = {
+            id: 'action-fiscal-order',
+            title: 'Activer l’ordre fiscal automatique',
+            plainFrenchWhy: 'Maximise le capital net.',
+            impactCad: 25_000,
+            impactMonths: 6,
+            priority: 1,
+            isAlreadyApplied: false,
+            applyLabel: 'Appliquer à mon plan',
+            applyPatch: { projection: useFinanceStore.getState().projection },
+            targetTab: Tab.RETIREMENT,
+        };
+        render(
+            <FutureUnifiedInsightsPanel
+                report={report}
+                scenario={report.scenarios.real_trajectory}
+                reconciledActions={[reconciledAction]}
+                completedActionIds={[]}
+                onToggleActionCompleted={onToggle}
+                onApplyActionPatch={onApply}
+                onFocusMonth={vi.fn()}
+                onSelectScenario={vi.fn()}
+                onNavigateTab={vi.fn()}
+            />,
+        );
+        const checkbox = screen.getByRole('checkbox');
+        fireEvent.click(checkbox);
+        expect(onToggle).toHaveBeenCalledWith('action-fiscal-order');
+
+        fireEvent.click(screen.getByRole('button', { name: /Appliquer à mon plan/i }));
+        expect(onApply).toHaveBeenCalledWith(reconciledAction);
     });
 });
