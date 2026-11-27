@@ -73,9 +73,9 @@ async function lireDerniereLigneP10P50P90(
     };
 
     return {
-      p10: extract('P10'),
-      p50: extract('P50'),
-      p90: extract('P90'),
+      p10: extract('Scénario prudent'),
+      p50: extract('Scénario central'),
+      p90: extract('Scénario favorable'),
     };
   });
 }

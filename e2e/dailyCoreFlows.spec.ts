@@ -75,7 +75,7 @@ test.describe('Parcours quotidiens Desktop (Accueil, Futur, Transactions, Budget
     await page.goto('/#SETTINGS');
     await page.waitForLoadState('domcontentloaded');
     const settingsTablist = page.getByRole('tablist', { name: 'Sections des réglages' });
-    await expect(settingsTablist.getByRole('tab')).toHaveCount(4);
+    await expect(settingsTablist.getByRole('tab')).toHaveCount(3);
     await settingsTablist.getByRole('tab', { name: /Banque auto/ }).click();
     await expect(page.getByLabel(/Jeton Fintable/i)).toBeVisible();
     await assertZeroOverflow(page, 'Réglages');

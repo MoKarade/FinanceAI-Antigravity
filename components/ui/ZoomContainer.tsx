@@ -132,96 +132,102 @@ export const ZoomContainer: React.FC<ZoomContainerProps> = ({ zoom, className = 
             onPointerUpCapture={handlePointerUpOrCancel}
             onPointerCancelCapture={handlePointerUpOrCancel}
             style={style}
-            className={`relative select-none group/gfzoom ${cursor} ${className}`}
+            className={`relative flex flex-col select-none group/gfzoom ${cursor} ${className}`}
         >
-            {children}
-            {dragRange && compStats && (
-                <>
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 shrink-0">
+                <div className="min-w-0">
+                    {dragRange && compStats ? (
+                        <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-surface border border-repere/40 text-tiny font-mono shadow-lg">
+                            <span className="text-ink-200 font-semibold">
+                                {compStats.labelA} → {compStats.labelB}
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded-sm font-bold ${compStats.delta >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}>
+                                <PrivateAmount>
+                                    {compStats.isPercentSeries
+                                        ? formatVariationPct(compStats.delta, 2)
+                                        : `${compStats.delta >= 0 ? '+' : ''}${formatCompactCAD(compStats.delta)}`}
+                                </PrivateAmount>
+                                {compStats.deltaPct !== null && (
+                                    <> (<PrivateAmount>{formatVariationPct(compStats.deltaPct, 1)}</PrivateAmount>)</>
+                                )}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setDragRange(null); }}
+                                className="touch-target min-h-11 min-w-11 inline-flex items-center justify-center px-1.5 text-ink-400 hover:text-ink-50 focus-ring rounded-xs"
+                                aria-label="Effacer la plage comparée"
+                                title="Effacer la comparaison"
+                            >
+                                ×
+                            </button>
+                        </div>
+                    ) : null}
+                </div>
+                <div className="flex items-center gap-1 ml-auto shrink-0">
+                    <div className="gf-chart-toolbar opacity-90 group-hover/gfzoom:opacity-100 focus-within:opacity-100 transition-opacity">
+                        {zoom.isZoomed && (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => zoom.panByRatio(-0.35)}
+                                    className="touch-target min-h-11 gf-chart-ctrl-btn focus-ring"
+                                    title="Déplacer la courbe vers la gauche"
+                                    aria-label="Déplacer la courbe vers la gauche"
+                                >
+                                    ‹
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => zoom.panByRatio(0.35)}
+                                    className="touch-target min-h-11 gf-chart-ctrl-btn focus-ring"
+                                    title="Déplacer la courbe vers la droite"
+                                    aria-label="Déplacer la courbe vers la droite"
+                                >
+                                    ›
+                                </button>
+                            </>
+                        )}
+                        <button
+                            type="button"
+                            onClick={zoom.zoomOut}
+                            disabled={!zoom.isZoomed}
+                            className="touch-target min-h-11 gf-chart-ctrl-btn focus-ring"
+                            title="Dézoomer la courbe"
+                            aria-label="Dézoomer la courbe"
+                        >
+                            −
+                        </button>
+                        <button
+                            type="button"
+                            onClick={zoom.zoomIn}
+                            className="touch-target min-h-11 gf-chart-ctrl-btn focus-ring"
+                            title="Zoomer sur la courbe"
+                            aria-label="Zoomer sur la courbe"
+                        >
+                            +
+                        </button>
+                    </div>
+                    {zoom.isZoomed && (
+                        <button
+                            type="button"
+                            onClick={zoom.reset}
+                            className="touch-target min-h-11 px-2.5 py-1 text-tiny bg-surface-douce hover:bg-surface border border-bordure rounded-sm text-ink-200 font-medium transition-colors focus-ring"
+                            title="Réinitialiser la vue (double-clic aussi)"
+                        >
+                            ↺ Vue complète
+                        </button>
+                    )}
+                </div>
+            </div>
+            <div className="relative flex-1 min-h-0 w-full">
+                {children}
+                {dragRange && compStats && (
                     <div
                         aria-hidden="true"
                         className="pointer-events-none absolute inset-y-2 z-10 bg-repere/10 border-x border-repere/50 rounded-xs"
                         // NOMBRE-NON-MONETAIRE : géométrie de sélection de plage à la souris
                         style={{ left: `${dragRange.leftPct}%`, width: `${dragRange.widthPct}%` }}
                     />
-                    <div className="absolute top-1 left-1 z-20 inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-surface border border-repere/40 text-tiny font-mono shadow-lg">
-                        <span className="text-ink-200 font-semibold">
-                            {compStats.labelA} → {compStats.labelB}
-                        </span>
-                        <span className={`px-1.5 py-0.5 rounded-sm font-bold ${compStats.delta >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}>
-                            <PrivateAmount>
-                                {compStats.isPercentSeries
-                                    ? formatVariationPct(compStats.delta, 2)
-                                    : `${compStats.delta >= 0 ? '+' : ''}${formatCompactCAD(compStats.delta)}`}
-                            </PrivateAmount>
-                            {compStats.deltaPct !== null && (
-                                <> (<PrivateAmount>{formatVariationPct(compStats.deltaPct, 1)}</PrivateAmount>)</>
-                            )}
-                        </span>
-                        <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setDragRange(null); }}
-                            className="touch-target inline-flex items-center justify-center px-1.5 text-ink-400 hover:text-ink-50 focus-ring rounded-xs"
-                            aria-label="Effacer la plage comparée"
-                            title="Effacer la comparaison"
-                        >
-                            ×
-                        </button>
-                    </div>
-                </>
-            )}
-            <div className="absolute top-1 right-1 z-10 flex items-center gap-1">
-                <div className="gf-chart-toolbar opacity-85 group-hover/gfzoom:opacity-100 focus-within:opacity-100 transition-opacity">
-                    {zoom.isZoomed && (
-                        <>
-                            <button
-                                type="button"
-                                onClick={() => zoom.panByRatio(-0.35)}
-                                className="touch-target gf-chart-ctrl-btn focus-ring"
-                                title="Déplacer la courbe vers la gauche"
-                                aria-label="Déplacer la courbe vers la gauche"
-                            >
-                                ‹
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => zoom.panByRatio(0.35)}
-                                className="touch-target gf-chart-ctrl-btn focus-ring"
-                                title="Déplacer la courbe vers la droite"
-                                aria-label="Déplacer la courbe vers la droite"
-                            >
-                                ›
-                            </button>
-                        </>
-                    )}
-                    <button
-                        type="button"
-                        onClick={zoom.zoomOut}
-                        disabled={!zoom.isZoomed}
-                        className="touch-target gf-chart-ctrl-btn focus-ring"
-                        title="Dézoomer la courbe"
-                        aria-label="Dézoomer la courbe"
-                    >
-                        −
-                    </button>
-                    <button
-                        type="button"
-                        onClick={zoom.zoomIn}
-                        className="touch-target gf-chart-ctrl-btn focus-ring"
-                        title="Zoomer sur la courbe"
-                        aria-label="Zoomer sur la courbe"
-                    >
-                        +
-                    </button>
-                </div>
-                {zoom.isZoomed && (
-                    <button
-                        type="button"
-                        onClick={zoom.reset}
-                        className="px-2 py-0.5 text-tiny bg-white/10 hover:bg-white/20 border border-white/15 rounded-sm text-ink-200 font-medium transition-colors focus-ring"
-                        title="Réinitialiser la vue (double-clic aussi)"
-                    >
-                        ↺ Vue complète
-                    </button>
                 )}
             </div>
             {zoom.isZoomed ? (
@@ -233,7 +239,7 @@ export const ZoomContainer: React.FC<ZoomContainerProps> = ({ zoom, className = 
                     />
                 </div>
             ) : hint ? (
-                <div className="absolute bottom-1 right-1 text-tiny text-ink-400 pointer-events-none bg-black/30 px-1.5 py-0.5 rounded-sm">
+                <div className="text-tiny text-ink-400 pointer-events-none text-right pt-1">
                     Glisser = comparer · Molette = zoom
                 </div>
             ) : null}

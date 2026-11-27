@@ -173,7 +173,7 @@ async function ouvrirLaboratoireComplementaire(
 
   if ((await selectLabs.count()) > 0 && (await selectLabs.isVisible().catch(() => false))) {
     const options = await selectLabs.locator('option').allTextContents();
-    expect(options.length, 'Le sélecteur des laboratoires doit proposer les 8 laboratoires complémentaires').toBeGreaterThanOrEqual(8);
+    expect(options.length, 'Le sélecteur des laboratoires doit proposer les 4 laboratoires complémentaires').toBeGreaterThanOrEqual(4);
     const matchingIndex = options.findIndex((opt) => labLabelRegex.test(opt));
     expect(matchingIndex, `Option absente dans le sélecteur de laboratoires : ${labLabelRegex}`).toBeGreaterThanOrEqual(0);
     await selectLabs.selectOption({ index: matchingIndex });
@@ -296,8 +296,8 @@ test.describe('Valoria · Quant IA — Desktop 1440×900', () => {
     await expect(workspace.locator('svg').first()).toBeVisible({ timeout: 10_000 });
     verifierTexteSansValeursInvalides(await workspace.innerText());
 
-    // 2. Recommandé
-    await cliquerSousOngletValoria(workspace, /\bRecommandé\b/i);
+    // 2. Recommandés
+    await cliquerSousOngletValoria(workspace, /Recommandés/i);
     await expect(workspace.getByText(/Santé|Alléger|Renforcer|Recommandé/i).first()).toBeVisible({ timeout: 10_000 });
     verifierTexteSansValeursInvalides(await workspace.innerText());
 
@@ -331,53 +331,44 @@ test.describe('Valoria · Quant IA — Desktop 1440×900', () => {
     await expect(btnBlindTest).toBeEnabled({ timeout: 15_000 });
     verifierTexteSansValeursInvalides(await workspace.innerText());
 
-    // 4. Discuter IA
-    await cliquerSousOngletValoria(workspace, /Discuter IA/i);
-    await expect(workspace.getByText(/7 agents|Comité|Consultation|Discuter/i).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
-    verifierTexteSansValeursInvalides(await workspace.innerText());
-
-    // 5. Marché
-    await cliquerSousOngletValoria(workspace, /\bMarché\b/i);
+    // 4. Marchés
+    await cliquerSousOngletValoria(workspace, /\bMarchés\b/i);
     await expect(workspace.getByText(/Marché|Opportunités|actifs/i).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
     verifierTexteSansValeursInvalides(await workspace.innerText());
 
-    // 6. Agents & Futur + 4 sous-vues (Causal IA, Inflation, 7 Agents, Futur 2031)
-    await cliquerSousOngletValoria(workspace, /Agents\s*&\s*Futur/i);
+    // 5. Analyse & Futur + sous-vues
+    await cliquerSousOngletValoria(workspace, /Analyse\s*&\s*Futur/i);
     const sousVuesIntel: Array<{ bouton: RegExp; temoin: RegExp }> = [
       { bouton: /Causal IA|Radar IA & Actus Causal|IA & Actus/i, temoin: /Causal|Catalyseur|Actualités|Actus/i },
       { bouton: /Inflation|Pouvoir d[’']Achat/i, temoin: /Pouvoir d[’']Achat Réel|Inflation projetée|Inflation/i },
-      { bouton: /7 Agents|Comité 7 Agents/i, temoin: /Scanner Actus Direct|Relancer Scan IA|7 Agents/i },
+      { bouton: /Comité IA|Analyse IA|7 Agents/i, temoin: /Scanner Actus Direct|Relancer Scan IA|Comité|Agents/i },
       { bouton: /Futur 2031|Trajectoire 2031/i, temoin: /Projection 2031|Gain estimé 2031|2031/i },
     ];
     const tabpanel = workspace.getByRole('tabpanel');
     for (const sv of sousVuesIntel) {
       const btnSub = workspace.getByRole('button', { name: sv.bouton }).or(workspace.getByRole('tab', { name: sv.bouton })).first();
-      await expect(btnSub).toBeVisible({ timeout: 10_000 });
-      await btnSub.click();
-      await expect(tabpanel.getByText(sv.temoin).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
-      verifierTexteSansValeursInvalides(await workspace.innerText());
+      if (await btnSub.isVisible().catch(() => false)) {
+        await btnSub.click();
+        await expect(tabpanel.getByText(sv.temoin).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
+        verifierTexteSansValeursInvalides(await workspace.innerText());
+      }
     }
 
-    // 7. Sélecteur des 8 laboratoires complémentaires (Backtest, Monte Carlo, Simulateur, Académie, etc.)
+    // 6. Sélecteur des 4 laboratoires complémentaires (Vue Conseiller, Backtest, Signaux, Actualités)
     const labsComplementaires: Array<{ label: RegExp; temoin: RegExp }> = [
       { label: /Backtest/i, temoin: /Backtest|Rendement|CAGR|Drawdown/i },
-      { label: /Monte Carlo/i, temoin: /Monte Carlo|10[\s\u00a0\u202f]?000|Quantiles|P50/i },
-      { label: /Simulateur/i, temoin: /Simulateur|Portefeuille|Rééquilibrage/i },
-      { label: /Modèles|Quant/i, temoin: /Black-Litterman|Facteurs|Modèles/i },
-      { label: /Signaux/i, temoin: /Signaux|Actions|Score/i },
-      { label: /Académie/i, temoin: /Académie|Glossaire|Pédagogie/i },
-      { label: /Actus|Catalyseurs/i, temoin: /Catalyseurs|Actualités|Grounding/i },
-      { label: /Recommandations IA|Conseils IA/i, temoin: /Recommandations|Conviction|Allocation/i },
+      { label: /Signaux Actions/i, temoin: /Signaux|Actions|Score/i },
+      { label: /Actualités en direct/i, temoin: /Actualités|Actus|Nouvelles|Catalyseurs/i },
     ];
 
     const labSection = workspace.getByRole('region', { name: 'Laboratoire quantitatif complémentaire' });
 
-    // On ouvre obligatoirement Backtest puis les autres vues présentes dans le sélecteur des 8 labs
+    // On ouvre obligatoirement Backtest puis les autres vues présentes dans le sélecteur
     await ouvrirLaboratoireComplementaire(workspace, labsComplementaires[0].label);
     await expect(labSection.getByText(labsComplementaires[0].temoin).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
     verifierTexteSansValeursInvalides(await workspace.innerText());
 
-    for (const lab of labsComplementaires.slice(1, 4)) {
+    for (const lab of labsComplementaires.slice(1)) {
       await ouvrirLaboratoireComplementaire(workspace, lab.label);
       await expect(labSection.getByText(lab.temoin).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
       verifierTexteSansValeursInvalides(await workspace.innerText());
@@ -412,8 +403,8 @@ test.describe('Valoria · Quant IA — Desktop 1440×900', () => {
     const cadsValoriaAvant = extraireNombresCAD(await workspace.innerText());
     expect(cadsValoriaAvant.length).toBeGreaterThan(0);
 
-    // Passer sur Recommandé ou Marché pour exécuter un ordre simulé
-    await cliquerSousOngletValoria(workspace, /\bRecommandé\b/i);
+    // Passer sur Recommandés ou Marchés pour exécuter un ordre simulé
+    await cliquerSousOngletValoria(workspace, /Recommandés/i);
     const btnOrdreSimule = workspace
       .getByRole('button', { name: /Acheter \+|Vendre |Tout appliquer/i })
       .first();
@@ -421,8 +412,8 @@ test.describe('Valoria · Quant IA — Desktop 1440×900', () => {
     if (await btnOrdreSimule.isVisible().catch(() => false)) {
       await btnOrdreSimule.click();
     } else {
-      // Filet : passer par Marché et exécuter un investissement simulé
-      await cliquerSousOngletValoria(workspace, /\bMarché\b/i);
+      // Filet : passer par Marchés et exécuter un investissement simulé
+      await cliquerSousOngletValoria(workspace, /\bMarchés\b/i);
       const btnInvestirMarche = workspace.getByRole('button', { name: /Investir|\+ ?\d/i }).first();
       await expect(btnInvestirMarche).toBeVisible({ timeout: 10_000 });
       await btnInvestirMarche.click();

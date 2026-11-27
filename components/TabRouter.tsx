@@ -13,11 +13,6 @@ import { lazyWithRetry } from '../utils/lazyWithRetry';
 // Import statique : store + syncHealth + Icon, rien de lourd ; elle se tait d'elle-même (région
 // live vide) quand tout va bien.
 import { SyncStaleBanner } from './dashboard/SyncStaleBanner';
-// [PERF panel #601, mesuré +17,3 KB] FutureKpiStrip importe useNetWorthVariation →
-// usePortfolioHistory → buildMarketData : son import STATIQUE ici tirait tout ça dans le chunk
-// de BOOT (leçon CLAUDE.md « hoister un import au niveau App »). Lazy comme les pages ;
-// fallback `null` (bandeau léger, un skeleton flasherait plus qu'il n'aiderait).
-const FutureKpiStrip = lazyWithRetry(() => import('./FutureKpiStrip').then(m => ({ default: m.FutureKpiStrip })), 'FutureKpiStrip');
 
 const AccueilGoogle = lazyWithRetry(() => import('./AccueilGoogle').then(m => ({ default: m.AccueilGoogle })), 'AccueilGoogle');
 const Transactions = lazyWithRetry(() => import('./Transactions').then(m => ({ default: m.Transactions })), 'Transactions');
@@ -39,10 +34,7 @@ const DebtManager = lazyWithRetry(() => import('./DebtManager').then(m => ({ def
 
 registerTabLoaders({
     [Tab.DASHBOARD]: () => import('./AccueilGoogle'),
-    [Tab.FUTURE]: () => Promise.all([
-        import('./FutureProjection'),
-        import('./FutureKpiStrip'),
-    ]),
+    [Tab.FUTURE]: () => import('./FutureProjection'),
     [Tab.TRANSACTIONS]: () => import('./Transactions'),
     [Tab.BUDGET]: () => import('./budget/BudgetWorkspace'),
     [Tab.DEBT]: () => import('./DebtManager'),
@@ -217,18 +209,6 @@ export const TabRouter: React.FC<TabRouterProps> = ({
                             projection={state.projection}
                             setProjection={(p) => setAppState({ projection: p })}
                             isPrivacyMode={isPrivacyMode}
-                            bandeauKpi={(variante) => (
-                                <Suspense fallback={null}>
-                                    <FutureKpiStrip
-                                        variante={variante}
-                                        netWorth={globalNetWorth}
-                                        liquidity={currentLiquidity}
-                                        monthlySavings={calculatedMonthlySavings}
-                                        avoirsHorsImmo={avoirsHorsImmo}
-                                        dettesHorsImmo={dettesHorsImmo}
-                                    />
-                                </Suspense>
-                            )}
                         />
                     </>
                 )}

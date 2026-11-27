@@ -55,13 +55,13 @@ export const ToastContainer: React.FC = () => {
             aria-live="polite"
             aria-atomic="true"
             aria-label="Notifications"
-            className="fixed bottom-[calc(76px+env(safe-area-inset-bottom)+0.75rem)] lg:bottom-6 right-6 z-9999 flex flex-col gap-2 pointer-events-none"
+            className="fixed bottom-[calc(76px+env(safe-area-inset-bottom)+0.75rem)] lg:bottom-6 right-4 sm:right-6 z-9999 flex flex-col gap-2 pointer-events-none"
         >
             {toasts.map(toast => (
                 <div
                     key={toast.id}
                     role={toast.type === 'error' ? 'alert' : 'status'}
-                    className={`${toast.isExiting ? 'animate-toast-out' : 'animate-toast-in'} pointer-events-auto min-w-[300px] p-4 rounded-xl border shadow-2xl flex items-center gap-3 bg-surfaceHighlight/95 backdrop-blur-xs text-ink-50 ${
+                    className={`${toast.isExiting ? 'animate-toast-out' : 'animate-toast-in'} pointer-events-auto min-w-[260px] max-w-[calc(100vw-2rem)] sm:min-w-[300px] p-4 rounded-xl border shadow-2xl flex items-center gap-3 bg-surfaceHighlight/95 backdrop-blur-xs text-ink-50 ${
                         toast.type === 'success' ? 'border-success-500/60' :
                             toast.type === 'error' ? 'border-danger-500/60' :
                                 'border-info-500/60'

@@ -841,19 +841,6 @@ export async function collectLiveNewsAndFundamentals(input: {
                             return normalizeRawNewsFeedItems(obj.articles);
                         }
                     }
-                    if (primary.status === 404) {
-                        const alt = await fetchJsonSafe(
-                            `/api/valoria/news?tickers=${tickerParam}`,
-                            controller.signal,
-                        );
-                        if (alt.ok && alt.data && typeof alt.data === 'object') {
-                            const obj = alt.data as { articles?: unknown };
-                            if (Array.isArray(obj.articles)) {
-                                liveNetworkSucceeded = true;
-                                return normalizeRawNewsFeedItems(obj.articles);
-                            }
-                        }
-                    }
                 } catch {
                     // Best-effort silencieux
                 }
@@ -863,11 +850,7 @@ export async function collectLiveNewsAndFundamentals(input: {
             const fetchMarket = async (): Promise<void> => {
                 try {
                     const primary = await fetchJsonSafe('/api/market/verified-feed', controller.signal);
-                    let data = primary.ok ? primary.data : null;
-                    if (!primary.ok && primary.status === 404) {
-                        const alt = await fetchJsonSafe('/api/valoria/market', controller.signal);
-                        if (alt.ok) data = alt.data;
-                    }
+                    const data = primary.ok ? primary.data : null;
                     if (data && typeof data === 'object') {
                         liveNetworkSucceeded = true;
                         const rec = data as {

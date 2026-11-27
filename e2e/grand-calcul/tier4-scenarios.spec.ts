@@ -93,7 +93,7 @@ test.describe('Futur 4.0 Tier 4 — Parcours Personas Québec', () => {
       await expect(boutonScenario(page, label)).toHaveAttribute('aria-pressed', 'true');
     }
 
-    await expect(zoneAnalyseUnifiee(page).getByText('Tes actions concrètes les plus payantes')).toBeVisible();
+    await expect(zoneAnalyseUnifiee(page).getByText(/Ce qu[’']il faut faire pour atteindre la trajectoire IA/i)).toBeVisible();
     const mainText = await page.locator('main').innerText();
     expect(mainText).not.toMatch(/\bNaN\b|\bundefined\b|\bInfinity\b/);
     errors.assertClean();
@@ -105,7 +105,7 @@ test.describe('Futur 4.0 Tier 4 — Parcours Personas Québec', () => {
 
     await expect(zoneReperesCles(page).getByText('Indépendance financière', { exact: true })).toBeVisible();
     const tooltip = await epinglerInfobulleSurCourbe(page, 0.55, 0.5);
-    await expect(tooltip.getByText(/Fourchette \[P10, P90\]/i)).toBeVisible();
+    await expect(tooltip.getByText(/Fourchette possible/i)).toBeVisible();
     await page.keyboard.press('Escape');
 
     const mainText = await page.locator('main').innerText();

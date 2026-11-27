@@ -200,11 +200,10 @@ test.describe('Valoria · Quant IA — Mobile 390×844 tactile', () => {
 
     const onglets: Array<{ label: RegExp; nom: string }> = [
       { label: /Ce que j[’']ai/i, nom: 'Ce que j’ai' },
-      { label: /\bRecommandé\b/i, nom: 'Recommandé' },
+      { label: /Recommandés/i, nom: 'Recommandés' },
       { label: /Preuve IA/i, nom: 'Preuve IA' },
-      { label: /Discuter IA/i, nom: 'Discuter IA' },
-      { label: /\bMarché\b/i, nom: 'Marché' },
-      { label: /Agents\s*&\s*Futur/i, nom: 'Agents & Futur' },
+      { label: /\bMarchés\b/i, nom: 'Marchés' },
+      { label: /Analyse\s*&\s*Futur/i, nom: 'Analyse & Futur' },
     ];
 
     for (const onglet of onglets) {

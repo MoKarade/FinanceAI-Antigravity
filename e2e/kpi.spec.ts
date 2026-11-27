@@ -30,7 +30,7 @@ test.describe('KPI quotidiens — Accueil, Futur et Budget', () => {
     await page.waitForLoadState('domcontentloaded');
     await expect(page.locator('#main h1').first()).toBeVisible({ timeout: 10_000 });
 
-    const patrimoineStat = page.locator('#main').getByText(/patrimoine net/i).first();
+    const patrimoineStat = page.locator('#main').getByText(/Patrimoine central/i).first();
     await expect(patrimoineStat).toBeVisible({ timeout: 8_000 });
 
     const valeurPatrimoine = page.locator('#main').getByText(/[\d\s,]+\s*\$/).first();

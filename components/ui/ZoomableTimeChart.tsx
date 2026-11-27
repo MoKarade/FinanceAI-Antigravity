@@ -341,7 +341,7 @@ export const ZoomableTimeChart: React.FC<ZoomableTimeChartProps> = ({
             ref={containerRef}
             data-testid="zoomable-chart-entrance"
             data-active-tab={activeTab}
-            className={`relative w-full h-full select-none gf-chart-enter ${isZoomed && isPanning ? 'cursor-grabbing' : (isZoomed ? 'cursor-grab' : 'cursor-crosshair')} ${isFullscreen ? 'bg-surface p-4' : ''}`}
+            className={`relative flex flex-col w-full h-full select-none gf-chart-enter ${isZoomed && isPanning ? 'cursor-grabbing' : (isZoomed ? 'cursor-grab' : 'cursor-crosshair')} ${isFullscreen ? 'bg-surface p-4' : ''}`}
             {...handlers}
             onPointerDownCapture={handlePointerDownCapture}
             onPointerMoveCapture={handlePointerMoveCapture}
@@ -351,113 +351,130 @@ export const ZoomableTimeChart: React.FC<ZoomableTimeChartProps> = ({
             role="img"
             aria-label="Graphique temporel — glisser pour comparer deux dates, molette ou pincement pour zoomer, double-clic pour réinitialiser"
         >
-            {/* Barre de contrôles : périodes (gauche) + zoom/pan/plein écran (droite). */}
-            {showControls && (
-                <div className="absolute top-1.5 sm:top-2 left-1.5 sm:left-2 max-w-[calc(100%-7.5rem)] sm:max-w-none overflow-x-auto no-scrollbar z-10 flex items-center gap-1 sm:flex-wrap">
-                    {availablePeriods.map((p) => (
-                        <button
-                            key={p.label}
-                            type="button"
-                            onClick={() => showPeriod(p.days)}
-                            className="shrink-0 px-2 py-0.5 text-tiny font-bold rounded-card bg-white/10 hover:bg-white/20 border border-white/15 text-ink-200 transition-colors focus-ring"
-                            title={`Afficher les ${p.label} derniers`}
-                        >
-                            {p.label}
-                        </button>
-                    ))}
-                    {availablePeriods.length > 0 && (
-                        <button
-                            type="button"
-                            onClick={reset}
-                            className={`shrink-0 px-2 py-0.5 text-tiny font-bold rounded-card border transition-colors focus-ring ${isZoomed ? 'bg-white/10 hover:bg-white/20 border-white/15 text-ink-200' : 'bg-indigo-500/25 border-indigo-400/40 text-white'}`}
-                            title="Vue complète"
-                        >
-                            Tout
-                        </button>
-                    )}
-                    {compStats && (
-                        <div className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-card bg-surface border border-repere/40 text-tiny font-mono shadow-lg">
-                            <span className="text-ink-200 font-semibold">
-                                {compStats.labelA} → {compStats.labelB}
-                            </span>
-                            <span className={`px-1.5 py-0.5 rounded-xs font-bold ${compStats.delta >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}>
-                                <PrivateAmount>{compStats.delta >= 0 ? '+' : ''}{yFormatter(compStats.delta)}</PrivateAmount>
-                                {compStats.pct !== null && (
-                                    <> (<PrivateAmount>{formatVariationPct(compStats.pct, 1)}</PrivateAmount>)</>
-                                )}
-                            </span>
-                            <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); setCompIndices(null); }}
-                                className="touch-target inline-flex items-center justify-center px-1 text-ink-400 hover:text-ink-50 focus-ring rounded-xs"
-                                aria-label="Effacer la plage comparée"
-                                title="Effacer la comparaison"
-                            >
-                                ×
-                            </button>
+            {/* Barre de contrôles au-dessus du tracé : périodes (gauche) + zoom/pan/plein écran (droite). */}
+            {(showControls || (isZoomed && !showControls)) && (
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-2 shrink-0">
+                    {showControls ? (
+                        <div className="overflow-x-auto no-scrollbar flex items-center gap-1 sm:flex-wrap min-w-0">
+                            {availablePeriods.map((p) => (
+                                <button
+                                    key={p.label}
+                                    type="button"
+                                    onClick={() => showPeriod(p.days)}
+                                    className="touch-target min-h-11 shrink-0 px-2.5 py-1 text-tiny font-bold rounded-card bg-surface-douce hover:bg-surface border border-bordure text-ink-200 transition-colors focus-ring"
+                                    title={`Afficher les ${p.label} derniers`}
+                                >
+                                    {p.label}
+                                </button>
+                            ))}
+                            {availablePeriods.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={reset}
+                                    className={`touch-target min-h-11 shrink-0 px-2.5 py-1 text-tiny font-bold rounded-card border transition-colors focus-ring ${isZoomed ? 'bg-surface-douce hover:bg-surface border-bordure text-ink-200' : 'bg-indigo-500/25 border-indigo-400/40 text-white'}`}
+                                    title="Vue complète"
+                                >
+                                    Tout
+                                </button>
+                            )}
+                            {compStats && (
+                                <div className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-card bg-surface border border-repere/40 text-tiny font-mono shadow-lg">
+                                    <span className="text-ink-200 font-semibold">
+                                        {compStats.labelA} → {compStats.labelB}
+                                    </span>
+                                    <span className={`px-1.5 py-0.5 rounded-xs font-bold ${compStats.delta >= 0 ? 'gf-delta-up' : 'gf-delta-down'}`}>
+                                        <PrivateAmount>{compStats.delta >= 0 ? '+' : ''}{yFormatter(compStats.delta)}</PrivateAmount>
+                                        {compStats.pct !== null && (
+                                            <> (<PrivateAmount>{formatVariationPct(compStats.pct, 1)}</PrivateAmount>)</>
+                                        )}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setCompIndices(null); }}
+                                        className="touch-target min-h-11 min-w-11 inline-flex items-center justify-center px-1 text-ink-400 hover:text-ink-50 focus-ring rounded-xs"
+                                        aria-label="Effacer la plage comparée"
+                                        title="Effacer la comparaison"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            )}
                         </div>
+                    ) : (
+                        <span />
                     )}
-                </div>
-            )}
-            {showControls && (
-                <div className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 z-10 flex items-center gap-1 sm:gap-1.5">
-                    {data.length > 2 && (
-                        <div className="gf-chart-toolbar">
-                            {isZoomed && (
-                                <>
+
+                    {showControls ? (
+                        <div className="flex items-center gap-1 sm:gap-1.5 ml-auto shrink-0">
+                            {data.length > 2 && (
+                                <div className="gf-chart-toolbar">
+                                    {isZoomed && (
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={() => panByRatio(-0.35)}
+                                                className="touch-target min-h-11 gf-chart-ctrl-btn focus-ring"
+                                                title="Déplacer vers la gauche"
+                                                aria-label="Déplacer vers la gauche"
+                                            >
+                                                ‹
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => panByRatio(0.35)}
+                                                className="touch-target min-h-11 gf-chart-ctrl-btn focus-ring"
+                                                title="Déplacer vers la droite"
+                                                aria-label="Déplacer vers la droite"
+                                            >
+                                                ›
+                                            </button>
+                                        </>
+                                    )}
                                     <button
                                         type="button"
-                                        onClick={() => panByRatio(-0.35)}
-                                        className="touch-target gf-chart-ctrl-btn focus-ring"
-                                        title="Déplacer vers la gauche"
-                                        aria-label="Déplacer vers la gauche"
+                                        onClick={zoomOut}
+                                        disabled={!isZoomed}
+                                        className="touch-target min-h-11 gf-chart-ctrl-btn focus-ring"
+                                        title="Dézoomer"
+                                        aria-label="Dézoomer"
                                     >
-                                        ‹
+                                        −
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => panByRatio(0.35)}
-                                        className="touch-target gf-chart-ctrl-btn focus-ring"
-                                        title="Déplacer vers la droite"
-                                        aria-label="Déplacer vers la droite"
+                                        onClick={zoomIn}
+                                        disabled={false}
+                                        className="touch-target min-h-11 gf-chart-ctrl-btn focus-ring"
+                                        title="Zoomer"
+                                        aria-label="Zoomer"
                                     >
-                                        ›
+                                        +
                                     </button>
-                                </>
+                                </div>
                             )}
                             <button
                                 type="button"
-                                onClick={zoomOut}
-                                disabled={!isZoomed}
-                                className="touch-target gf-chart-ctrl-btn focus-ring"
-                                title="Dézoomer"
-                                aria-label="Dézoomer"
+                                onClick={toggleFullscreen}
+                                className="touch-target min-h-11 px-2.5 py-1 text-tiny font-bold rounded-card bg-surface-douce hover:bg-surface border border-bordure text-ink-200 transition-colors focus-ring"
+                                title={isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
+                                aria-label={isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
                             >
-                                −
-                            </button>
-                            <button
-                                type="button"
-                                onClick={zoomIn}
-                                disabled={false}
-                                className="touch-target gf-chart-ctrl-btn focus-ring"
-                                title="Zoomer"
-                                aria-label="Zoomer"
-                            >
-                                +
+                                {isFullscreen ? 'Réduire' : 'Plein écran'}
                             </button>
                         </div>
-                    )}
-                    <button
-                        type="button"
-                        onClick={toggleFullscreen}
-                        className="px-2 py-0.5 text-tiny font-bold rounded-card bg-white/10 hover:bg-white/20 border border-white/15 text-ink-200 transition-colors focus-ring"
-                        title={isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
-                        aria-label={isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
-                    >
-                        {isFullscreen ? 'Réduire' : 'Plein écran'}
-                    </button>
+                    ) : isZoomed ? (
+                        <button
+                            type="button"
+                            onClick={reset}
+                            className="touch-target min-h-11 px-2.5 py-1 text-tiny bg-surface-douce hover:bg-surface border border-bordure rounded-card text-ink-200 font-medium transition-colors focus-ring ml-auto shrink-0"
+                            title="Réinitialiser la vue (double-clic aussi)"
+                        >
+                            ↺ Vue complète
+                        </button>
+                    ) : null}
                 </div>
             )}
+            <div className="relative flex-1 min-h-0 w-full">
             <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={visibleData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
@@ -562,18 +579,8 @@ export const ZoomableTimeChart: React.FC<ZoomableTimeChartProps> = ({
                     )}
                 </ComposedChart>
             </ResponsiveContainer>
+            </div>
 
-            {/* Reset autonome quand la barre de contrôles est masquée (sinon « Tout » l'assure). */}
-            {isZoomed && !showControls && (
-                <button
-                    type="button"
-                    onClick={reset}
-                    className="absolute top-2 right-2 px-2 py-1 text-tiny bg-white/10 hover:bg-white/20 border border-white/15 rounded-card text-ink-200 font-medium transition-colors focus-ring"
-                    title="Réinitialiser la vue (double-clic aussi)"
-                >
-                    ↺ Vue complète
-                </button>
-            )}
             {isZoomed && data.length > 1 ? (
                 <div className="gf-chart-minimap bg-black/30" aria-hidden="true">
                     <div

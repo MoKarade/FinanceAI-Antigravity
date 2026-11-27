@@ -31,7 +31,6 @@ import { REQUIREMENTS } from './setup/requirements';
 import { Drawer } from './ui/Drawer';
 import { type FutureDrawerId, tiroirDomId } from './future/OutilsProjection';
 import { couleurSerie } from './future/seriesConfig';
-import type { VarianteBandeau } from './FutureKpiStrip';
 import { Badge } from './ui/Badge';
 import { Icon } from './ui/Icon';
 import { PrivateAmount } from './ui/PrivateAmount';
@@ -158,7 +157,6 @@ interface FutureProjectionProps {
     setProjection: (p: ProjectionConfig) => void;
     isPrivacyMode?: boolean;
     autoReveal?: boolean;
-    bandeauKpi?: (variante: VarianteBandeau) => React.ReactNode;
 }
 
 type DisplayPointInput = {
@@ -249,7 +247,6 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     projection,
     setProjection,
     isPrivacyMode = false,
-    bandeauKpi,
 }) => {
     const updateProj = <K extends keyof ProjectionConfig>(key: K, val: ProjectionConfig[K]) => {
         setProjection({ ...projection, [key]: val });
@@ -1475,8 +1472,6 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                 }
             />
 
-            {bandeauKpi?.(etroit ? 'mobile-tete' : 'bureau')}
-
             {curveRestoring && (
                 <section className="gf-terminal-card rounded-2xl bg-surface border border-bordure text-center">
                     <div className="py-10 flex flex-col items-center gap-3 text-texte-doux" role="status" aria-live="polite">
@@ -2268,10 +2263,6 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                             />
                         )}
                     </section>
-
-                    {etroit && bandeauKpi && (
-                        <div className="grid grid-cols-2 gap-2.5">{bandeauKpi('mobile-pied')}</div>
-                    )}
 
                     {/* Effet des marchés et analyses sur ton patrimoine */}
                     <MarketImpactCard

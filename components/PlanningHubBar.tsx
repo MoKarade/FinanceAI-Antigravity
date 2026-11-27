@@ -16,7 +16,7 @@ interface PlanningHubBarProps {
 export const PlanningHubBar: React.FC<PlanningHubBarProps> = ({ activeTab, onSelectTab }) => (
     <nav
         aria-label="Espace Planification"
-        className="gf-subtab-bar flex items-center gap-1.5 overflow-x-auto no-scrollbar p-1 rounded-2xl bg-surface border border-bordure"
+        className="gf-subtab-bar flex flex-wrap items-center gap-1.5 p-1.5 rounded-2xl bg-surface border border-bordure"
     >
         {PLANNING_SUBTABS.map((it) => {
             const actif = it.tab === activeTab || Boolean(it.alsoActiveFor?.includes(activeTab));

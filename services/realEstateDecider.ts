@@ -14,7 +14,7 @@ import {
 } from './realEstate';
 import { isOwnedToday } from './realEstatePartition';
 
-export type RealEstateVerdict = 'feu_vert' | 'tendu' | 'risque';
+type RealEstateVerdict = 'feu_vert' | 'tendu' | 'risque';
 
 export interface EvaluateRealEstateDecisionInput {
     goal: RealEstateGoal;

@@ -366,7 +366,7 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
                     type="button"
                     onClick={() => { if (!o.courant) setActiveTab(o.tab); }}
                     aria-current={o.courant ? 'page' : undefined}
-                    className={`gf-subtab-pill flex-1 lg:flex-none min-h-10 lg:min-h-9 px-3.5 rounded-lg text-body transition-colors focus-ring touch-target ${o.courant ? 'gf-subtab-pill-active bg-ink-50 lg:bg-surfaceHighlight text-dark lg:text-ink-50 font-semibold' : 'text-ink-300 hover:bg-surface-douce'}`}
+                    className={`gf-subtab-pill flex-1 lg:flex-none min-h-11 px-3.5 rounded-lg text-body transition-colors focus-ring touch-target ${o.courant ? 'gf-subtab-pill-active bg-ink-50 lg:bg-surfaceHighlight text-dark lg:text-ink-50 font-semibold' : 'text-ink-300 hover:bg-surface-douce'}`}
                 >
                     {o.libelle}
                 </button>
@@ -378,7 +378,7 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
             type="button"
             onClick={addNewGoal}
             aria-label={isActuel ? 'Ajouter un bien' : 'Ajouter un projet'}
-            className="h-10 px-3.5 lg:px-4 rounded-lg border border-bordure-champ lg:border-transparent text-ink-100 lg:bg-primary lg:text-dark text-body lg:font-bold focus-ring touch-target"
+            className="min-h-11 px-3.5 lg:px-4 rounded-lg border border-bordure-champ lg:border-transparent text-ink-100 lg:bg-primary lg:text-dark text-body lg:font-bold focus-ring touch-target"
         >
             <span className="lg:hidden">Ajouter</span><span className="hidden lg:inline">{isActuel ? 'Ajouter un bien' : 'Ajouter un projet'}</span>
         </button>
@@ -420,7 +420,7 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
                             ? 'Tu ne possèdes aucun bien immobilier pour l\'instant (photo d\'aujourd\'hui).'
                             : 'Aucun projet d\'achat futur pour l\'instant (les plans qui déforment la courbe).'}
                     </p>
-                    <button type="button" onClick={addNewGoal} className="h-10 px-4 rounded-lg bg-primary text-dark text-body font-bold focus-ring touch-target">
+                    <button type="button" onClick={addNewGoal} className="min-h-11 px-4 rounded-lg bg-primary text-dark text-body font-bold focus-ring touch-target">
                         {isActuel ? '+ Ajouter un bien détenu' : '+ Ajouter un projet d\'achat'}
                     </button>
                 </section>
@@ -484,7 +484,7 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
                             // [A11Y-DELETE-SPAN-NO-KEYBOARD] Sélection et suppression sont des FRÈRES (jamais
                             // un contrôle dans un <button>).
                             <div key={g.id} className={`rounded-lg border flex items-center text-body ${choisi ? 'bg-surfaceHighlight border-bordure-champ text-ink-50 font-semibold' : 'border-bordure text-ink-300 hover:bg-surface-douce'}`}>
-                                <button type="button" onClick={() => setActiveGoalId(g.id)} aria-pressed={choisi} className="min-h-10 px-3.5 flex items-center gap-2 rounded-lg focus-ring touch-target">
+                                <button type="button" onClick={() => setActiveGoalId(g.id)} aria-pressed={choisi} className="min-h-11 px-3.5 flex items-center gap-2 rounded-lg focus-ring touch-target">
                                     {nomAffiche}
                                     {g.isActive && <span className="w-2 h-2 rounded-full bg-success-500" aria-label="active" />}
                                 </button>
@@ -700,7 +700,7 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
                                     type="button"
                                     onClick={() => updateActiveGoal({ amortization: n })}
                                     aria-pressed={amortization === n}
-                                    className={`h-9 rounded-lg text-[13px] transition-colors focus-ring touch-target ${amortization === n ? 'bg-ink-50 text-dark font-semibold' : 'text-ink-200 hover:bg-surface-douce'}`}
+                                    className={`min-h-11 rounded-lg text-[13px] transition-colors focus-ring touch-target ${amortization === n ? 'bg-ink-50 text-dark font-semibold' : 'text-ink-200 hover:bg-surface-douce'}`}
                                 >
                                     {/* NOMBRE-NON-MONETAIRE : choix d'une durée d'amortissement (réglage proposé) */}
                                     {n} ans

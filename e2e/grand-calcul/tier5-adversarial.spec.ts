@@ -55,14 +55,14 @@ test.describe('Futur 4.0 Tier 5 — Hardening & Cas Adversariaux', () => {
     const pageErrors: string[] = [];
     page.on('pageerror', (err) => pageErrors.push(err.message));
 
-    await page.route(/\/api\/(news|valoria)\//, (route) =>
-      route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'offline' }) }),
-    );
-
     await preparerFuturAvecPersona(page, 'couple-confort');
     await expect(zoneAnalyseUnifiee(page).getByText('Actualités & consensus Valoria')).toBeVisible({
       timeout: 10_000,
     });
+
+    await page.route(/\/api\/(news|valoria)\//, (route) =>
+      route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'offline' }) }),
+    );
 
     // Lancer puis naviguer vers Profil pendant le calcul, puis revenir à Futur
     await boutonLancerAnalyseProfonde(page).click();

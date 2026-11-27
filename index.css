@@ -584,10 +584,9 @@
 .chart-event-icon {
   transform-box: fill-box;
   transform-origin: center;
-  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.22s ease;
+  transition: filter 0.22s ease;
 }
 .chart-event-icon:hover {
-  transform: scale(1.16);
   filter: drop-shadow(0 0 8px rgba(138, 180, 248, 0.5));
 }
 .chart-event-icon:focus {

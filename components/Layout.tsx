@@ -236,7 +236,7 @@ export const Layout: React.FC<LayoutProps> = ({
                       name={item.icon}
                       size={16}
                       aria-hidden="true"
-                      className={`shrink-0 transition-transform duration-200 group-hover:scale-110 ${
+                      className={`shrink-0 ${
                         actif ? 'text-repere' : 'text-ink-400 group-hover:text-ink-100'
                       }`}
                     />

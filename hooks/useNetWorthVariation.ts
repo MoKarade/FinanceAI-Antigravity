@@ -175,7 +175,7 @@ export function computeNetWorthVariation(
 
 /** Fenêtre demandée par la tuile du bandeau KPI (fixe — le sélecteur complet est au Lot 2b).
  *  Exportée pour que la tuile compare `spanDays` à la MÊME valeur que le calcul. */
-export const VARIATION_WINDOW_DAYS = 30;
+const VARIATION_WINDOW_DAYS = 30;
 
 /** Fenêtre FIXE de 30 jours (tuile du bandeau KPI). Sources : store + usePortfolioHistory —
  *  les MÊMES que l'ex-Accueil (l'AppState de App.tsx est une vue du store, pas une copie). */

@@ -679,7 +679,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
         }
     };
     const ligneOutil = 'gf-row w-full min-h-12 px-4 lg:px-5 flex items-center justify-between gap-3 border-t border-bordure text-body text-ink-100 text-left hover:bg-surface-douce focus-ring transition-colors';
-    const pastille = 'gf-chip h-10 px-3.5 rounded-full border text-[13px] whitespace-nowrap transition-colors focus-ring shrink-0';
+    const pastille = 'gf-chip touch-target min-h-11 px-3.5 rounded-full border text-[13px] whitespace-nowrap transition-colors focus-ring shrink-0';
     const signe = (n: number) => (n > 0 ? '+' : '');
     // Jours de la liste mobile (maquette : « mar. 15 sept. » + total du jour).
     const jours: Array<{ date: string; libelle: string; total: number; lignes: Transaction[] }> = [];
@@ -766,14 +766,14 @@ export const Transactions: React.FC<TransactionsProps> = ({
         <section aria-labelledby="a-classer-titre" className="gf-terminal-card rounded-2xl border border-warning-400/35 bg-warning-500/6 p-3.5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
                 <span className="w-2.5 h-2.5 rounded-full bg-alerte-texte shrink-0" aria-hidden="true" />
-                <h2 id="a-classer-titre" className="text-body font-semibold text-warning-400 truncate">{uncategorizedGroups.length} groupe{uncategorizedGroups.length > 1 ? 's' : ''} à classer</h2>
+                <h2 id="a-classer-titre" className="text-body font-semibold text-warning-400 break-words">{uncategorizedGroups.length} groupe{uncategorizedGroups.length > 1 ? 's' : ''} à classer</h2>
                 <p className="sr-only">Choisis une catégorie par groupe de transactions semblables : tout le groupe la prend.</p>
             </div>
             <button
                 type="button"
                 onClick={() => setShowWizard(true)}
                 aria-label={`Ouvrir l'assistant de classement (${uncategorizedGroups.length} groupes)`}
-                className={etroit ? 'gf-chip shrink-0 h-10 px-3.5 rounded-full bg-warning-400 text-dark text-meta font-bold focus-ring' : 'gf-chip shrink-0 h-11 px-3.5 rounded-full border border-warning-400/60 text-warning-400 text-meta font-semibold hover:bg-warning-500/10 focus-ring'}
+                className={etroit ? 'gf-chip touch-target shrink-0 min-h-11 px-3.5 rounded-full bg-warning-400 text-dark text-meta font-bold focus-ring' : 'gf-chip touch-target shrink-0 min-h-11 px-3.5 rounded-full border border-warning-400/60 text-warning-400 text-meta font-semibold hover:bg-warning-500/10 focus-ring'}
             >
                 {etroit ? 'Classer' : 'Classer maintenant'}
             </button>
@@ -803,7 +803,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                 type="button"
                                 onClick={() => setImportOuvert((o) => !o)}
                                 aria-expanded={importOuvert}
-                                className={`gf-chip h-10 px-3.5 lg:px-4 rounded-full border text-body focus-ring ${importOuvert ? 'gf-chip-active text-primary' : 'border-bordure-champ text-ink-100 hover:bg-surface-douce'}`}
+                                className={`gf-chip touch-target min-h-11 px-3.5 lg:px-4 rounded-full border text-body focus-ring ${importOuvert ? 'gf-chip-active text-primary' : 'border-bordure-champ text-ink-100 hover:bg-surface-douce'}`}
                             >
                                 {etroit ? 'Importer' : 'Importer CSV / PDF'}
                             </button>
@@ -812,7 +812,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                             <button
                                 type="button"
                                 onClick={() => { void exporterTout(); }}
-                                className="gf-chip h-10 px-4 rounded-full border border-bordure-champ text-body text-ink-100 hover:bg-surface-douce focus-ring"
+                                className="gf-chip touch-target min-h-11 px-4 rounded-full border border-bordure-champ text-body text-ink-100 hover:bg-surface-douce focus-ring"
                                 title="Exporter toutes les transactions en CSV"
                             >
                                 Exporter (CSV)
@@ -824,7 +824,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                 onClick={() => { void handleAutoCategorizeAll('gaps'); }}
                                 disabled={processing}
                                 aria-label={processing ? 'Scan IA en cours' : 'Demarrer le scan IA'}
-                                className="gf-chip h-10 px-4 rounded-full bg-primary text-dark text-body font-bold hover:bg-accent-fonce disabled:opacity-60 focus-ring"
+                                className="gf-chip touch-target min-h-11 px-4 rounded-full bg-primary text-dark text-body font-bold hover:bg-accent-fonce disabled:opacity-60 focus-ring"
                             >
                                 {processing ? 'Catégorisation…' : 'Auto-catégoriser'}
                             </button>
@@ -1128,7 +1128,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                     <div data-focus-section={`category:${selectedCategory}`} className="flex flex-col gap-4">
                     <section aria-label="Historique des transactions" className={etroit ? 'flex flex-col gap-3' : 'gf-terminal-card rounded-2xl bg-surface border border-bordure overflow-hidden'}>
                         <div className={etroit ? 'flex flex-col gap-3' : 'flex items-center gap-2.5 px-4 py-3.5 border-b border-bordure bg-surface-douce/30 flex-wrap'}>
-                            <label className={`gf-omnibox-pill flex items-center gap-2.5 h-10 px-3.5 text-ink-400 ${etroit ? 'w-full' : 'flex-1 min-w-[220px]'}`}>
+                            <label className={`gf-omnibox-pill flex items-center gap-2.5 min-h-11 px-3.5 text-ink-400 ${etroit ? 'w-full' : 'flex-1 min-w-[220px]'}`}>
                                 <Icon name="search" size={16} />
                                 <input
                                     type="search"
@@ -1143,7 +1143,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                 <span className="relative shrink-0">
                                     <select
                                         aria-label="Filtre par catégorie"
-                                        className={`champ-nu gf-chip appearance-none h-10 pl-3.5 pr-7 rounded-full border text-[13px] max-w-[180px] truncate cursor-pointer focus-ring ${selectedCategory !== 'All' ? 'gf-chip-active bg-primary/15 border-primary/60 text-ink-50' : 'bg-surfaceHighlight border-bordure text-ink-100'}`}
+                                        className={`champ-nu gf-chip touch-target appearance-none min-h-11 pl-3.5 pr-7 rounded-full border text-[13px] max-w-[240px] cursor-pointer focus-ring ${selectedCategory !== 'All' ? 'gf-chip-active bg-primary/15 border-primary/60 text-ink-50' : 'bg-surfaceHighlight border-bordure text-ink-100'}`}
                                         value={selectedCategory}
                                         onChange={(e) => vueFiltree(() => setSelectedCategory(e.target.value))}
                                     >
@@ -1430,7 +1430,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                                             <span className="pointer-events-none absolute left-2.5 w-2 h-2 rounded-sm" style={{ background: couleurCategorie(t.category) }} aria-hidden="true" />
                                                             <PrivateSelect
                                                                 aria-label={rowControlLabel('Catégorie de', t.payee, t.date, t.id, isPrivacyMode)}
-                                                                className={`champ-nu appearance-none field-sizing-content h-[30px] pl-6 pr-2.5 rounded-full border bg-surfaceHighlight text-[13px] cursor-pointer max-w-[170px] truncate ${needsReview ? 'border-warning-400/50 text-warning-400' : 'border-bordure text-ink-200'}`}
+                                                                className={`champ-nu touch-target appearance-none field-sizing-content min-h-11 pl-6 pr-2.5 rounded-full border bg-surfaceHighlight text-[13px] cursor-pointer max-w-[220px] ${needsReview ? 'border-warning-400/50 text-warning-400' : 'border-bordure text-ink-200'}`}
                                                                 value={t.category}
                                                                 onChange={(e) => updateCategory(t.id, e.target.value)}
                                                             >
@@ -1458,7 +1458,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                                                         {t.amount < 0 && !t.isTransfer ? (
                                                             <select
                                                                 aria-label={rowControlLabel('Conjoint propriétaire de', t.payee, t.date, t.id, isPrivacyMode)}
-                                                                className="champ-nu appearance-none bg-transparent border-0 h-8 text-meta text-ink-300 cursor-pointer focus-ring rounded-sm"
+                                                                className="champ-nu touch-target appearance-none bg-transparent border-0 min-h-11 text-meta text-ink-300 cursor-pointer focus-ring rounded-sm"
                                                                 value={t.ownerId === 0 ? '0' : t.ownerId === 1 ? '1' : 'auto'}
                                                                 onChange={(e) => updateOwner(t.id, e.target.value === 'auto' ? undefined : (e.target.value === '0' ? 0 : 1))}
                                                             >

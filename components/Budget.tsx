@@ -1058,10 +1058,10 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                                 />
                             </div>
                         )}
-                        <ul className="grid grid-cols-2 gap-2 text-tiny">
-                            <li className="gf-quote-cell rounded-xl border border-bordure bg-surface-douce px-2.5 py-2"><span className="text-ink-300 truncate">{coupleAnalysis.user1.name}</span><PrivateAmount className="font-mono text-body font-bold text-success-400">{formatCAD(coupleAnalysis.user1Savings)}</PrivateAmount></li>
+                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-tiny">
+                            <li className="gf-quote-cell rounded-xl border border-bordure bg-surface-douce px-2.5 py-2"><span className="text-ink-300 break-words">{coupleAnalysis.user1.name}</span><PrivateAmount className="font-mono text-body font-bold text-success-400">{formatCAD(coupleAnalysis.user1Savings)}</PrivateAmount></li>
                             {!coupleAnalysis.isSolo && coupleAnalysis.user2 && (
-                                <li className="gf-quote-cell rounded-xl border border-bordure bg-surface-douce px-2.5 py-2"><span className="text-ink-300 truncate">{coupleAnalysis.user2.name}</span><PrivateAmount className="font-mono text-body font-bold text-success-400">{formatCAD(coupleAnalysis.user2Savings)}</PrivateAmount></li>
+                                <li className="gf-quote-cell rounded-xl border border-bordure bg-surface-douce px-2.5 py-2"><span className="text-ink-300 break-words">{coupleAnalysis.user2.name}</span><PrivateAmount className="font-mono text-body font-bold text-success-400">{formatCAD(coupleAnalysis.user2Savings)}</PrivateAmount></li>
                             )}
                         </ul>
                         <div className="sr-only">
@@ -1161,7 +1161,7 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                                     <ul className="flex flex-col gap-1">
                                         {orphanCategories.map((o: OrphanCategory) => (
                                             <li key={o.category} className="gf-row flex items-center justify-between gap-2 text-body px-2 py-1 rounded-lg">
-                                                <PrivateText quoi="categorie" className="text-ink-100 truncate">{o.category}</PrivateText>
+                                                <PrivateText quoi="categorie" className="text-ink-100 break-words min-w-0">{o.category}</PrivateText>
                                                 <PrivateAmount className="font-mono text-ink-100 shrink-0">{formatCAD(o.total)}</PrivateAmount>
                                             </li>
                                         ))}

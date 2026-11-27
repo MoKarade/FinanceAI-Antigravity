@@ -45,7 +45,7 @@ test.describe('Futur 4.0 — Analyse unifiée & Recommandations Prescriptives', 
     await expect(panel.getByText('Diagnostic de ton passé réel')).toBeVisible();
     await expect(panel.getByText('Actualités & consensus Valoria')).toBeVisible();
     await expect(panel.getByText('Pourquoi ta courbe évolue ainsi')).toBeVisible();
-    await expect(panel.getByText('Tes actions concrètes les plus payantes')).toBeVisible();
+    await expect(panel.getByText(/Ce qu[’']il faut faire pour atteindre la trajectoire IA/i)).toBeVisible();
 
     // Section B : déplier les chiffres (aria-expanded)
     const btnChiffres = panel.getByRole('button', { name: /Voir les chiffres/i }).first();

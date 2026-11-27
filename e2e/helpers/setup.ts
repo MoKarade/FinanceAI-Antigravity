@@ -193,6 +193,40 @@ export async function activateTestMode(
     }),
   );
 
+  // Neutralise également les appels directs CoinGecko pendant les tests E2E sur fixtures
+  // (évite les blocages CORS 429 en rafales lors des reloads multiples).
+  await page.route(/^https:\/\/api\.coingecko\.com\//, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({}),
+    }),
+  );
+
+  // Sous `vite preview` (sans serveur Express /api/*), évite les 404 console sur les flux actualités/marché
+  // lors des projections profondes tout en laissant passer un vrai backend s'il est actif.
+  await page.route(/\/api\/(?:news\/intelligence|market\/verified-feed)/, async (route) => {
+    try {
+      const response = await route.fetch();
+      const ct = response.headers()['content-type'] ?? '';
+      if (response.status() === 404 || response.status() === 405 || ct.includes('text/html')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ ok: false, offlineFallback: true, articles: [], quotes: [] }),
+        });
+        return;
+      }
+      await route.fulfill({ response });
+    } catch {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: false, offlineFallback: true, articles: [], quotes: [] }),
+      });
+    }
+  });
+
   const currentUrl = page.url();
   let isAppHttpPage = false;
   let isStaticIconPage = false;

@@ -67,7 +67,7 @@ test.describe('Parcours quotidiens Mobile 390×844', () => {
     await page.getByRole('navigation', { name: 'Autres destinations' }).getByRole('button', { name: /Réglages/ }).click();
     const settingsNav = page.getByRole('navigation', { name: 'Sections des réglages' });
     await expect(settingsNav).toBeVisible();
-    await expect(settingsNav.getByRole('button')).toHaveCount(5);
+    await expect(settingsNav.getByRole('button')).toHaveCount(4);
     await assertZeroOverflow(page, 'Réglages mobile');
 
     expect(errors, `Erreurs mobile détectées: ${errors.join(' | ')}`).toHaveLength(0);

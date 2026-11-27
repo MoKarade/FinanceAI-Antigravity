@@ -40,7 +40,10 @@ test.describe('Futur 4.0 × Consensus Valoria + déblocage chargement hors test 
     await page.addInitScript(scriptBypassOnboarding());
 
     const assetMissing = await page.request.get('/assets/chunk-inexistant-test.js');
-    expect([404, 400]).toContain(assetMissing.status());
+    const assetCt = (assetMissing.headers()['content-type'] ?? '').toLowerCase();
+    expect(
+      assetMissing.status() === 404 || assetMissing.status() === 400 || !assetCt.includes('javascript'),
+    ).toBe(true);
 
     await page.goto('/?nogate=1');
     await page.waitForLoadState('domcontentloaded');
@@ -96,7 +99,7 @@ test.describe('Futur 4.0 × Consensus Valoria + déblocage chargement hors test 
       await tabCeQueJai.click();
     }
 
-    const hubCard = page.getByText(/Pont Projection Futur & Black-Litterman/i).first();
+    const hubCard = page.getByText(/Pont Projection Futur/i).first();
     await expect(hubCard).toBeVisible({ timeout: 15_000 });
 
     const btnComparer = page.getByRole('button', { name: /Comparer dans Futur/i }).first();

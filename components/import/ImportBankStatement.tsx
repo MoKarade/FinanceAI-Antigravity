@@ -126,7 +126,7 @@ export const ImportBankStatement: React.FC<ImportBankStatementProps> = ({ onImpo
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f); e.target.value = ''; }}
                     aria-label="Choisir un relevé (CSV, PDF ou image) à importer"
                 />
-                <span className="mb-2 transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-0.5" aria-hidden="true"><Icon name={analyzing ? 'clock' : 'import'} size={28} className="text-ink-300" /></span>
+                <span className="mb-2" aria-hidden="true"><Icon name={analyzing ? 'clock' : 'import'} size={28} className="text-ink-300" /></span>
                 <span className="text-meta font-medium text-ink-200">{analyzing ? 'Analyse du document en cours…' : (fileName || 'Cliquer ou glisser un fichier')}</span>
                 <span className="text-tiny text-ink-400 mt-1">CSV · TSV · PDF · image</span>
             </label>

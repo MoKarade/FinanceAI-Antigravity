@@ -51,7 +51,7 @@ test.describe('Futur 4.0 — Infobulle riche unifiée (hover, pin, onglets, Dét
     await expect(page.locator('[data-testid="future-rich-tooltip"][data-pinned="false"]')).toBeVisible({
       timeout: 8_000,
     });
-    await expect(tooltip.getByText(/Fourchette \[P10, P90\]/i)).toBeVisible();
+    await expect(tooltip.getByText(/Fourchette possible/i)).toBeVisible();
 
     // 2. Clic -> data-pinned="true"
     await page.mouse.click(box!.x + box!.width * 0.62, box!.y + box!.height * 0.5);
