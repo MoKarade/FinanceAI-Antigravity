@@ -167,9 +167,7 @@ test.describe('Placements simplifiés & Comité Multi-Agents IA (Placements + LI
     await activateTestMode(page);
     await ecarterLeRail(page);
 
-    const plusBtn = page.getByRole('button', { name: "Plus d'options" });
-    await plusBtn.click();
-    await page.getByRole('navigation', { name: 'Autres destinations' }).getByRole('button', { name: /^Placements$/i }).click();
+    await page.getByRole('navigation', { name: 'Navigation mobile' }).getByRole('button', { name: /^Placements$/i }).click();
     await expect(page.locator('#main h1').first()).toContainText(/Placements/i, { timeout: 10_000 });
 
     const scrollPortefeuille = await page.evaluate(() => ({

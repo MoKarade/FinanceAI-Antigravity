@@ -54,13 +54,13 @@ describe('navDestinations — menu ultra-court sans perte', () => {
         for (const tab of MOBILE_BAR_TABS) expect(navItemOfTab(tab)?.tab).toBe(tab);
         const plusTabs = MOBILE_PLUS_GROUPS.flatMap((g) => g.items.map((i) => i.tab));
         expect(plusTabs).toEqual([
-            Tab.DEBT,
-            Tab.INVESTMENTS,
-            Tab.RETIREMENT,
             Tab.REAL_ESTATE,
+            Tab.RETIREMENT,
+            Tab.TAX,
             Tab.CHILD,
             Tab.LIFE_PROJECTS,
-            Tab.TAX,
+            Tab.TRANSACTIONS,
+            Tab.DEBT,
             Tab.SETTINGS,
         ]);
     });

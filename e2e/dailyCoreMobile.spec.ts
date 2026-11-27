@@ -40,19 +40,26 @@ test.describe('Parcours quotidiens Mobile 390×844', () => {
     await expect(page.locator('#main h1').first()).toContainText(/Projection/i);
     await assertZeroOverflow(page, 'Futur mobile');
 
-    // 3. Transactions mobile
-    await mobileBar.getByRole('button', { name: 'Transactions' }).click();
-    await expect(page.locator('#main h1').first()).toContainText(/Transactions/i);
-    await assertZeroOverflow(page, 'Transactions mobile');
+    // 3. Placements mobile (accès direct barre du bas)
+    await mobileBar.getByRole('button', { name: 'Placements' }).click();
+    await expect(page.locator('#main h1').first()).toContainText(/Placements/i);
+    await assertZeroOverflow(page, 'Placements mobile');
 
     // 4. Budget mobile
     await mobileBar.getByRole('button', { name: 'Budget' }).click();
     await expect(page.locator('#main h1').first()).toContainText(/Budget/i);
     await assertZeroOverflow(page, 'Budget mobile');
 
-    // 5. Menu Plus → Retraite (Planification) → Impôts
+    // 5. Menu Plus → Transactions, puis Retraite (Planification) → Impôts
     await mobileBar.getByRole('button', { name: "Plus d'options" }).click();
     const drawer = page.getByRole('navigation', { name: 'Autres destinations' });
+    await expect(drawer).toBeVisible();
+    await drawer.getByRole('button', { name: /Transactions/ }).click();
+    await expect(drawer).toBeHidden();
+    await expect(page.locator('#main h1').first()).toContainText(/Transactions/i);
+    await assertZeroOverflow(page, 'Transactions mobile');
+
+    await mobileBar.getByRole('button', { name: "Plus d'options" }).click();
     await expect(drawer).toBeVisible();
     await drawer.getByRole('button', { name: /Retraite/ }).click();
     await expect(drawer).toBeHidden();

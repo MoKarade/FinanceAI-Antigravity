@@ -18,6 +18,7 @@ import {
   boutonScenario,
   epinglerInfobulleSurCourbe,
   executerEtAppliquerAnalyseProfonde,
+  ouvrirOngletFutur,
   preparerFuturAvecPersona,
   verifierModeDiscretFutur4,
   zoneAnalyseUnifiee,
@@ -103,10 +104,12 @@ test.describe('Futur 4.0 Tier 3 — Combinaisons & cohérence croisée', () => {
       expect(percentiles.p10).toBeLessThanOrEqual(percentiles.p50 + 1);
       expect(percentiles.p50).toBeLessThanOrEqual(percentiles.p90 + 1);
 
-      // Le repère Patrimoine final affiche une valeur cohérente
+      // Le repère Patrimoine final (onglet Détails) affiche une valeur cohérente
+      await ouvrirOngletFutur(page, 'Détails');
       const cardSuccession = zoneReperesCles(page).locator('article').filter({ hasText: 'Patrimoine final & Succession' });
       const valText = await cardSuccession.innerText();
       expect(parseMontantCAD(valText)).toBeGreaterThan(0);
+      await ouvrirOngletFutur(page, 'Courbe');
 
       finals[label] = percentiles;
     }
@@ -124,11 +127,13 @@ test.describe('Futur 4.0 Tier 3 — Combinaisons & cohérence croisée', () => {
     const errors = attacherCapteurErreurs(page);
     await preparerFuturAvecPersona(page, 'couple-confort');
 
-    // Déplier « Voir les chiffres » avant d'activer le mode discret pour couvrir le détail chiffré
+    // Déplier « Voir les chiffres » (onglet Détails) avant d'activer le mode discret pour couvrir le détail chiffré
+    await ouvrirOngletFutur(page, 'Détails');
     const btnChiffres = zoneAnalyseUnifiee(page).getByRole('button', { name: /Voir les chiffres/i }).first();
     if (await btnChiffres.isVisible().catch(() => false)) {
       await btnChiffres.click();
     }
+    await ouvrirOngletFutur(page, 'Courbe');
 
     await basculerModeDiscret(page);
     await verifierModeDiscretFutur4(page);
@@ -156,6 +161,7 @@ test.describe('Futur 4.0 Tier 3 — Combinaisons & cohérence croisée', () => {
 
     // Désactiver le mode discret rétablit les montants CAD
     await basculerModeDiscret(page);
+    await ouvrirOngletFutur(page, 'Détails');
     await expect(zoneReperesCles(page).getByText(/\$/).first()).toBeVisible({ timeout: 8_000 });
 
     errors.assertClean();

@@ -20,6 +20,7 @@ import {
   epinglerInfobulleSurCourbe,
   executerEtAppliquerAnalyseProfonde,
   naviguerVersFutur,
+  ouvrirOngletFutur,
   preparerFuturAvecPersona,
   zoneAnalyseUnifiee,
   zoneScenarios,
@@ -56,9 +57,11 @@ test.describe('Futur 4.0 Tier 5 — Hardening & Cas Adversariaux', () => {
     page.on('pageerror', (err) => pageErrors.push(err.message));
 
     await preparerFuturAvecPersona(page, 'couple-confort');
+    await ouvrirOngletFutur(page, 'Détails');
     await expect(zoneAnalyseUnifiee(page).getByText('Actualités & consensus Valoria')).toBeVisible({
       timeout: 10_000,
     });
+    await ouvrirOngletFutur(page, 'Courbe');
 
     await page.route(/\/api\/(news|valoria)\//, (route) =>
       route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'offline' }) }),

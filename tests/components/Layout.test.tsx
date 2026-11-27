@@ -137,12 +137,12 @@ describe('Layout', () => {
         const setActiveTab = vi.fn();
         render(<Layout {...baseProps} setActiveTab={setActiveTab} />);
         const mobileNav = screen.getByRole('navigation', { name: 'Navigation mobile' });
-        for (const label of ['Accueil', 'Futur', 'Transactions', 'Budget']) {
+        for (const label of ['Accueil', 'Futur', 'Placements', 'Budget']) {
             expect(within(mobileNav).getByText(label)).toBeInTheDocument();
         }
         fireEvent.click(within(mobileNav).getByRole('button', { name: "Plus d'options" }));
         const menu = screen.getByRole('navigation', { name: 'Autres destinations' });
-        for (const label of ['Dettes', 'Placements', 'Retraite', 'Immobilier', 'Enfants', 'Projets de vie', 'Impôts', 'Réglages']) {
+        for (const label of ['Immobilier', 'Retraite', 'Impôts', 'Enfants', 'Projets de vie', 'Transactions', 'Dettes', 'Réglages']) {
             const btns = within(menu).getAllByRole('button').filter(b => b.textContent?.replace('›', '').trim() === label);
             expect(btns.length, `« ${label} » = un bouton du menu`).toBe(1);
         }

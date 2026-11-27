@@ -81,7 +81,8 @@ test.describe('Futur 4.0 × Consensus Valoria + déblocage chargement hors test 
     // Ancien bouton Agents IA (7 Agents) retiré de Futur 4.0
     await expect(page.getByRole('button', { name: /Agents IA\s*\(7 Agents\)/i })).toHaveCount(0);
 
-    // Section A de l'Analyse unifiée intègre les actualités & consensus Valoria
+    // Section A de l'Analyse unifiée (onglet Détails) intègre les actualités & consensus Valoria
+    await page.getByRole('tablist', { name: 'Sections du Futur' }).getByRole('tab', { name: /Détails/i }).click();
     const panel = page.locator('section[aria-labelledby="futur-insights-unifies-titre"]');
     await expect(panel).toBeVisible({ timeout: 10_000 });
     await expect(panel.getByText('Actualités & consensus Valoria')).toBeVisible();

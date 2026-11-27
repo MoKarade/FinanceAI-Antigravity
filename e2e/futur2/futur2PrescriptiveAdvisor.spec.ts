@@ -39,13 +39,15 @@ test.describe('Futur 4.0 — Analyse unifiée & Recommandations Prescriptives', 
   test("L'Analyse unifiée affiche les sections A, B et C avec interactions sur la courbe et Optimisé IA", async ({ page }) => {
     await preparerPageFutur(page);
 
+    const tabs = page.getByRole('tablist', { name: 'Sections du Futur' });
+    await tabs.getByRole('tab', { name: /Détails/i }).click();
+
     const panel = page.locator('section[aria-labelledby="futur-insights-unifies-titre"]');
     await expect(panel).toBeVisible({ timeout: 10_000 });
 
     await expect(panel.getByText('Diagnostic de ton passé réel')).toBeVisible();
     await expect(panel.getByText('Actualités & consensus Valoria')).toBeVisible();
     await expect(panel.getByText('Pourquoi ta courbe évolue ainsi')).toBeVisible();
-    await expect(panel.getByText(/Ce qu[’']il faut faire pour atteindre la trajectoire IA/i)).toBeVisible();
 
     // Section B : déplier les chiffres (aria-expanded)
     const btnChiffres = panel.getByRole('button', { name: /Voir les chiffres/i }).first();
@@ -58,30 +60,31 @@ test.describe('Futur 4.0 — Analyse unifiée & Recommandations Prescriptives', 
       );
     }
 
-    // Section B : « Voir sur la courbe » épingle le FutureRichTooltip
+    // Section B : « Voir sur la courbe » bascule sur Courbe et épingle le FutureRichTooltip
     const btnVoirCourbe = panel.getByRole('button', { name: /Voir sur la courbe/i }).first();
     if (await btnVoirCourbe.isVisible().catch(() => false)) {
       await btnVoirCourbe.click();
+      await expect(tabs.getByRole('tab', { name: /Courbe/i })).toHaveAttribute('aria-selected', 'true');
       const tooltip = page.locator('[data-testid="future-rich-tooltip"][data-pinned="true"]');
       await expect(tooltip).toBeVisible({ timeout: 8_000 });
       await page.keyboard.press('Escape');
       await expect(page.locator('[data-testid="future-rich-tooltip"]')).toHaveCount(0);
     }
 
-    // Section C : « Appliquer dans Optimisé IA » active le scénario Optimisé IA dans Bloc 1
-    const btnOptimiser = panel.getByRole('button', { name: /Appliquer dans Optimisé IA/i }).first();
-    if (await btnOptimiser.isVisible().catch(() => false)) {
-      await btnOptimiser.click();
-      const scenariosSection = page.getByRole('region', { name: 'Scénarios de trajectoire future' });
-      await expect(scenariosSection.getByRole('button', { name: /Optimisé IA/i })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      );
+    // Onglet « Quoi faire » : section C
+    await tabs.getByRole('tab', { name: /Quoi faire/i }).click();
+    await expect(panel.getByText(/Ce qu[’']il faut faire pour atteindre la trajectoire IA/i)).toBeVisible();
+    const btnAction = panel.getByRole('button', { name: /Appliquer à mon plan|Prioriser les dettes|Optimiser la localisation|Appliquer dans Optimisé IA/i }).first();
+    if (await btnAction.isVisible().catch(() => false)) {
+      await btnAction.click();
     }
   });
 
   test("Les boutons de l'Analyse unifiée respectent la cible tactile >= 44 px", async ({ page }) => {
     await preparerPageFutur(page);
+
+    const tabs = page.getByRole('tablist', { name: 'Sections du Futur' });
+    await tabs.getByRole('tab', { name: /Détails/i }).click();
 
     const panel = page.locator('section[aria-labelledby="futur-insights-unifies-titre"]');
     await expect(panel).toBeVisible({ timeout: 10_000 });

@@ -15,6 +15,7 @@ import {
   boutonScenario,
   epinglerInfobulleSurCourbe,
   executerEtAppliquerAnalyseProfonde,
+  ouvrirOngletFutur,
   preparerFuturAvecPersona,
   verifierZeroDebordementHorizontal,
   zoneAnalyseUnifiee,
@@ -42,6 +43,7 @@ test.describe('Futur 4.0 Tier 4 — Parcours Personas Québec', () => {
     await expect(tooltip.getByText(/REER|CELI/i).first()).toBeVisible();
     await page.keyboard.press('Escape');
 
+    await ouvrirOngletFutur(page, 'Détails');
     await expect(zoneReperesCles(page).getByText(/\$/).first()).toBeVisible();
     await expect(zoneAnalyseUnifiee(page).getByText('Pourquoi ta courbe évolue ainsi')).toBeVisible();
     await verifierZeroDebordementHorizontal(page);
@@ -52,7 +54,9 @@ test.describe('Futur 4.0 Tier 4 — Parcours Personas Québec', () => {
     const errors = attacherCapteurErreurs(page);
     await preparerFuturAvecPersona(page, 'pre-retraite-riche');
 
+    await ouvrirOngletFutur(page, 'Détails');
     await expect(zoneReperesCles(page).getByText(/Léguer\s*500/i).first()).toBeVisible();
+    await ouvrirOngletFutur(page, 'Courbe');
     await executerEtAppliquerAnalyseProfonde(page);
 
     // Ouvrir Anatomie d'une année et inspecter la structure fiscale sans NaN
@@ -71,11 +75,12 @@ test.describe('Futur 4.0 Tier 4 — Parcours Personas Québec', () => {
     const errors = attacherCapteurErreurs(page);
     await preparerFuturAvecPersona(page, 'gilles-actif-decaisse');
 
-    await expect(zoneReperesCles(page).getByText('Revenu mensuel net retraite')).toBeVisible();
     for (const label of ['Prudent / Stress', 'Optimisé IA', 'Favorable', 'Trajectoire réelle'] as const) {
       await boutonScenario(page, label).click();
       await expect(boutonScenario(page, label)).toHaveAttribute('aria-pressed', 'true');
     }
+    await ouvrirOngletFutur(page, 'Détails');
+    await expect(zoneReperesCles(page).getByText('Revenu mensuel net retraite')).toBeVisible();
 
     const mainText = await page.locator('main').innerText();
     expect(mainText).not.toMatch(/\bNaN\b|\bundefined\b|\bInfinity\b/);
@@ -93,6 +98,7 @@ test.describe('Futur 4.0 Tier 4 — Parcours Personas Québec', () => {
       await expect(boutonScenario(page, label)).toHaveAttribute('aria-pressed', 'true');
     }
 
+    await ouvrirOngletFutur(page, 'Quoi faire');
     await expect(zoneAnalyseUnifiee(page).getByText(/Ce qu[’']il faut faire pour atteindre la trajectoire IA/i)).toBeVisible();
     const mainText = await page.locator('main').innerText();
     expect(mainText).not.toMatch(/\bNaN\b|\bundefined\b|\bInfinity\b/);
@@ -103,10 +109,12 @@ test.describe('Futur 4.0 Tier 4 — Parcours Personas Québec', () => {
     const errors = attacherCapteurErreurs(page);
     await preparerFuturAvecPersona(page, 'karim-immigre');
 
-    await expect(zoneReperesCles(page).getByText('Indépendance financière', { exact: true })).toBeVisible();
     const tooltip = await epinglerInfobulleSurCourbe(page, 0.55, 0.5);
     await expect(tooltip.getByText(/Fourchette possible/i)).toBeVisible();
     await page.keyboard.press('Escape');
+
+    await ouvrirOngletFutur(page, 'Détails');
+    await expect(zoneReperesCles(page).getByText('Indépendance financière', { exact: true })).toBeVisible();
 
     const mainText = await page.locator('main').innerText();
     expect(mainText).not.toMatch(/\bNaN\b|\bundefined\b|\bInfinity\b/);

@@ -32,6 +32,8 @@ test.describe('Futur 4.0 — Écran Mobile & Parité des Repères', () => {
       await ecarterLeRail(page);
 
       await expect(page.getByRole('group', { name: /Courbe de vie/ })).toBeVisible({ timeout: 20_000 });
+      const tabs = page.getByRole('tablist', { name: 'Sections du Futur' });
+      await tabs.getByRole('tab', { name: /Détails/i }).click();
       const milestones = page.locator('section[aria-labelledby="futur-reperes-cles-titre"]');
       await expect(milestones).toBeVisible();
       const desktopText = (await milestones.innerText()).replace(/\s+/g, ' ').trim();
@@ -42,6 +44,9 @@ test.describe('Futur 4.0 — Écran Mobile & Parité des Repères', () => {
 
       const mobileText = (await milestones.innerText()).replace(/\s+/g, ' ').trim();
       expect(mobileText).toBe(desktopText);
+
+      // Revenir sur Courbe pour tester la barre de période mobile
+      await tabs.getByRole('tab', { name: /Courbe/i }).click();
 
       // Contrôles compacts de période mobile
       const btnZoomIn = page.getByRole('button', { name: 'Zoomer', exact: true });

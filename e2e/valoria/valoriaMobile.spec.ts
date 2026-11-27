@@ -105,8 +105,10 @@ async function passerGardeLocale(page: Page): Promise<void> {
 }
 
 async function ouvrirValoriaDepuisMenuPlusMobile(page: Page): Promise<Locator> {
+  const navMobile = page.getByRole('navigation', { name: 'Navigation mobile' });
+  await expect(navMobile).toBeVisible({ timeout: 10_000 });
+
   const plusBtn = page.getByRole('button', { name: "Plus d'options" });
-  await expect(plusBtn).toBeVisible({ timeout: 10_000 });
   if ((await plusBtn.getAttribute('aria-expanded')) !== 'true') {
     await plusBtn.click();
   }
@@ -114,8 +116,9 @@ async function ouvrirValoriaDepuisMenuPlusMobile(page: Page): Promise<Locator> {
   const navAutres = page.getByRole('navigation', { name: 'Autres destinations' });
   await expect(navAutres).toBeVisible({ timeout: 10_000 });
   await expect(navAutres.getByRole('button', { name: /Valoria\s*·\s*Quant IA/i })).toHaveCount(0);
+  await page.keyboard.press('Escape');
 
-  const btnPlacements = navAutres.getByRole('button', { name: /^Placements$/i });
+  const btnPlacements = navMobile.getByRole('button', { name: /^Placements$/i });
   await expect(btnPlacements).toBeVisible({ timeout: 10_000 });
   await btnPlacements.click();
 

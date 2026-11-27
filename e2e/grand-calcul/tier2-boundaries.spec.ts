@@ -23,6 +23,7 @@ import {
   executerEtAppliquerAnalyseProfonde,
   inspecterPayloadIDBDeepForecast,
   naviguerVersFutur,
+  ouvrirOngletFutur,
   preparerFuturAvecPersona,
   supprimerClesAppareilIDB,
   zoneReperesCles,
@@ -39,13 +40,14 @@ test.describe('Futur 4.0 Tier 2 — Limites, intégrité IDB & isolation', () =>
     const errors = attacherCapteurErreurs(page);
     await preparerFuturAvecPersona(page, 'couple-dettes');
 
-    await expect(zoneScenarios(page).getByText(/Aperçu rapide actif/i)).toBeVisible();
+    await expect(zoneScenarios(page).getByText(/Aperçu rapide/i)).toBeVisible();
     await expect(zoneScenarios(page).getByText(/Analyse profonde en mémoire/i)).toHaveCount(0);
 
     const textMain = await page.locator('main').innerText();
     expect(textMain).not.toMatch(/\bNaN\b|\bundefined\b|\bInfinity\b/);
     expect(textMain).not.toContain('999 ans');
 
+    await ouvrirOngletFutur(page, 'Détails');
     await expect(zoneReperesCles(page).getByText('Indépendance financière')).toBeVisible();
     errors.assertClean();
   });
@@ -65,13 +67,13 @@ test.describe('Futur 4.0 Tier 2 — Limites, intégrité IDB & isolation', () =>
     await page.waitForLoadState('domcontentloaded');
     await expect(zoneScenarios(page)).toBeVisible({ timeout: 20_000 });
     await expect(zoneScenarios(page).getByText(/Analyse profonde en mémoire/i)).toHaveCount(0);
-    await expect(zoneScenarios(page).getByText(/Aperçu rapide actif/i)).toBeVisible();
+    await expect(zoneScenarios(page).getByText(/Aperçu rapide/i)).toBeVisible();
 
     // Vérifier « Ignorer » après une nouvelle attente staged
     await executerEtAppliquerAnalyseProfonde(page, { appliquer: false });
     await boutonIgnorerAnalyseProfonde(page).click();
     await expect(boutonAppliquerAnalyseProfonde(page)).toHaveCount(0);
-    await expect(zoneScenarios(page).getByText(/Aperçu rapide actif/i)).toBeVisible();
+    await expect(zoneScenarios(page).getByText(/Aperçu rapide/i)).toBeVisible();
 
     errors.assertClean();
   });

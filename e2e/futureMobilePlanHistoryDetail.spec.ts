@@ -34,7 +34,10 @@ test.describe('Futur 4.0 Mobile — Actions IA, Historique & Détail du mois', (
 
       await expect(page.getByRole('group', { name: /Courbe de vie/ })).toBeVisible({ timeout: 20_000 });
 
-      // 1. Bloc 4 Actions concrètes : cibles >= 44 px & bascule sur Optimisé IA
+      const tabs = page.getByRole('tablist', { name: 'Sections du Futur' });
+
+      // 1a. Onglet Détails : déplier les chiffres (>= 44 px)
+      await tabs.getByRole('tab', { name: /Détails/i }).click();
       const panel = page.locator('section[aria-labelledby="futur-insights-unifies-titre"]');
       await expect(panel).toBeVisible();
 
@@ -48,6 +51,8 @@ test.describe('Futur 4.0 Mobile — Actions IA, Historique & Détail du mois', (
         );
       }
 
+      // 1b. Onglet Quoi faire : cibles >= 44 px & action concrète
+      await tabs.getByRole('tab', { name: /Quoi faire/i }).click();
       const btnAppliquerIa = panel
         .getByRole('button', {
           name: /Appliquer à mon plan|Prioriser les dettes|Optimiser la localisation|Appliquer dans Optimisé IA/i,
@@ -57,6 +62,9 @@ test.describe('Futur 4.0 Mobile — Actions IA, Historique & Détail du mois', (
         expect((await btnAppliquerIa.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
         await btnAppliquerIa.click();
       }
+
+      // Retour sur Courbe : scénario Optimisé IA, Historique & Détail du mois
+      await tabs.getByRole('tab', { name: /Courbe/i }).click();
       const btnScenarioIa = page
         .getByRole('region', { name: 'Scénarios de trajectoire future' })
         .getByRole('button', { name: /Optimisé IA/i });

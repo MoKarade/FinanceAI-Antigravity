@@ -26,6 +26,7 @@ import {
 import { computeMarketImpactSummary } from '../services/marketImpactSummary';
 import { prefetchTab } from '../utils/tabPrefetch';
 import { PageHeader } from './ui/PageHeader';
+import { SubTabs, TabPanel } from './ui/SubTabs';
 import { FUTURE_REQ_IDS } from './ProjectionEngine';
 import { REQUIREMENTS } from './setup/requirements';
 import { Drawer } from './ui/Drawer';
@@ -298,6 +299,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     const curveVisible = results !== null;
 
     const [restoringTimedOut, setRestoringTimedOut] = useState(false);
+    const [futurTab, setFuturTab] = useState<'courbe' | 'actions' | 'details'>('courbe');
     useEffect(() => {
         if (!reqsMet || hasError || results !== null || projectionStatus === 'computing') {
             setRestoringTimedOut(false);
@@ -624,6 +626,11 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             fxRates,
             deepForecast.activeReport,
         ],
+    );
+
+    const pendingActionsCount = useMemo(
+        () => reconciledActions.filter((a) => !a.isAlreadyApplied && !completedAiActionIds.includes(a.id)).length,
+        [reconciledActions, completedAiActionIds],
     );
 
     const marketImpact = useMemo(
@@ -1102,14 +1109,20 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     );
 
     useEffect(() => {
-        if (pendingFocusMonth === null) return;
+        if (pendingFocusMonth === null || futurTab !== 'courbe') return;
         const target = pendingFocusMonth;
         setPendingFocusMonth(null);
         focusMonthPointNow(target);
-    }, [pendingFocusMonth, selectSeries, focusMonthPointNow]);
+        zoom.containerEl.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    }, [pendingFocusMonth, futurTab, selectSeries, focusMonthPointNow, zoom.containerEl]);
 
     const handleSelectExplanationMonth = useCallback(
         (monthIdx: number) => {
+            if (futurTab !== 'courbe') {
+                setFuturTab('courbe');
+                setPendingFocusMonth(monthIdx);
+                return;
+            }
             const lo = zoom.visibleData[0]?.monthIndex ?? Number.NEGATIVE_INFINITY;
             const hi = zoom.visibleData[zoom.visibleData.length - 1]?.monthIndex ?? Number.POSITIVE_INFINITY;
             if (zoom.isZoomed && (monthIdx < lo || monthIdx > hi)) {
@@ -1120,7 +1133,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             }
             zoom.containerEl.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
         },
-        [zoom, focusMonthPointNow],
+        [futurTab, zoom, focusMonthPointNow],
     );
 
     const activeTurningPointHint = useMemo(() => {
@@ -1539,6 +1552,29 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
 
             {curveVisible && (
                 <div ref={revealedRef} tabIndex={-1} className="outline-hidden space-y-4 lg:space-y-6" role="region" aria-label="Projection affichée">
+                    <SubTabs
+                        idPrefix="futur"
+                        label="Sections du Futur"
+                        tabs={[
+                            { id: 'courbe', label: 'Courbe', icon: 'future' },
+                            {
+                                id: 'actions',
+                                label: 'Quoi faire',
+                                icon: 'sparkles',
+                                badge: pendingActionsCount > 0 ? pendingActionsCount : undefined,
+                            },
+                            { id: 'details', label: 'Détails', icon: 'compass' },
+                        ]}
+                        active={futurTab}
+                        onSelect={setFuturTab}
+                    />
+
+                    <TabPanel
+                        idPrefix="futur"
+                        tab="courbe"
+                        when={futurTab === 'courbe'}
+                        className="space-y-4 lg:space-y-6 focus-ring rounded-card"
+                    >
                     {alerteObjectifs && (
                         <div className="flex flex-wrap items-center gap-3 rounded-card border border-alerte-texte/40 bg-alerte-fond px-4 py-2.5">
                             <span aria-hidden="true">🎯</span>
@@ -2264,30 +2300,91 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                         )}
                     </section>
 
-                    {/* Effet des marchés et analyses sur ton patrimoine */}
-                    <MarketImpactCard
-                        summary={marketImpact}
-                        onOpenMarkets={() => naviguerVers(TabEnum.INVESTMENTS)}
-                    />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <button
+                            type="button"
+                            onClick={() => setFuturTab('actions')}
+                            className="touch-target min-h-11 rounded-2xl border border-bordure bg-surface hover:bg-surface-douce px-4 py-3 flex items-center justify-between text-meta font-bold text-texte transition-colors focus-ring"
+                        >
+                            <span>Voir quoi faire{pendingActionsCount > 0 ? ` (${pendingActionsCount})` : ''}</span>
+                            <span aria-hidden="true" className="text-repere">→</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setFuturTab('details')}
+                            className="touch-target min-h-11 rounded-2xl border border-bordure bg-surface hover:bg-surface-douce px-4 py-3 flex items-center justify-between text-meta font-semibold text-texte transition-colors focus-ring"
+                        >
+                            <span>Marché, retraite &amp; détails</span>
+                            <span aria-hidden="true" className="text-texte-doux">→</span>
+                        </button>
+                    </div>
+                    </TabPanel>
 
-                    {/* Bloc 3 : 4 repères clés pleine largeur */}
-                    <FutureCoreMilestonesGrid
-                        report={deepForecast.activeReport}
-                        scenario={activeScenarioOutput}
-                    />
+                    <TabPanel
+                        idPrefix="futur"
+                        tab="actions"
+                        when={futurTab === 'actions'}
+                        className="space-y-4 focus-ring rounded-card"
+                    >
+                            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-bordure bg-surface px-4 py-3">
+                                <span className="inline-flex items-center gap-2 text-meta font-bold text-texte">
+                                    <span className="w-2 h-2 rounded-full bg-accent" aria-hidden="true" />
+                                    Plan pour : {activeScenarioOutput.label}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setFuturTab('courbe')}
+                                    className="touch-target min-h-11 px-3 py-2 rounded-xl border border-bordure-champ bg-surface-douce hover:bg-fond text-tiny font-semibold text-texte focus-ring transition-colors"
+                                >
+                                    Voir la courbe →
+                                </button>
+                            </div>
+                            <FutureUnifiedInsightsPanel
+                                report={deepForecast.activeReport}
+                                scenario={activeScenarioOutput}
+                                sectionMode="actions"
+                                reconciledActions={reconciledActions}
+                                completedActionIds={completedAiActionIds}
+                                onToggleActionCompleted={handleToggleActionCompleted}
+                                onApplyActionPatch={handleApplyActionPatch}
+                                onFocusMonth={handleSelectExplanationMonth}
+                                onSelectScenario={deepForecast.setSelectedScenario}
+                                onNavigateTab={naviguerVers}
+                            />
+                    </TabPanel>
 
-                    {/* Bloc 4 : Panneau unifié (Passé & actualités + Pourquoi la courbe évolue ainsi + Actions concrètes) */}
-                    <FutureUnifiedInsightsPanel
-                        report={deepForecast.activeReport}
-                        scenario={activeScenarioOutput}
-                        reconciledActions={reconciledActions}
-                        completedActionIds={completedAiActionIds}
-                        onToggleActionCompleted={handleToggleActionCompleted}
-                        onApplyActionPatch={handleApplyActionPatch}
-                        onFocusMonth={handleSelectExplanationMonth}
-                        onSelectScenario={deepForecast.setSelectedScenario}
-                        onNavigateTab={naviguerVers}
-                    />
+                    <TabPanel
+                        idPrefix="futur"
+                        tab="details"
+                        when={futurTab === 'details'}
+                        className="space-y-4 lg:space-y-6 focus-ring rounded-card"
+                    >
+                            {/* Effet des marchés et analyses sur ton patrimoine */}
+                            <MarketImpactCard
+                                summary={marketImpact}
+                                onOpenMarkets={() => naviguerVers(TabEnum.INVESTMENTS)}
+                            />
+
+                            {/* Bloc 3 : 4 repères clés pleine largeur */}
+                            <FutureCoreMilestonesGrid
+                                report={deepForecast.activeReport}
+                                scenario={activeScenarioOutput}
+                            />
+
+                            {/* Bloc 4 : Panneau unifié (Passé & actualités + Pourquoi la courbe évolue ainsi) */}
+                            <FutureUnifiedInsightsPanel
+                                report={deepForecast.activeReport}
+                                scenario={activeScenarioOutput}
+                                sectionMode="details"
+                                reconciledActions={reconciledActions}
+                                completedActionIds={completedAiActionIds}
+                                onToggleActionCompleted={handleToggleActionCompleted}
+                                onApplyActionPatch={handleApplyActionPatch}
+                                onFocusMonth={handleSelectExplanationMonth}
+                                onSelectScenario={deepForecast.setSelectedScenario}
+                                onNavigateTab={naviguerVers}
+                            />
+                    </TabPanel>
 
                     <FutureYearAnatomyModal
                         isOpen={anatomyOpen}

@@ -25,6 +25,7 @@ import {
   epinglerInfobulleSurCourbe,
   infobulleRiche,
   inspecterPayloadIDBDeepForecast,
+  ouvrirOngletFutur,
   preparerFuturAvecPersona,
   verifierZeroDebordementHorizontal,
   zoneAnalyseUnifiee,
@@ -69,8 +70,6 @@ test.describe('Futur 4.0 Tier 1 — Fonctionnalités principales Desktop', () =>
       const btn = boutonScenario(page, label);
       await btn.click();
       await expect(btn).toHaveAttribute('aria-pressed', 'true');
-      await expect(zoneReperesCles(page).getByRole('heading', { name: new RegExp(label.replace('/', '\\/'), 'i') })).toBeVisible();
-      await expect(zoneAnalyseUnifiee(page).locator('h2')).toContainText(new RegExp(label.replace('/', '\\/'), 'i'));
     }
 
     // Audit ruban [P10, P90] unique borné + ChartDataTable
@@ -83,9 +82,13 @@ test.describe('Futur 4.0 Tier 1 — Fonctionnalités principales Desktop', () =>
     expect(headersText).toContain('Dettes (hors hypothèque)');
     expect(headersText).toContain('dont levier Smith');
 
-    // Audit cibles tactiles >= 44 px & zéro débordement à 1440×900 puis 1280×800
+    // Audit cibles tactiles >= 44 px & zéro débordement sur Courbe, Détails et Quoi faire
     await auditerCiblesTactilesConteneur(zoneScenarios(page));
+    await ouvrirOngletFutur(page, 'Détails');
+    await expect(zoneReperesCles(page).getByRole('heading', { name: /Trajectoire réelle/i })).toBeVisible();
+    await expect(zoneAnalyseUnifiee(page).locator('h2')).toContainText(/Trajectoire réelle/i);
     await auditerCiblesTactilesConteneur(zoneAnalyseUnifiee(page));
+    await ouvrirOngletFutur(page, 'Courbe');
     await verifierZeroDebordementHorizontal(page);
 
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -143,7 +146,8 @@ test.describe('Futur 4.0 Tier 1 — Fonctionnalités principales Desktop', () =>
     await page.keyboard.press('Escape');
     await expect(infobulleRiche(page)).toHaveCount(0);
 
-    // Bloc 3 : 4 repères clés visibles
+    // Bloc 3 (onglet Détails) : 4 repères clés visibles
+    await ouvrirOngletFutur(page, 'Détails');
     const rep = zoneReperesCles(page);
     for (const titreRepere of [
       'Indépendance financière',
@@ -154,7 +158,7 @@ test.describe('Futur 4.0 Tier 1 — Fonctionnalités principales Desktop', () =>
       await expect(rep.getByText(titreRepere).first()).toBeVisible();
     }
 
-    // Bloc 4 : diagnostic passé, consensus Valoria, Voir les chiffres, Voir sur la courbe, Appliquer dans Optimisé IA
+    // Bloc 4 : diagnostic passé, consensus Valoria, Voir les chiffres, Voir sur la courbe (bascule Courbe)
     const insights = zoneAnalyseUnifiee(page);
     await expect(insights.getByText('Diagnostic de ton passé réel')).toBeVisible();
     await expect(insights.getByText('Actualités & consensus Valoria')).toBeVisible();
@@ -172,14 +176,17 @@ test.describe('Futur 4.0 Tier 1 — Fonctionnalités principales Desktop', () =>
     await expect(page.locator('[data-testid="future-rich-tooltip"][data-pinned="true"]')).toBeVisible({ timeout: 8_000 });
     await page.keyboard.press('Escape');
 
+    await ouvrirOngletFutur(page, 'Quoi faire');
     const btnAction = insights
       .getByRole('button', { name: /Appliquer à mon plan|Prioriser les dettes|Optimiser la localisation|Appliquer dans Optimisé IA/i })
       .first();
     if (await btnAction.isVisible().catch(() => false)) {
       await btnAction.click();
     } else {
+      await ouvrirOngletFutur(page, 'Courbe');
       await boutonScenario(page, 'Optimisé IA').click();
     }
+    await ouvrirOngletFutur(page, 'Courbe');
     await expect(boutonScenario(page, 'Optimisé IA')).toHaveAttribute('aria-pressed', /(true|false)/);
 
     errors.assertClean();

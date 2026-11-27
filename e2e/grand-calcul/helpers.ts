@@ -139,6 +139,19 @@ export function zoneAnalyseUnifiee(page: Page): Locator {
   return page.locator('main section[aria-labelledby="futur-insights-unifies-titre"]').first();
 }
 
+export async function ouvrirOngletFutur(
+  page: Page,
+  onglet: 'Courbe' | 'Quoi faire' | 'Détails',
+): Promise<void> {
+  const tab = page
+    .getByRole('tablist', { name: 'Sections du Futur' })
+    .getByRole('tab', { name: new RegExp(onglet, 'i') })
+    .first();
+  await expect(tab).toBeVisible({ timeout: 10_000 });
+  await tab.click();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+}
+
 export function infobulleRiche(page: Page): Locator {
   return page.locator('[data-testid="future-rich-tooltip"]');
 }
@@ -483,11 +496,19 @@ export async function basculerModeDiscret(page: Page): Promise<void> {
 export async function verifierModeDiscretFutur4(page: Page): Promise<void> {
   await expect(page.getByText('•••').first()).toBeVisible({ timeout: 8_000 });
 
+  await ouvrirOngletFutur(page, 'Détails');
   for (const section of [zoneReperesCles(page), zoneAnalyseUnifiee(page)]) {
     const text = await section.innerText();
     expect(text).not.toMatch(/\d[\d\s\u00a0\u202f,.]*\s*\$/);
     expect(text).toContain('•••');
   }
+
+  await ouvrirOngletFutur(page, 'Quoi faire');
+  const actionsText = await zoneAnalyseUnifiee(page).innerText();
+  expect(actionsText).not.toMatch(/\d[\d\s\u00a0\u202f,.]*\s*\$/);
+  expect(actionsText).toContain('•••');
+
+  await ouvrirOngletFutur(page, 'Courbe');
 
   // En-têtes ou cellules du tableau accessible .sr-only masquées en mode discret
   const srOnlyText = await page.locator('main .sr-only').allInnerTexts();

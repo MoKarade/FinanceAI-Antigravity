@@ -63,27 +63,27 @@ export const NAV_GROUPS: NavGroup[] = [
 export const PROFILE_TAB = Tab.PROFILE;
 
 /** Onglets épinglés dans la barre mobile (le reste passe par « Plus »). */
-export const MOBILE_BAR_TABS: Tab[] = [Tab.DASHBOARD, Tab.FUTURE, Tab.TRANSACTIONS, Tab.BUDGET];
+export const MOBILE_BAR_TABS: Tab[] = [Tab.DASHBOARD, Tab.FUTURE, Tab.INVESTMENTS, Tab.BUDGET];
 
 /** Destinations groupées pour le menu mobile « Plus » (accès direct en 1 touche). */
 export const MOBILE_PLUS_GROUPS: ReadonlyArray<{ id: string; label: string; items: ReadonlyArray<NavItem> }> = [
     {
-        id: 'ESSENTIEL',
-        label: 'Essentiel',
+        id: 'PLANIFICATION',
+        label: 'Projets & maison',
         items: [
-            { tab: Tab.DEBT, label: 'Dettes', icon: 'debt' },
-            { tab: Tab.INVESTMENTS, label: 'Placements', icon: 'investments', alsoActiveFor: [Tab.VALORIA] },
+            { tab: Tab.REAL_ESTATE, label: 'Immobilier', icon: 'real-estate', alsoActiveFor: [Tab.REAL_ESTATE_PROJECTS] },
+            { tab: Tab.RETIREMENT, label: 'Retraite', icon: 'retirement' },
+            { tab: Tab.TAX, label: 'Impôts', icon: 'tax' },
+            { tab: Tab.CHILD, label: 'Enfants', icon: 'child' },
+            { tab: Tab.LIFE_PROJECTS, label: 'Projets de vie', icon: 'life-projects' },
         ],
     },
     {
-        id: 'PLANIFICATION',
-        label: 'Planification',
-        items: PLANNING_SUBTABS,
-    },
-    {
         id: 'OUTILS',
-        label: 'Outils',
+        label: 'Comptes & outils',
         items: [
+            { tab: Tab.TRANSACTIONS, label: 'Transactions', icon: 'transactions' },
+            { tab: Tab.DEBT, label: 'Dettes', icon: 'debt' },
             { tab: Tab.SETTINGS, label: 'Réglages', icon: 'settings' },
         ],
     },

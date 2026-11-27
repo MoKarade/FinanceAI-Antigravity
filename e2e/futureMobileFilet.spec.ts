@@ -47,10 +47,10 @@ test.describe('Futur 4.0 — Filet mobile tactile (390×844)', () => {
       }));
       expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
 
-      // 1. Contrôles critiques Futur 4.0 : 100 % >= 44 px
+      // 1. Contrôles critiques Futur 4.0 : 100 % >= 44 px (Courbe, puis Quoi faire & Détails)
       for (const selector of [
+        'div[role="tablist"][aria-label="Sections du Futur"] button:visible',
         'section[aria-label="Scénarios de trajectoire future"] button:visible',
-        'section[aria-labelledby="futur-insights-unifies-titre"] button:visible',
       ]) {
         const btns = page.locator(selector);
         const count = await btns.count();
@@ -61,6 +61,20 @@ test.describe('Futur 4.0 — Filet mobile tactile (390×844)', () => {
           expect(box!.height).toBeGreaterThanOrEqual(43.5);
         }
       }
+
+      const tabs = page.getByRole('tablist', { name: 'Sections du Futur' });
+      for (const onglet of [/Quoi faire/i, /Détails/i]) {
+        await tabs.getByRole('tab', { name: onglet }).click();
+        const btns = page.locator('section[aria-labelledby="futur-insights-unifies-titre"] button:visible');
+        const count = await btns.count();
+        expect(count).toBeGreaterThan(0);
+        for (let i = 0; i < count; i++) {
+          const box = await btns.nth(i).boundingBox();
+          expect(box).not.toBeNull();
+          expect(box!.height).toBeGreaterThanOrEqual(43.5);
+        }
+      }
+      await tabs.getByRole('tab', { name: /Courbe/i }).click();
 
       for (const actionLabel of ['Hypothèses', 'Anatomie', 'Historique']) {
         const btn = page.getByRole('button', { name: actionLabel, exact: true });

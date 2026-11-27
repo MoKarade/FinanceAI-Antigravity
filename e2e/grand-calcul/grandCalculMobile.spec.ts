@@ -20,6 +20,7 @@ import {
   epinglerInfobulleSurCourbe,
   executerEtAppliquerAnalyseProfonde,
   fermerToastsSiPresents,
+  ouvrirOngletFutur,
   passerGardeLocale,
   preparerFuturAvecPersona,
   verifierModeDiscretFutur4,
@@ -67,16 +68,22 @@ test.describe('Futur 4.0 Mobile Tactile (390×844)', () => {
       await expect(page.locator('.hover\\:scale-105, .hover\\:-translate-y-1')).toHaveCount(0);
       await verifierZeroDebordementHorizontal(page);
 
-      // Cibles tactiles >= 44 px sur Bloc 1 & Bloc 4
+      // Cibles tactiles >= 44 px sur Bloc 1 & Bloc 4 (Détails + Quoi faire)
       await auditerCiblesTactilesConteneur(zoneScenarios(page));
+      await ouvrirOngletFutur(page, 'Quoi faire');
+      await auditerCiblesTactilesConteneur(zoneAnalyseUnifiee(page));
+      await verifierZeroDebordementHorizontal(page);
+
+      await ouvrirOngletFutur(page, 'Détails');
       await auditerCiblesTactilesConteneur(zoneAnalyseUnifiee(page));
 
-      // Déplier « Voir les chiffres » et épingler l'infobulle riche sur mobile -> zéro débordement
+      // Déplier « Voir les chiffres » sans débordement, puis revenir sur Courbe et épingler l'infobulle riche
       const btnChiffres = zoneAnalyseUnifiee(page).getByRole('button', { name: /Voir les chiffres/i }).first();
       if (await btnChiffres.isVisible().catch(() => false)) {
         await btnChiffres.click();
         await verifierZeroDebordementHorizontal(page);
       }
+      await ouvrirOngletFutur(page, 'Courbe');
 
       const tooltip = await epinglerInfobulleSurCourbe(page, 0.55, 0.5);
       const boxFermer = await tooltip.getByRole('button', { name: 'Fermer le détail épinglé' }).boundingBox();
@@ -122,15 +129,17 @@ test.describe('Futur 4.0 Mobile Tactile (390×844)', () => {
 
     await boutonScenario(page, 'Optimisé IA').click();
     await expect(boutonScenario(page, 'Optimisé IA')).toHaveAttribute('aria-pressed', 'true');
+    await ouvrirOngletFutur(page, 'Détails');
     const desktopMilestones = await zoneReperesCles(page).innerText();
 
     // Redimensionner vers Mobile 390×844 sur la même instance
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(300);
 
-    await expect(boutonScenario(page, 'Optimisé IA')).toHaveAttribute('aria-pressed', 'true');
     const mobileMilestones = await zoneReperesCles(page).innerText();
     expect(mobileMilestones.replace(/\s+/g, ' ').trim()).toBe(desktopMilestones.replace(/\s+/g, ' ').trim());
+    await ouvrirOngletFutur(page, 'Courbe');
+    await expect(boutonScenario(page, 'Optimisé IA')).toHaveAttribute('aria-pressed', 'true');
     await verifierZeroDebordementHorizontal(page);
 
     errors.assertClean();

@@ -99,7 +99,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
   const isNavActive = (tab: Tab) => navItemOfTab(activeTab)?.tab === tab;
   const itemsMobilePlus = MOBILE_PLUS_GROUPS;
-  const surPagePlus = !MOBILE_BAR_TABS.includes(activeTab);
+  const surPagePlus = !MOBILE_BAR_TABS.includes(navItemOfTab(activeTab)?.tab ?? activeTab);
 
   const groupeActif = isPlanningTab(activeTab)
     ? { label: 'Planification' }
@@ -426,11 +426,12 @@ export const Layout: React.FC<LayoutProps> = ({
         </div>
       </main>
 
-      {/* Barre du bas (mobile, < lg) : Accueil, Futur, Transactions, Budget, Plus. Cibles ≥ 44 px. */}
+      {/* Barre du bas (mobile, < lg) : Accueil, Futur, Placements, Budget, Plus. Cibles ≥ 44 px. */}
       <nav aria-label="Navigation mobile" className="lg:hidden fixed bottom-0 left-0 right-0 h-[64px] z-100 grid grid-cols-5 px-1.5 pt-1 pb-1.5 pb-safe bg-fond/95 backdrop-blur-md border-t border-bordure">
         {MOBILE_BAR_TABS.map((tab) => {
           const item = navItemOfTab(tab)!;
-          const actif = activeTab === tab && !showMobileDrawer;
+          const isCurrent = activeTab === tab || Boolean(item.alsoActiveFor?.includes(activeTab));
+          const actif = isCurrent && !showMobileDrawer;
           return (
             <button
               key={tab}
@@ -438,7 +439,7 @@ export const Layout: React.FC<LayoutProps> = ({
               onClick={() => { setActiveTab(tab); setShowMobileDrawer(false); }}
               onMouseEnter={() => prefetchTab(tab)}
               onTouchStart={() => prefetchTab(tab)}
-              aria-current={activeTab === tab ? 'page' : undefined}
+              aria-current={isCurrent ? 'page' : undefined}
               className={`touch-target flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors focus-ring rounded-xl ${actif ? 'text-ink-50 font-semibold bg-repere-doux border border-bordure' : 'text-ink-400 hover:text-ink-200'}`}
             >
               <Icon name={item.icon} size={20} aria-hidden="true" className={actif ? 'text-repere' : ''} />

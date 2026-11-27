@@ -81,10 +81,11 @@ test.describe('Futur 4.0 — Bandeau Scénarios & Commandes de Simulation (Deskt
 
     await expect(scenariosSection.getByRole('button', { name: /Lancer l’analyse profonde/i })).toBeVisible();
 
-    // Basculer sur Prudent / Stress met à jour aria-pressed, Bloc 3 et Bloc 4
+    // Basculer sur Prudent / Stress met à jour aria-pressed, Bloc 3 et Bloc 4 (onglet Détails)
     await scenarioPrudent.click();
     await expect(scenarioPrudent).toHaveAttribute('aria-pressed', 'true');
     await expect(scenarioReal).toHaveAttribute('aria-pressed', 'false');
+    await page.getByRole('tablist', { name: 'Sections du Futur' }).getByRole('tab', { name: /Détails/i }).click();
     await expect(page.getByRole('heading', { name: /Repères clés de vie · Prudent \/ Stress/i })).toBeVisible();
     await expect(page.getByRole('heading', { name: /Analyse unifiée · Prudent \/ Stress/i })).toBeVisible();
   });

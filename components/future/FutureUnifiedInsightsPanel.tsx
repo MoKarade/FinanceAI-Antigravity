@@ -30,6 +30,7 @@ export interface FutureUnifiedInsightsPanelProps {
     completedActionIds?: string[];
     onToggleActionCompleted?: (actionId: string) => void;
     onApplyActionPatch?: (action: ReconciledAiAction) => void;
+    sectionMode?: 'all' | 'details' | 'actions';
 }
 
 const TURNING_KIND_META: Record<DeepTurningPointKind, { label: string; cls: string }> = {
@@ -80,6 +81,7 @@ export const FutureUnifiedInsightsPanel: React.FC<FutureUnifiedInsightsPanelProp
     completedActionIds = [],
     onToggleActionCompleted,
     onApplyActionPatch,
+    sectionMode = 'all',
 }) => {
     const [expandedTurningIds, setExpandedTurningIds] = useState<Record<string, boolean>>({});
     const past = report.pastDiagnostic;
@@ -108,6 +110,8 @@ export const FutureUnifiedInsightsPanel: React.FC<FutureUnifiedInsightsPanelProp
                 </p>
             </div>
 
+            {(sectionMode === 'all' || sectionMode === 'details') && (
+            <>
             {/* A. Ce que ton passé réel & les actualités disent aujourd'hui */}
             <div className="space-y-3">
                 <h3 className="text-meta font-bold uppercase tracking-wider text-repere flex items-center gap-2">
@@ -430,9 +434,12 @@ export const FutureUnifiedInsightsPanel: React.FC<FutureUnifiedInsightsPanelProp
                     </ol>
                 )}
             </div>
+            </>
+            )}
 
             {/* C. Tes actions concrètes les plus payantes */}
-            <div className="space-y-3 border-t border-bordure pt-5">
+            {(sectionMode === 'all' || sectionMode === 'actions') && (
+            <div className={sectionMode === 'actions' ? 'space-y-3' : 'space-y-3 border-t border-bordure pt-5'}>
                 <h3 className="text-meta font-bold uppercase tracking-wider text-succes-texte flex items-center gap-2">
                     <Icon name="sparkles" size={16} className="text-succes-texte shrink-0" />
                     <span>C. Ce qu’il faut faire pour atteindre la trajectoire IA</span>
@@ -570,6 +577,7 @@ export const FutureUnifiedInsightsPanel: React.FC<FutureUnifiedInsightsPanelProp
                     );
                 })()}
             </div>
+            )}
         </section>
     );
 };
