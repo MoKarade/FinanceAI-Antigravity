@@ -80,9 +80,10 @@
     "vitest": "^5.0.5",
     "vitest-axe": "^0.1.0"
   },
-  "//overrides": "Plancher de sécurité sur dépendances transitives : @grpc/grpc-js >= 1.13.6 (firebase/firestore), typed-rest-client -> qs >= 6.16.0 (stryker-mutator dev).",
+  "//overrides": "Plancher de sécurité sur dépendances transitives : @grpc/grpc-js >= 1.13.6 (firebase/firestore), typed-rest-client -> qs >= 6.16.0 (stryker-mutator dev), minimatch >= 11.0.1 (eslint/stryker dev).",
   "overrides": {
     "@grpc/grpc-js": "^1.13.6",
+    "minimatch": "^11.0.1",
     "typed-rest-client": {
       "qs": "^6.16.0"
     }
