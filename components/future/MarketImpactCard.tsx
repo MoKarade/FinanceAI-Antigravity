@@ -54,15 +54,12 @@ export const MarketImpactCard: React.FC<MarketImpactCardProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                     <Icon name="globe" size={18} className="text-repere shrink-0" />
-                    <div className="min-w-0">
-                        <h3 className="text-body font-bold text-texte">
-                            Effet du marché sur ton patrimoine
-                        </h3>
-                        <p className="text-tiny text-texte-doux">{summary.headlineFr}</p>
-                    </div>
+                    <h3 className="text-body font-bold text-texte">
+                        Effet du marché
+                    </h3>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                     <span className={`px-2.5 py-1 rounded-full border text-tiny font-semibold ${toneClass}`}>
                         {summary.regimeLabel}
                         {summary.annualShiftPct !== null && Number.isFinite(summary.annualShiftPct) && summary.annualShiftPct !== 0 ? (
@@ -87,11 +84,11 @@ export const MarketImpactCard: React.FC<MarketImpactCardProps> = ({
             </div>
 
             {summary.hasMarketData && (
-                <div className={`grid grid-cols-1 sm:grid-cols-3 ${compact ? 'gap-2' : 'gap-3'}`}>
-                    <div className="rounded-xl border border-bordure bg-surface-douce p-3 min-w-0">
-                        <div className="text-tiny text-texte-doux">Impact estimé sur 5 ans</div>
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                    <div className="rounded-xl border border-bordure bg-surface-douce p-2.5 sm:p-3 min-w-0">
+                        <div className="text-[11px] sm:text-tiny text-texte-doux truncate">Sur 5 ans</div>
                         <div
-                            className={`text-body font-mono font-bold tabular-nums mt-0.5 ${
+                            className={`text-meta sm:text-body font-mono font-bold tabular-nums mt-0.5 truncate ${
                                 (summary.impact5yCad ?? 0) > 0
                                     ? 'text-succes-texte'
                                     : (summary.impact5yCad ?? 0) < 0
@@ -103,10 +100,10 @@ export const MarketImpactCard: React.FC<MarketImpactCardProps> = ({
                         </div>
                     </div>
 
-                    <div className="rounded-xl border border-bordure bg-surface-douce p-3 min-w-0">
-                        <div className="text-tiny text-texte-doux">Impact à l’horizon retraite</div>
+                    <div className="rounded-xl border border-bordure bg-surface-douce p-2.5 sm:p-3 min-w-0">
+                        <div className="text-[11px] sm:text-tiny text-texte-doux truncate">À la retraite</div>
                         <div
-                            className={`text-body font-mono font-bold tabular-nums mt-0.5 ${
+                            className={`text-meta sm:text-body font-mono font-bold tabular-nums mt-0.5 truncate ${
                                 (summary.horizonImpactCad ?? 0) > 0
                                     ? 'text-succes-texte'
                                     : (summary.horizonImpactCad ?? 0) < 0
@@ -118,13 +115,22 @@ export const MarketImpactCard: React.FC<MarketImpactCardProps> = ({
                         </div>
                     </div>
 
-                    <div className="rounded-xl border border-bordure bg-surface-douce p-3 min-w-0">
-                        <div className="text-tiny text-texte-doux">Effet sur la date de retraite</div>
-                        <div className="text-body font-mono font-bold text-texte tabular-nums mt-0.5">
+                    <div className="rounded-xl border border-bordure bg-surface-douce p-2.5 sm:p-3 min-w-0">
+                        <div className="text-[11px] sm:text-tiny text-texte-doux truncate">Date retraite</div>
+                        <div className="text-meta sm:text-body font-mono font-bold text-texte tabular-nums mt-0.5 truncate">
                             {renderMonthsDelta(summary.retirementMonthsDelta)}
                         </div>
                     </div>
                 </div>
+            )}
+
+            {!compact && summary.headlineFr && (
+                <details className="text-tiny text-texte-doux">
+                    <summary className="cursor-pointer select-none hover:text-texte">
+                        Détails du marché
+                    </summary>
+                    <p className="mt-1.5 text-texte-doux">{summary.headlineFr}</p>
+                </details>
             )}
         </section>
     );

@@ -108,7 +108,7 @@ export const FutureScenarioHeader: React.FC<FutureScenarioHeaderProps> = ({
 
     return (
         <section aria-label="Scénarios de trajectoire future" className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-3">
                 {DEEP_SCENARIO_IDS.map((id) => {
                     const scenario = report.scenarios[id];
                     const isSelected = selectedScenario === id;
@@ -124,51 +124,46 @@ export const FutureScenarioHeader: React.FC<FutureScenarioHeaderProps> = ({
                             key={id}
                             type="button"
                             aria-pressed={isSelected}
+                            title={description}
                             onClick={() => onSelectScenario(id)}
-                            className={`touch-target min-h-11 w-full min-w-0 text-left rounded-card border p-3.5 flex flex-col justify-between gap-3 transition-colors focus-ring ${
+                            className={`touch-target min-h-11 w-full min-w-0 text-left rounded-card border p-3 sm:p-3.5 flex flex-col justify-between gap-2.5 transition-colors focus-ring ${
                                 isSelected
                                     ? 'border-accent bg-surface-douce shadow-sm'
                                     : 'border-bordure bg-surface hover:border-bordure-champ hover:bg-surface-douce'
                             }`}
                         >
-                            <span className="block space-y-2 min-w-0">
-                                <span className="flex items-start justify-between gap-2 min-w-0">
-                                    <span className="text-body font-bold text-texte break-words leading-snug">
-                                        {label}
+                            <span className="flex items-start justify-between gap-1.5 min-w-0">
+                                <span className="text-meta sm:text-body font-bold text-texte break-words leading-snug">
+                                    {label}
+                                </span>
+                                {id === 'real_trajectory' && (
+                                    <span className="inline-flex items-center rounded-full border border-bordure-champ bg-fond px-2 py-0.5 text-[11px] font-bold text-texte-doux shrink-0">
+                                        Défaut
                                     </span>
-                                    {id === 'real_trajectory' && (
-                                        <span className="inline-flex items-center rounded-full border border-bordure-champ bg-fond px-2 py-0.5 text-tiny font-bold text-texte-doux shrink-0">
-                                            Défaut
-                                        </span>
-                                    )}
-                                    {showAiGain && (
-                                        <span className="inline-flex items-center rounded-full border border-succes-texte/30 bg-succes-fond px-2 py-0.5 text-tiny font-bold text-succes-texte shrink-0">
-                                            <PrivateAmount>+{formatCompactCAD(aiGainVsReal)}</PrivateAmount>
-                                        </span>
-                                    )}
-                                </span>
-
-                                <span className="block text-meta text-texte-doux leading-snug break-words">
-                                    {description}
-                                </span>
+                                )}
+                                {showAiGain && (
+                                    <span className="inline-flex items-center rounded-full border border-succes-texte/30 bg-succes-fond px-2 py-0.5 text-[11px] font-bold text-succes-texte shrink-0">
+                                        <PrivateAmount>+{formatCompactCAD(aiGainVsReal)}</PrivateAmount>
+                                    </span>
+                                )}
                             </span>
 
-                            <span className="grid grid-cols-2 gap-2 pt-2 border-t border-bordure w-full min-w-0">
+                            <span className="grid grid-cols-2 gap-1.5 pt-2 border-t border-bordure w-full min-w-0">
                                 <span className="block min-w-0">
-                                    <span className="block text-tiny uppercase tracking-wider text-texte-doux">
+                                    <span className="block text-[11px] text-texte-doux truncate">
                                         Patrimoine central
                                     </span>
-                                    <PrivateAmount className="block font-mono text-body font-bold text-texte truncate">
+                                    <PrivateAmount className="block font-mono text-meta sm:text-body font-bold text-texte truncate">
                                         {typeof finalP50 === 'number' && Number.isFinite(finalP50)
                                             ? formatCompactCAD(finalP50)
                                             : '—'}
                                     </PrivateAmount>
                                 </span>
                                 <span className="block min-w-0 text-right">
-                                    <span className="block text-tiny uppercase tracking-wider text-texte-doux">
+                                    <span className="block text-[11px] text-texte-doux truncate">
                                         Indépendance
                                     </span>
-                                    <PrivateAmount className="block font-mono text-body font-bold text-texte truncate">
+                                    <PrivateAmount className="block font-mono text-meta sm:text-body font-bold text-texte truncate">
                                         {typeof fiAge === 'number' && Number.isFinite(fiAge)
                                             ? `${Math.round(fiAge)} ans`
                                             : '—'}
@@ -191,7 +186,7 @@ export const FutureScenarioHeader: React.FC<FutureScenarioHeaderProps> = ({
                                 </span>
                                 <p className="text-meta text-texte break-words m-0">
                                     {/* NOMBRE-NON-MONETAIRE : nombre technique de trajectoires simulées */}
-                                    {formatNumber(pendingReport.trajectoriesRun)} trajectoires (passé réel + actualités + simulation) prêtes à être appliquées.
+                                    {formatNumber(pendingReport.trajectoriesRun)} trajectoires prêtes
                                 </p>
                             </div>
                         ) : appliedReport ? (
@@ -217,9 +212,12 @@ export const FutureScenarioHeader: React.FC<FutureScenarioHeaderProps> = ({
                                 )}
                             </div>
                         ) : (
-                            <p className="text-meta text-texte-doux break-words m-0">
-                                Aperçu rapide actif — lance l’analyse profonde complète (passé réel, actualités en direct et simulation avancée).
-                            </p>
+                            <div className="flex flex-wrap items-center gap-2 min-w-0">
+                                <span className="inline-flex items-center rounded-full border border-bordure-champ bg-surface-douce px-2.5 py-0.5 text-tiny font-bold text-texte">
+                                    Aperçu rapide
+                                </span>
+                                <span className="text-tiny text-texte-doux">Prêt pour l’analyse approfondie</span>
+                            </div>
                         )}
 
                         {status === 'cancelled' && !hasPendingToApply && !error && (

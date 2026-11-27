@@ -1625,8 +1625,8 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                         />
                         <h2 id="courbe-vie-titre" className="sr-only">La courbe de vie</h2>
 
-                        <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pb-2 border-b border-bordure">
-                            <div className="flex items-center gap-2 min-w-max">
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-bordure">
+                            <div className="flex flex-wrap items-center gap-2 min-w-0">
                                 <FutureCurveToolbar
                                     modeCourbe={modeCourbe}
                                     onChangeModeCourbe={setModeCourbe}

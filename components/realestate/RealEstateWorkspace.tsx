@@ -56,6 +56,7 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
     variant, availableCash, allGoals, visibleGoals, setAllGoals,
 }) => {
     const isActuel = variant === 'actuel';
+    const isPrivacyMode = useFinanceStore(s => s.isPrivacyMode);
 
     // Selection state
     const [activeGoalId, setActiveGoalId] = useState<string>(visibleGoals[0]?.id || '');
@@ -601,35 +602,40 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
                 </div>
 
                 {decision.reasonsFr.length > 0 && (
-                    <ul className="space-y-1 text-tiny text-ink-300 list-disc pl-5">
-                        {decision.reasonsFr.map((r, i) => (
-                            <li key={i}>
-                                <PrivateAmount>{r}</PrivateAmount>
-                            </li>
-                        ))}
-                    </ul>
+                    <details className="text-tiny text-ink-300">
+                        <summary className="cursor-pointer select-none font-semibold text-ink-200 hover:text-ink-50">
+                            Pourquoi ce verdict ?
+                        </summary>
+                        <ul className="mt-2 space-y-1 list-disc pl-5">
+                            {decision.reasonsFr.map((r, i) => (
+                                <li key={i}>
+                                    <PrivateAmount>{r}</PrivateAmount>
+                                </li>
+                            ))}
+                        </ul>
+                    </details>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    <div className="rounded-xl border border-bordure bg-surface-douce p-3 min-w-0">
-                        <div className="text-tiny text-ink-400">
-                            {decision.isAlreadyOwned ? 'Liquidités actuelles' : 'Trésorerie prévue à la date'}
+                <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+                    <div className="rounded-xl border border-bordure bg-surface-douce p-2.5 sm:p-3 min-w-0">
+                        <div className="text-[11px] sm:text-tiny text-ink-400 truncate">
+                            {decision.isAlreadyOwned ? 'Liquidités' : 'Trésorerie'}
                         </div>
-                        <div className="text-body font-mono font-bold text-ink-50 tabular-nums mt-0.5">
+                        <div className="text-meta sm:text-body font-mono font-bold text-ink-50 tabular-nums mt-0.5 truncate">
                             <PrivateAmount>
                                 {decision.projectedCashAtDate !== null ? formatCAD(decision.projectedCashAtDate) : '—'}
                             </PrivateAmount>
                         </div>
                     </div>
-                    <div className="rounded-xl border border-bordure bg-surface-douce p-3 min-w-0">
-                        <div className="text-tiny text-ink-400">Budget mensuel logement</div>
-                        <div className="text-body font-mono font-bold text-ink-50 tabular-nums mt-0.5">
-                            <PrivateAmount>{`${formatCAD(decision.monthlyHousingTotal)}/mois`}</PrivateAmount>
+                    <div className="rounded-xl border border-bordure bg-surface-douce p-2.5 sm:p-3 min-w-0">
+                        <div className="text-[11px] sm:text-tiny text-ink-400 truncate">Logement / mois</div>
+                        <div className="text-meta sm:text-body font-mono font-bold text-ink-50 tabular-nums mt-0.5 truncate">
+                            <PrivateAmount>{`${formatCAD(decision.monthlyHousingTotal)}/m`}</PrivateAmount>
                         </div>
                     </div>
-                    <div className="rounded-xl border border-bordure bg-surface-douce p-3 min-w-0">
-                        <div className="text-tiny text-ink-400">Test bancaire (ABD / ATD)</div>
-                        <div className="text-body font-mono font-bold text-ink-50 tabular-nums mt-0.5">
+                    <div className="rounded-xl border border-bordure bg-surface-douce p-2.5 sm:p-3 min-w-0">
+                        <div className="text-[11px] sm:text-tiny text-ink-400 truncate">Test bancaire</div>
+                        <div className="text-meta sm:text-body font-mono font-bold text-ink-50 tabular-nums mt-0.5 truncate">
                             {decision.b20GdsPct !== null && decision.b20TdsPct !== null ? (
                                 <PrivateAmount>
                                     {`${formatPercent(decision.b20GdsPct, 0)} / ${formatPercent(decision.b20TdsPct, 0)}`}
@@ -638,6 +644,20 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
                                 '—'
                             )}
                         </div>
+                        {decision.b20TdsPct !== null && Number.isFinite(decision.b20TdsPct) && (
+                            <div className="mt-1.5 h-1.5 w-full rounded-full bg-fond overflow-hidden" aria-hidden="true">
+                                <div
+                                    className={`h-full rounded-full ${
+                                        decision.b20TdsPct <= 39
+                                            ? 'bg-succes-texte'
+                                            : decision.b20TdsPct <= 44
+                                              ? 'bg-alerte-texte'
+                                              : 'bg-erreur-texte'
+                                    }`}
+                                    style={{ width: isPrivacyMode ? '50%' : `${Math.min(100, Math.max(4, Math.round((decision.b20TdsPct / 50) * 100)))}%` }}
+                                />
+                            </div>
+                        )}
                     </div>
                 </div>
             </section>

@@ -271,12 +271,8 @@ export const FutureUnifiedInsightsPanel: React.FC<FutureUnifiedInsightsPanelProp
                             </span>
                         </div>
 
-                        <p className="text-meta text-texte font-medium break-words">
-                            <PrivateText quoi="memo">{news.macroHeadlineFr}</PrivateText>
-                        </p>
-
                         {valoria && (
-                            <div className="rounded-lg border border-bordure bg-fond p-2.5 flex flex-wrap items-center justify-between gap-2 text-tiny">
+                            <div className="rounded-lg border border-bordure bg-fond px-2.5 py-2 flex flex-wrap items-center justify-between gap-2 text-tiny">
                                 <span className="font-semibold text-texte">
                                     Valoria : {valoria.consensusTitle} ({valoria.regimeName})
                                 </span>
@@ -300,33 +296,50 @@ export const FutureUnifiedInsightsPanel: React.FC<FutureUnifiedInsightsPanelProp
                         )}
 
                         {news.keySignals.length > 0 && (
-                            <ul className="space-y-2">
+                            <ul className="space-y-1.5">
                                 {news.keySignals.slice(0, 3).map((sig) => {
                                     const dir = SIGNAL_DIRECTION_META[sig.direction];
                                     return (
-                                        <li key={sig.id} className="rounded-lg border border-bordure bg-fond p-2.5 space-y-1 min-w-0">
-                                            <div className="flex flex-wrap items-center justify-between gap-1.5">
-                                                <span className="text-tiny font-bold text-texte break-words min-w-0">
-                                                    <PrivateText quoi="memo">{sig.title}</PrivateText>
-                                                </span>
-                                                <span className={`px-2 py-0.5 rounded-full border text-[11px] font-semibold shrink-0 ${dir.cls}`}>
-                                                    {dir.label} · {sig.impactLabel}
-                                                </span>
-                                            </div>
-                                            <p className="text-tiny text-texte-doux break-words">
-                                                <PrivateText quoi="memo">{sig.plainFrench}</PrivateText>
-                                            </p>
+                                        <li key={sig.id} className="rounded-lg border border-bordure bg-fond px-2.5 py-2 flex flex-wrap items-center justify-between gap-1.5 min-w-0">
+                                            <span className="text-tiny font-bold text-texte break-words min-w-0">
+                                                <PrivateText quoi="memo">{sig.title}</PrivateText>
+                                            </span>
+                                            <span className={`px-2 py-0.5 rounded-full border text-[11px] font-semibold shrink-0 ${dir.cls}`}>
+                                                {dir.label} · {sig.impactLabel}
+                                            </span>
                                         </li>
                                     );
                                 })}
                             </ul>
                         )}
 
-                        {news.aiSynthesisFr && (
-                            <div className="rounded-lg border border-bordure-champ bg-fond p-3 text-tiny text-texte break-words">
-                                <span className="font-bold text-repere block mb-0.5">Synthèse Gemini</span>
-                                <PrivateText quoi="memo">{news.aiSynthesisFr}</PrivateText>
-                            </div>
+                        {(news.macroHeadlineFr || news.aiSynthesisFr || news.keySignals.some((s) => Boolean(s.plainFrench))) && (
+                            <details className="rounded-lg border border-bordure bg-fond px-3 py-2 text-tiny text-texte-doux">
+                                <summary className="cursor-pointer select-none font-semibold text-texte hover:text-repere">
+                                    Détails de l’analyse
+                                </summary>
+                                <div className="mt-2 space-y-2">
+                                    {news.macroHeadlineFr && (
+                                        <p className="text-texte break-words">
+                                            <PrivateText quoi="memo">{news.macroHeadlineFr}</PrivateText>
+                                        </p>
+                                    )}
+                                    {news.keySignals.slice(0, 3).map((sig) =>
+                                        sig.plainFrench ? (
+                                            <p key={sig.id} className="text-texte-doux break-words">
+                                                <strong className="text-texte"><PrivateText quoi="memo">{sig.title}</PrivateText> : </strong>
+                                                <PrivateText quoi="memo">{sig.plainFrench}</PrivateText>
+                                            </p>
+                                        ) : null,
+                                    )}
+                                    {news.aiSynthesisFr && (
+                                        <p className="text-texte break-words pt-1 border-t border-bordure">
+                                            <span className="font-bold text-repere">Synthèse Gemini : </span>
+                                            <PrivateText quoi="memo">{news.aiSynthesisFr}</PrivateText>
+                                        </p>
+                                    )}
+                                </div>
+                            </details>
                         )}
                     </div>
                 </div>
@@ -344,14 +357,15 @@ export const FutureUnifiedInsightsPanel: React.FC<FutureUnifiedInsightsPanelProp
                         Aucun point d&apos;inflexion majeur détecté sur cet horizon.
                     </p>
                 ) : (
-                    <ol className="space-y-3">
+                    <ol className="space-y-2.5">
                         {scenario.turningPoints.slice(0, 6).map((tp) => {
                             const kindMeta = TURNING_KIND_META[tp.kind];
                             const isExpanded = Boolean(expandedTurningIds[tp.id]);
+                            const hasDetails = Boolean(tp.summaryFr) || tp.proofDetailsFr.length > 0;
                             return (
                                 <li
                                     key={tp.id}
-                                    className="rounded-xl border border-bordure bg-surface-douce p-3.5 sm:p-4 space-y-2.5 min-w-0"
+                                    className="rounded-xl border border-bordure bg-surface-douce p-3 sm:p-3.5 space-y-2 min-w-0"
                                 >
                                     <div className="flex flex-wrap items-start justify-between gap-2">
                                         <div className="space-y-1 min-w-0">
@@ -369,7 +383,7 @@ export const FutureUnifiedInsightsPanel: React.FC<FutureUnifiedInsightsPanelProp
                                         </div>
 
                                         <div className="flex flex-wrap items-center gap-2 shrink-0">
-                                            {tp.proofDetailsFr.length > 0 && (
+                                            {hasDetails && (
                                                 <button
                                                     type="button"
                                                     aria-expanded={isExpanded}
@@ -389,21 +403,26 @@ export const FutureUnifiedInsightsPanel: React.FC<FutureUnifiedInsightsPanelProp
                                         </div>
                                     </div>
 
-                                    <p className="text-meta text-texte-doux break-words">
-                                        <PrivateText quoi="memo">{tp.summaryFr}</PrivateText>
-                                    </p>
-
-                                    {isExpanded && tp.proofDetailsFr.length > 0 && (
-                                        <ul className="rounded-lg border border-bordure bg-fond p-3 space-y-1 text-tiny text-texte-doux">
-                                            {tp.proofDetailsFr.map((detail, i) => (
-                                                <li key={i} className="flex items-start gap-2 min-w-0">
-                                                    <span className="text-repere shrink-0" aria-hidden="true">→</span>
-                                                    <span className="break-words">
-                                                        <PrivateText quoi="memo">{detail}</PrivateText>
-                                                    </span>
-                                                </li>
-                                            ))}
-                                        </ul>
+                                    {isExpanded && hasDetails && (
+                                        <div className="rounded-lg border border-bordure bg-fond p-3 space-y-2 text-tiny text-texte-doux">
+                                            {tp.summaryFr && (
+                                                <p className="text-texte break-words">
+                                                    <PrivateText quoi="memo">{tp.summaryFr}</PrivateText>
+                                                </p>
+                                            )}
+                                            {tp.proofDetailsFr.length > 0 && (
+                                                <ul className="space-y-1">
+                                                    {tp.proofDetailsFr.map((detail, i) => (
+                                                        <li key={i} className="flex items-start gap-2 min-w-0">
+                                                            <span className="text-repere shrink-0" aria-hidden="true">→</span>
+                                                            <span className="break-words">
+                                                                <PrivateText quoi="memo">{detail}</PrivateText>
+                                                            </span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                        </div>
                                     )}
                                 </li>
                             );
@@ -481,9 +500,16 @@ export const FutureUnifiedInsightsPanel: React.FC<FutureUnifiedInsightsPanelProp
                                                     </label>
                                                 )}
                                             </div>
-                                            <p className="text-tiny text-texte-doux break-words">
-                                                <PrivateText quoi="memo">{action.plainFrenchWhy}</PrivateText>
-                                            </p>
+                                            {action.plainFrenchWhy && (
+                                                <details className="text-tiny text-texte-doux">
+                                                    <summary className="cursor-pointer select-none hover:text-texte">
+                                                        Pourquoi ?
+                                                    </summary>
+                                                    <p className="mt-1 break-words">
+                                                        <PrivateText quoi="memo">{action.plainFrenchWhy}</PrivateText>
+                                                    </p>
+                                                </details>
+                                            )}
                                             {(gainOk || monthsOk || action.isAlreadyApplied) && (
                                                 <div className="flex flex-wrap items-center gap-2 pt-1">
                                                     {action.isAlreadyApplied && (

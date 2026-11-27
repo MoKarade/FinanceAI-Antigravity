@@ -114,16 +114,13 @@ export const FutureCoreMilestonesGrid: React.FC<FutureCoreMilestonesGridProps> =
                     data-testid="retirement-success-gauge"
                     className="rounded-2xl border border-bordure bg-surface p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                 >
-                    <div className="space-y-1 min-w-0">
-                        <div className="text-tiny font-bold uppercase tracking-wider text-texte-doux">
-                            Solidité du plan retraite
-                        </div>
-                        <p className="text-body font-semibold text-texte">
-                            <span className={`font-mono font-extrabold ${survivalTextCls}`}>
-                                <PrivateAmount>{`${survivalChancePct} chances sur 100`}</PrivateAmount>
-                            </span>{' '}
-                            de tenir jusqu’à la fin de l’horizon sans manquer de liquidités.
-                        </p>
+                    <div className="flex items-baseline justify-between sm:justify-start gap-3 min-w-0">
+                        <span className="text-tiny font-bold uppercase tracking-wider text-texte-doux">
+                            Solidité retraite
+                        </span>
+                        <span className={`font-mono text-body sm:text-h3 font-extrabold ${survivalTextCls}`}>
+                            <PrivateAmount>{`${survivalChancePct} chances sur 100`}</PrivateAmount>
+                        </span>
                     </div>
                     <div className="w-full sm:w-56 shrink-0 space-y-1">
                         <div className="h-2.5 w-full rounded-full bg-surface-douce overflow-hidden border border-bordure">
