@@ -288,26 +288,26 @@ export const AccueilHeroTrajectoire: React.FC<AccueilHeroTrajectoireProps> = ({
     pointsTempsForts,
     colonnesTrajectoire,
 }) => (
-    <div aria-label="Trajectoire du patrimoine" className="p-6 sm:p-8 space-y-6 bg-surface">
-        <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6">
+    <div aria-label="Trajectoire du patrimoine" className="p-3.5 sm:p-8 space-y-3 sm:space-y-6 bg-surface">
+        <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-3 xl:gap-6">
             {/* Gauche : Titre, Montant Héro animé et Variation */}
-            <div className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2.5 text-sm text-ink-300">
+            <div className="space-y-1.5 sm:space-y-3">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 text-xs sm:text-sm text-ink-300">
                     <span className="sr-only">Trajectoire</span>
                     <span className="gf-ticker-symbol">{lentilleCourante.ticker}</span>
                     <span aria-hidden="true" className="text-ink-400">·</span>
-                    <h1 className="font-semibold text-ink-100 tracking-normal text-base sm:text-lg">
+                    <h1 className="font-semibold text-ink-100 tracking-normal text-sm sm:text-lg">
                         {prenom ? `${prenom} · ${lentilleCourante.label}` : lentilleCourante.label}
                     </h1>
                     <FxEstimateBadge />
                 </div>
 
-                <div className="flex flex-wrap items-baseline gap-3.5">
+                <div className="flex flex-wrap items-baseline gap-2.5 sm:gap-3.5">
                     <AnimatedNetWorth
                         value={valeurHeroAffichee}
                         as="div"
                         testId="animated-global-net-worth"
-                        className="font-mono tabular-nums text-4xl sm:text-5xl font-bold tracking-normal text-ink-50 leading-none"
+                        className="font-mono tabular-nums text-3xl sm:text-5xl font-bold tracking-normal text-ink-50 leading-none"
                     />
 
                     {variation && lentilleHero === 'net' ? (
@@ -348,7 +348,7 @@ export const AccueilHeroTrajectoire: React.FC<AccueilHeroTrajectoireProps> = ({
             <div
                 role="group"
                 aria-label="Lentille d'affichage du patrimoine"
-                className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 w-full xl:w-auto xl:min-w-[600px]"
+                className="flex overflow-x-auto no-scrollbar snap-x gap-2 w-full sm:grid sm:grid-cols-4 sm:gap-2.5 xl:w-auto xl:min-w-[600px]"
             >
                 {(
                     [
@@ -365,13 +365,13 @@ export const AccueilHeroTrajectoire: React.FC<AccueilHeroTrajectoireProps> = ({
                             type="button"
                             aria-pressed={actif}
                             onClick={() => setLentilleHero(l.cle)}
-                            className={`touch-target rounded-xl px-4 py-3 text-left border transition-all duration-150 flex flex-col justify-between gap-1.5 focus-ring ${
+                            className={`touch-target min-h-11 min-w-[132px] sm:min-w-0 shrink-0 snap-start rounded-xl px-3 py-2 sm:px-4 sm:py-3 text-left border transition-all duration-150 flex flex-col justify-between gap-1 sm:gap-1.5 focus-ring ${
                                 actif
                                     ? 'bg-surface-douce border-bordure-champ'
                                     : 'bg-fond border-bordure hover:bg-surface-douce hover:border-bordure-champ'
                             }`}
                         >
-                            <div className="flex items-center gap-2 text-xs text-ink-300">
+                            <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-ink-300">
                                 <span className={`w-2 h-2 rounded-full shrink-0 ${l.dotClass}`} aria-hidden="true" />
                                 <span className="truncate font-medium">{l.label}</span>
                                 <span className="sr-only">{l.ticker}</span>
@@ -386,12 +386,12 @@ export const AccueilHeroTrajectoire: React.FC<AccueilHeroTrajectoireProps> = ({
         </div>
 
         {/* Barre d'outils épurée de la courbe */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-bordure">
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 pt-2.5 sm:pt-4 border-t border-bordure">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 w-full sm:w-auto min-w-0">
                 <div
                     role="group"
                     aria-label="Horizon de la courbe"
-                    className="inline-flex items-center p-1 rounded-full border border-bordure bg-fond gap-1 max-w-full overflow-x-auto no-scrollbar"
+                    className="inline-flex items-center p-1 rounded-full border border-bordure bg-fond gap-0.5 sm:gap-1 max-w-full overflow-x-auto no-scrollbar"
                 >
                     {HORIZONS.map((h) => (
                         <button
@@ -399,7 +399,7 @@ export const AccueilHeroTrajectoire: React.FC<AccueilHeroTrajectoireProps> = ({
                             type="button"
                             aria-pressed={horizon === h.cle}
                             onClick={() => setHorizon(h.cle)}
-                            className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-mono font-semibold tabular-nums transition-colors duration-100 focus-ring ${
+                            className={`touch-target min-h-11 shrink-0 px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-mono font-semibold tabular-nums transition-colors duration-100 focus-ring ${
                                 horizon === h.cle ? 'gf-subtab-pill-active' : 'text-ink-300 hover:text-ink-50'
                             }`}
                         >
@@ -408,94 +408,102 @@ export const AccueilHeroTrajectoire: React.FC<AccueilHeroTrajectoireProps> = ({
                     ))}
                 </div>
 
-                <div
-                    role="group"
-                    aria-label="Série affichée sur la courbe"
-                    className="inline-flex items-center p-1 rounded-full border border-bordure bg-fond gap-1"
-                >
-                    <button
-                        type="button"
-                        aria-pressed={modeCourbe === 'nette'}
-                        onClick={() => setModeCourbe('nette')}
-                        className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring whitespace-nowrap ${
-                            modeCourbe === 'nette' ? 'gf-subtab-pill-active' : 'text-ink-300 hover:text-ink-50'
-                        }`}
-                    >
-                        Valeur nette
-                    </button>
-                    <button
-                        type="button"
-                        aria-pressed={modeCourbe === 'complete'}
-                        onClick={() => setModeCourbe('complete')}
-                        className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring whitespace-nowrap ${
-                            modeCourbe === 'complete' ? 'gf-subtab-pill-active' : 'text-ink-300 hover:text-ink-50'
-                        }`}
-                    >
-                        Par compte · + Avoirs
-                    </button>
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full sm:flex-wrap sm:flex-1 sm:justify-between">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 sm:flex-wrap">
+                        <div
+                            role="group"
+                            aria-label="Série affichée sur la courbe"
+                            className="inline-flex items-center p-1 rounded-full border border-bordure bg-fond gap-1 shrink-0"
+                        >
+                            <button
+                                type="button"
+                                aria-pressed={modeCourbe === 'nette'}
+                                onClick={() => setModeCourbe('nette')}
+                                className={`touch-target min-h-11 px-3 sm:px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring whitespace-nowrap shrink-0 ${
+                                    modeCourbe === 'nette' ? 'gf-subtab-pill-active' : 'text-ink-300 hover:text-ink-50'
+                                }`}
+                            >
+                                Valeur nette
+                            </button>
+                            <button
+                                type="button"
+                                aria-pressed={modeCourbe === 'complete'}
+                                onClick={() => setModeCourbe('complete')}
+                                className={`touch-target min-h-11 px-3 sm:px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring whitespace-nowrap shrink-0 ${
+                                    modeCourbe === 'complete' ? 'gf-subtab-pill-active' : 'text-ink-300 hover:text-ink-50'
+                                }`}
+                            >
+                                Par compte<span className="hidden sm:inline"> · + Avoirs</span>
+                            </button>
+                        </div>
+
+                        <button
+                            type="button"
+                            aria-pressed={tempsFortsActifs}
+                            onClick={() => setTempsFortsActifs((v) => !v)}
+                            className={`touch-target min-h-11 shrink-0 whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium inline-flex items-center gap-1.5 sm:gap-2 border transition-all duration-150 focus-ring ${
+                                tempsFortsActifs
+                                    ? 'gf-delta-amber'
+                                    : 'bg-fond text-ink-300 border-bordure hover:text-ink-50'
+                            }`}
+                        >
+                            <span className="gf-amber-dot shrink-0" aria-hidden="true" />
+                            <span>Temps forts</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            data-testid="accueil-toggle-mc"
+                            aria-pressed={runMC}
+                            onClick={() => {
+                                const next = !runMC;
+                                setRunMC(next);
+                                if (next && lentilleHero !== 'net') setLentilleHero('net');
+                            }}
+                            title={runMC ? 'Masquer les courbes Monte Carlo (P10–P90)' : 'Afficher les courbes Monte Carlo (P10–P90)'}
+                            className={`touch-target min-h-11 shrink-0 whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium inline-flex items-center gap-1.5 sm:gap-2 border transition-all duration-150 focus-ring ${
+                                runMC
+                                    ? 'gf-subtab-pill-active'
+                                    : 'bg-fond text-ink-300 border-bordure hover:text-ink-50 hover:border-bordure-champ'
+                            }`}
+                        >
+                            <span className="w-2 h-2 rounded-full gf-alloc-nonreg shrink-0" aria-hidden="true" />
+                            <span>Monte Carlo</span>
+                        </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 sm:ml-auto">
+                        <button
+                            type="button"
+                            onClick={onBasculerHorizonSuivant}
+                            aria-label="Choisir la durée Présent et Futur de la courbe"
+                            className="touch-target min-h-11 shrink-0 whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-mono text-ink-300 hover:text-ink-50 inline-flex items-center gap-1.5 sm:gap-2 transition-colors duration-100 focus-ring"
+                        >
+                            <Icon name="refresh" size={13} aria-hidden="true" />
+                            <span>
+                                <span className="hidden sm:inline">{isDailyCurve ? 'Pas quotidien (' : 'Pas mensuel ('}</span>
+                                {isDailyCurve ? '1 j' : '1 m'}
+                                <span className="hidden sm:inline">)</span>
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab(Tab.FUTURE)}
+                            onMouseEnter={() => prefetchTab(Tab.FUTURE)}
+                            className="touch-target min-h-11 shrink-0 whitespace-nowrap px-3 sm:px-4 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-1 sm:gap-1.5 transition-colors duration-100 focus-ring"
+                        >
+                            <span>Simulateur</span>
+                            <Icon name="chevron-right" size={14} aria-hidden="true" />
+                        </button>
+                    </div>
                 </div>
-
-                <button
-                    type="button"
-                    aria-pressed={tempsFortsActifs}
-                    onClick={() => setTempsFortsActifs((v) => !v)}
-                    className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium inline-flex items-center gap-2 border transition-all duration-150 focus-ring ${
-                        tempsFortsActifs
-                            ? 'gf-delta-amber'
-                            : 'bg-fond text-ink-300 border-bordure hover:text-ink-50'
-                    }`}
-                >
-                    <span className="gf-amber-dot shrink-0" aria-hidden="true" />
-                    <span>Temps forts</span>
-                </button>
-
-                <button
-                    type="button"
-                    data-testid="accueil-toggle-mc"
-                    aria-pressed={runMC}
-                    onClick={() => {
-                        const next = !runMC;
-                        setRunMC(next);
-                        if (next && lentilleHero !== 'net') setLentilleHero('net');
-                    }}
-                    title={runMC ? 'Masquer les courbes Monte Carlo (P10–P90)' : 'Afficher les courbes Monte Carlo (P10–P90)'}
-                    className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium inline-flex items-center gap-2 border transition-all duration-150 focus-ring ${
-                        runMC
-                            ? 'gf-subtab-pill-active'
-                            : 'bg-fond text-ink-300 border-bordure hover:text-ink-50 hover:border-bordure-champ'
-                    }`}
-                >
-                    <span className="w-2 h-2 rounded-full gf-alloc-nonreg shrink-0" aria-hidden="true" />
-                    <span>Monte Carlo</span>
-                </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-                <button
-                    type="button"
-                    onClick={onBasculerHorizonSuivant}
-                    aria-label="Choisir la durée Présent et Futur de la courbe"
-                    className="touch-target px-3.5 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce text-xs font-mono text-ink-300 hover:text-ink-50 inline-flex items-center gap-2 transition-colors duration-100 focus-ring"
-                >
-                    <Icon name="refresh" size={13} aria-hidden="true" />
-                    <span>{isDailyCurve ? 'Pas quotidien (1 j)' : 'Pas mensuel (1 m)'}</span>
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() => setActiveTab(Tab.FUTURE)}
-                    onMouseEnter={() => prefetchTab(Tab.FUTURE)}
-                    className="touch-target px-4 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-1.5 transition-colors duration-100 focus-ring whitespace-nowrap shrink-0"
-                >
-                    <span>Simulateur</span>
-                    <Icon name="chevron-right" size={14} aria-hidden="true" />
-                </button>
             </div>
         </div>
 
         {/* Lecture directe de la fenêtre ou du point survolé / épinglé */}
         {(pointInspecte || resumeFenetre) && (
-            <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-fond border border-bordure text-xs font-mono tabular-nums">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-fond border border-bordure text-[11px] sm:text-xs font-mono tabular-nums">
                 {pointInspecte && typeof pointInspecte.valeur === 'number' ? (
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                         <span className="font-semibold text-ink-50">
@@ -559,28 +567,28 @@ export const AccueilHeroTrajectoire: React.FC<AccueilHeroTrajectoireProps> = ({
         {lentilleHero === 'net' && (
             <div
                 data-testid="accueil-mc-legend"
-                className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-ink-300"
+                className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 px-1 text-[11px] sm:text-xs text-ink-300"
             >
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <span className="inline-flex items-center gap-1.5">
+                <div className="flex items-center gap-x-3 sm:gap-x-4 overflow-x-auto no-scrollbar whitespace-nowrap sm:flex-wrap sm:gap-y-1 max-w-full">
+                    <span className="inline-flex items-center gap-1.5 shrink-0">
                         <span className="w-4 border-t-2" style={{ borderColor: 'var(--gf-bleu)' }} aria-hidden="true" />
                         <span>Passé réel</span>
                     </span>
-                    <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1.5 shrink-0">
                         <span className="w-4 border-t-2" style={{ borderColor: 'var(--gf-vert)' }} aria-hidden="true" />
                         <span>Projection</span>
                     </span>
                     {runMC && (
                         <>
-                            <span className="inline-flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1.5 shrink-0">
                                 <span className="w-4 border-t-2 border-dashed" style={{ borderColor: 'var(--gf-violet)' }} aria-hidden="true" />
                                 <span>Favorable (P90)</span>
                             </span>
-                            <span className="inline-flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1.5 shrink-0">
                                 <span className="w-4 border-t-2 border-dotted" style={{ borderColor: 'var(--gf-bleu)' }} aria-hidden="true" />
                                 <span>Médiane (P50)</span>
                             </span>
-                            <span className="inline-flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1.5 shrink-0">
                                 <span className="w-4 border-t-2 border-dashed" style={{ borderColor: 'var(--gf-rouge)' }} aria-hidden="true" />
                                 <span>Prudent (P10)</span>
                             </span>
@@ -610,7 +618,7 @@ export const AccueilHeroTrajectoire: React.FC<AccueilHeroTrajectoireProps> = ({
             data-chart-lens={lentilleHero}
             role="img"
             aria-label="Graphique combiné du présent et du futur projeté — valeurs détaillées dans le tableau de données."
-            className="h-[340px] sm:h-[400px] w-full gf-chart-enter py-2 cursor-crosshair"
+            className="h-[235px] sm:h-[400px] w-full gf-chart-enter py-1 sm:py-2 cursor-crosshair"
         >
             <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart

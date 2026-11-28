@@ -44,8 +44,8 @@ export const FuturePeriodSelector: React.FC<Props> = ({
 
     if (variant === 'compact') {
         return (
-            <div className="flex items-center gap-1.5 flex-wrap">
-                <div className="gf-chart-toolbar">
+            <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto no-scrollbar max-w-full">
+                <div className="gf-chart-toolbar shrink-0">
                     {zoom.isZoomed && (
                         <>
                             <button
@@ -92,7 +92,7 @@ export const FuturePeriodSelector: React.FC<Props> = ({
                     <button
                         type="button"
                         onClick={zoom.reset}
-                        className="h-11 px-3 rounded-full text-xs font-semibold gf-delta-neutral focus-ring"
+                        className="h-11 px-2.5 whitespace-nowrap rounded-full text-xs font-semibold gf-delta-neutral focus-ring shrink-0"
                         title="Réinitialiser le zoom et afficher toute la courbe Passé + Futur"
                     >
                         Tout voir
@@ -107,7 +107,7 @@ export const FuturePeriodSelector: React.FC<Props> = ({
                                 ? zoom.reset()
                                 : zoom.showRange(since2025PresetRange[0], since2025PresetRange[1])
                         }
-                        className={`h-11 px-3 rounded-full text-xs font-medium border transition-colors focus-ring ${
+                        className={`h-11 px-2.5 whitespace-nowrap rounded-full text-xs font-medium border transition-colors focus-ring shrink-0 ${
                             isSince2025Range
                                 ? 'gf-delta-amber'
                                 : 'bg-surface border-bordure text-ink-200 hover:text-ink-50'
@@ -126,7 +126,7 @@ export const FuturePeriodSelector: React.FC<Props> = ({
                                 ? zoom.reset()
                                 : zoom.showRange(todayPresetRange[0], todayPresetRange[1])
                         }
-                        className={`h-11 px-3 rounded-full text-xs font-medium border transition-colors focus-ring ${
+                        className={`h-11 px-2.5 whitespace-nowrap rounded-full text-xs font-medium border transition-colors focus-ring shrink-0 ${
                             isTodayRange
                                 ? 'gf-delta-amber'
                                 : 'bg-surface border-bordure text-ink-200 hover:text-ink-50'

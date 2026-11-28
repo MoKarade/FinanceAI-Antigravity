@@ -1299,12 +1299,15 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     const visibleLifeEvents = lifeChartEvents.filter((e) => e.monthIndex >= visMinMonth && e.monthIndex <= visMaxMonth);
     const visibleFlowEvents = flowChartEvents.filter((e) => e.monthIndex >= visMinMonth && e.monthIndex <= visMaxMonth);
     const thinEvents = sampleEvenly;
-    const MAX_LIFE_ICONS = 24;
-    const MAX_FLOW_ICONS = 16;
-    const shownLifeEvents = assignStackIndex([
-        ...thinEvents(visibleLifeEvents.filter((e) => !e.pinned), MAX_LIFE_ICONS),
-        ...visibleLifeEvents.filter((e) => e.pinned),
-    ]);
+    const MAX_LIFE_ICONS = isNarrowViewport ? (zoom.isZoomed ? 8 : 4) : 24;
+    const MAX_FLOW_ICONS = isNarrowViewport ? (zoom.isZoomed ? 4 : 0) : 16;
+    const pinnedLife = visibleLifeEvents.filter((e) => e.pinned);
+    const unpinnedLife = visibleLifeEvents.filter((e) => !e.pinned);
+    const shownLifeEvents = assignStackIndex(
+        isNarrowViewport
+            ? thinEvents([...pinnedLife, ...unpinnedLife], MAX_LIFE_ICONS)
+            : [...thinEvents(unpinnedLife, MAX_LIFE_ICONS), ...pinnedLife],
+    );
     const shownFlowEvents = assignStackIndex(thinEvents(visibleFlowEvents, MAX_FLOW_ICONS));
     const lastMonthIndex = chartData.length > 0 ? chartData[chartData.length - 1].monthIndex : 0;
 
@@ -1349,7 +1352,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     const naviguerVers = (tab: Tab) => useFinanceStore.getState().setActiveTab(tab);
 
     const cellCourbe =
-        'touch-target min-h-11 gf-quote-cell inline-flex items-center gap-2 rounded-xl border border-bordure hover:border-repere bg-surface-douce px-3 py-1.5 text-tiny cursor-pointer transition-colors focus-ring shrink-0';
+        'touch-target min-h-11 inline-flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-xl border border-bordure hover:border-repere bg-surface-douce px-3 py-1.5 text-tiny cursor-pointer transition-colors focus-ring shrink-0';
     const statsCourbe = (
         <div className="flex items-center gap-2 shrink-0">
             <button
@@ -1400,7 +1403,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     ) : undefined;
 
     const actionsCourbe = (
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5">
             <button
                 type="button"
                 onClick={() => setTiroirOuvert('hypotheses')}
@@ -1465,7 +1468,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
     );
 
     return (
-        <div className="space-y-4 lg:space-y-6 pb-24">
+        <div className="space-y-2.5 sm:space-y-4 lg:space-y-6 pb-24">
             <PageHeader
                 title="Projection"
                 badge={insolvencyBadge}
@@ -1551,7 +1554,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
             )}
 
             {curveVisible && (
-                <div ref={revealedRef} tabIndex={-1} className="outline-hidden space-y-4 lg:space-y-6" role="region" aria-label="Projection affichée">
+                <div ref={revealedRef} tabIndex={-1} className="outline-hidden space-y-2.5 sm:space-y-4 lg:space-y-6" role="region" aria-label="Projection affichée">
                     <SubTabs
                         idPrefix="futur"
                         label="Sections du Futur"
@@ -1573,7 +1576,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                         idPrefix="futur"
                         tab="courbe"
                         when={futurTab === 'courbe'}
-                        className="space-y-4 lg:space-y-6 focus-ring rounded-card"
+                        className="space-y-2.5 sm:space-y-4 lg:space-y-6 focus-ring rounded-card"
                     >
                     {alerteObjectifs && (
                         <div className="flex flex-wrap items-center gap-3 rounded-card border border-alerte-texte/40 bg-alerte-fond px-4 py-2.5">
@@ -1609,9 +1612,9 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                     />
 
                     {/* Bloc 2 : Carte graphique épurée + ruban [P10, P90] unique + FutureRichTooltip */}
-                    <section aria-labelledby="courbe-vie-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure px-3 py-3.5 sm:px-5 sm:py-4 lg:px-6 lg:pt-5 lg:pb-6 space-y-4">
+                    <section aria-labelledby="courbe-vie-titre" className="gf-terminal-card rounded-2xl bg-surface border border-bordure p-2.5 sm:px-5 sm:py-4 lg:px-6 lg:pt-5 lg:pb-6 space-y-2.5 sm:space-y-4">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-bordure-champ bg-surface-douce px-3 py-1 text-tiny font-bold text-texte">
+                            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-bordure-champ bg-surface-douce px-3 py-1 text-tiny font-bold text-texte">
                                 <span className="w-2 h-2 rounded-full bg-accent" aria-hidden="true" />
                                 Scénario affiché : {activeScenarioOutput.label}
                             </span>
@@ -1634,7 +1637,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                 <span className="font-semibold">
                                     {deepForecast.activeReport.isDeepRun ? 'Fourchette possible approfondie' : 'Fourchette possible estimée'}
                                 </span>
-                                <span className="text-texte-doux">
+                                <span className="hidden sm:inline text-texte-doux">
                                     Favorable · Central · Prudent
                                     {deepForecast.activeReport.pastDiagnostic.pastCurveCalibration?.hasUsableCurve
                                         ? ' · calibrée depuis janv. 2025'
@@ -1662,7 +1665,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                         <h2 id="courbe-vie-titre" className="sr-only">La courbe de vie</h2>
 
                         <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-bordure">
-                            <div className="flex flex-wrap items-center gap-2 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
                                 <FutureCurveToolbar
                                     modeCourbe={modeCourbe}
                                     onChangeModeCourbe={setModeCourbe}
@@ -1673,9 +1676,11 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                     onClearComparaison={() => setComparaisonPoints({ a: null, b: null })}
                                     mcLabel={libelleMC}
                                 />
-                                {statsCourbe}
+                                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full">
+                                    {statsCourbe}
+                                </div>
                             </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
+                            <div className="flex flex-wrap items-center gap-1.5 max-w-full">
                                 {isComputing && (
                                     <span className="flex items-center gap-1.5 text-tiny text-alerte-texte" role="status" aria-live="polite">
                                         <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -1796,7 +1801,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                             }}
                             tabIndex={0}
                             onKeyDown={handleChartKeyDown}
-                            className="chart-fullscreen relative w-full select-none focus-ring rounded-lg cursor-crosshair gf-chart-enter"
+                            className="chart-fullscreen scroll-mb-24 lg:scroll-mb-6 relative w-full select-none focus-ring rounded-lg cursor-crosshair gf-chart-enter"
                             role="group"
                             aria-roledescription="graphique"
                             aria-label="Courbe de vie — évolution projetée du patrimoine net et de chaque compte dans le temps. Le détail du jour visé est affiché dans l'infobulle sur la courbe ; les mêmes données sont aussi lisibles sous forme de tableau et de liste de jalons. À la souris : survol = aperçu, clic = épingle l'infobulle, glisser = comparer deux dates, molette = zoom. Au clavier : Entrée ou flèches = épingle le jour d'aujourd'hui, Échap = relâche."
@@ -1951,7 +1956,7 @@ export const FutureProjection: React.FC<FutureProjectionProps> = ({
                                                         stroke={mk.color}
                                                         strokeOpacity={0.5}
                                                         strokeDasharray="2 4"
-                                                        label={etroit && mk.jalon ? undefined : <RefLineLabel value={mk.label} color={mk.color} jalon={mk.jalon} />}
+                                                        label={isNarrowViewport || (etroit && mk.jalon) ? undefined : <RefLineLabel value={mk.label} color={mk.color} jalon={mk.jalon} />}
                                                     />
                                                 ))}
 

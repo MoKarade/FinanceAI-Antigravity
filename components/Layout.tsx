@@ -315,109 +315,148 @@ export const Layout: React.FC<LayoutProps> = ({
       <main
         id="main"
         tabIndex={-1}
-        className={`flex-1 min-w-0 ${margeMain} px-2.5 sm:px-4 lg:px-6 pb-20 lg:pb-6 pt-2 sm:pt-3 lg:pt-4 min-h-dvh relative z-0 focus:outline-hidden`}
+        className={`flex-1 min-w-0 ${margeMain} px-3 sm:px-4 lg:px-6 pb-20 lg:pb-6 pt-1.5 sm:pt-3 lg:pt-4 min-h-dvh relative z-0 focus:outline-hidden`}
       >
-        <div className="w-full min-w-0 max-w-[1600px] mx-auto space-y-2.5 sm:space-y-3.5 lg:space-y-4">
+        <div className="w-full min-w-0 max-w-[1600px] mx-auto space-y-2 sm:space-y-3.5 lg:space-y-4">
           {/* Barre supérieure unique : fil d'Ariane + barre de recherche directe (masquée sur Accueil qui possède déjà son Omnibox) */}
           {activeTab !== Tab.DASHBOARD && (
-          <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-bordure">
-            <div className="flex items-center gap-2 min-w-0 shrink-0">
-              {surPagePlus && (
-                <button
-                  type="button"
-                  onClick={() => setShowMobileDrawer(true)}
-                  className="touch-target lg:hidden px-1.5 min-h-11 min-w-11 inline-flex items-center text-meta text-ink-400 hover:text-ink-100 focus-ring rounded-sm"
-                >
-                  ‹ Plus
-                </button>
-              )}
-              <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-ink-400 truncate">
-                <span className="font-semibold uppercase tracking-wider text-repere">
-                  {groupeActif ? groupeActif.label : 'Dossier'}
-                </span>
-                <span aria-hidden="true">/</span>
-                <span className="font-semibold text-ink-100 truncate">{TAB_LABELS[activeTab]}</span>
+          <div ref={searchContainerRef} className="relative pb-1.5 sm:pb-2.5 border-b border-bordure">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-none sm:shrink-0">
+                {surPagePlus && (
+                  <button
+                    type="button"
+                    onClick={() => setShowMobileDrawer(true)}
+                    className="touch-target lg:hidden px-1.5 min-h-11 min-w-11 inline-flex items-center text-meta text-ink-400 hover:text-ink-100 focus-ring rounded-sm shrink-0"
+                  >
+                    ‹ Plus
+                  </button>
+                )}
+                <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-ink-400 truncate min-w-0">
+                  <span className="font-semibold uppercase tracking-wider text-repere shrink-0">
+                    {groupeActif ? groupeActif.label : 'Dossier'}
+                  </span>
+                  <span aria-hidden="true">/</span>
+                  <span className="font-semibold text-ink-100 truncate">{TAB_LABELS[activeTab]}</span>
+                </div>
               </div>
+
+              <div className="hidden sm:block relative sm:w-80 lg:w-96 shrink-0">
+                <div className="relative flex items-center gf-omnibox-pill px-3 h-10">
+                  <Icon name="search" size={14} className="text-ink-400 pointer-events-none shrink-0" aria-hidden="true" />
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onFocus={() => setSearchOpen(true)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setSearchOpen(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setSearchOpen(false);
+                      } else if (e.key === 'Enter' && resultatsRecherche.pagesFiltrees[0]) {
+                        setActiveTab(resultatsRecherche.pagesFiltrees[0].tab);
+                        setSearchOpen(false);
+                        setSearchQuery('');
+                      }
+                    }}
+                    placeholder="Rechercher page, titre…"
+                    aria-label="Rechercher une page, un titre ou une opération"
+                    className="touch-target champ-nu w-full h-9 pl-2 pr-1 text-xs text-ink-50 placeholder:text-ink-400"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSearchOpen((v) => !v)}
+                aria-label="Ouvrir la recherche rapide"
+                aria-expanded={searchOpen}
+                className="touch-target min-h-11 min-w-11 sm:hidden rounded-full border border-bordure bg-surface inline-flex items-center justify-center text-ink-200 hover:text-ink-50 focus-ring shrink-0"
+              >
+                <Icon name="search" size={16} aria-hidden="true" />
+              </button>
             </div>
 
-            <div ref={searchContainerRef} className="relative flex-1 min-w-0 max-w-[220px] sm:max-w-none sm:flex-none sm:w-80 lg:w-96">
-              <div className="relative flex items-center gf-omnibox-pill px-3 h-9 sm:h-10">
-                <Icon name="search" size={14} className="text-ink-400 pointer-events-none shrink-0" aria-hidden="true" />
-                <input
-                  type="search"
-                  value={searchQuery}
-                  onFocus={() => setSearchOpen(true)}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setSearchOpen(true);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      setSearchOpen(false);
-                    } else if (e.key === 'Enter' && resultatsRecherche.pagesFiltrees[0]) {
-                      setActiveTab(resultatsRecherche.pagesFiltrees[0].tab);
-                      setSearchOpen(false);
-                      setSearchQuery('');
-                    }
-                  }}
-                  placeholder="Rechercher page, titre…"
-                  aria-label="Rechercher une page, un titre ou une opération"
-                  className="touch-target champ-nu w-full h-9 pl-2 pr-1 text-xs text-ink-50 placeholder:text-ink-400"
-                />
-              </div>
+            {searchOpen && (
+              <div
+                role="listbox"
+                aria-label="Résultats de recherche rapide"
+                className="absolute right-0 mt-1.5 w-full sm:w-80 lg:w-96 rounded-2xl bg-surface border border-bordure-champ shadow-2xl py-2 z-50 divide-y divide-bordure"
+              >
+                <div className="px-2.5 pb-2 sm:hidden">
+                  <div className="relative flex items-center gf-omnibox-pill px-3 h-11">
+                    <Icon name="search" size={15} className="text-ink-400 pointer-events-none shrink-0" aria-hidden="true" />
+                    <input
+                      type="search"
+                      autoFocus
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setSearchOpen(true);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setSearchOpen(false);
+                        } else if (e.key === 'Enter' && resultatsRecherche.pagesFiltrees[0]) {
+                          setActiveTab(resultatsRecherche.pagesFiltrees[0].tab);
+                          setSearchOpen(false);
+                          setSearchQuery('');
+                        }
+                      }}
+                      placeholder="Rechercher page, titre…"
+                      aria-label="Rechercher une page, un titre ou une opération"
+                      className="touch-target champ-nu w-full h-10 pl-2 pr-1 text-sm text-ink-50 placeholder:text-ink-400"
+                    />
+                  </div>
+                </div>
 
-              {searchOpen && (
-                <div
-                  role="listbox"
-                  aria-label="Résultats de recherche rapide"
-                  className="absolute right-0 mt-1.5 w-[min(20rem,calc(100vw-1.5rem))] sm:w-full rounded-2xl bg-surface border border-bordure-champ shadow-2xl py-2 z-50 divide-y divide-bordure"
-                >
-                  <div className="px-2 pb-1">
-                    <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400">Pages</p>
-                    {resultatsRecherche.pagesFiltrees.map((dest) => (
+                <div className="px-2 pb-1">
+                  <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400">Pages</p>
+                  {resultatsRecherche.pagesFiltrees.map((dest) => (
+                    <button
+                      key={dest.tab}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab(dest.tab);
+                        setSearchOpen(false);
+                        setSearchQuery('');
+                      }}
+                      onMouseEnter={() => prefetchTab(dest.tab)}
+                      className="touch-target w-full px-2.5 py-1.5 rounded-lg flex items-center justify-between text-xs text-ink-100 hover:bg-surface-douce focus-ring"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Icon name={dest.icon} size={14} className="text-repere" aria-hidden="true" />
+                        <span className="font-medium text-ink-50">{dest.label}</span>
+                      </span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full gf-delta-neutral">{dest.group}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {!isPrivacyMode && resultatsRecherche.titresFiltres.length > 0 && (
+                  <div className="px-2 pt-2">
+                    <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400">Titres en portefeuille</p>
+                    {resultatsRecherche.titresFiltres.map((asset, idx) => (
                       <button
-                        key={dest.tab}
+                        key={`${asset.symbol}-${idx}`}
                         type="button"
                         onClick={() => {
-                          setActiveTab(dest.tab);
+                          setActiveTab(Tab.INVESTMENTS);
                           setSearchOpen(false);
                           setSearchQuery('');
                         }}
-                        onMouseEnter={() => prefetchTab(dest.tab)}
                         className="touch-target w-full px-2.5 py-1.5 rounded-lg flex items-center justify-between text-xs text-ink-100 hover:bg-surface-douce focus-ring"
                       >
-                        <span className="flex items-center gap-2">
-                          <Icon name={dest.icon} size={14} className="text-repere" aria-hidden="true" />
-                          <span className="font-medium text-ink-50">{dest.label}</span>
-                        </span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full gf-delta-neutral">{dest.group}</span>
+                        <span className="font-semibold font-mono text-repere">{asset.symbol || asset.name}</span>
+                        <span className="text-[11px] text-ink-300 truncate max-w-[160px]">{asset.name}</span>
                       </button>
                     ))}
                   </div>
-
-                  {!isPrivacyMode && resultatsRecherche.titresFiltres.length > 0 && (
-                    <div className="px-2 pt-2">
-                      <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400">Titres en portefeuille</p>
-                      {resultatsRecherche.titresFiltres.map((asset, idx) => (
-                        <button
-                          key={`${asset.symbol}-${idx}`}
-                          type="button"
-                          onClick={() => {
-                            setActiveTab(Tab.INVESTMENTS);
-                            setSearchOpen(false);
-                            setSearchQuery('');
-                          }}
-                          className="touch-target w-full px-2.5 py-1.5 rounded-lg flex items-center justify-between text-xs text-ink-100 hover:bg-surface-douce focus-ring"
-                        >
-                          <span className="font-semibold font-mono text-repere">{asset.symbol || asset.name}</span>
-                          <span className="text-[11px] text-ink-300 truncate max-w-[160px]">{asset.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
           )}
 

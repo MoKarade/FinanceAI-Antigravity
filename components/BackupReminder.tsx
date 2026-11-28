@@ -103,17 +103,17 @@ export const BackupReminder: React.FC<BackupReminderProps> = ({ onNavigateToSett
         <div
             role="status"
             aria-label="Rappel backup"
-            className={`mx-3 mb-4 flex items-start gap-3 rounded-xl border px-4 py-3 text-body ${
+            className={`mx-0 sm:mx-3 mb-1.5 sm:mb-4 flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 rounded-xl border px-3 py-2 sm:px-4 sm:py-3 text-xs sm:text-body ${
                 quotaWarning
                     ? 'border-danger-500/30 bg-red-900/20 text-red-200'
                     : 'border-warning-500/30 bg-amber-900/15 text-amber-200'
             }`}
         >
-            <span className="mt-0.5 shrink-0 text-base" aria-hidden="true">
+            <span className="shrink-0 text-sm sm:text-base" aria-hidden="true">
                 {quotaWarning ? '!' : 'i'}
             </span>
-            <p className="flex-1 leading-snug">{message}</p>
-            <div className="flex shrink-0 items-center gap-2">
+            <p className="flex-1 min-w-0 leading-snug line-clamp-1 sm:line-clamp-none">{message}</p>
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                 <button
                     type="button"
                     onClick={handleNavigate}
@@ -122,7 +122,7 @@ export const BackupReminder: React.FC<BackupReminderProps> = ({ onNavigateToSett
                     // ⚠️ `hover:brightness-110` (le fix CeliAssetNudge, base info-600) échouerait ICI de justesse
                     // (danger-600 ×1,1 = 4,48:1) : le bon facteur dépend de la BASE, toujours mesurer.
                     // Variante warning (translucide) mesurée OK : base 8,64:1, hover 5,27:1.
-                    className={`rounded-lg px-2.5 py-1 text-meta font-bold focus-ring ${
+                    className={`rounded-lg px-2.5 py-1 text-meta font-bold focus-ring shrink-0 ${
                         quotaWarning
                             ? 'bg-danger-600 transition-[filter] hover:brightness-90 text-white'
                             : 'bg-amber-700/60 hover:bg-warning-600/70 text-white transition-colors'
@@ -135,7 +135,7 @@ export const BackupReminder: React.FC<BackupReminderProps> = ({ onNavigateToSett
                     onClick={handleDismiss}
                     // [A11Y 2.5.3 Label in Name] le nom accessible commence par le texte visible.
                     aria-label="Plus tard — ignorer ce rappel"
-                    className="rounded-lg px-2 py-1 text-meta text-ink-300 hover:text-white transition-colors focus-ring"
+                    className="rounded-lg px-2 py-1 text-meta text-ink-300 hover:text-white transition-colors focus-ring shrink-0"
                 >
                     Plus tard
                 </button>

@@ -33,19 +33,45 @@ export const AccueilOmniboxBar: React.FC<AccueilOmniboxBarProps> = ({
     setActiveTab,
     onOpenConnexions,
 }) => (
-    <div className="px-5 sm:px-8 py-4 bg-surface flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex items-center justify-between lg:justify-start gap-3 shrink-0">
+    <div className="px-3.5 sm:px-8 py-2 sm:py-4 bg-surface flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+        <div className="flex items-center justify-between gap-2 shrink-0 lg:contents">
             <span
-                className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-fond border border-bordure text-xs font-mono text-ink-200"
+                className="inline-flex items-center gap-2 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full bg-fond border border-bordure text-[11px] sm:text-xs font-mono text-ink-200 lg:order-1 shrink-0"
                 title="Synchronisation automatique en temps réel entre PC et mobile"
             >
-                <span className="w-2.5 h-2.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
-                <span>{syncState === 'syncing' ? 'Sync Cloud…' : 'Direct · PC & Mobile'}</span>
+                <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full gf-alloc-reer gf-pulse-live" aria-hidden="true" />
+                <span>
+                    {syncState === 'syncing' ? 'Sync…' : 'Direct'}
+                    <span className="hidden sm:inline">{syncState === 'syncing' ? ' Cloud' : ' · PC & Mobile'}</span>
+                </span>
             </span>
+
+            <div className="flex items-center gap-1.5 shrink-0 lg:order-3">
+                <button
+                    type="button"
+                    onClick={() => setRechercheOuverte(!rechercheOuverte)}
+                    aria-label="Rechercher dans votre patrimoine"
+                    aria-expanded={rechercheOuverte}
+                    className="touch-target min-h-11 min-w-11 lg:hidden rounded-full border border-bordure bg-fond inline-flex items-center justify-center text-ink-200 hover:text-ink-50 focus-ring"
+                >
+                    <Icon name="search" size={16} aria-hidden="true" />
+                </button>
+                <button
+                    type="button"
+                    onClick={onOpenConnexions}
+                    aria-label="Importer ou synchroniser des comptes"
+                    className="touch-target min-h-11 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-1.5 sm:gap-2 transition-colors duration-100 focus-ring whitespace-nowrap"
+                >
+                    <Icon name="cloud" size={15} className="text-ink-300" aria-hidden="true" />
+                    <span>
+                        <span className="hidden sm:inline">Comptes & </span>Sync
+                    </span>
+                </button>
+            </div>
         </div>
 
-        <div className="relative flex-1 max-w-xl mx-auto w-full">
-            <div className="gf-omnibox-pill relative flex items-center px-4 py-0.5">
+        <div className={`${rechercheOuverte ? 'block' : 'hidden lg:block'} relative flex-1 max-w-xl mx-auto w-full lg:order-2`}>
+            <div className="gf-omnibox-pill relative flex items-center px-3.5 sm:px-4 py-0.5">
                 <Icon
                     name="search"
                     size={17}
@@ -147,18 +173,6 @@ export const AccueilOmniboxBar: React.FC<AccueilOmniboxBarProps> = ({
                     )}
                 </div>
             )}
-        </div>
-
-        <div className="flex items-center gap-2.5 shrink-0">
-            <button
-                type="button"
-                onClick={onOpenConnexions}
-                aria-label="Importer ou synchroniser des comptes"
-                className="touch-target px-4 py-2 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs sm:text-sm font-medium text-ink-100 inline-flex items-center gap-2 transition-colors duration-100 focus-ring whitespace-nowrap"
-            >
-                <Icon name="cloud" size={15} className="text-ink-300" aria-hidden="true" />
-                <span>Comptes & Sync</span>
-            </button>
         </div>
     </div>
 );

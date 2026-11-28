@@ -211,7 +211,7 @@ export const GoogleFinanceHero: React.FC<GoogleFinanceHeroProps> = ({
                             />
                         ))}
                     </div>
-                    <div className="flex items-center gap-x-2.5 overflow-x-auto no-scrollbar whitespace-nowrap sm:flex-wrap sm:gap-x-3 sm:gap-y-0.5 text-[10px] sm:text-[11px] font-mono text-ink-300">
+                    <div className="hidden sm:flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] font-mono text-ink-300">
                         {repartition.slice(0, 5).map((s) => (
                             <span key={s.cle} className="inline-flex items-center gap-1 shrink-0">
                                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} aria-hidden="true" />

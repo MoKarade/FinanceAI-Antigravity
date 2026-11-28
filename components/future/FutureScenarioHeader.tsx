@@ -107,8 +107,8 @@ export const FutureScenarioHeader: React.FC<FutureScenarioHeaderProps> = ({
     const launchDisabled = status === 'restoring' || Boolean(refusMessage);
 
     return (
-        <section aria-label="Scénarios de trajectoire future" className="space-y-3">
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-3">
+        <section aria-label="Scénarios de trajectoire future" className="space-y-2 sm:space-y-3">
+            <div className="flex overflow-x-auto no-scrollbar snap-x gap-2 pb-0.5 sm:grid sm:grid-cols-2 xl:grid-cols-4 sm:gap-3 sm:pb-0">
                 {DEEP_SCENARIO_IDS.map((id) => {
                     const scenario = report.scenarios[id];
                     const isSelected = selectedScenario === id;
@@ -126,7 +126,7 @@ export const FutureScenarioHeader: React.FC<FutureScenarioHeaderProps> = ({
                             aria-pressed={isSelected}
                             title={description}
                             onClick={() => onSelectScenario(id)}
-                            className={`touch-target min-h-11 w-full min-w-0 text-left rounded-card border p-3 sm:p-3.5 flex flex-col justify-between gap-2.5 transition-colors focus-ring ${
+                            className={`touch-target min-h-11 min-w-[200px] sm:min-w-0 sm:w-full shrink-0 snap-start text-left rounded-card border p-2.5 sm:p-3.5 flex flex-col justify-between gap-1.5 sm:gap-2.5 transition-colors focus-ring ${
                                 isSelected
                                     ? 'border-accent bg-surface-douce shadow-sm'
                                     : 'border-bordure bg-surface hover:border-bordure-champ hover:bg-surface-douce'
@@ -148,7 +148,7 @@ export const FutureScenarioHeader: React.FC<FutureScenarioHeaderProps> = ({
                                 )}
                             </span>
 
-                            <span className="grid grid-cols-2 gap-1.5 pt-2 border-t border-bordure w-full min-w-0">
+                            <span className="grid grid-cols-2 gap-1.5 pt-1.5 sm:pt-2 border-t border-bordure w-full min-w-0">
                                 <span className="block min-w-0">
                                     <span className="block text-[11px] text-texte-doux truncate">
                                         Patrimoine central
@@ -175,8 +175,8 @@ export const FutureScenarioHeader: React.FC<FutureScenarioHeaderProps> = ({
                 })}
             </div>
 
-            <div className="rounded-card border border-bordure bg-surface p-3.5 space-y-2.5">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div className="rounded-card border border-bordure bg-surface p-2.5 sm:p-3.5 space-y-2">
+                <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3">
                     <div className="min-w-0 space-y-1 flex-1">
                         {hasPendingToApply && pendingReport ? (
                             <div className="flex flex-wrap items-center gap-2 min-w-0">
@@ -195,7 +195,7 @@ export const FutureScenarioHeader: React.FC<FutureScenarioHeaderProps> = ({
                                     <Icon name="check" size={13} className="text-succes-texte" />
                                     Analyse profonde en mémoire
                                 </span>
-                                <span className="text-meta text-texte-doux break-words">
+                                <span className="hidden sm:inline text-meta text-texte-doux break-words">
                                     {formatDate(appliedReport.createdAt, {
                                         year: 'numeric',
                                         month: 'long',
@@ -216,7 +216,7 @@ export const FutureScenarioHeader: React.FC<FutureScenarioHeaderProps> = ({
                                 <span className="inline-flex items-center rounded-full border border-bordure-champ bg-surface-douce px-2.5 py-0.5 text-tiny font-bold text-texte">
                                     Aperçu rapide
                                 </span>
-                                <span className="text-tiny text-texte-doux">Prêt pour l’analyse approfondie</span>
+                                <span className="hidden sm:inline text-tiny text-texte-doux">Prêt pour l’analyse approfondie</span>
                             </div>
                         )}
 
@@ -227,7 +227,7 @@ export const FutureScenarioHeader: React.FC<FutureScenarioHeaderProps> = ({
                         )}
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+                    <div className={`flex items-stretch sm:items-center gap-2 shrink-0 ${status === 'running' || hasPendingToApply ? 'w-full sm:w-auto flex-col sm:flex-row' : ''}`}>
                         {status === 'running' && progress ? (
                             <button
                                 type="button"
@@ -263,7 +263,7 @@ export const FutureScenarioHeader: React.FC<FutureScenarioHeaderProps> = ({
                                 type="button"
                                 disabled={launchDisabled}
                                 onClick={onLaunch}
-                                className="touch-target min-h-11 focus-ring inline-flex items-center justify-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-meta font-bold text-sur-accent hover:bg-accent-fonce disabled:opacity-50 disabled:pointer-events-none transition-colors"
+                                className="touch-target min-h-11 focus-ring inline-flex items-center justify-center gap-1.5 rounded-lg bg-accent px-3 sm:px-4 py-2 text-tiny sm:text-meta font-bold text-sur-accent hover:bg-accent-fonce disabled:opacity-50 disabled:pointer-events-none transition-colors whitespace-nowrap"
                             >
                                 <Icon name="sparkles" size={15} />
                                 {appliedReport !== null

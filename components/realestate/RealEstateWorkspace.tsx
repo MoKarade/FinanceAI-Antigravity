@@ -438,7 +438,7 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
     const pctTexte = (v: number) => formatNumber(v, { decimals: Number.isInteger(v) ? 0 : 1 });
 
     return (
-        <div className="space-y-5 stagger-in pb-10">
+        <div className="space-y-3 sm:space-y-5 stagger-in pb-10">
             <ConfirmModal
                 isOpen={!!confirmDeleteGoalId}
                 onConfirm={doConfirmDeleteGoal}
@@ -504,30 +504,34 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
             )}
 
             {/* Carte du bien : nom, type, rôle dans la simulation, interrupteur « Actif ». */}
-            <section aria-labelledby="bien-titre" className="rounded-2xl bg-surface border border-bordure p-4 sm:px-[22px] sm:py-[18px] flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-5">
-                <div className="flex-1 min-w-0 flex flex-col gap-1">
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                        <h2 id="bien-titre" className="text-[17px] lg:text-[20px] font-bold text-ink-50">{propertyName}</h2>
-                        <span className="max-lg:basis-full max-lg:-mt-1 lg:h-6 lg:px-2.5 lg:rounded-full lg:bg-surfaceHighlight text-meta text-ink-300 flex items-center">{activeGoal.isPrimaryResidence ? 'Résidence principale' : activeGoal.isRented ? 'Propriété locative' : 'Propriété secondaire'}</span>
-                        {/* [ENG-PAST-OWNED-VS-PLANNED] (A6) : date passée sans achat confirmé (condition de DATE requise). */}
-                        {activeGoal.isOwned === false && !!activeGoal.purchaseDate && activeGoal.purchaseDate < firstDayOfCurrentMonth && (
-                            <Badge variant="warning" size="md">Date passée — non acheté</Badge>
-                        )}
+            <section aria-labelledby="bien-titre" className="rounded-2xl bg-surface border border-bordure p-3 sm:px-[22px] sm:py-[18px] flex flex-col gap-1.5">
+                <div className="flex flex-row items-center justify-between gap-2 lg:gap-5">
+                    <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                            <h2 id="bien-titre" className="text-[16px] sm:text-[17px] lg:text-[20px] font-bold text-ink-50 truncate">{propertyName}</h2>
+                            <span className="max-lg:basis-full lg:h-6 lg:px-2.5 lg:rounded-full lg:bg-surfaceHighlight text-[11px] sm:text-meta text-ink-300 flex items-center">{activeGoal.isPrimaryResidence ? 'Résidence principale' : activeGoal.isRented ? 'Propriété locative' : 'Propriété secondaire'}</span>
+                            {/* [ENG-PAST-OWNED-VS-PLANNED] (A6) : date passée sans achat confirmé (condition de DATE requise). */}
+                            {activeGoal.isOwned === false && !!activeGoal.purchaseDate && activeGoal.purchaseDate < firstDayOfCurrentMonth && (
+                                <Badge variant="warning" size="md">Date passée — non acheté</Badge>
+                            )}
+                        </div>
+                        <p className="sr-only text-[13px] text-ink-400">{activeGoal.isPrimaryResidence ? 'Le loyer actuel disparaît de la simulation à l\'achat.' : activeGoal.isRented ? 'Les loyers perçus entrent dans la simulation.' : 'Aucun loyer : le bien pèse par sa mensualité et son équité.'}</p>
                     </div>
-                    <p className="sr-only text-[13px] text-ink-400">{activeGoal.isPrimaryResidence ? 'Le loyer actuel disparaît de la simulation à l\'achat.' : activeGoal.isRented ? 'Les loyers perçus entrent dans la simulation.' : 'Aucun loyer : le bien pèse par sa mensualité et son équité.'}</p>
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={activeGoal.isActive}
+                        onClick={() => updateActiveGoal({ isActive: !activeGoal.isActive })}
+                        className="touch-target flex items-center justify-between lg:justify-start gap-2 sm:gap-3 min-h-11 px-2.5 sm:px-3.5 lg:px-0 rounded-xl lg:rounded-none border border-bordure lg:border-0 bg-dark/40 lg:bg-transparent text-xs sm:text-body text-ink-200 focus-ring shrink-0 whitespace-nowrap"
+                    >
+                        <span>
+                            Actif<span className="hidden sm:inline"> dans la simulation</span>
+                        </span>
+                        <span className={`w-11 h-[26px] rounded-full p-[3px] flex transition-colors ${activeGoal.isActive ? 'bg-success-400 justify-end' : 'bg-bordure-champ justify-start'}`} aria-hidden="true">
+                            <span className={`w-5 h-5 rounded-full ${activeGoal.isActive ? 'bg-dark' : 'bg-ink-300'}`} />
+                        </span>
+                    </button>
                 </div>
-                <button
-                    type="button"
-                    role="switch"
-                    aria-checked={activeGoal.isActive}
-                    onClick={() => updateActiveGoal({ isActive: !activeGoal.isActive })}
-                    className="flex items-center justify-between lg:justify-start gap-3 min-h-11 px-3.5 lg:px-0 rounded-xl lg:rounded-none border border-bordure lg:border-0 bg-dark/40 lg:bg-transparent text-body text-ink-200 focus-ring"
-                >
-                    Actif dans la simulation
-                    <span className={`w-11 h-[26px] rounded-full p-[3px] flex transition-colors ${activeGoal.isActive ? 'bg-success-400 justify-end' : 'bg-bordure-champ justify-start'}`} aria-hidden="true">
-                        <span className={`w-5 h-5 rounded-full ${activeGoal.isActive ? 'bg-dark' : 'bg-ink-300'}`} />
-                    </span>
-                </button>
                 {/* [UX-ISACTIVE-BADGE] (A5) : l'amputation du patrimoine doit être VISIBLE. */}
                 {!activeGoal.isActive && <p className="text-meta text-warning-400 lg:hidden">Non compté dans la simulation.</p>}
                 <p className="sr-only text-[13px] text-ink-400">{activeGoal.isPrimaryResidence ? 'Le loyer actuel disparaît de la simulation à l\'achat.' : activeGoal.isRented ? 'Les loyers perçus entrent dans la simulation.' : 'Aucun loyer : le bien pèse par sa mensualité et son équité.'}</p>
@@ -537,43 +541,10 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
             <section
                 data-testid="real-estate-verdict-card"
                 aria-label="Décideur d'achat immobilier"
-                className="rounded-2xl bg-surface border border-bordure p-4 sm:px-5 sm:py-4 space-y-4"
+                className="rounded-2xl bg-surface border border-bordure p-3 sm:px-5 sm:py-4 space-y-2.5 sm:space-y-4"
             >
-                <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:max-w-lg w-full">
-                        <div>
-                            <label htmlFor="rew-quick-price" className="text-meta font-semibold text-ink-300 block mb-1">
-                                Prix d’achat ($ CAD)
-                            </label>
-                            <PrivateNumberInput
-                                id="rew-quick-price"
-                                step="5000"
-                                min={0}
-                                value={price}
-                                onChange={(e) => {
-                                    const v = Number(e.target.value);
-                                    if (Number.isFinite(v) && v >= 0) {
-                                        updateActiveGoal({ price: v });
-                                    }
-                                }}
-                                className="w-full min-h-11 px-3 font-mono text-ink-50 rounded-xl border border-bordure-champ bg-surface-douce focus-ring"
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="rew-quick-date" className="text-meta font-semibold text-ink-300 block mb-1">
-                                Date d’achat visée
-                            </label>
-                            <input
-                                id="rew-quick-date"
-                                type="date"
-                                value={targetDate}
-                                onChange={(e) => updateActiveGoal({ purchaseDate: e.target.value })}
-                                className="w-full min-h-11 px-3 font-mono text-ink-50 rounded-xl border border-bordure-champ bg-surface-douce focus-ring"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-2.5 sm:gap-4">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 lg:order-2">
                         <Badge
                             variant={
                                 decision.verdict === 'feu_vert'
@@ -598,6 +569,39 @@ export const RealEstateWorkspace: React.FC<RealEstateWorkspaceProps> = ({
                                 </strong>
                             </span>
                         )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:max-w-lg w-full lg:order-1">
+                        <div className="min-w-0">
+                            <label htmlFor="rew-quick-price" className="text-xs sm:text-meta font-semibold text-ink-300 block mb-1 truncate">
+                                Prix ($ CAD)
+                            </label>
+                            <PrivateNumberInput
+                                id="rew-quick-price"
+                                step="5000"
+                                min={0}
+                                value={price}
+                                onChange={(e) => {
+                                    const v = Number(e.target.value);
+                                    if (Number.isFinite(v) && v >= 0) {
+                                        updateActiveGoal({ price: v });
+                                    }
+                                }}
+                                className="w-full min-h-11 px-2.5 sm:px-3 font-mono text-sm sm:text-base text-ink-50 rounded-xl border border-bordure-champ bg-surface-douce focus-ring"
+                            />
+                        </div>
+                        <div className="min-w-0">
+                            <label htmlFor="rew-quick-date" className="text-xs sm:text-meta font-semibold text-ink-300 block mb-1 truncate">
+                                Date visée
+                            </label>
+                            <input
+                                id="rew-quick-date"
+                                type="date"
+                                value={targetDate}
+                                onChange={(e) => updateActiveGoal({ purchaseDate: e.target.value })}
+                                className="w-full min-h-11 px-2.5 sm:px-3 font-mono text-sm sm:text-base text-ink-50 rounded-xl border border-bordure-champ bg-surface-douce focus-ring"
+                            />
+                        </div>
                     </div>
                 </div>
 

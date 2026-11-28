@@ -28,10 +28,10 @@ interface PageHeaderProps {
 export const PageHeader: React.FC<PageHeaderProps> = ({
     title, subtitle, badge, actions, nav, className = '',
 }) => (
-    <header className={`gf-page-header flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 ${className}`}>
+    <header className={`gf-page-header flex flex-wrap items-center justify-between gap-1.5 sm:gap-3 ${className}`}>
         <div className={`min-w-[min(220px,100%)] flex-1 ${nav ? 'lg:flex-none' : ''}`}>
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 sm:gap-x-3 sm:gap-y-2">
-                <h1 className="text-xl sm:text-[24px] leading-7 sm:leading-8 font-bold tracking-tight text-ink-50">{title}</h1>
+                <h1 className="text-lg sm:text-[24px] leading-6 sm:leading-8 font-bold tracking-tight text-ink-50">{title}</h1>
                 {badge && <div className="gf-quote-badge text-xs max-w-full">{badge}</div>}
             </div>
             {subtitle && (
