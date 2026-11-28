@@ -694,7 +694,7 @@ export const Investments: React.FC<InvestmentsProps> = ({
             {/* Ruban d'allocation par enveloppe + KPI + Graphe + Titres détenus + 2 sections repliables */}
             {subTab === 'portfolio' && (
                 <>
-                    <CoursPerimesNotice titres={coursPerimes} />
+                    <CoursPerimesNotice titres={coursPerimes} onRefresh={handleRefreshPrices} isRefreshing={isRefreshingPrices} />
                     <CeliAssetNudge onAddAsset={() => setShowAddStockForm(true)} />
                     <BrokerReconciliationCard variant="compact" />
                     <section

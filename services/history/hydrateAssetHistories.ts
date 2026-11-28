@@ -26,6 +26,7 @@ import { causePermanente } from '../marketData/messageEchec';
 import { variantClosePlausible } from './plausibiliteCours';
 import type { MarketDataErrorCode } from '../marketData/types';
 import { verdictDeviseHistorique, messageDeviseIncompatible } from './deviseHistorique';
+import { coursPerime, dateDernierCours } from './fraicheurCours';
 
 interface HydrateHistoryDeps {
     /**
@@ -63,6 +64,7 @@ export interface HydrateHistoryResult {
 }
 
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000; // au-delà : re-sync (aligné sur le TTL cache 'history')
+const STALE_HISTORY_RETRY_MS = 15 * 60 * 1000; // cours dont la dernière clôture est périmée → réessai après 15 min
 const DEFAULT_DELAY_MS = 2_500;
 
 /**
@@ -103,7 +105,12 @@ export function needsHistorySync(a: Asset, now: number): boolean {
     if ((a.quantity || 0) === 0 && getEffectivePurchases(a).length === 0) return false;
     if (!a.priceHistory || a.priceHistory.length === 0) return true;
     if (isSyntheticPriceHistory(a.priceHistory)) return true;
-    return !a.lastHistorySync || now - a.lastHistorySync > STALE_AFTER_MS;
+    if (!a.lastHistorySync || now - a.lastHistorySync > STALE_AFTER_MS) return true;
+    const todayIso = new Date(now).toISOString().slice(0, 10);
+    if (coursPerime(dateDernierCours(a.priceHistory), todayIso) && now - a.lastHistorySync > STALE_HISTORY_RETRY_MS) {
+        return true;
+    }
+    return false;
 }
 
 /**

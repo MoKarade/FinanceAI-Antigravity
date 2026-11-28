@@ -196,10 +196,21 @@ export const useInvestmentsPortfolio = ({
             try {
                 const { hydrateAssetHistories, applyHistoryPatches } = await import('../../services/history/hydrateAssetHistories');
                 const { setHistorySyncReport } = await import('../../services/history/syncDiagnostics');
+                const { searchYahooSymbols } = await import('../../services/marketData/providers/yahooProxy');
                 clearMarketDataCache('history');
+                clearMarketDataCache('quote');
                 clearNegativeCache();
                 const current = useFinanceStore.getState().assets ?? [];
-                const histRes = await hydrateAssetHistories(current, { getHistory: getHistoryDetaille, hasProvider: hasHistoryProvider }, { force: true });
+                const histRes = await hydrateAssetHistories(
+                    current,
+                    {
+                        getHistory: getHistoryDetaille,
+                        hasProvider: hasHistoryProvider,
+                        searchSymbols: async (q) => (await searchYahooSymbols(q)) ?? [],
+                        delayMs: 500,
+                    },
+                    { force: true },
+                );
                 setHistorySyncReport({ at: Date.now(), skipped: histRes.skipped, patchedCount: histRes.patches.size });
                 if (histRes.patches.size > 0) {
                     const freshAssets = useFinanceStore.getState().assets ?? [];
@@ -210,7 +221,7 @@ export const useInvestmentsPortfolio = ({
                 logError({ source: 'network', severity: 'error', message: 'Resynchronisation des historiques échouée (les quotes sont quand même actualisées).', error: e });
             }
 
-            const res = await refreshAssetPrices(useFinanceStore.getState().assets ?? [], { getQuote, hasProvider: hasQuoteProvider }, { force: true });
+            const res = await refreshAssetPrices(useFinanceStore.getState().assets ?? [], { getQuote, hasProvider: hasQuoteProvider, delayMs: 500 }, { force: true });
             if (res.patches.size > 0) {
                 const fresh = useFinanceStore.getState().assets ?? [];
                 setAssets(applyPricePatches(fresh, res.patches));

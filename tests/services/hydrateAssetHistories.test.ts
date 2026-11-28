@@ -50,6 +50,19 @@ describe('needsHistorySync', () => {
         // Avant fix panel 2026-07-22 : attendu par buildMarketData mais JAMAIS hydraté → exclu à vie.
         expect(needsHistorySync(mk({ quantity: 0 }), NOW)).toBe(true);
     });
+    it('clôture périmée (> 4 jours) → réessai automatique après 15 min même si lastHistorySync < 24 h', () => {
+        const todayIso = new Date(NOW).toISOString().slice(0, 10);
+        const staleDate = new Date(NOW - 10 * 86_400_000).toISOString().slice(0, 10);
+        expect(
+            needsHistorySync(mk({ priceHistory: [{ date: staleDate, price: 28 }], lastHistorySync: NOW - 10 * 60_000 }), NOW),
+        ).toBe(false);
+        expect(
+            needsHistorySync(mk({ priceHistory: [{ date: staleDate, price: 28 }], lastHistorySync: NOW - 16 * 60_000 }), NOW),
+        ).toBe(true);
+        expect(
+            needsHistorySync(mk({ priceHistory: [{ date: todayIso, price: 28 }], lastHistorySync: NOW - 16 * 60_000 }), NOW),
+        ).toBe(false);
+    });
 });
 
 describe('hydrateAssetHistories', () => {

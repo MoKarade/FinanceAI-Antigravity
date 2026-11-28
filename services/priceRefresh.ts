@@ -29,10 +29,14 @@
 import type { Asset } from '../types';
 import type { Quote } from './marketData';
 import { logError } from './errorLogger';
+import { coursPerime, dateDernierCours } from './history/fraicheurCours';
+import { mergePriceHistories } from './history/hydrateAssetHistories';
 
 interface PricePatch {
     currentPrice: number;
     priceUpdatedAt: number;
+    /** Date YYYY-MM-DD du cours live (permet de maintenir priceHistory à jour même si les bougies retardent). */
+    marketDate?: string;
     /** Devise de l'actif AU MOMENT du quote (undefined = actif legacy sans devise). Revalidée à
      *  l'application : si la devise de l'actif FRAIS diffère (éditée pendant la fenêtre), le patch
      *  est ABANDONNÉ (un prix natif de l'ancienne devise sur la nouvelle = montant mal dénominé). */
@@ -209,10 +213,20 @@ async function runRefresh(
         // de push Drive, pas de conflit fantôme multi-appareils). Le quote CONFIRME, il ne change
         // rien. Exception : un actif LEGACY sans devise avec un prix identique reçoit quand même le
         // self-heal de devise (une seule fois — ensuite il a une devise).
-        if (quote.price === a.currentPrice && a.currency) {
+        const marketTs = Math.max(a.priceUpdatedAt ?? 0, marketTimestampOrNow(quote.timestamp, now()));
+        const marketDate = new Date(marketTs).toISOString().slice(0, 10);
+        const lastHistDate = dateDernierCours(a.priceHistory);
+        const needsHistoryHeal = lastHistDate !== null && marketDate > lastHistDate && coursPerime(lastHistDate, marketDate);
+
+        if (quote.price === a.currentPrice && a.currency && !needsHistoryHeal) {
             result.unchanged.push(a.symbol);
             continue;
         }
+
+        const canAppendToHistory =
+            Array.isArray(a.priceHistory) &&
+            a.priceHistory.length > 0 &&
+            (!lastHistDate || marketDate >= lastHistDate);
 
         const patch: PricePatch = {
             currentPrice: quote.price,
@@ -221,8 +235,9 @@ async function runRefresh(
             // MONOTONE (finding code-reviewer #499, prouvé par sonde) : deux providers peuvent
             // rapporter des horodatages incohérents pour le même titre (bascule Finnhub↔Yahoo) —
             // sans clamp, priceUpdatedAt pouvait RECULER (quoteFresh/« Cours mis à jour » régressent).
-            priceUpdatedAt: Math.max(a.priceUpdatedAt ?? 0, marketTimestampOrNow(quote.timestamp, now())),
+            priceUpdatedAt: marketTs,
             forCurrency: a.currency || undefined,
+            ...(canAppendToHistory ? { marketDate } : {}),
         };
         if (!a.currency) {
             const healed = asSupportedCurrency(quote.currency);
@@ -257,6 +272,14 @@ export function applyPricePatches(assets: readonly Asset[], patches: Map<string,
         if ((a.currency || undefined) !== p.forCurrency) return a;
         const next: Asset = { ...a, currentPrice: p.currentPrice, priceUpdatedAt: p.priceUpdatedAt };
         if (p.healCurrency && !a.currency) next.currency = p.healCurrency; // typé sur l'union — plus de cast
+        if (
+            p.marketDate &&
+            Array.isArray(a.priceHistory) &&
+            a.priceHistory.length > 0 &&
+            p.marketDate >= (dateDernierCours(a.priceHistory) ?? '')
+        ) {
+            next.priceHistory = mergePriceHistories(a.priceHistory, [{ date: p.marketDate, price: p.currentPrice }]);
+        }
         if ((a.buyPrice || 0) > 0) {
             next.performance = ((p.currentPrice - (a.buyPrice as number)) / (a.buyPrice as number)) * 100;
         }

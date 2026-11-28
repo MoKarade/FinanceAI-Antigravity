@@ -251,4 +251,17 @@ describe('applyPricePatches — fusion anti-course sur l\'état COURANT', () => 
         const out = applyPricePatches([asset({})], new Map());
         expect(out[0].currentPrice).toBe(100);
     });
+
+    it('HISTOIRE VIVANTE : un cours live récent complète priceHistory périmé même si le prix est identique', async () => {
+        const staleDate = '2025-07-01'; // > 4 jours avant NOW (2025-07-14)
+        const existingHist = [{ date: staleDate, price: 120 }];
+        const res = await refreshAssetPrices(
+            [asset({ currentPrice: 120, priceHistory: existingHist })],
+            deps(async () => quote({ price: 120, timestamp: NOW })),
+        );
+        expect(res.refreshed).toEqual(['ZALF']);
+        const merged = applyPricePatches([asset({ currentPrice: 120, priceHistory: existingHist })], res.patches);
+        const todayIso = new Date(NOW).toISOString().slice(0, 10);
+        expect(merged[0].priceHistory?.some((p) => p.date === todayIso && p.price === 120)).toBe(true);
+    });
 });

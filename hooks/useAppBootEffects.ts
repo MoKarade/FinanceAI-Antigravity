@@ -322,50 +322,64 @@ export function useAppBootEffects(): void {
         };
     }, [fintableRoles, fintableToken]);
 
-    // Taux FX au boot (une fois). L'état FX est lu DANS l'effet (`getState`), sans abonnement :
-    // voir le commentaire ci-dessous, c'est la différence entre « lire une fois » et « re-rendre
-    // toute l'app à chaque écriture du store ».
+    // Taux FX au boot + rafraîchissement automatique au réveil (focus/visibility/online) et toutes les 6 h.
+    // L'état FX est lu DANS `doUpdateFxRates` APRÈS `await fetchFxRates()` (`getState`), sans abonnement.
     const updateFxRates = useFinanceStore((s) => s.updateFxRates);
     useEffect(() => {
-        const doUpdateFxRates = async () => {
+        let cancelled = false;
+        let lastFxAttemptAt = 0;
+        const FX_WAKE_COOLDOWN_MS = 30 * 60_000;
+        const FX_INTERVAL_MS = 6 * 60 * 60_000;
+
+        const doUpdateFxRates = async (fromWake = false) => {
+            if (cancelled) return;
+            const nowMs = Date.now();
+            if (fromWake && nowMs - lastFxAttemptAt < FX_WAKE_COOLDOWN_MS) return;
+            lastFxAttemptAt = nowMs;
             try {
-                // ⚠️⚠️ `getState()` et PAS un sélecteur. Mon premier jet faisait
-                // `useFinanceStore(etatFxPourComparaison)` — un sélecteur qui RECONSTRUIT un objet,
-                // donc jamais égal par référence, donc « changé » à CHAQUE écriture du store. Ce
-                // hook est appelé depuis `App`, la racine : toute l'app se serait re-rendue à
-                // chaque tick de la projection Monte Carlo, ré-introduisant exactement la cascade
-                // que le sélecteur d'`App.tsx` exclut délibérément. Lire l'état au moment de
-                // l'effet est plus simple ET plus juste (c'est la valeur du moment de la lecture,
-                // pas celle du montage) — et ça ne s'abonne à rien.
+                // ⚠️⚠️ `getState()` est relu APRÈS `await fetchFxRates()` (fxBootLectureApresAttente).
                 const rates = await fetchFxRates();
-                // ⚠️ L'état est relu APRÈS l'attente, jamais avant. Le lire d'abord figeait une
-                // photo vieille de la durée du réseau (jusqu'à 8 s) : si Marc saisit son taux à la
-                // main pendant ce temps — le cas EXACT où la saisie sert, puisqu'elle sert quand la
-                // Banque du Canada ne répond pas —, la branche `'diagnostic'` réécrivait par-dessus
-                // les valeurs d'AVANT sa saisie, sans erreur ni notification. Sa saisie disparaissait
-                // en silence (revue panel du 2026-09-17 ; défaut né au lot précédent, élargi ici en
-                // ajoutant `observationDate` à la même photo figée).
+                if (cancelled) return;
                 const fxEtat = useFinanceStore.getState();
-                // ⚠️ [FX-TAUX-JAMAIS-ARRIVES] La condition d'écriture ne compare plus SEULEMENT les
-                // valeurs. Elle vivait ici, en ligne, et elle était fausse pour une raison qu'aucun
-                // test ne pouvait voir depuis ce fichier : la Banque du Canada ne publie qu'un jour
-                // OUVRÉ, donc « même taux qu'hier » est le cas normal — une lecture réussie ne
-                // rafraîchissait alors ni la fraîcheur, ni la cause, ni la date de tentative.
-                // La décision est maintenant PURE et testée (`decisionEcritureFx`).
-                // [FX-SERVEUR-JAMAIS-RAFRAICHI] Décision ET branche « diagnostic » (une lecture SANS
-                // autorité n'écrase pas un taux saisi à la main) vivent dans `services/fx/ecritureFx.ts`,
-                // partagées avec le rafraîchissement serveur : le serveur ne pouvait pas importer ce
-                // hook, et une copie aurait divergé au premier correctif.
                 const ecriture = ecritureFxSelonLecture(fxEtat, rates);
                 if (ecriture) updateFxRates(ecriture);
             } catch (e) {
                 logError({ source: 'network', severity: 'warning', message: 'Mise à jour des taux FX impossible (taux de repli utilisés)', error: e });
             }
         };
-        // [S5-REFONTE-PERF] Après le premier affichage : les taux de repli servent déjà, la lecture
-        // fraîche n'a pas à entrer dans le chemin critique du démarrage (utils/apresPremierAffichage).
-        return apresPremierAffichage(() => { void doUpdateFxRates(); });
-    // Effet run-once au boot : fetch FX rates une seule fois, sans re-run réactif sur state.
+        const stopBoot = apresPremierAffichage(() => { void doUpdateFxRates(false); });
+        const isJsdom = typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
+        if (isJsdom) return stopBoot;
+
+        const onWake = () => {
+            if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+                void doUpdateFxRates(true);
+            }
+        };
+        const onOnline = () => { void doUpdateFxRates(false); };
+        const intervalId = typeof window !== 'undefined'
+            ? window.setInterval(() => {
+                  if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+                      void doUpdateFxRates(false);
+                  }
+              }, FX_INTERVAL_MS)
+            : null;
+        if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onWake);
+        if (typeof window !== 'undefined') {
+            window.addEventListener('focus', onWake);
+            window.addEventListener('online', onOnline);
+        }
+        return () => {
+            cancelled = true;
+            stopBoot();
+            if (intervalId !== null && typeof window !== 'undefined') window.clearInterval(intervalId);
+            if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onWake);
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('focus', onWake);
+                window.removeEventListener('online', onOnline);
+            }
+        };
+    // Effet run-once : fetch FX rates au boot et sur réveil/périodique, sans re-run réactif sur state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 }
