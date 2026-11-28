@@ -47,8 +47,11 @@ export const isCreditBack = (t: Transaction): boolean =>
  */
 const HORS_COMPARAISON_BUDGET = new Set<string>(['Impôts']);
 
+export const isCategoryHorsComparaison = (category?: string): boolean =>
+    HORS_COMPARAISON_BUDGET.has(category ?? '');
+
 export const isHorsComparaisonBudget = (t: Transaction): boolean =>
-    HORS_COMPARAISON_BUDGET.has(t.category ?? '');
+    isCategoryHorsComparaison(t.category);
 
 /** Indique si une transaction est un transfert ou un virement (flag `isTransfer` ou catégorie dédiée). */
 export const isTransferOrVirement = (t: Transaction): boolean =>

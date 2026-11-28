@@ -13,7 +13,7 @@
 // produit (UI + moteur) — décision Marc 2026-08-27. Ce fichier n'a plus que trois
 // sous-onglets : Budget / Charges fixes & Abos / Santé.
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Tab, type Transaction, type BudgetConfig, type BudgetCategory } from '../../types';
 import { TAB_LABELS } from '../../constants';
 import { useFinanceStore } from '../../store/useFinanceStore';
@@ -23,8 +23,10 @@ import { Planning } from '../Planning';
 import { HealthIndicator } from '../dashboard/HealthIndicator';
 import { PageHeader } from '../ui/PageHeader';
 import { type IconName } from '../ui/Icon';
+import { showToast } from '../ui/Toast';
 import { useViewportBelowLg } from '../../hooks/useViewportBelowLg';
 import { isCoupleMode } from '../../services/couple/netWorthByOwner';
+import { maybeRunDailyFintableSync } from '../../services/fintable/autoSync';
 import { useBudgetPilotage, ChoixPeriode, NavigateurPeriode, ChoixPersonne } from './pilotage';
 import { SubTabs, TabPanel } from '../ui/SubTabs';
 
@@ -68,6 +70,24 @@ export const BudgetWorkspace: React.FC<BudgetWorkspaceProps> = ({
     // Consomme pendingFocus + scroll vers le poste ciblé (one-shot).
     usePendingFocus(Tab.BUDGET);
 
+    // Rafraîchit la banque en arrière-plan à l'ouverture de Budget si configurée et âgée de > 5 min.
+    const fintableToken = useFinanceStore((s) => s.apiKeys?.fintable ?? '');
+    useEffect(() => {
+        if (!fintableToken) return;
+        let cancelled = false;
+        void maybeRunDailyFintableSync({
+            maxAgeMs: 5 * 60_000,
+            attemptCooldownMs: 2 * 60_000,
+            autoCreditCards: true,
+        }).then((outcome) => {
+            if (cancelled || !outcome.ran) return;
+            if (outcome.report.error === null && outcome.report.transactionsAdded > 0) {
+                showToast(`Budget actualisé : ${outcome.report.transactionsAdded} transaction(s) synchronisée(s).`, 'success');
+            }
+        });
+        return () => { cancelled = true; };
+    }, [fintableToken]);
+
     // [S5-REFONTE-BUDGET] En-tête des maquettes : onglets à côté du titre ; période, mois affiché et
     // personne à droite (sous-onglet Budget seulement). Sur mobile : le mois à droite du titre, la
     // période et la personne sous les onglets.
@@ -79,7 +99,7 @@ export const BudgetWorkspace: React.FC<BudgetWorkspaceProps> = ({
     const surBudget = sub === 'budget';
 
     return (
-        <div className="space-y-5 stagger-in">
+        <div className="space-y-3 sm:space-y-5 stagger-in">
             {/* [REFONTE-NAV-L5] En-tête de page : titre = TAB_LABELS (cohérence de la destination
                 Transactions), stable quel que soit le sous-onglet actif. */}
             <PageHeader
@@ -106,7 +126,7 @@ export const BudgetWorkspace: React.FC<BudgetWorkspaceProps> = ({
                 ) : undefined}
             />
             {surBudget && etroit && (
-                <div className="gf-terminal-card px-3 py-2 flex flex-wrap items-center gap-2 overflow-x-auto no-scrollbar bg-surface border border-bordure">
+                <div className="gf-terminal-card px-2.5 py-1.5 flex flex-nowrap items-center gap-2 overflow-x-auto no-scrollbar bg-surface border border-bordure">
                     <ChoixPeriode p={pilotage} />
                     {noms && <ChoixPersonne p={pilotage} noms={noms} />}
                 </div>

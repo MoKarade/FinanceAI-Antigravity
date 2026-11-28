@@ -18,6 +18,7 @@ import { detectSubscriptionAlerts, type SubscriptionAlertInput } from '../servic
 import { showToast } from './ui/Toast';
 import { formatCAD, formatPercent } from '../utils/format';
 import { useFinanceStore } from '../store/useFinanceStore';
+import { useTodayIsoLocal } from '../hooks/useSimulationParams';
 import { mergeSubscriptions, addSubscription, removeSubscription, isPinned, subscriptionKey, dismissSubscription, restoreSubscription, monthlyEquivalent, totalMonthlyCost, totalYearlyCost, isAnnualSubscription, subscriptionDueLabel } from '../utils/subscriptions';
 
 /** Icône ligne d'un abonnement selon le marchand (sobre, remplace les emoji). */
@@ -52,10 +53,16 @@ export const Planning: React.FC<PlanningProps> = ({ transactions, apiKey }) => {
     // jamais le proposer ». Sans ça, un faux positif revenait à CHAQUE actualisation.
     const dismissedSubs = useFinanceStore(s => s.dismissedSubscriptions) ?? EMPTY_DISMISSED;
     const setAppState = useFinanceStore(s => s.setAppState);
+    const todayIso = useTodayIsoLocal();
+
+    const refDate = useMemo(() => {
+        const [y, m, d] = todayIso.split('-').map(Number);
+        return y && m && d ? new Date(y, m - 1, d) : new Date();
+    }, [todayIso]);
 
     const heuristicSubs = useMemo(() => {
         const groups: Record<string, Transaction[]> = {};
-        const sixMonthsAgo = new Date();
+        const sixMonthsAgo = new Date(refDate);
         sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
         const variableKeywords = ['iga', 'metro', 'provigo', 'super c', 'maxi', 'walmart', 'costco', 'dollama', 'mcdonald', 'tim horton', 'starbucks', 'uber', 'taxi', 'restaurant', 'resto', 'bar', 'saq', 'petro', 'shell', 'esso', 'ultramar', 'sonic', 'essence', 'gaz', 'pharmaprix', 'jean coutu', 'uniprix', 'familiprix', 'amazon', 'paypal', 'home depot', 'canadian tire'];
         transactions.filter(t => t.amount < 0 && !t.isTransfer && !t.isDuplicate && new Date(t.date) > sixMonthsAgo).forEach(t => {
@@ -84,7 +91,7 @@ export const Planning: React.FC<PlanningProps> = ({ transactions, apiKey }) => {
             }
         });
         return detected.sort((a, b) => b.averageAmount - a.averageAmount);
-    }, [transactions]);
+    }, [transactions, refDate]);
 
     // [TX-SUBSCRIPTIONS] Alertes sur les abonnements RECONNUS (profil de récurrence) : prix qui monte
     // sans qu'on l'ait vu passer, service qui a cessé d'être débité. Ce sont des invitations à
@@ -106,9 +113,8 @@ export const Planning: React.FC<PlanningProps> = ({ transactions, apiKey }) => {
         for (const [key, profile] of profiles) {
             inputs.push({ profile, amounts: byKey.get(key) ?? [] });
         }
-        const today = new Date().toISOString().slice(0, 10);
-        return detectSubscriptionAlerts(inputs, today);
-    }, [transactions]);
+        return detectSubscriptionAlerts(inputs, todayIso);
+    }, [transactions, todayIso]);
 
     // [PH4-F] liste affichée = abos ÉPINGLÉS (persistés) + DÉTECTÉS non déjà épinglés (dédup par marchand).
     const activeSubs = useMemo(() => mergeSubscriptions(pinnedSubs, aiSubs || heuristicSubs, dismissedSubs), [pinnedSubs, aiSubs, heuristicSubs, dismissedSubs]);
@@ -327,7 +333,7 @@ export const Planning: React.FC<PlanningProps> = ({ transactions, apiKey }) => {
                             {calendarDays.map((date, idx) => {
                                 if (!date) return <div key={idx} />;
                                 const day = date.getDate();
-                                const isToday = new Date().toDateString() === date.toDateString();
+                                const isToday = refDate.toDateString() === date.toDateString();
                                 // [PLANNING-ANNUAL-CALENDAR] un abo MENSUEL tombe chaque mois à `dayOfMonth` ;
                                 // un abo ANNUEL uniquement dans son mois d'échéance (dérivé de `lastDate`).
                                 const bills = activeSubs.filter(i => {

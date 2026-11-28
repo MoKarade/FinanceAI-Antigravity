@@ -47,6 +47,7 @@ interface MonthlySpendingVsBudgetChartProps {
     budgetItems?: readonly BudgetCategory[];
     isPrivacyMode?: boolean;
     className?: string;
+    compact?: boolean;
 }
 
 function formaterMoisCourt(moisIso: string): string {
@@ -66,6 +67,7 @@ export const MonthlySpendingVsBudgetChart: React.FC<MonthlySpendingVsBudgetChart
     budgetItems: propBudgetItems,
     isPrivacyMode: propPrivacyMode,
     className = '',
+    compact = false,
 }) => {
     const storeTransactions = useFinanceStore((s) => s.transactions);
     const storeBudgetItems = useFinanceStore((s) => s.budgetItems);
@@ -200,15 +202,15 @@ export const MonthlySpendingVsBudgetChart: React.FC<MonthlySpendingVsBudgetChart
             className={`premium-card rounded-xl bg-surface border border-bordure divide-y divide-bordure gf-chart-enter ${className}`}
         >
             {/* En-tête : titre, indicateurs de santé budgétaire du mois et sélecteur de vue */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-6 py-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 px-4 py-3.5 sm:px-6 sm:py-5">
                 <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                         <h2 className="text-base sm:text-lg font-semibold text-ink-50 tracking-normal">
                             Dépenses mensuelles vs Budget
                         </h2>
                         {ecartMoisCourant !== null && (
                             <span
-                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium font-mono tabular-nums ${
+                                className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full border text-xs font-medium font-mono tabular-nums ${
                                     estSousBudget
                                         ? 'bg-surface-douce text-ink-50 border-bordure-champ'
                                         : 'bg-erreur-fond text-erreur-texte border-bordure'
@@ -227,14 +229,14 @@ export const MonthlySpendingVsBudgetChart: React.FC<MonthlySpendingVsBudgetChart
                             </span>
                         )}
                         {scoreAdherence !== null && (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-bordure bg-fond text-xs font-mono tabular-nums font-medium text-ink-200">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full border border-bordure bg-fond text-xs font-mono tabular-nums font-medium text-ink-200">
                                 Adhérence : <PrivateAmount>{`${scoreAdherence}/100`}</PrivateAmount>
                             </span>
                         )}
                     </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2.5">
+                <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 sm:gap-2.5">
                     <div
                         role="group"
                         aria-label="Mode d'affichage du graphique budgétaire"
@@ -244,7 +246,7 @@ export const MonthlySpendingVsBudgetChart: React.FC<MonthlySpendingVsBudgetChart
                             type="button"
                             aria-pressed={modeVue === 'mensuel'}
                             onClick={() => setModeVue('mensuel')}
-                            className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring ${
+                            className={`touch-target min-h-11 px-3 sm:px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring ${
                                 modeVue === 'mensuel'
                                     ? 'bg-accent text-sur-accent font-semibold'
                                     : 'text-ink-300 hover:text-ink-50 hover:bg-surface-douce'
@@ -256,7 +258,7 @@ export const MonthlySpendingVsBudgetChart: React.FC<MonthlySpendingVsBudgetChart
                             type="button"
                             aria-pressed={modeVue === 'postes'}
                             onClick={() => setModeVue('postes')}
-                            className={`touch-target px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring ${
+                            className={`touch-target min-h-11 px-3 sm:px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors duration-100 focus-ring ${
                                 modeVue === 'postes'
                                     ? 'bg-accent text-sur-accent font-semibold'
                                     : 'text-ink-300 hover:text-ink-50 hover:bg-surface-douce'
@@ -266,18 +268,21 @@ export const MonthlySpendingVsBudgetChart: React.FC<MonthlySpendingVsBudgetChart
                         </button>
                     </div>
 
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab(Tab.BUDGET)}
-                        className="touch-target inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs sm:text-sm font-medium text-ink-100 transition-colors duration-100 focus-ring"
-                    >
-                        <span>Voir au Budget</span>
-                        <Icon name="chevron-right" size={14} aria-hidden="true" />
-                    </button>
+                    {activeTab !== Tab.BUDGET && (
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab(Tab.BUDGET)}
+                            className="touch-target min-h-11 inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-bordure bg-fond hover:bg-surface-douce hover:border-bordure-champ text-xs sm:text-sm font-medium text-ink-100 transition-colors duration-100 focus-ring"
+                        >
+                            <span>Voir au Budget</span>
+                            <Icon name="chevron-right" size={14} aria-hidden="true" />
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* Résumé chiffré rapide du mois en cours — grille 3 colonnes en Blanc & Gris */}
+            {/* Résumé chiffré rapide du mois en cours — masqué en mode compact (déjà affiché par DualKPIStat) */}
+            {!compact && (
             <div className="grid grid-cols-2 sm:grid-cols-3 divide-y sm:divide-y-0 divide-x divide-bordure bg-fond">
                 <div className="px-6 py-4 space-y-1">
                     <p className="text-xs sm:text-sm text-ink-300">Dépensé ce mois</p>
@@ -310,9 +315,10 @@ export const MonthlySpendingVsBudgetChart: React.FC<MonthlySpendingVsBudgetChart
                     </p>
                 </div>
             </div>
+            )}
 
             {/* Graphique à barres Recharts */}
-            <div className="p-6 sm:p-7 bg-surface space-y-4">
+            <div className="p-3.5 sm:p-6 sm:pt-5 bg-surface space-y-3 sm:space-y-4">
                 {aucuneDonnee ? (
                     <div className="py-8 text-center text-xs text-ink-400">
                         Aucune dépense ou cible budgétaire enregistrée sur les 6 derniers mois.

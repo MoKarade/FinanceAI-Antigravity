@@ -27,6 +27,8 @@ import { apresPremierAffichage } from '../utils/apresPremierAffichage';
 import { requestPersistentStorage } from '../services/storagePersistence';
 import { ecritureFxSelonLecture } from '../services/fx/ecritureFx';
 import { surveillerSessionAccess } from '../utils/sessionAccess';
+import { computeBudgetSyncPatch } from '../services/budgetAutoSync';
+import { useTodayIsoLocal } from './useTodayIsoLocal';
 
 /** Tous les effets de boot d'App : handlers d'erreur, courbe verrouillée, service worker, purge
  *  persona, filets migration/hydratation, provider marché, clés API chiffrées,
@@ -382,4 +384,33 @@ export function useAppBootEffects(): void {
     // Effet run-once : fetch FX rates au boot et sur réveil/périodique, sans re-run réactif sur state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Garder les postes Budget alignés sur les transactions réelles dès le boot, après sync
+    // bancaire / import ou lors d'un changement de mois, sans attendre l'ouverture de Budget.
+    const bootTransactions = useFinanceStore((s) => s.transactions);
+    const todayIso = useTodayIsoLocal();
+    const currentMonthKey = todayIso.slice(0, 7);
+    const budgetInitialSyncDone = useRef(false);
+    useEffect(() => {
+        if (!bootTransactions || bootTransactions.length === 0) return;
+        const [y, m, d] = todayIso.split('-').map(Number);
+        const refDate = y && m && d ? new Date(y, m - 1, d) : new Date();
+        const timer = setTimeout(() => {
+            const st = useFinanceStore.getState();
+            if (!st.transactions || st.transactions.length === 0) return;
+            const allowRemoval = !budgetInitialSyncDone.current;
+            const patch = computeBudgetSyncPatch(st.transactions, st.budgetItems, { allowRemoval, refDate });
+            budgetInitialSyncDone.current = true;
+            if (!patch.changed) return;
+            st.setAppState({ budgetItems: patch.items });
+            if (patch.added.length > 0 || patch.removed.length > 0 || patch.renamed.length > 0) {
+                logError({
+                    source: 'storage',
+                    severity: 'info',
+                    message: `Budget auto-aligné — +${patch.added.length}, ~${patch.renamed.length}, -${patch.removed.length}`,
+                });
+            }
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [bootTransactions, currentMonthKey, todayIso]);
 }

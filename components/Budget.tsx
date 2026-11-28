@@ -15,8 +15,11 @@ import { Icon } from './ui/Icon';
 import { Badge } from './ui/Badge';
 import { formatCAD, formatSigned, formatNumber } from '../utils/format';
 import { computeBudgetParity, matchTransactionToCategory, computeActualByOwner, isSavingsNature, type OrphanCategory } from '../utils/budget';
-import { syncBudgetWithTransactionCategories, buildMonthlyLedger, computeMonthlyActualAverages, computeIncomeBreakdown, computeAvgByItem } from '../utils/budgetSync';
-import { isTransferOrVirement } from '../utils/spendRules';
+import { buildMonthlyLedger, computeMonthlyActualAverages, computeIncomeBreakdown, computeAvgByItem, historicalMonthlyAverage } from '../utils/budgetSync';
+import { computeBudgetSyncPatch, findDriftedManualItems, realignItemsToRealAverage } from '../services/budgetAutoSync';
+import { maybeRunDailyFintableSync } from '../services/fintable/autoSync';
+import { useTodayIsoLocal } from '../hooks/useSimulationParams';
+import { isTransferOrVirement, isCategoryHorsComparaison } from '../utils/spendRules';
 import { DualKPIStat } from './budget/DualKPIStat';
 import { useBudgetPilotage, ChoixPeriode, NavigateurPeriode, ChoixPersonne, toLocalDateStr, type BudgetPilotage } from './budget/pilotage';
 import { CollapsibleSection } from './ui/CollapsibleSection';
@@ -91,8 +94,13 @@ function civilDaysBetween(a: Date, b: Date): number {
 export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItems: rawBudgetItems, setBudgetItems, apiKey, pilotage }) => {
     const pilotageInterne = useBudgetPilotage();
     const p = pilotage ?? pilotageInterne;
-    const { timeView, periodOffset, customStart, customEnd } = p;
+    const { timeView, periodOffset, customStart, customEnd, personFilter } = p;
+    const setPersonFilter = p.setPersonFilter;
     const [inflationSim, setInflationSim] = useState(0);
+    const [onlyOverBudget, setOnlyOverBudget] = useState(false);
+    const [isSyncingBank, setIsSyncingBank] = useState(false);
+    const todayIso = useTodayIsoLocal();
+    const now = useMemo(() => parseLocalDateStr(todayIso), [todayIso]);
     const budgetItems = useMemo(
         () => rawBudgetItems.filter(i => {
             const n = (i.name ?? '').trim();
@@ -157,62 +165,36 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
     // affecter une transaction (œuf-et-poule : le menu de catégories se nourrit des postes).
     // Idempotent ; no-op sur transactions vides (état pas encore hydraté).
     useEffect(() => {
-        if (rawBudgetItems.length !== budgetItems.length) {
-            setBudgetItems(budgetItems);
+        const removalAllowed = !_budgetFullSyncDoneThisLoad;
+        const patch = computeBudgetSyncPatch(transactions, rawBudgetItems, {
+            allowRemoval: removalAllowed,
+            refDate: now,
+        });
+        if (!patch.changed) {
+            if (transactions.length > 0) _budgetFullSyncDoneThisLoad = true;
             return;
         }
-        if (transactions.length === 0) return;
-        const sync = syncBudgetWithTransactionCategories(transactions, budgetItems, undefined, false);
-        if (!sync.changed) { _budgetFullSyncDoneThisLoad = true; return; }
-        const removalAllowed = !_budgetFullSyncDoneThisLoad;
-        // Mode ajouts-seulement (après la 1re sync du chargement) : retraits/renommages GELÉS,
-        // mais les REFRESH de cibles auto passent quand même (finding panel : sinon un import
-        // CSV en cours de session laisse les postes auto préexistants sur des moyennes d'AVANT
-        // l'import jusqu'au prochain reload). Un poste conservé garde son id+nom → on reprend
-        // sa version rafraîchie depuis sync.items ; les retirés/renommés restent tels quels.
-        const items = removalAllowed
-            ? sync.items
-            : [
-                ...budgetItems.map(b => {
-                    const refreshed = sync.items.find(i => i.id === b.id && i.name === b.name);
-                    return b.autoTarget === true && refreshed ? refreshed : b;
-                }),
-                ...sync.items.filter(i => sync.added.includes(i.name)),
-            ];
-        _budgetFullSyncDoneThisLoad = true;
-        if (removalAllowed || sync.added.length > 0 || sync.refreshedCount > 0) {
-            setBudgetItems(items);
-            if (removalAllowed && (sync.removed.length || sync.renamed.length)) {
-                // Trace DURABLE (le toast disparaît en 4 s) : quels postes ont été retirés/renommés.
-                logError({
-                    source: 'storage', severity: 'warning',
-                    message: `Budget aligné sur les catégories des transactions — retirés : [${sync.removed.join(', ') || '—'}], renommés : [${sync.renamed.join(', ') || '—'}]`,
-                });
-            } else if (removalAllowed && !sync.added.length) {
-                // Refresh des cibles AUTO seul (persist + push Drive sans action utilisateur) :
-                // trace discrète pour la traçabilité des écritures automatiques (finding panel).
-                logError({
-                    source: 'storage', severity: 'info',
-                    message: 'Budget : cibles auto recalculées (moyenne de tout le passé) — aucune autre modification.',
-                });
-            }
-            const parts: string[] = [];
-            if (sync.added.length) parts.push(`${sync.added.length} catégorie(s) ajoutée(s) depuis tes transactions`);
-            if (removalAllowed && sync.renamed.length) parts.push(`${sync.renamed.length} renommée(s) (réglages conservés)`);
-            if (removalAllowed && sync.removed.length) parts.push(`${sync.removed.length} sans transaction retirée(s)`);
-            if (parts.length) showToast(`Budget aligné sur tes transactions : ${parts.join(', ')}.`, 'info');
+        if (transactions.length > 0) _budgetFullSyncDoneThisLoad = true;
+        setBudgetItems(patch.items);
+        if (removalAllowed && (patch.removed.length || patch.renamed.length)) {
+            logError({
+                source: 'storage', severity: 'warning',
+                message: `Budget aligné sur les catégories des transactions — retirés : [${patch.removed.join(', ') || '—'}], renommés : [${patch.renamed.join(', ') || '—'}]`,
+            });
+        } else if (removalAllowed && !patch.added.length && patch.refreshedCount > 0) {
+            logError({
+                source: 'storage', severity: 'info',
+                message: 'Budget : cibles auto recalculées (moyenne de tout le passé) — aucune autre modification.',
+            });
         }
+        const parts: string[] = [];
+        if (patch.added.length) parts.push(`${patch.added.length} catégorie(s) ajoutée(s) depuis tes transactions`);
+        if (removalAllowed && patch.renamed.length) parts.push(`${patch.renamed.length} renommée(s) (réglages conservés)`);
+        if (removalAllowed && patch.removed.length) parts.push(`${patch.removed.length} sans transaction retirée(s)`);
+        if (parts.length) showToast(`Budget aligné sur tes transactions : ${parts.join(', ')}.`, 'info');
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [transactions, budgetItems]);
+    }, [transactions, rawBudgetItems, todayIso]);
 
-    // Custom Date State
-    // [BUDGET-INCOME-WINDOW-UTC-OFFBYONE] `toLocalDateStr`, jamais `.toISOString().split('T')[0]` :
-    // ce dernier convertit en UTC d'abord, donc sous un fuseau POSITIF (Europe/Asie/Australie), le
-    // 1er du mois à minuit LOCAL peut reculer d'un jour en UTC — le champ « Date de début » se
-    // pré-remplirait avec le dernier jour du mois précédent (finding code-reviewer #751 : site le
-    // plus visible, une valeur affichée directement dans le formulaire, pas juste une borne interne).
-
-    const now = new Date();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const currentDay = now.getDate();
     // [BUDGET-MONTH-NAV] Un mois PASSÉ (navigué) est CLOS → progression 100 % ; seul le mois en cours
@@ -396,15 +378,15 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
     // [BUDGET-MONTHLY-LEDGER] Grand livre mensuel (12 mois) : RÉEL des dépenses ET des revenus
     // par mois + solde (demande Marc). Lignes dépenses = exactement les postes du budget.
     const ledger = useMemo(
-        () => buildMonthlyLedger(transactions, budgetItems.map(i => i.name), 12, undefined, false),
-        [transactions, budgetItems],
+        () => buildMonthlyLedger(transactions, budgetItems.map(i => i.name), 12, now, false),
+        [transactions, budgetItems, now],
     );
 
     // [BUDGET-PAST-AVG] « Budget du mois en cours = moyenne de tout le passé » (demande Marc) :
     // moyennes mensuelles GLOBALES (dépenses/revenus) sur tous les mois PLEINS d'historique.
     const pastAverages = useMemo(
-        () => computeMonthlyActualAverages(transactions, undefined, false),
-        [transactions],
+        () => computeMonthlyActualAverages(transactions, now, false),
+        [transactions, now],
     );
 
     // [BUDGET-3-VUES] Moyenne MENSUELLE par poste sur la fenêtre du ledger 12 mois — mois courant
@@ -795,8 +777,8 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
     // revenu). Les ratios de comportement (effort, clé de partage) restent : ils ne disent pas le revenu.
     const maskedAttr = (v: number) => (isPrivacyMode ? MASKED_AMOUNT_LABEL : formatCAD(v));
 
-    // Wiring 2026-05: snapshot final de la projection vivante.
-    // Permet de relier "épargne théorique mensuelle" → "patrimoine fin vie".
+    const fintableToken = useFinanceStore(s => s.apiKeys?.fintable ?? '');
+    const fintableSyncReport = useFinanceStore(s => s.fintableSyncReport);
     const lastProjection = useFinanceStore(s => s.lastProjection);
     const navigateWithFocus = useFinanceStore(s => s.navigateWithFocus);
     const projectionSummary = useMemo(() => {
@@ -804,35 +786,152 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
         const last = lastProjection.chartData[lastProjection.chartData.length - 1];
         const monthlyTotalSavings = coupleAnalysis.totalSavings / getMultiplier(); // ramène mensuel
         const horizonYears = lastProjection.chartData.length / 12;
-        // [BUDGET-SENSIBILITE-FORMULE-5PCT] ⚠️ La tuile « Sensibilité » vivait ICI, et elle est
-        // SUPPRIMÉE plutôt que corrigée. Elle recalculait localement un patrimoine long terme
-        // (valeur future d'une rente à 5 % en dur), ce qui viole le non-négociable « Future = source
-        // unique » — et le chiffre était faux d'une façon qui interdit de le réparer :
-        //   · il ne dépendait QUE de l'horizon, donc il valait **145 648 $ pour les SEPT personas**,
-        //     identiques revenus, dettes, âge de retraite et fiscalité confondus ;
-        //   · la vraie réponse du moteur (même scénario, dépenses −100 $/mois) va de **18 495 $**
-        //     (`pre-retraite-riche`) à **307 118 $** (`lea-fauchee`), soit un rapport de **16,6×**.
-        //   · l'écart n'est donc pas un biais qu'on corrigerait en changeant le taux : le rapport
-        //     formule/moteur va de **0,47× à 7,88×** selon le ménage. C'est la FORME qui est fausse
-        //     (`UN-FACTEUR-PLAT-SUR-UNE-RELATION-CONVEXE`).
-        // Une sensibilité qui ne dépend pas de l'utilisateur n'est pas une sensibilité. La question
-        // reste légitime et le moteur sait y répondre : elle est ROUTÉE en
-        // `[BUDGET-SENSIBILITE-MOTEUR]` plutôt que devinée ici. La carte entière navigue déjà vers
-        // l'onglet Futur, donc rien d'ATTEIGNABLE n'est perdu.
-        // [BUDGET-SENSIBILITE-MOTEUR] (lot 198) Le moteur y RÉPOND désormais : `savingsSensitivity` est
-        // un second scénario BASE (dépenses − 100 $/mois) calculé par la projection elle-même. Ici on
-        // le LIT, on ne le recalcule pas — `null` (appel ciblé, valeur non finie) → rien d'affiché.
         return {
             estateNetWorth: lastProjection.estateNetWorth ?? last?.NetWorth ?? 0,
             savingsSensitivity: lastProjection.savingsSensitivity ?? null,
-            finalYear: last?.year ?? new Date().getFullYear() + Math.round(horizonYears),
+            finalYear: last?.year ?? now.getFullYear() + Math.round(horizonYears),
             horizonYears: Math.round(horizonYears),
             currentMonthlySavings: monthlyTotalSavings,
         };
     // getMultiplier est recréé à chaque render ; ses deps (timeView, customStart, customEnd)
     // sont implicitement couvertes par coupleAnalysis.totalSavings qui se recalcule avec elles.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [lastProjection, coupleAnalysis.totalSavings]);
+    }, [lastProjection, coupleAnalysis.totalSavings, now]);
+
+    const driftedManualItems = useMemo(
+        () => findDriftedManualItems(budgetItems, avg12ByItem),
+        [budgetItems, avg12ByItem],
+    );
+
+    const autoCount = useMemo(
+        () => budgetItems.filter(b => b.autoTarget === true).length,
+        [budgetItems],
+    );
+
+    const isPersonFiltered = personFilter !== null && !coupleAnalysis.isSolo;
+    const activePersonType = personFilter === 0 ? 'Perso 1' : 'Perso 2';
+    const personRatio = personFilter === 0 ? coupleAnalysis.splitRatio1 : (1 - coupleAnalysis.splitRatio1);
+    const activePersonName = personFilter === 0
+        ? (coupleAnalysis.user1?.name || 'P1')
+        : (coupleAnalysis.user2?.name || 'P2');
+
+    const scaleForItem = (item: BudgetCategory): number => {
+        if (!isPersonFiltered) return 1;
+        if (item.type === 'Commun') return personRatio;
+        return item.type === activePersonType ? 1 : 0;
+    };
+
+    const getDisplayTargetForView = (item: BudgetCategory): number =>
+        getDisplayTarget(item) * scaleForItem(item);
+
+    const getDisplayAvgForView = (item: BudgetCategory): number | null => {
+        const base = getDisplayAvg(item);
+        if (base === null) return null;
+        return base * scaleForItem(item);
+    };
+
+    const actualsMapForView = useMemo(() => {
+        if (!isPersonFiltered) return actualsMap;
+        const scaled: Record<string, number> = {};
+        for (const item of budgetItems) {
+            const raw = actualsMap[item.name] || 0;
+            scaled[item.name] = item.type === 'Commun' ? raw * personRatio : item.type === activePersonType ? raw : 0;
+        }
+        return scaled;
+    }, [isPersonFiltered, actualsMap, budgetItems, personRatio, activePersonType]);
+
+    const visibleGroupedItems = useMemo(() => {
+        const overSet = onlyOverBudget ? new Set(alerts.map(a => a.poste)) : null;
+        const filterGroup = (list: BudgetCategory[]) => list.filter((item) => {
+            if (isPersonFiltered && item.type !== 'Commun' && item.type !== activePersonType) return false;
+            if (overSet && !overSet.has(item.name)) return false;
+            return true;
+        });
+        return {
+            Besoin: filterGroup(groupedItems.Besoin),
+            Envie: filterGroup(groupedItems.Envie),
+            Epargne: filterGroup(groupedItems.Epargne),
+        };
+    }, [groupedItems, isPersonFiltered, activePersonType, onlyOverBudget, alerts]);
+
+    const handleSyncBankNow = async () => {
+        if (isSyncingBank) return;
+        setIsSyncingBank(true);
+        try {
+            const outcome = await maybeRunDailyFintableSync({
+                maxAgeMs: 0,
+                ignoreCooldown: true,
+                autoCreditCards: true,
+            });
+            if (!outcome.ran) {
+                showToast('Synchronisation déjà en cours ou indisponible.', 'info');
+                return;
+            }
+            if (outcome.report.error) {
+                showToast(`Sync impossible : ${outcome.report.error}`, 'error');
+            } else if (outcome.report.transactionsAdded > 0) {
+                showToast(`${outcome.report.transactionsAdded} transaction(s) synchronisée(s).`, 'success');
+            } else {
+                showToast('Budget déjà à jour avec ta banque.', 'info');
+            }
+        } finally {
+            setIsSyncingBank(false);
+        }
+    };
+
+    const handleAlignDrifted = () => {
+        if (driftedManualItems.length === 0) return;
+        setBudgetItems(realignItemsToRealAverage(budgetItems, driftedManualItems));
+        /* NOMBRE-NON-MONETAIRE : nombre de postes budgétaires mis à jour */
+        showToast(`${driftedManualItems.length} poste(s) réaligné(s) sur la moyenne réelle.`, 'success');
+    };
+
+    const handleSwitchItemToAuto = (itemId: string, avgMonthly: number) => {
+        const next = budgetItems.map((b) =>
+            b.id === itemId
+                ? { ...b, target: Math.max(0, Math.round(avgMonthly)), frequency: 'Monthly' as const, autoTarget: true }
+                : b,
+        );
+        setBudgetItems(next);
+        showToast('Poste passé en suivi automatique selon ta moyenne réelle.', 'success');
+    };
+
+    const handleQuickAddOrphan = (categoryName: string) => {
+        if (budgetItems.some(b => b.name === categoryName)) return;
+        const avg = historicalMonthlyAverage(transactions, categoryName, now, false);
+        const lower = categoryName.toLowerCase();
+        const nature: 'Besoin' | 'Envie' | 'Epargne' =
+            ['celi', 'reer', 'reee', 'celiapp', 'épargne', 'epargne', 'investissement'].some(k => lower.includes(k))
+                ? 'Epargne'
+                : ['logement', 'épicerie', 'epicerie', 'transport', 'santé', 'sante', 'assurances', 'frais bancaires'].some(k => lower.includes(k))
+                    ? 'Besoin'
+                    : 'Envie';
+        const newItem: BudgetCategory = {
+            id: `cat_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            name: categoryName,
+            target: avg,
+            frequency: 'Monthly',
+            type: 'Commun',
+            nature,
+            autoTarget: true,
+        };
+        setBudgetItems([...budgetItems, newItem]);
+        showToast(`Poste « ${categoryName} » ajouté au budget.`, 'success');
+    };
+
+    const handleCleanUnusedItems = () => {
+        if (itemsWithoutTransactions.length === 0) return;
+        const unusedIds = new Set(itemsWithoutTransactions.map(i => i.id));
+        const unusedNames = new Set(itemsWithoutTransactions.map(i => i.name));
+        setBudgetItems(budgetItems.filter(b => !(b.id ? unusedIds.has(b.id) : unusedNames.has(b.name))));
+        /* NOMBRE-NON-MONETAIRE : nombre de postes inutilisés retirés */
+        showToast(`${itemsWithoutTransactions.length} poste(s) sans transaction retiré(s).`, 'success');
+    };
+
+    const lastSyncHeure =
+        fintableSyncReport?.error === null && fintableSyncReport.at
+            ? new Date(fintableSyncReport.at).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })
+            : null;
 
     // [S5-REFONTE-BUDGET] Contrôles de période/personne : dans l'en-tête de page quand l'espace Budget
     // les porte (`pilotage` fourni), sinon ici (Budget rendu seul).
@@ -842,7 +941,7 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
     const excedent = avgRealIncomeDisplay - totalBudgetDisplay;
 
     return (
-        <div className="space-y-5 stagger-in pb-10">
+        <div className="space-y-3 sm:space-y-5 stagger-in pb-10">
             <ConfirmModal
                 isOpen={!!confirmDeleteId}
                 onConfirm={doConfirmDelete}
@@ -937,7 +1036,76 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                 transactions={transactions}
                 budgetItems={budgetItems}
                 isPrivacyMode={isPrivacyMode}
+                compact
             />
+
+            {/* Barre compacte de fraîcheur et d'actions rapides Budget */}
+            <div
+                aria-label="État et actions rapides du budget"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-bordure bg-surface px-3 py-2 sm:px-4"
+            >
+                <div className="flex flex-wrap items-center gap-2 text-tiny text-ink-300">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-succes-texte/30 bg-succes-fond px-2.5 py-0.5 font-semibold text-succes-texte">
+                        <span className="w-1.5 h-1.5 rounded-full bg-succes-texte" aria-hidden="true" />
+                        Budget à jour
+                    </span>
+                    {lastSyncHeure ? (
+                        <span>Banque · {lastSyncHeure}</span>
+                    ) : (
+                        <span>
+                            {/* NOMBRE-NON-MONETAIRE : nombre de catégories suivies en moyenne auto */}
+                            {autoCount} poste{autoCount > 1 ? 's' : ''} en moyenne auto
+                        </span>
+                    )}
+                    {isPersonFiltered && (
+                        <button
+                            type="button"
+                            onClick={() => setPersonFilter(null)}
+                            className="touch-target min-h-11 px-2.5 py-1 rounded-full border border-bordure-champ bg-surface-douce text-tiny font-medium text-ink-100 hover:bg-fond focus-ring"
+                        >
+                            Vue : {activePersonName} · Voir le couple
+                        </button>
+                    )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {fintableToken && (
+                        <button
+                            type="button"
+                            onClick={() => { void handleSyncBankNow(); }}
+                            disabled={isSyncingBank}
+                            className="touch-target min-h-11 px-3 py-1.5 rounded-xl border border-bordure bg-fond hover:bg-surface-douce text-tiny font-semibold text-ink-100 disabled:opacity-60 focus-ring whitespace-nowrap"
+                        >
+                            {isSyncingBank ? 'Sync…' : 'Synchroniser'}
+                        </button>
+                    )}
+                    {driftedManualItems.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={handleAlignDrifted}
+                            className="touch-target min-h-11 px-3 py-1.5 rounded-xl border border-bordure-champ bg-surface-douce hover:bg-fond text-tiny font-semibold text-ink-100 focus-ring whitespace-nowrap"
+                        >
+                            {/* NOMBRE-NON-MONETAIRE : nombre de postes manuels qui s'écartent de leur moyenne */}
+                            Aligner sur le réel ({driftedManualItems.length})
+                        </button>
+                    )}
+                    {alerts.length > 0 && (
+                        <button
+                            type="button"
+                            aria-pressed={onlyOverBudget}
+                            onClick={() => setOnlyOverBudget(v => !v)}
+                            className={`touch-target min-h-11 px-3 py-1.5 rounded-xl border text-tiny font-semibold focus-ring whitespace-nowrap ${
+                                onlyOverBudget
+                                    ? 'bg-erreur-fond border-erreur-texte/40 text-erreur-texte'
+                                    : 'border-bordure bg-fond text-ink-200 hover:bg-surface-douce'
+                            }`}
+                        >
+                            {/* NOMBRE-NON-MONETAIRE : nombre de catégories en dépassement */}
+                            {onlyOverBudget ? `Tout voir (${alerts.length})` : `Dépassés (${alerts.length})`}
+                        </button>
+                    )}
+                </div>
+            </div>
 
             {/* ALERTS BANNER */}
             {timeView === 'MONTH' && alerts.length > 0 && (
@@ -957,23 +1125,23 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                 </div>
             )}
 
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-5 items-start">
-                <div className="flex flex-col gap-5 min-w-0">
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-4 sm:gap-5 items-start">
+                <div className="flex flex-col gap-4 sm:gap-5 min-w-0">
                     {(['Besoin', 'Envie', 'Epargne'] as const).map(nature => (
                         <BudgetGroupTable
                             key={nature}
                             nature={nature}
-                            items={groupedItems[nature]}
+                            items={visibleGroupedItems[nature]}
                             allItems={budgetItems}
-                            actualsMap={actualsMap}
+                            actualsMap={actualsMapForView}
                             trendMap={trendMap}
                             monthlyDataMap={monthlyDataMap}
                             totalBudgetDisplay={totalBudgetDisplay}
                             monthProgress={monthProgress}
                             expandedId={expandedId}
                             onExpandToggle={setExpandedId}
-                            getDisplayTarget={getDisplayTarget}
-                            getDisplayAvg={getDisplayAvg}
+                            getDisplayTarget={getDisplayTargetForView}
+                            getDisplayAvg={getDisplayAvgForView}
                             isSolo={coupleAnalysis.isSolo}
                             splitRatio1={coupleAnalysis.splitRatio1}
                             userNames={[config.users[0].name, config.users[1]?.name ?? '']}
@@ -981,6 +1149,8 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                             onUpdateItem={handleUpdateItem}
                             onDeleteItem={handleDeleteItem}
                             onAddItem={handleAddItem}
+                            avgMonthlyMap={avg12ByItem}
+                            onSwitchToAuto={handleSwitchItemToAuto}
                             // [REFONTE-NAV-L5] Cross-link poste → Transactions filtrées sur la catégorie.
                             onViewTransactions={(name) => navigateWithFocus(TabEnum.TRANSACTIONS, `category:${name}`)}
                         />
@@ -1159,27 +1329,50 @@ export const Budget: React.FC<BudgetProps> = ({ transactions, config, budgetItem
                                         {orphanCategories.length} catégorie{orphanCategories.length > 1 ? 's' : ''} sans poste
                                     </h3>
                                     <ul className="flex flex-col gap-1">
-                                        {orphanCategories.map((o: OrphanCategory) => (
-                                            <li key={o.category} className="gf-row flex items-center justify-between gap-2 text-body px-2 py-1 rounded-lg">
-                                                <PrivateText quoi="categorie" className="text-ink-100 break-words min-w-0">{o.category}</PrivateText>
-                                                <PrivateAmount className="font-mono text-ink-100 shrink-0">{formatCAD(o.total)}</PrivateAmount>
-                                            </li>
-                                        ))}
+                                        {orphanCategories.map((o: OrphanCategory) => {
+                                            const estHorsComp = isCategoryHorsComparaison(o.category);
+                                            return (
+                                                <li key={o.category} className="gf-row flex items-center justify-between gap-2 text-body px-2 py-1 rounded-lg">
+                                                    <PrivateText quoi="categorie" className="text-ink-100 break-words min-w-0 flex-1">{o.category}</PrivateText>
+                                                    <PrivateAmount className="font-mono text-ink-100 shrink-0">{formatCAD(o.total)}</PrivateAmount>
+                                                    {!estHorsComp && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleQuickAddOrphan(o.category)}
+                                                            aria-label={`Ajouter ${o.category} au budget`}
+                                                            className="touch-target min-h-11 px-2.5 py-1 rounded-lg border border-bordure-champ bg-surface-douce hover:bg-fond text-tiny font-semibold text-ink-100 focus-ring shrink-0"
+                                                        >
+                                                            + Ajouter
+                                                        </button>
+                                                    )}
+                                                </li>
+                                            );
+                                        })}
                                     </ul>
-                                    <p className="text-meta text-ink-400">Crée un poste du même nom (ou renomme la catégorie) pour suivre ces montants dans le budget.</p>
+                                    <p className="text-meta text-ink-400">Ajoute un poste en un clic (ou renomme la catégorie) pour suivre ces montants dans le budget.</p>
                                 </div>
                             )}
                             {itemsWithoutTransactions.length > 0 && (
                                 <div className={`flex flex-col gap-1.5 ${orphanCategories.length > 0 ? 'pt-2.5 border-t border-warning-400/20' : ''}`}>
-                                    <h3 className="text-body font-semibold text-warning-400">
-                                        {itemsWithoutTransactions.length} poste{itemsWithoutTransactions.length > 1 ? 's' : ''} jamais rapproché{itemsWithoutTransactions.length > 1 ? 's' : ''} à une dépense
-                                    </h3>
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <h3 className="text-body font-semibold text-warning-400">
+                                            {itemsWithoutTransactions.length} poste{itemsWithoutTransactions.length > 1 ? 's' : ''} jamais rapproché{itemsWithoutTransactions.length > 1 ? 's' : ''} à une dépense
+                                        </h3>
+                                        <button
+                                            type="button"
+                                            onClick={handleCleanUnusedItems}
+                                            className="touch-target min-h-11 px-3 py-1 rounded-lg border border-bordure-champ bg-surface-douce hover:bg-fond text-tiny font-semibold text-ink-100 focus-ring shrink-0"
+                                        >
+                                            {/* NOMBRE-NON-MONETAIRE : nombre de postes inutilisés à retirer */}
+                                            Nettoyer ({itemsWithoutTransactions.length})
+                                        </button>
+                                    </div>
                                     <ul className="flex flex-wrap gap-1.5">
                                         {itemsWithoutTransactions.map(i => (
                                             <li key={i.id ?? i.name} className="text-meta px-2.5 py-0.5 rounded-full bg-surface-douce border border-bordure text-ink-200">{i.name}</li>
                                         ))}
                                     </ul>
-                                    <p className="text-meta text-ink-400">Aucune transaction (tout l'historique) ne correspond à ce poste — nom différent des catégories de transactions, ou poste inutilisé&nbsp;? (l'épargne par virement n'est pas comptée ici)</p>
+                                    <p className="text-meta text-ink-400">Aucune transaction (tout l&apos;historique) ne correspond à ce poste — nom différent des catégories de transactions, ou poste inutilisé&nbsp;? (l&apos;épargne par virement n&apos;est pas comptée ici)</p>
                                 </div>
                             )}
                         </section>

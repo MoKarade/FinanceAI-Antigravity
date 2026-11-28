@@ -63,7 +63,7 @@ export const DualKPIStat: React.FC<DualKPIStatProps> = ({
     const pct = <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold font-mono tabular-nums ${texte}`}><PrivateAmount>{formatVariationPct(ecartPct)}</PrivateAmount></span>;
 
     return (
-        <div data-kpi={label} className="gf-stat-cell gf-quote-cell rounded-2xl bg-surface border border-bordure px-3.5 py-3 lg:px-[18px] lg:py-4 flex flex-col gap-2 min-w-0">
+        <div data-kpi={label} className="gf-stat-cell gf-quote-cell rounded-2xl bg-surface border border-bordure p-2.5 sm:px-3.5 sm:py-3 lg:px-[18px] lg:py-4 flex flex-col gap-1.5 sm:gap-2 min-w-0">
             <div className="flex items-center justify-between gap-2">
                 <span className="font-mono text-meta lg:text-[11px] lg:font-semibold lg:tracking-[0.06em] lg:uppercase text-ink-400 truncate">{label}</span>
                 <span className="hidden lg:inline text-meta">{pct}</span>

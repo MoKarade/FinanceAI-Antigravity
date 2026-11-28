@@ -104,6 +104,10 @@ interface BudgetGroupTableProps {
     onAddItem: (nature: 'Besoin' | 'Envie' | 'Epargne') => void;
     /** [REFONTE-NAV-L5] Cross-link « Voir les transactions » d'un poste (catégorie du même nom). */
     onViewTransactions?: (categoryName: string) => void;
+    /** Moyenne mensuelle réelle (12 mois pleins) par nom de poste pour proposer le passage en auto. */
+    avgMonthlyMap?: Readonly<Record<string, number | null | undefined>>;
+    /** Passe un poste manuel en suivi automatique calé sur sa moyenne réelle mensuelle. */
+    onSwitchToAuto?: (itemId: string, avgMonthly: number) => void;
 }
 
 
@@ -120,6 +124,7 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
     totalBudgetDisplay, monthProgress, expandedId, onExpandToggle,
     getDisplayTarget, getDisplayAvg, isSolo, splitRatio1, userNames, timeView,
     onUpdateItem, onDeleteItem, onAddItem, onViewTransactions,
+    avgMonthlyMap, onSwitchToAuto,
 }) => {
     // NB : on ne masque PLUS les groupes vides. Sinon le bouton « + Ajouter »
     // (ci-dessous) disparaissait avec eux → impossible de créer la 1re catégorie
@@ -213,6 +218,8 @@ export const BudgetGroupTable: React.FC<BudgetGroupTableProps> = ({
             l={l} nature={nature} totalBudgetDisplay={totalBudgetDisplay} trend={trendMap[l.item.name] || []}
             mensuel={monthlyDataMap[l.item.name] || []} isSolo={isSolo} splitRatio1={splitRatio1} userNames={userNames}
             isPrivacyMode={isPrivacyMode} onUpdateItem={onUpdateItem} onDeleteItem={onDeleteItem} onViewTransactions={onViewTransactions}
+            monthlyAvg={avgMonthlyMap?.[l.item.name] ?? null}
+            onSwitchToAuto={onSwitchToAuto}
         />
     );
 
@@ -347,11 +354,14 @@ interface EditeurPosteProps {
     onUpdateItem: BudgetGroupTableProps['onUpdateItem'];
     onDeleteItem: BudgetGroupTableProps['onDeleteItem'];
     onViewTransactions?: BudgetGroupTableProps['onViewTransactions'];
+    monthlyAvg?: number | null;
+    onSwitchToAuto?: (itemId: string, avgMonthly: number) => void;
 }
 
 /** Édition d'un poste (déplié) : nom, montant de base, fréquence, attribution, répartition, historique. */
 const EditeurPoste: React.FC<EditeurPosteProps> = ({
-    l, totalBudgetDisplay, trend, mensuel, isSolo, splitRatio1, userNames, isPrivacyMode, onUpdateItem, onDeleteItem, onViewTransactions,
+    l, totalBudgetDisplay, trend, mensuel, isSolo, splitRatio1, userNames, isPrivacyMode,
+    onUpdateItem, onDeleteItem, onViewTransactions, monthlyAvg, onSwitchToAuto,
 }) => {
     const { item, idx, displayTarget, isOver } = l;
     const percentageOfBudget = totalBudgetDisplay > 0 ? (displayTarget / totalBudgetDisplay) * 100 : 0;
@@ -415,17 +425,31 @@ const EditeurPoste: React.FC<EditeurPosteProps> = ({
                 </label>
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-meta text-ink-300">
-                <span>Part du budget <span className="font-mono text-ink-100"><PrivateAmount>{formatNumber(percentageOfBudget, { decimals: 1 })} %</PrivateAmount></span></span>
-                <span className="font-mono">
-                    {parts.map((p, i) => (
-                        <React.Fragment key={p.nom}>
-                            {i > 0 && ' / '}
-                            {p.nom}: <PrivateAmount>{formatCAD(p.montant)}</PrivateAmount>
-                        </React.Fragment>
-                    ))}
-                </span>
-                <span className="flex items-center gap-2">Tendance (6 mois) <Sparkline data={trend} color={isOver ? '#f87171' : '#34b39a'} poste={item.name} /></span>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-meta text-ink-300">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-tiny font-medium border border-bordure bg-surface text-ink-200">
+                        {item.autoTarget ? 'Cible auto (moyenne)' : 'Cible manuelle'}
+                    </span>
+                    <span>Part du budget <span className="font-mono text-ink-100"><PrivateAmount>{formatNumber(percentageOfBudget, { decimals: 1 })} %</PrivateAmount></span></span>
+                    <span className="font-mono">
+                        {parts.map((p, i) => (
+                            <React.Fragment key={p.nom}>
+                                {i > 0 && ' / '}
+                                {p.nom}: <PrivateAmount>{formatCAD(p.montant)}</PrivateAmount>
+                            </React.Fragment>
+                        ))}
+                    </span>
+                    <span className="flex items-center gap-2">Tendance (6 mois) <Sparkline data={trend} color={isOver ? 'var(--erreur-texte)' : 'var(--succes-texte)'} poste={item.name} /></span>
+                </div>
+                {item.autoTarget !== true && typeof monthlyAvg === 'number' && Number.isFinite(monthlyAvg) && monthlyAvg > 0 && onSwitchToAuto && item.id && (
+                    <button
+                        type="button"
+                        onClick={() => onSwitchToAuto(item.id!, Math.round(monthlyAvg))}
+                        className="touch-target min-h-11 px-3 py-1.5 rounded-xl border border-bordure-champ bg-surface-douce hover:bg-fond text-tiny font-semibold text-ink-100 focus-ring whitespace-nowrap"
+                    >
+                        Suivre la moyenne (auto)
+                    </button>
+                )}
             </div>
 
             <div className="flex flex-col gap-2">
@@ -436,7 +460,7 @@ const EditeurPoste: React.FC<EditeurPosteProps> = ({
                         <button
                             type="button"
                             onClick={() => onViewTransactions(item.name)}
-                            className="touch-target inline-flex items-center text-meta text-ink-100 underline underline-offset-2 focus-ring rounded-sm px-1 -my-3 whitespace-nowrap"
+                            className="touch-target min-h-11 inline-flex items-center text-meta text-ink-100 underline underline-offset-2 focus-ring rounded-sm px-2 whitespace-nowrap"
                             aria-label={`Voir les transactions de la catégorie ${item.name}`}
                         >
                             Voir les transactions →
@@ -448,11 +472,11 @@ const EditeurPoste: React.FC<EditeurPosteProps> = ({
                 <div style={{ width: '100%', height: '150px' }} role="img" aria-label={`Dépenses mensuelles de ${item.name} sur les six derniers mois, comparées à la cible du poste.`}>
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={mensuel}>
-                            <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                            <XAxis dataKey="name" stroke="#8896a8" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                            <YAxis stroke="#8896a8" tick={{ fontSize: 10 }} width={36} tickLine={false} axisLine={false} tickFormatter={maskedTick(isPrivacyMode, (v: number) => String(v))} />
+                            <CartesianGrid stroke="var(--bordure)" vertical={false} />
+                            <XAxis dataKey="name" stroke="var(--texte-doux)" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                            <YAxis stroke="var(--texte-doux)" tick={{ fontSize: 10 }} width={36} tickLine={false} axisLine={false} tickFormatter={maskedTick(isPrivacyMode, (v: number) => String(v))} />
                             <Tooltip
-                                cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                                cursor={{ fill: 'var(--surface-douce)', fillOpacity: 0.45 }}
                                 isAnimationActive={true}
                                 animationDuration={90}
                                 contentStyle={CHART_TOOLTIP_STYLE}
@@ -465,8 +489,8 @@ const EditeurPoste: React.FC<EditeurPosteProps> = ({
                                     return [`${formatCAD(n)}${suffix}`, item.name];
                                 }}
                             />
-                            <ReferenceLine y={displayTarget} stroke="#8896a8" strokeDasharray="3 3" label={{ position: 'right', value: 'Cible', fill: '#8896a8', fontSize: 10 }} />
-                            <Bar dataKey="value" fill={isOver ? '#f87171' : '#34b39a'} radius={[3, 3, 0, 0]} maxBarSize={36} isAnimationActive={true} animationDuration={300} animationEasing="ease-out" />
+                            <ReferenceLine y={displayTarget} stroke="var(--texte-doux)" strokeDasharray="3 3" label={{ position: 'right', value: 'Cible', fill: 'var(--texte-doux)', fontSize: 10 }} />
+                            <Bar dataKey="value" fill={isOver ? 'var(--erreur-texte)' : 'var(--succes-texte)'} radius={[3, 3, 0, 0]} maxBarSize={36} isAnimationActive={true} animationDuration={300} animationEasing="ease-out" />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>

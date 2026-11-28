@@ -75,32 +75,32 @@ export const ChoixPeriode: React.FC<{ p: BudgetPilotage }> = ({ p }) => (
 export const NavigateurPeriode: React.FC<{ p: BudgetPilotage }> = ({ p }) => {
     if (p.timeView === 'CUSTOM') {
         return (
-            <div className="flex items-center gap-1 h-10 px-2 rounded-lg border border-white/12 focus-within:border-white/30 transition-colors">
-                <input type="date" value={p.customStart} onChange={(e) => p.setCustomStart(e.target.value)} className="champ-nu bg-transparent text-ink-100 text-meta border-none outline-hidden w-36" aria-label="Date de début" />
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-1 min-h-11 px-2 rounded-lg border border-bordure focus-within:border-bordure-champ transition-colors">
+                <input type="date" value={p.customStart} onChange={(e) => p.setCustomStart(e.target.value)} className="champ-nu bg-transparent text-ink-100 text-meta border-none outline-hidden w-32 sm:w-36 min-h-10" aria-label="Date de début" />
                 <span className="text-ink-400" aria-hidden="true">–</span>
-                <input type="date" value={p.customEnd} onChange={(e) => p.setCustomEnd(e.target.value)} className="champ-nu bg-transparent text-ink-100 text-meta border-none outline-hidden w-36" aria-label="Date de fin" />
+                <input type="date" value={p.customEnd} onChange={(e) => p.setCustomEnd(e.target.value)} className="champ-nu bg-transparent text-ink-100 text-meta border-none outline-hidden w-32 sm:w-36 min-h-10" aria-label="Date de fin" />
             </div>
         );
     }
     return (
-        <div className="flex items-center h-10 rounded-lg border border-white/12">
+        <div className="flex items-center min-h-11 rounded-lg border border-bordure bg-surface">
             <button
                 type="button"
                 onClick={() => p.setPeriodOffset((o) => o - 1)}
                 title="Période précédente"
                 aria-label="Période précédente"
-                className="h-9 px-2 text-ink-300 hover:text-ink-50 rounded-l-lg focus-ring"
+                className="touch-target min-h-11 min-w-11 px-2 inline-flex items-center justify-center text-ink-300 hover:text-ink-50 rounded-l-lg focus-ring"
             >
                 <Icon name="chevron-left" size={15} />
             </button>
-            <span className="text-[13px] text-ink-100 whitespace-nowrap" aria-live="polite">{libellePeriode(p.timeView, p.periodOffset)}</span>
+            <span className="text-[13px] text-ink-100 whitespace-nowrap px-1" aria-live="polite">{libellePeriode(p.timeView, p.periodOffset)}</span>
             <button
                 type="button"
                 onClick={() => p.setPeriodOffset((o) => Math.min(0, o + 1))}
                 disabled={p.periodOffset >= 0}
                 title={p.periodOffset >= 0 ? 'Période actuelle' : 'Période suivante'}
                 aria-label="Période suivante"
-                className="h-9 px-2 text-ink-300 hover:text-ink-50 rounded-r-lg focus-ring disabled:opacity-30 disabled:cursor-not-allowed"
+                className="touch-target min-h-11 min-w-11 px-2 inline-flex items-center justify-center text-ink-300 hover:text-ink-50 rounded-r-lg focus-ring disabled:opacity-30 disabled:cursor-not-allowed"
             >
                 <Icon name="chevron-right" size={15} />
             </button>
@@ -109,7 +109,7 @@ export const NavigateurPeriode: React.FC<{ p: BudgetPilotage }> = ({ p }) => {
                     type="button"
                     onClick={() => p.setPeriodOffset(0)}
                     title="Revenir à la période actuelle"
-                    className="h-full pr-2.5 text-meta text-ink-200 underline underline-offset-2 focus-ring rounded-sm"
+                    className="touch-target min-h-11 px-2.5 text-meta text-ink-200 underline underline-offset-2 focus-ring rounded-sm"
                 >
                     Auj.
                 </button>
