@@ -27,15 +27,16 @@ export function useAssetDataHydration(
     // part au TOTAL avant le prochain reload, sans message). Pas de boucle : les patchs (priceHistory/
     // currentPrice/secteur) ne changent PAS les symboles ; une re-passe est bon marché (fraîcheur 24 h
     // par actif + mutex module `_hydrateQueue` + mutex/intervalle min de priceRefresh).
+    const finnhubKey = useFinanceStore((s) => s.apiKeys?.finnhub ?? '');
     const assetSymbolsKey = useMemo(
         () => (assets ?? []).map(a => a?.symbol || '').filter(Boolean).sort().join(','),
         [assets],
     );
-    const inFlightRef = useRef(false);
     const lastRunAtRef = useRef(0);
 
     useEffect(() => {
         let cancelled = false;
+        let inFlight = false;
         const MARKET_AUTO_INTERVAL_MS = 15 * 60_000;
         const MARKET_WAKE_COOLDOWN_MS = 2 * 60_000;
 
@@ -110,7 +111,9 @@ export function useAssetDataHydration(
                 const { getQuote, canAttemptQuote, hasQuoteProvider } = await loadMarketData();
                 if (forceRefresh) {
                     const { clearMarketDataCache } = await import('../services/marketData/cache');
+                    const { clearNegativeCache } = await import('../services/marketData/negativeCache');
                     clearMarketDataCache('quote');
+                    clearNegativeCache();
                 }
                 const res = await refreshAssetPrices(
                     current,
@@ -149,7 +152,7 @@ export function useAssetDataHydration(
         };
 
         const runPass = async (opts?: { fromWake?: boolean; force?: boolean }) => {
-            if (cancelled || inFlightRef.current) return;
+            if (cancelled || inFlight) return;
             const currentAssets = useFinanceStore.getState().assets ?? [];
             if (currentAssets.length === 0) return;
             const today = todayIsoLocal();
@@ -157,28 +160,28 @@ export function useAssetDataHydration(
                 (a) => a.symbol && (a.quantity || 0) > 0 && coursPerime(dateDernierCours(a.priceHistory), today),
             );
             const nowMs = Date.now();
-            if (opts?.fromWake && !hasStaleNow && nowMs - lastRunAtRef.current < MARKET_WAKE_COOLDOWN_MS) {
+            if (opts?.fromWake && nowMs - lastRunAtRef.current < MARKET_WAKE_COOLDOWN_MS) {
                 return;
             }
-            if (opts?.fromWake && hasStaleNow && nowMs - lastRunAtRef.current < MARKET_WAKE_COOLDOWN_MS) {
-                return;
-            }
-            inFlightRef.current = true;
+            inFlight = true;
             lastRunAtRef.current = nowMs;
             try {
-                const hadStale = await hydrateAssets();
+                // 1. Cours en direct D'ABORD dès le lancement (complète aussi priceHistory périmé)
+                await refreshPricesAtBoot(Boolean(opts?.force || hasStaleNow));
+                // 2. Historiques détaillés ensuite (sans bloquer la mise à jour immédiate des prix)
                 if (!cancelled) {
-                    await refreshPricesAtBoot(Boolean(opts?.force || hadStale || hasStaleNow));
+                    await hydrateAssets();
                 }
+                // 3. Profils secteur/région en dernier
                 if (!cancelled) {
                     await hydrateProfilesAtBoot();
                 }
             } finally {
-                inFlightRef.current = false;
+                inFlight = false;
             }
         };
 
-        void runPass();
+        void runPass({ force: true });
 
         const isJsdom = typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
         if (isJsdom) {
@@ -219,5 +222,5 @@ export function useAssetDataHydration(
     // session) — jamais sur un simple patch de prix/historique (la clé ne bouge pas). setAppState et
     // assets restent volontairement omis (une dep sur l'objet assets re-fetcherait en boucle).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [assetSymbolsKey]);
+    }, [assetSymbolsKey, finnhubKey]);
 }
